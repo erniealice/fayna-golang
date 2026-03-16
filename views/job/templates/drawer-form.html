@@ -1,0 +1,48 @@
+{{/*
+Job drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .Name, .ClientID, .LocationID, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "job-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="Sheet.handleResponse(event)">
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Job Name --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.Columns.Name
+                "Value" .Name
+                "Required" true
+                "Placeholder" "Job name"
+            )}}
+        </div>
+
+        {{/* --- Client ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "client_id"
+                "Label" .Labels.Columns.Client
+                "Value" .ClientID
+                "Placeholder" "Client ID"
+            )}}
+        </div>
+
+        {{/* --- Location ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "location_id"
+                "Label" .Labels.Columns.Location
+                "Value" .LocationID
+                "Placeholder" "Location ID"
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

@@ -1,0 +1,74 @@
+package outcome_criteria
+
+import (
+	"context"
+
+	fayna "github.com/erniealice/fayna-golang"
+
+	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/pyeza-golang/types"
+	"github.com/erniealice/pyeza-golang/view"
+
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
+
+	outcomecriteriadetail "github.com/erniealice/fayna-golang/views/outcome_criteria/detail"
+	outcomecriterialist "github.com/erniealice/fayna-golang/views/outcome_criteria/list"
+)
+
+// ModuleDeps holds all dependencies for the outcome criteria module.
+type ModuleDeps struct {
+	Routes       fayna.OutcomeCriteriaRoutes
+	Labels       fayna.OutcomeCriteriaLabels
+	CommonLabels pyeza.CommonLabels
+	TableLabels  types.TableLabels
+
+	// Outcome criteria CRUD
+	CreateOutcomeCriteria func(ctx context.Context, req *criteriapb.CreateOutcomeCriteriaRequest) (*criteriapb.CreateOutcomeCriteriaResponse, error)
+	ReadOutcomeCriteria   func(ctx context.Context, req *criteriapb.ReadOutcomeCriteriaRequest) (*criteriapb.ReadOutcomeCriteriaResponse, error)
+	UpdateOutcomeCriteria func(ctx context.Context, req *criteriapb.UpdateOutcomeCriteriaRequest) (*criteriapb.UpdateOutcomeCriteriaResponse, error)
+	DeleteOutcomeCriteria func(ctx context.Context, req *criteriapb.DeleteOutcomeCriteriaRequest) (*criteriapb.DeleteOutcomeCriteriaResponse, error)
+	ListOutcomeCriterias  func(ctx context.Context, req *criteriapb.ListOutcomeCriteriasRequest) (*criteriapb.ListOutcomeCriteriasResponse, error)
+}
+
+// Module holds all constructed outcome criteria views.
+type Module struct {
+	routes     fayna.OutcomeCriteriaRoutes
+	List       view.View
+	Detail     view.View
+	TabAction  view.View
+	Add        view.View
+	Edit       view.View
+	Delete     view.View
+	BulkDelete view.View
+}
+
+// NewModule creates a new outcome criteria module with all views wired.
+func NewModule(deps *ModuleDeps) *Module {
+	detailDeps := &outcomecriteriadetail.Deps{
+		Routes:              deps.Routes,
+		Labels:              deps.Labels,
+		CommonLabels:        deps.CommonLabels,
+		TableLabels:         deps.TableLabels,
+		ReadOutcomeCriteria: deps.ReadOutcomeCriteria,
+	}
+
+	return &Module{
+		routes: deps.Routes,
+		List: outcomecriterialist.NewView(&outcomecriterialist.Deps{
+			Routes:               deps.Routes,
+			ListOutcomeCriterias: deps.ListOutcomeCriterias,
+			Labels:               deps.Labels,
+			CommonLabels:         deps.CommonLabels,
+			TableLabels:          deps.TableLabels,
+		}),
+		Detail:    outcomecriteriadetail.NewView(detailDeps),
+		TabAction: outcomecriteriadetail.NewTabAction(detailDeps),
+	}
+}
+
+// RegisterRoutes registers all outcome criteria routes.
+func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
+	r.GET(m.routes.ListURL, m.List)
+	r.GET(m.routes.DetailURL, m.Detail)
+	r.GET(m.routes.TabActionURL, m.TabAction)
+}

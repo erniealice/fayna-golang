@@ -1,0 +1,114 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "job-detail-content"}}
+<div class="page-content sale-detail-layout">
+    {{/* --- Tabs --- */}}
+    <div class="detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "job-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="sale-detail-body">
+        {{if eq .ActiveTab "info"}}
+        {{template "job-tab-info" .}}
+        {{else if eq .ActiveTab "phases"}}
+        {{template "job-tab-phases" .}}
+        {{else if eq .ActiveTab "activities"}}
+        {{template "job-tab-activities" .}}
+        {{else if eq .ActiveTab "settlement"}}
+        {{template "job-tab-settlement" .}}
+        {{else if eq .ActiveTab "attachments"}}
+        {{template "attachment-tab" .}}
+        {{end}}
+    </div>
+</div>
+{{template "sheet-form" .}}
+<script src="/assets/js/pyeza/sheet.js?v={{.CacheVersion}}"></script>
+{{end}}
+
+{{/* Basic Information Tab */}}
+{{define "job-tab-info"}}
+<div class="tab-scroll">
+    <h4 class="sale-section-title">Job Information</h4>
+    <div class="sale-info-grid">
+        <div class="sale-info-item">
+            <span class="sale-info-label">{{.Labels.Columns.Name}}</span>
+            <span class="sale-info-value">{{index .Job "name"}}</span>
+        </div>
+        <div class="sale-info-item">
+            <span class="sale-info-label">{{.Labels.Columns.Client}}</span>
+            <span class="sale-info-value">{{index .Job "client"}}</span>
+        </div>
+        <div class="sale-info-item">
+            <span class="sale-info-label">{{.Labels.Columns.Location}}</span>
+            <span class="sale-info-value">{{index .Job "location"}}</span>
+        </div>
+        <div class="sale-info-item">
+            <span class="sale-info-label">{{.Labels.Columns.Status}}</span>
+            <span>
+                <span class="badge badge--{{index .Job "status_variant"}}">
+                    {{index .Job "status"}}
+                </span>
+            </span>
+        </div>
+        <div class="sale-info-item">
+            <span class="sale-info-label">Approval</span>
+            <span>
+                <span class="badge badge--{{index .Job "approval_variant"}}">
+                    {{index .Job "approval_status"}}
+                </span>
+            </span>
+        </div>
+        <div class="sale-info-item">
+            <span class="sale-info-label">{{.Labels.Columns.Created}}</span>
+            <span class="sale-info-value">{{index .Job "date_created_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{/* Phases & Tasks Tab */}}
+{{define "job-tab-phases"}}
+<div class="tab-scroll">
+    {{if .PhasesTable}}
+        {{template "table-card" .PhasesTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">No phases</div>
+            <p class="coming-soon-text">This job has no phases defined yet.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Activities Tab */}}
+{{define "job-tab-activities"}}
+<div class="tab-scroll">
+    {{if .ActivitiesTable}}
+        {{template "table-card" .ActivitiesTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">No activities</div>
+            <p class="coming-soon-text">No activity entries have been recorded for this job yet.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Settlement Tab */}}
+{{define "job-tab-settlement"}}
+<div class="tab-scroll">
+    {{if .SettlementTable}}
+        {{template "table-card" .SettlementTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">No settlements</div>
+            <p class="coming-soon-text">No cost allocations have been settled for this job yet.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}

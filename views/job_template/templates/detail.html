@@ -1,0 +1,53 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-template-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "job-template-detail-content"}}
+<div class="page-content page-content--detail">
+    {{template "tab-bar" .TabItems}}
+    <div class="tab-content">
+        {{template "job-tab-info" .}}
+    </div>
+</div>
+{{end}}
+
+{{define "job-tab-info"}}
+<div class="detail-section">
+    <dl class="detail-list">
+        <div class="detail-item">
+            <dt>{{.Labels.Detail.Name}}</dt>
+            <dd>{{index .JobTemplate "name"}}</dd>
+        </div>
+        <div class="detail-item">
+            <dt>{{.Labels.Detail.Description}}</dt>
+            <dd>{{index .JobTemplate "description"}}</dd>
+        </div>
+        <div class="detail-item">
+            <dt>{{.Labels.Detail.Status}}</dt>
+            <dd><span class="badge badge--{{index .JobTemplate "status_variant"}}">{{index .JobTemplate "status"}}</span></dd>
+        </div>
+        <div class="detail-item">
+            <dt>{{.Labels.Detail.CreatedDate}}</dt>
+            <dd>{{index .JobTemplate "date_created_string"}}</dd>
+        </div>
+        <div class="detail-item">
+            <dt>{{.Labels.Detail.ModifiedDate}}</dt>
+            <dd>{{index .JobTemplate "date_modified_string"}}</dd>
+        </div>
+    </dl>
+</div>
+{{end}}
+
+{{define "job-tab-phases"}}
+<div class="detail-section">
+    {{template "table-card" .PhasesTable}}
+</div>
+{{end}}
+
+{{define "attachment-tab"}}
+<div class="detail-section">
+    {{template "attachment-section" .}}
+</div>
+{{end}}

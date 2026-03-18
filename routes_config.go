@@ -286,6 +286,11 @@ type OutcomeSummaryRoutes struct {
 	ActiveNav    string `json:"active_nav"`
 	ActiveSubNav string `json:"active_sub_nav"`
 
+	// ListActiveSubNav overrides ActiveSubNav for the standalone list page.
+	// Job/phase summary pages highlight "jobs" while the list page highlights "report-cards".
+	ListActiveSubNav string `json:"list_active_sub_nav"`
+
+	ListURL         string `json:"list_url"`
 	JobSummaryURL   string `json:"job_summary_url"`
 	PhaseSummaryURL string `json:"phase_summary_url"`
 }
@@ -294,9 +299,11 @@ type OutcomeSummaryRoutes struct {
 // the package-level route constants defined in routes.go.
 func DefaultOutcomeSummaryRoutes() OutcomeSummaryRoutes {
 	return OutcomeSummaryRoutes{
-		ActiveNav:    "operations",
-		ActiveSubNav: "jobs",
+		ActiveNav:        "operations",
+		ActiveSubNav:     "jobs",
+		ListActiveSubNav: "report-cards",
 
+		ListURL:         OutcomeSummaryListURL,
 		JobSummaryURL:   OutcomeSummaryJobURL,
 		PhaseSummaryURL: OutcomeSummaryPhaseURL,
 	}
@@ -306,6 +313,7 @@ func DefaultOutcomeSummaryRoutes() OutcomeSummaryRoutes {
 // outcome summary routes.
 func (r OutcomeSummaryRoutes) RouteMap() map[string]string {
 	return map[string]string{
+		"outcome_summary.list":  r.ListURL,
 		"outcome_summary.job":   r.JobSummaryURL,
 		"outcome_summary.phase": r.PhaseSummaryURL,
 	}

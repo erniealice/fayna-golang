@@ -6,11 +6,13 @@ import (
 	fayna "github.com/erniealice/fayna-golang"
 
 	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 
+	summarylist "github.com/erniealice/fayna-golang/views/outcome_summary/list"
 	jobsummary "github.com/erniealice/fayna-golang/views/outcome_summary/job_summary"
 	phasesummary "github.com/erniealice/fayna-golang/views/outcome_summary/phase_summary"
 )
@@ -20,6 +22,7 @@ type ModuleDeps struct {
 	Routes       fayna.OutcomeSummaryRoutes
 	Labels       fayna.OutcomeSummaryLabels
 	CommonLabels pyeza.CommonLabels
+	TableLabels  types.TableLabels
 
 	// Job outcome summary operations
 	GetJobOutcomeSummaryByJob func(ctx context.Context, req *jobsumpb.GetJobOutcomeSummaryByJobRequest) (*jobsumpb.GetJobOutcomeSummaryByJobResponse, error)
@@ -33,6 +36,7 @@ type ModuleDeps struct {
 // Module holds all constructed outcome summary views.
 type Module struct {
 	routes       fayna.OutcomeSummaryRoutes
+	List         view.View
 	JobSummary   view.View
 	PhaseSummary view.View
 }
@@ -41,6 +45,13 @@ type Module struct {
 func NewModule(deps *ModuleDeps) *Module {
 	return &Module{
 		routes: deps.Routes,
+		List: summarylist.NewView(&summarylist.Deps{
+			Routes:                 deps.Routes,
+			ListJobOutcomeSummarys: deps.ListJobOutcomeSummarys,
+			Labels:                 deps.Labels,
+			CommonLabels:           deps.CommonLabels,
+			TableLabels:            deps.TableLabels,
+		}),
 		JobSummary: jobsummary.NewView(&jobsummary.Deps{
 			Routes:                    deps.Routes,
 			Labels:                    deps.Labels,
@@ -58,6 +69,7 @@ func NewModule(deps *ModuleDeps) *Module {
 
 // RegisterRoutes registers all outcome summary routes.
 func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
+	r.GET(m.routes.ListURL, m.List)
 	r.GET(m.routes.JobSummaryURL, m.JobSummary)
 	r.GET(m.routes.PhaseSummaryURL, m.PhaseSummary)
 }

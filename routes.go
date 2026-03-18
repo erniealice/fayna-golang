@@ -56,6 +56,7 @@ const (
 	TaskOutcomeDeleteURL = "/action/outcomes/delete"
 
 	// Outcome Summary routes (report cards)
+	OutcomeSummaryListURL  = "/app/outcomes/summaries"
 	OutcomeSummaryJobURL   = "/app/jobs/detail/{id}/summary"
 	OutcomeSummaryPhaseURL = "/app/jobs/detail/{id}/phase/{phase_id}/summary"
 )

@@ -100,7 +100,7 @@ func NewView(deps *Deps) view.View {
 				CacheVersion:   viewCtx.CacheVersion,
 				Title:          headerTitle,
 				CurrentPath:    viewCtx.CurrentPath,
-				ActiveNav:      "operations",
+				ActiveNav:      "jobs",
 				ActiveSubNav:   "activities",
 				HeaderTitle:    headerTitle,
 				HeaderSubtitle: l.Detail.PageTitle,

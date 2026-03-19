@@ -93,6 +93,7 @@ Data: .TaskID, .CriteriaID, .CriteriaName, .CriteriaType, .CriteriaOptions,
                             type="checkbox"
                             name="checked_options"
                             value="{{.Value}}"
+                            id="option-{{.Value}}"
                             {{if .Selected}}checked{{end}}
                         >
                         <span class="to-form-check-label">{{.Label}}</span>

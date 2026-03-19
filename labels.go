@@ -170,6 +170,7 @@ type JobActivityLabels struct {
 	Buttons JobActivityButtonLabels  `json:"buttons"`
 	Columns JobActivityColumnLabels  `json:"columns"`
 	Empty   JobActivityEmptyLabels   `json:"empty"`
+	Form    JobActivityFormLabels    `json:"form"`
 	Actions JobActivityActionLabels  `json:"actions"`
 	Detail  JobActivityDetailLabels  `json:"detail"`
 	Status  JobActivityStatusLabels  `json:"status"`
@@ -198,6 +199,21 @@ type JobActivityColumnLabels struct {
 type JobActivityEmptyLabels struct {
 	Title   string `json:"title"`
 	Message string `json:"message"`
+}
+
+type JobActivityFormLabels struct {
+	Job            string `json:"job"`
+	Task           string `json:"task"`
+	EntryType      string `json:"entryType"`
+	Description    string `json:"description"`
+	BillableStatus string `json:"billableStatus"`
+	Hours          string `json:"hours"`
+	HourlyRate     string `json:"hourlyRate"`
+	Product        string `json:"product"`
+	Quantity       string `json:"quantity"`
+	UnitCost       string `json:"unitCost"`
+	Amount         string `json:"amount"`
+	Category       string `json:"category"`
 }
 
 type JobActivityActionLabels struct {
@@ -278,6 +294,20 @@ func DefaultJobActivityLabels() JobActivityLabels {
 			Title:   "No activities found",
 			Message: "No activity entries to display.",
 		},
+		Form: JobActivityFormLabels{
+			Job:            "Job",
+			Task:           "Task",
+			EntryType:      "Entry Type",
+			Description:    "Description",
+			BillableStatus: "Billable Status",
+			Hours:          "Hours",
+			HourlyRate:     "Hourly Rate",
+			Product:        "Product",
+			Quantity:       "Quantity",
+			UnitCost:       "Unit Cost",
+			Amount:         "Amount",
+			Category:       "Category",
+		},
 		Actions: JobActivityActionLabels{
 			View:    "View Activity",
 			Edit:    "Edit Activity",
@@ -339,6 +369,7 @@ type JobLabels struct {
 	Buttons JobButtonLabels  `json:"buttons"`
 	Columns JobColumnLabels  `json:"columns"`
 	Empty   JobEmptyLabels   `json:"empty"`
+	Form    JobFormLabels    `json:"form"`
 	Actions JobActionLabels  `json:"actions"`
 	Detail  JobDetailLabels  `json:"detail"`
 	Tabs    JobTabLabels     `json:"tabs"`
@@ -372,8 +403,22 @@ type JobColumnLabels struct {
 }
 
 type JobEmptyLabels struct {
-	Title   string `json:"title"`
-	Message string `json:"message"`
+	Title              string `json:"title"`
+	Message            string `json:"message"`
+	PhasesTitle        string `json:"phasesTitle"`
+	PhasesMessage      string `json:"phasesMessage"`
+	ActivitiesTitle    string `json:"activitiesTitle"`
+	ActivitiesMessage  string `json:"activitiesMessage"`
+	SettlementTitle    string `json:"settlementTitle"`
+	SettlementMessage  string `json:"settlementMessage"`
+	OutcomesTitle      string `json:"outcomesTitle"`
+	OutcomesMessage    string `json:"outcomesMessage"`
+}
+
+type JobFormLabels struct {
+	NamePlaceholder     string `json:"namePlaceholder"`
+	ClientPlaceholder   string `json:"clientPlaceholder"`
+	LocationPlaceholder string `json:"locationPlaceholder"`
 }
 
 type JobActionLabels struct {
@@ -385,6 +430,8 @@ type JobActionLabels struct {
 type JobDetailLabels struct {
 	PageTitle    string `json:"pageTitle"`
 	TitlePrefix  string `json:"titlePrefix"`
+	SectionInfo  string `json:"sectionInfo"`
+	Approval     string `json:"approval"`
 	Description  string `json:"description"`
 	Quantity     string `json:"quantity"`
 	UnitCost     string `json:"unitCost"`
@@ -410,6 +457,7 @@ type JobTabLabels struct {
 	Phases      string `json:"phases"`
 	Activities  string `json:"activities"`
 	Settlement  string `json:"settlement"`
+	Outcomes    string `json:"outcomes"`
 	Attachments string `json:"attachments"`
 }
 
@@ -433,6 +481,7 @@ type OutcomeCriteriaLabels struct {
 	Buttons OutcomeCriteriaButtonLabels  `json:"buttons"`
 	Columns OutcomeCriteriaColumnLabels  `json:"columns"`
 	Empty   OutcomeCriteriaEmptyLabels   `json:"empty"`
+	Form    OutcomeCriteriaFormLabels    `json:"form"`
 	Actions OutcomeCriteriaActionLabels  `json:"actions"`
 	Detail  OutcomeCriteriaDetailLabels  `json:"detail"`
 	Tabs    OutcomeCriteriaTabLabels     `json:"tabs"`
@@ -468,6 +517,17 @@ type OutcomeCriteriaEmptyLabels struct {
 	ActiveMessage   string `json:"activeMessage"`
 	InactiveTitle   string `json:"inactiveTitle"`
 	InactiveMessage string `json:"inactiveMessage"`
+}
+
+type OutcomeCriteriaFormLabels struct {
+	Name            string `json:"name"`
+	NamePlaceholder string `json:"namePlaceholder"`
+	Type            string `json:"type"`
+	Scope           string `json:"scope"`
+	Description     string `json:"description"`
+	DescPlaceholder string `json:"descriptionPlaceholder"`
+	Required        string `json:"required"`
+	Weight          string `json:"weight"`
 }
 
 type OutcomeCriteriaActionLabels struct {
@@ -540,6 +600,16 @@ func DefaultOutcomeCriteriaLabels() OutcomeCriteriaLabels {
 			InactiveTitle:   "No inactive criteria",
 			InactiveMessage: "Deactivated criteria will appear here.",
 		},
+		Form: OutcomeCriteriaFormLabels{
+			Name:            "Name",
+			NamePlaceholder: "Enter criterion name",
+			Type:            "Criteria Type",
+			Scope:           "Scope",
+			Description:     "Description",
+			DescPlaceholder: "Enter criterion description...",
+			Required:        "Required",
+			Weight:          "Weight",
+		},
 		Actions: OutcomeCriteriaActionLabels{
 			View:   "View Criterion",
 			Edit:   "Edit Criterion",
@@ -589,6 +659,7 @@ type TaskOutcomeLabels struct {
 	Buttons TaskOutcomeButtonLabels  `json:"buttons"`
 	Columns TaskOutcomeColumnLabels  `json:"columns"`
 	Empty   TaskOutcomeEmptyLabels   `json:"empty"`
+	Form    TaskOutcomeFormLabels    `json:"form"`
 	Actions TaskOutcomeActionLabels  `json:"actions"`
 	Detail  TaskOutcomeDetailLabels  `json:"detail"`
 	Confirm TaskOutcomeConfirmLabels `json:"confirm"`
@@ -616,6 +687,15 @@ type TaskOutcomeColumnLabels struct {
 type TaskOutcomeEmptyLabels struct {
 	Title   string `json:"title"`
 	Message string `json:"message"`
+}
+
+type TaskOutcomeFormLabels struct {
+	Task             string `json:"task"`
+	Criteria         string `json:"criteria"`
+	Value            string `json:"value"`
+	Notes            string `json:"notes"`
+	NotesPlaceholder string `json:"notesPlaceholder"`
+	Determination    string `json:"determination"`
 }
 
 type TaskOutcomeActionLabels struct {
@@ -673,6 +753,14 @@ func DefaultTaskOutcomeLabels() TaskOutcomeLabels {
 			Title:   "No outcomes found",
 			Message: "No task outcome records to display.",
 		},
+		Form: TaskOutcomeFormLabels{
+			Task:             "Task",
+			Criteria:         "Criteria",
+			Value:            "Value",
+			Notes:            "Notes",
+			NotesPlaceholder: "Enter outcome notes...",
+			Determination:    "Determination",
+		},
 		Actions: TaskOutcomeActionLabels{
 			View:   "View Outcome",
 			Edit:   "Edit Outcome",
@@ -713,8 +801,26 @@ func DefaultTaskOutcomeLabels() TaskOutcomeLabels {
 type OutcomeSummaryLabels struct {
 	Page    OutcomeSummaryPageLabels    `json:"page"`
 	Buttons OutcomeSummaryButtonLabels  `json:"buttons"`
+	Columns OutcomeSummaryColumnLabels  `json:"columns"`
+	Empty   OutcomeSummaryEmptyLabels   `json:"empty"`
 	Detail  OutcomeSummaryDetailLabels  `json:"detail"`
 	Errors  OutcomeSummaryErrorLabels   `json:"errors"`
+}
+
+type OutcomeSummaryColumnLabels struct {
+	Job           string `json:"job"`
+	Determination string `json:"determination"`
+	Score         string `json:"score"`
+	ScoringMethod string `json:"scoringMethod"`
+	Total         string `json:"total"`
+	Pass          string `json:"pass"`
+	Fail          string `json:"fail"`
+	IssuedBy      string `json:"issuedBy"`
+}
+
+type OutcomeSummaryEmptyLabels struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
 }
 
 type OutcomeSummaryPageLabels struct {
@@ -761,6 +867,20 @@ func DefaultOutcomeSummaryLabels() OutcomeSummaryLabels {
 		},
 		Buttons: OutcomeSummaryButtonLabels{
 			GenerateSummary: "Generate Summary",
+		},
+		Columns: OutcomeSummaryColumnLabels{
+			Job:           "Job",
+			Determination: "Determination",
+			Score:         "Score",
+			ScoringMethod: "Scoring Method",
+			Total:         "Total",
+			Pass:          "Pass",
+			Fail:          "Fail",
+			IssuedBy:      "Issued By",
+		},
+		Empty: OutcomeSummaryEmptyLabels{
+			Title:   "No summaries",
+			Message: "No outcome summaries have been generated yet.",
 		},
 		Detail: OutcomeSummaryDetailLabels{
 			OverallDetermination: "Overall Determination",
@@ -811,8 +931,21 @@ func DefaultJobLabels() JobLabels {
 			Location: "Location",
 		},
 		Empty: JobEmptyLabels{
-			Title:   "No jobs found",
-			Message: "No jobs to display.",
+			Title:             "No jobs found",
+			Message:           "No jobs to display.",
+			PhasesTitle:       "No phases",
+			PhasesMessage:     "This job has no phases defined yet.",
+			ActivitiesTitle:   "No activities",
+			ActivitiesMessage: "No activity entries have been recorded for this job yet.",
+			SettlementTitle:   "No settlements",
+			SettlementMessage: "No cost allocations have been settled for this job yet.",
+			OutcomesTitle:     "No outcomes",
+			OutcomesMessage:   "No outcome evaluations have been recorded for this job yet.",
+		},
+		Form: JobFormLabels{
+			NamePlaceholder:     "Enter job name",
+			ClientPlaceholder:   "Select client",
+			LocationPlaceholder: "Select location",
 		},
 		Actions: JobActionLabels{
 			View:   "View Job",
@@ -822,6 +955,8 @@ func DefaultJobLabels() JobLabels {
 		Detail: JobDetailLabels{
 			PageTitle:    "Job Details",
 			TitlePrefix:  "Job ",
+			SectionInfo:  "Job Information",
+			Approval:     "Approval",
 			Description:  "Description",
 			Quantity:     "Quantity",
 			UnitCost:     "Unit Cost",
@@ -846,6 +981,7 @@ func DefaultJobLabels() JobLabels {
 			Phases:      "Phases",
 			Activities:  "Activities",
 			Settlement:  "Settlement",
+			Outcomes:    "Outcomes",
 			Attachments: "Attachments",
 		},
 		Confirm: JobConfirmLabels{

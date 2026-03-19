@@ -1,0 +1,15 @@
+{
+  "name": "fayna-e2e",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  },
+  "dependencies": {
+    "pg": "^8.19.0"
+  }
+}

@@ -1,10 +1,10 @@
 {{/* Full page — for direct access / non-HTMX */}}
-{{define "job-template-list"}}
+{{define "job-activity-list"}}
 {{template "app-shell" .}}
 {{end}}
 
 {{/* Content-only partial — for HTMX navigation */}}
-{{define "job-template-list-content"}}
+{{define "job-activity-list-content"}}
 <div class="page-content page-content--table">
     {{template "table-card" .Table}}
 </div>

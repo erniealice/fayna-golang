@@ -58,8 +58,8 @@ func NewView(deps *Deps) view.View {
 			DefaultSortDirection: "desc",
 			Labels:               deps.TableLabels,
 			EmptyState: types.TableEmptyState{
-				Title:   "No report cards found",
-				Message: "Outcome summaries will appear here once jobs are evaluated.",
+				Title:   l.Empty.Title,
+				Message: l.Empty.Message,
 			},
 		}
 
@@ -69,12 +69,12 @@ func NewView(deps *Deps) view.View {
 		pageData := &PageData{
 			PageData: types.PageData{
 				CacheVersion:   viewCtx.CacheVersion,
-				Title:          "Report Cards",
+				Title:          l.Page.JobHeading,
 				CurrentPath:    viewCtx.CurrentPath,
 				ActiveNav:      deps.Routes.ActiveNav,
 				ActiveSubNav:   activeSubNav,
-				HeaderTitle:    "Report Cards",
-				HeaderSubtitle: "Browse outcome summaries across all jobs",
+				HeaderTitle:    l.Page.JobHeading,
+				HeaderSubtitle: l.Page.JobCaption,
 				HeaderIcon:     "icon-award",
 				CommonLabels:   deps.CommonLabels,
 			},
@@ -88,7 +88,7 @@ func NewView(deps *Deps) view.View {
 
 func summaryColumns(l fayna.OutcomeSummaryLabels) []types.TableColumn {
 	return []types.TableColumn{
-		{Key: "job", Label: "Job", Sortable: true, MinWidth: "140px"},
+		{Key: "job", Label: l.Columns.Job, Sortable: true, MinWidth: "140px"},
 		{Key: "determination", Label: l.Detail.OverallDetermination, Sortable: true, MinWidth: "120px"},
 		{Key: "score", Label: l.Detail.Score, Sortable: true, MinWidth: "80px"},
 		{Key: "scoring_method", Label: l.Detail.ScoringMethod, Sortable: true, MinWidth: "120px"},

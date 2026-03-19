@@ -5,49 +5,77 @@
 
 {{/* Content-only partial — for HTMX navigation */}}
 {{define "job-template-detail-content"}}
-<div class="page-content page-content--detail">
-    {{template "tab-bar" .TabItems}}
-    <div class="tab-content">
-        {{template "job-tab-info" .}}
+<div class="page-content jt-detail-layout" data-page-css="/assets/css/fayna/fayna-job-template-detail.css?v={{.CacheVersion}}">
+    {{/* --- Tabs --- */}}
+    <div class="jt-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "jt-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="jt-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "jt-tab-info" .}}
+        {{else if eq .ActiveTab "phases"}}
+        {{template "jt-tab-phases" .}}
+        {{else if eq .ActiveTab "attachments"}}
+        {{template "attachment-tab" .}}
+        {{end}}
+    </div>
+</div>
+{{template "sheet-form" .}}
+<script src="/assets/js/pyeza/sheet.js?v={{.CacheVersion}}"></script>
+{{end}}
+
+{{/* Basic Information Tab */}}
+{{define "jt-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="jt-section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="jt-info-grid">
+        <div class="jt-info-item">
+            <span class="jt-info-label">{{.Labels.Detail.Name}}</span>
+            <span class="jt-info-value">{{index .JobTemplate "name"}}</span>
+        </div>
+        <div class="jt-info-item">
+            <span class="jt-info-label">{{.Labels.Detail.Description}}</span>
+            <span class="jt-info-value">{{index .JobTemplate "description"}}</span>
+        </div>
+        <div class="jt-info-item">
+            <span class="jt-info-label">{{.Labels.Detail.Status}}</span>
+            <span>
+                <span class="badge badge--{{index .JobTemplate "status_variant"}}">
+                    {{index .JobTemplate "status"}}
+                </span>
+            </span>
+        </div>
+        <div class="jt-info-item">
+            <span class="jt-info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="jt-info-value">{{index .JobTemplate "date_created_string"}}</span>
+        </div>
+        <div class="jt-info-item">
+            <span class="jt-info-label">{{.Labels.Detail.ModifiedDate}}</span>
+            <span class="jt-info-value">{{index .JobTemplate "date_modified_string"}}</span>
+        </div>
     </div>
 </div>
 {{end}}
 
-{{define "job-tab-info"}}
-<div class="detail-section">
-    <dl class="detail-list">
-        <div class="detail-item">
-            <dt>{{.Labels.Detail.Name}}</dt>
-            <dd>{{index .JobTemplate "name"}}</dd>
+{{/* Phases Tab */}}
+{{define "jt-tab-phases"}}
+<div class="tab-scroll">
+    {{if .PhasesTable}}
+        {{template "table-card" .PhasesTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
         </div>
-        <div class="detail-item">
-            <dt>{{.Labels.Detail.Description}}</dt>
-            <dd>{{index .JobTemplate "description"}}</dd>
-        </div>
-        <div class="detail-item">
-            <dt>{{.Labels.Detail.Status}}</dt>
-            <dd><span class="badge badge--{{index .JobTemplate "status_variant"}}">{{index .JobTemplate "status"}}</span></dd>
-        </div>
-        <div class="detail-item">
-            <dt>{{.Labels.Detail.CreatedDate}}</dt>
-            <dd>{{index .JobTemplate "date_created_string"}}</dd>
-        </div>
-        <div class="detail-item">
-            <dt>{{.Labels.Detail.ModifiedDate}}</dt>
-            <dd>{{index .JobTemplate "date_modified_string"}}</dd>
-        </div>
-    </dl>
+    {{end}}
 </div>
 {{end}}
 
-{{define "job-tab-phases"}}
-<div class="detail-section">
-    {{template "table-card" .PhasesTable}}
-</div>
-{{end}}
-
+{{/* Attachments Tab */}}
 {{define "attachment-tab"}}
-<div class="detail-section">
+<div class="tab-scroll">
     {{template "attachment-section" .}}
 </div>
 {{end}}

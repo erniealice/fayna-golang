@@ -1,0 +1,77 @@
+{{/*
+Outcome criteria drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .Name, .Type, .Scope, .Description, .Required, .Weight, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "outcome-criteria-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="Sheet.handleResponse(event)">
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Name --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.Detail.Name
+                "Value" .Name
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Type --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "type"
+                "Label" .Labels.Detail.Type
+                "Value" .Type
+                "Options" .TypeOptions
+            )}}
+        </div>
+
+        {{/* --- Scope --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "scope"
+                "Label" .Labels.Detail.Scope
+                "Value" .Scope
+                "Options" .ScopeOptions
+            )}}
+        </div>
+
+        {{/* --- Description --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "description"
+                "Label" .Labels.Detail.Description
+                "Value" .Description
+            )}}
+        </div>
+
+        {{/* --- Required --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "toggle"
+                "Name" "required"
+                "Label" .Labels.Detail.Required
+                "Checked" .Required
+            )}}
+        </div>
+
+        {{/* --- Weight --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "weight"
+                "Label" .Labels.Detail.Weight
+                "Value" .Weight
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

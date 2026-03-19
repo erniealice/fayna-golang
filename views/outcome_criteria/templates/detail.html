@@ -1,0 +1,148 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "outcome-criteria-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "outcome-criteria-detail-content"}}
+<div class="page-content oc-detail-layout" data-page-css="/assets/css/fayna/fayna-criteria-detail.css?v={{.CacheVersion}}">
+    {{/* --- Tabs --- */}}
+    <div class="oc-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "oc-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="oc-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "outcome-criteria-tab-info" .}}
+        {{else if eq .ActiveTab "thresholds"}}
+        {{template "outcome-criteria-tab-thresholds" .}}
+        {{else if eq .ActiveTab "options"}}
+        {{template "outcome-criteria-tab-options" .}}
+        {{else if eq .ActiveTab "templates"}}
+        {{template "outcome-criteria-tab-templates" .}}
+        {{else if eq .ActiveTab "versions"}}
+        {{template "outcome-criteria-tab-versions" .}}
+        {{end}}
+    </div>
+</div>
+{{template "sheet-form" .}}
+<script src="/assets/js/pyeza/sheet.js?v={{.CacheVersion}}"></script>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "outcome-criteria-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="oc-section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="oc-info-grid">
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Name}}</span>
+            <span class="oc-info-value">{{index .Criteria "name"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Type}}</span>
+            <span>
+                <span class="badge badge--default">
+                    {{index .Criteria "criteria_type"}}
+                </span>
+            </span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Scope}}</span>
+            <span class="oc-info-value">{{index .Criteria "scope"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Version}}</span>
+            <span class="oc-info-value">{{index .Criteria "version"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Status}}</span>
+            <span>
+                <span class="badge badge--{{index .Criteria "version_status_variant"}}">
+                    {{index .Criteria "version_status"}}
+                </span>
+            </span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Required}}</span>
+            <span>
+                {{if index .Criteria "required"}}
+                <span class="badge badge--info">{{.Labels.Detail.Required}}</span>
+                {{end}}
+            </span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Weight}}</span>
+            <span class="oc-info-value">{{index .Criteria "weight"}}</span>
+        </div>
+        <div class="oc-info-item oc-info-item--full">
+            <span class="oc-info-label">{{.Labels.Detail.Description}}</span>
+            <span class="oc-info-value">{{index .Criteria "description"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="oc-info-value">{{index .Criteria "date_created_string"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.ModifiedDate}}</span>
+            <span class="oc-info-value">{{index .Criteria "date_modified_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{/* Thresholds Tab */}}
+{{define "outcome-criteria-tab-thresholds"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Thresholds}}">
+    {{if .ThresholdsTable}}
+        {{template "table-card" .ThresholdsTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Options Tab */}}
+{{define "outcome-criteria-tab-options"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Options}}">
+    {{if .OptionsTable}}
+        {{template "table-card" .OptionsTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Templates Tab */}}
+{{define "outcome-criteria-tab-templates"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Templates}}">
+    {{if .TemplatesTable}}
+        {{template "table-card" .TemplatesTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Versions Tab */}}
+{{define "outcome-criteria-tab-versions"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Versions}}">
+    {{if .VersionsTable}}
+        {{template "table-card" .VersionsTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}

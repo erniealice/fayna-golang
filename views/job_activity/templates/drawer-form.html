@@ -1,0 +1,193 @@
+{{/*
+Job activity drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
+      .BillableStatus, .Hours, .Product, .UnitOfMeasure, .ExpenseCategory,
+      .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "job-activity-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="Sheet.handleResponse(event)">
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+
+        {{/* --- Job --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "job_id"
+                "Label" .Labels.Detail.Job
+                "Value" .JobID
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Entry Type --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "entry_type"
+                "Label" .Labels.Detail.EntryType
+                "Value" .EntryType
+                "Required" true
+                "Options" (list
+                    (dict "Value" "labor" "Label" .Labels.Columns.EntryType)
+                    (dict "Value" "material" "Label" .Labels.Detail.Product)
+                    (dict "Value" "expense" "Label" .Labels.Detail.ExpenseCategory)
+                )
+            )}}
+        </div>
+
+        {{/* --- Description --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "description"
+                "Label" .Labels.Detail.Description
+                "Value" .Description
+            )}}
+        </div>
+
+        {{/* --- Quantity & Unit Cost --- */}}
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "quantity"
+                "Label" .Labels.Detail.Quantity
+                "Value" .Quantity
+                "Required" true
+            )}}
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "unit_cost"
+                "Label" .Labels.Detail.UnitCost
+                "Value" .UnitCost
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Currency --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "currency"
+                "Label" .Labels.Detail.Currency
+                "Value" .Currency
+            )}}
+        </div>
+
+        {{/* --- Billable Status --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "billable_status"
+                "Label" .Labels.Detail.BillableStatus
+                "Value" .BillableStatus
+                "Options" (list
+                    (dict "Value" "billable" "Label" .Labels.Detail.BillableStatus)
+                    (dict "Value" "non_billable" "Label" .Labels.Detail.BillableStatus)
+                    (dict "Value" "included" "Label" .Labels.Detail.BillableStatus)
+                    (dict "Value" "write_off" "Label" .Labels.Detail.BillableStatus)
+                )
+            )}}
+        </div>
+
+        {{/* --- Labor fields (shown when entry_type = labor) --- */}}
+        <div class="act-entry-section act-entry-section--labor">
+            <div class="form-row">
+                {{template "form-group" (dict
+                    "Type" "number"
+                    "Name" "hours"
+                    "Label" .Labels.Detail.Hours
+                    "Value" .Hours
+                )}}
+                {{template "form-group" (dict
+                    "Type" "number"
+                    "Name" "hourly_rate"
+                    "Label" .Labels.Detail.UnitCost
+                    "Value" .HourlyRate
+                )}}
+            </div>
+            <div class="form-row single">
+                {{template "form-group" (dict
+                    "Type" "text"
+                    "Name" "staff_id"
+                    "Label" .Labels.Detail.Staff
+                    "Value" .StaffID
+                )}}
+            </div>
+        </div>
+
+        {{/* --- Material fields (shown when entry_type = material) --- */}}
+        <div class="act-entry-section act-entry-section--material">
+            <div class="form-row single">
+                {{template "form-group" (dict
+                    "Type" "text"
+                    "Name" "product_id"
+                    "Label" .Labels.Detail.Product
+                    "Value" .ProductID
+                )}}
+            </div>
+            <div class="form-row">
+                {{template "form-group" (dict
+                    "Type" "number"
+                    "Name" "quantity"
+                    "Label" .Labels.Detail.Quantity
+                    "Value" .Quantity
+                )}}
+                {{template "form-group" (dict
+                    "Type" "number"
+                    "Name" "unit_cost"
+                    "Label" .Labels.Detail.UnitCost
+                    "Value" .UnitCost
+                )}}
+            </div>
+            <div class="form-row">
+                {{template "form-group" (dict
+                    "Type" "text"
+                    "Name" "unit_of_measure"
+                    "Label" .Labels.Detail.UnitOfMeasure
+                    "Value" .UnitOfMeasure
+                )}}
+                {{template "form-group" (dict
+                    "Type" "text"
+                    "Name" "lot_number"
+                    "Label" .Labels.Detail.LotNumber
+                    "Value" .LotNumber
+                )}}
+            </div>
+        </div>
+
+        {{/* --- Expense fields (shown when entry_type = expense) --- */}}
+        <div class="act-entry-section act-entry-section--expense">
+            <div class="form-row single">
+                {{template "form-group" (dict
+                    "Type" "number"
+                    "Name" "amount"
+                    "Label" .Labels.Columns.Amount
+                    "Value" .Amount
+                )}}
+            </div>
+            <div class="form-row single">
+                {{template "form-group" (dict
+                    "Type" "text"
+                    "Name" "expense_category"
+                    "Label" .Labels.Detail.ExpenseCategory
+                    "Value" .ExpenseCategory
+                )}}
+            </div>
+            <div class="form-row single">
+                {{template "form-group" (dict
+                    "Type" "text"
+                    "Name" "vendor_ref"
+                    "Label" .Labels.Detail.Vendor
+                    "Value" .VendorRef
+                )}}
+            </div>
+        </div>
+
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

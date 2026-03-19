@@ -16,7 +16,7 @@ Data: .Name, .ClientID, .LocationID, .ID, .FormAction, .IsEdit, .CommonLabels, .
                 "Label" .Labels.Columns.Name
                 "Value" .Name
                 "Required" true
-                "Placeholder" "Job name"
+                "Placeholder" .Labels.Form.NamePlaceholder
             )}}
         </div>
 
@@ -27,7 +27,7 @@ Data: .Name, .ClientID, .LocationID, .ID, .FormAction, .IsEdit, .CommonLabels, .
                 "Name" "client_id"
                 "Label" .Labels.Columns.Client
                 "Value" .ClientID
-                "Placeholder" "Client ID"
+                "Placeholder" .Labels.Form.ClientPlaceholder
             )}}
         </div>
 
@@ -38,7 +38,7 @@ Data: .Name, .ClientID, .LocationID, .ID, .FormAction, .IsEdit, .CommonLabels, .
                 "Name" "location_id"
                 "Label" .Labels.Columns.Location
                 "Value" .LocationID
-                "Placeholder" "Location ID"
+                "Placeholder" .Labels.Form.LocationPlaceholder
             )}}
         </div>
     </div>

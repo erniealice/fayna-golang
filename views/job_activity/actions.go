@@ -3,14 +3,44 @@ package job_activity
 import (
 	"context"
 	"log"
+	"net/http"
 	"strconv"
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
 
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
 )
+
+// activityFormData is the template data for the job activity drawer form.
+type activityFormData struct {
+	FormAction     string
+	IsEdit         bool
+	ID             string
+	JobID          string
+	EntryType      string
+	Description    string
+	Quantity       float64
+	UnitCost       float64
+	Currency       string
+	BillableStatus string
+	// Labor fields
+	Hours      float64
+	HourlyRate float64
+	StaffID    string
+	// Material fields
+	ProductID     string
+	UnitOfMeasure string
+	LotNumber     string
+	Amount        float64
+	// Expense fields
+	ExpenseCategory string
+	VendorRef       string
+	Labels          fayna.JobActivityLabels
+	CommonLabels    any
+}
 
 // parseFormFloat parses a float64 from a form value, returning 0 on error.
 func parseFormFloat(s string) float64 {
@@ -18,12 +48,21 @@ func parseFormFloat(s string) float64 {
 	return f
 }
 
-// newCreateAction creates the job activity create action (POST).
+// newCreateAction creates the job activity create action (GET = form, POST = create).
 func newCreateAction(deps *ModuleDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_activity", "create") {
 			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+		}
+
+		if viewCtx.Request.Method == http.MethodGet {
+			return view.OK("job-activity-drawer-form", &activityFormData{
+				FormAction:   deps.Routes.CreateURL,
+				JobID:        viewCtx.Request.URL.Query().Get("job_id"),
+				Labels:       deps.Labels,
+				CommonLabels: nil, // injected by ViewAdapter
+			})
 		}
 
 		if err := viewCtx.Request.ParseForm(); err != nil {
@@ -65,12 +104,52 @@ func newCreateAction(deps *ModuleDeps) view.View {
 	})
 }
 
-// newUpdateAction creates the job activity update action (POST).
+// newUpdateAction creates the job activity update action (GET = pre-filled form, POST = update).
 func newUpdateAction(deps *ModuleDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_activity", "update") {
 			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+		}
+
+		if viewCtx.Request.Method == http.MethodGet {
+			id := viewCtx.Request.URL.Query().Get("id")
+			if id == "" {
+				return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			}
+
+			readResp, err := deps.ReadJobActivity(ctx, &jobactivitypb.ReadJobActivityRequest{
+				Data: &jobactivitypb.JobActivity{Id: id},
+			})
+			if err != nil {
+				log.Printf("Failed to read job activity %s: %v", id, err)
+				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+			}
+			readData := readResp.GetData()
+			if len(readData) == 0 {
+				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+			}
+			record := readData[0]
+
+			desc := ""
+			if record.Description != nil {
+				desc = *record.Description
+			}
+
+			return view.OK("job-activity-drawer-form", &activityFormData{
+				FormAction:     route.ResolveURL(deps.Routes.UpdateURL, "id", id),
+				IsEdit:         true,
+				ID:             id,
+				JobID:          record.GetJobId(),
+				EntryType:      record.GetEntryType().String(),
+				Description:    desc,
+				Quantity:       record.GetQuantity(),
+				UnitCost:       record.GetUnitCost() / 100,
+				Currency:       record.GetCurrency(),
+				BillableStatus: record.GetBillableStatus().String(),
+				Labels:         deps.Labels,
+				CommonLabels:   nil, // injected by ViewAdapter
+			})
 		}
 
 		if err := viewCtx.Request.ParseForm(); err != nil {

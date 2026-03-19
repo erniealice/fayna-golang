@@ -1,0 +1,198 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-activity-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "job-activity-detail-content"}}
+<div class="page-content act-detail-layout" data-page-css="/assets/css/fayna/fayna-activity-detail.css?v={{.CacheVersion}}">
+    <div class="act-detail-body" role="tabpanel" aria-labelledby="act-detail-heading">
+
+        {{/* --- Core Information --- */}}
+        <div class="act-info-section">
+            <div class="act-info-grid">
+
+                {{/* Job */}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.Job}}</span>
+                    <span class="act-info-value">{{index .Activity "job"}}</span>
+                </div>
+
+                {{/* Entry Type */}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.EntryType}}</span>
+                    <span>
+                        <span class="badge badge--info">{{.EntryType}}</span>
+                    </span>
+                </div>
+
+                {{/* Description */}}
+                <div class="act-info-item act-info-item--wide">
+                    <span class="act-info-label">{{.Labels.Detail.Description}}</span>
+                    <span class="act-info-value">{{index .Activity "description"}}</span>
+                </div>
+
+                {{/* Date */}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.EntryDate}}</span>
+                    <span class="act-info-value">{{index .Activity "entry_date"}}</span>
+                </div>
+
+                {{/* Quantity */}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.Quantity}}</span>
+                    <span class="act-info-value mono">{{index .Activity "quantity"}}</span>
+                </div>
+
+                {{/* Unit Cost */}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.UnitCost}}</span>
+                    <span class="act-info-value mono">{{index .Activity "unit_cost"}}</span>
+                </div>
+
+                {{/* Total Cost */}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.TotalCost}}</span>
+                    <span class="act-info-value mono">{{index .Activity "total_cost"}}</span>
+                </div>
+
+                {{/* Billable Status */}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.BillableStatus}}</span>
+                    <span>
+                        <span class="badge badge--default">{{index .Activity "billable_status"}}</span>
+                    </span>
+                </div>
+
+                {{/* Approval Status */}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.ApprovalStatus}}</span>
+                    <span>
+                        <span class="badge badge--{{.StatusVariant}}">
+                            {{if eq .ApprovalStatus "draft"}}{{.Labels.Status.Draft}}
+                            {{else if eq .ApprovalStatus "submitted"}}{{.Labels.Status.Submitted}}
+                            {{else if eq .ApprovalStatus "approved"}}{{.Labels.Status.Approved}}
+                            {{else if eq .ApprovalStatus "rejected"}}{{.Labels.Status.Rejected}}
+                            {{else}}{{.ApprovalStatus}}
+                            {{end}}
+                        </span>
+                    </span>
+                </div>
+
+                {{/* Created By */}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.CreatedDate}}</span>
+                    <span class="act-info-value">{{index .Activity "created_by"}}</span>
+                </div>
+
+            </div>
+        </div>
+
+        {{/* --- Entry-Type Subtype Detail --- */}}
+        {{if .SubtypeData}}
+        <div class="act-subtype-section">
+
+            {{/* Labor subtype */}}
+            {{if eq .EntryType "labor"}}
+            <div class="act-info-grid">
+                {{if index .SubtypeData "hours"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.Hours}}</span>
+                    <span class="act-info-value mono">{{index .SubtypeData "hours"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "rate_type"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.RateType}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "rate_type"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "time_start"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.TimeStart}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "time_start"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "time_end"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.TimeEnd}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "time_end"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "staff_id"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.Staff}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "staff_id"}}</span>
+                </div>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{/* Material subtype */}}
+            {{if eq .EntryType "material"}}
+            <div class="act-info-grid">
+                {{if index .SubtypeData "product"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.Product}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "product"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "unit_of_measure"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.UnitOfMeasure}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "unit_of_measure"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "lot_number"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.LotNumber}}</span>
+                    <span class="act-info-value mono">{{index .SubtypeData "lot_number"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "location_id"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.Location}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "location_id"}}</span>
+                </div>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{/* Expense subtype */}}
+            {{if eq .EntryType "expense"}}
+            <div class="act-info-grid">
+                {{if index .SubtypeData "expense_category"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.ExpenseCategory}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "expense_category"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "vendor_ref"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.Vendor}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "vendor_ref"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "receipt_url"}}
+                <div class="act-info-item act-info-item--wide">
+                    <span class="act-info-label">{{.Labels.Detail.Receipt}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "receipt_url"}}</span>
+                </div>
+                {{end}}
+                {{if index .SubtypeData "reimbursable"}}
+                <div class="act-info-item">
+                    <span class="act-info-label">{{.Labels.Detail.Reimbursable}}</span>
+                    <span class="act-info-value">{{index .SubtypeData "reimbursable"}}</span>
+                </div>
+                {{end}}
+            </div>
+            {{end}}
+
+        </div>
+        {{end}}
+
+    </div>
+</div>
+{{template "sheet-form" .}}
+<script src="/assets/js/pyeza/sheet.js?v={{.CacheVersion}}"></script>
+{{end}}

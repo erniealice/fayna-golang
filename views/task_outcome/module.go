@@ -63,6 +63,9 @@ func NewModule(deps *ModuleDeps) *Module {
 			TableLabels:      deps.TableLabels,
 		}),
 		Detail: taskoutcomedetail.NewView(detailDeps),
+		Add:    newAddAction(deps),
+		Edit:   newEditAction(deps),
+		Delete: newDeleteAction(deps),
 	}
 }
 
@@ -70,4 +73,11 @@ func NewModule(deps *ModuleDeps) *Module {
 func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	r.GET(m.routes.ListURL, m.List)
 	r.GET(m.routes.DetailURL, m.Detail)
+
+	// CRUD actions (GET = recording form, POST = process submission)
+	r.GET(m.routes.AddURL, m.Add)
+	r.POST(m.routes.AddURL, m.Add)
+	r.GET(m.routes.EditURL, m.Edit)
+	r.POST(m.routes.EditURL, m.Edit)
+	r.POST(m.routes.DeleteURL, m.Delete)
 }

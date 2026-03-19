@@ -24,6 +24,12 @@ type PageData struct {
 	Labels          fayna.OutcomeCriteriaLabels
 	ActiveTab       string
 	TabItems        []pyeza.TabItem
+
+	// Tab data — nil means the tab renders a coming-soon panel.
+	ThresholdsTable *types.TableConfig
+	OptionsTable    *types.TableConfig
+	TemplatesTable  *types.TableConfig
+	VersionsTable   *types.TableConfig
 }
 
 // criteriaToMap converts an OutcomeCriteria protobuf to a map[string]any for template use.
@@ -104,6 +110,25 @@ func versionStatusVariant(s enums.VersionStatus) string {
 	}
 }
 
+// loadTabData populates the tab-specific table fields on pageData based on the active tab.
+// Each case sets its table to nil for now — the template renders a coming-soon panel when nil.
+func loadTabData(pd *PageData) {
+	switch pd.ActiveTab {
+	case "thresholds":
+		// TODO: load thresholds table data
+		pd.ThresholdsTable = nil
+	case "options":
+		// TODO: load options table data
+		pd.OptionsTable = nil
+	case "templates":
+		// TODO: load templates table data
+		pd.TemplatesTable = nil
+	case "versions":
+		// TODO: load versions table data
+		pd.VersionsTable = nil
+	}
+}
+
 // NewView creates the outcome criteria detail view.
 func NewView(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
@@ -149,6 +174,8 @@ func NewView(deps *Deps) view.View {
 			ActiveTab:       activeTab,
 			TabItems:        tabItems,
 		}
+
+		loadTabData(pageData)
 
 		return view.OK("outcome-criteria-detail", pageData)
 	})
@@ -200,6 +227,8 @@ func NewTabAction(deps *Deps) view.View {
 			ActiveTab: tab,
 			TabItems:  buildTabItems(l, id, deps.Routes),
 		}
+
+		loadTabData(pageData)
 
 		templateName := "outcome-criteria-tab-" + tab
 		return view.OK(templateName, pageData)

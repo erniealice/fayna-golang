@@ -1,0 +1,136 @@
+{{/*
+Task outcome recording form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit recording actions.
+Data: .TaskID, .CriteriaID, .CriteriaName, .CriteriaType, .CriteriaOptions,
+      .NumericValue, .TextValue, .Notes, .FormAction, .IsEdit,
+      .CommonLabels, .Labels (fayna.TaskOutcomeLabels)
+*/}}
+{{define "task-outcome-recording-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="Sheet.handleResponse(event)">
+
+    {{/* --- Hidden identifiers --- */}}
+    <input type="hidden" name="task_id" value="{{.TaskID}}">
+    <input type="hidden" name="criteria_id" value="{{.CriteriaID}}">
+
+    <div class="sheet-body">
+
+        {{/* --- Criteria info (read-only) --- */}}
+        <div class="to-form-criteria-info">
+            <div class="to-form-criteria-name">{{.CriteriaName}}</div>
+            <span class="badge badge--default">{{.CriteriaType}}</span>
+        </div>
+
+        {{/* --- Dynamic input section based on criteria type --- */}}
+
+        {{if eq .CriteriaType "NUMERIC_RANGE"}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "number"
+                "Name"        "numeric_value"
+                "Label"       .Labels.Detail.Value
+                "Value"       .NumericValue
+                "Required"    true
+                "Placeholder" ""
+            )}}
+        </div>
+
+        {{else if eq .CriteriaType "NUMERIC_SCORE"}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "number"
+                "Name"        "numeric_value"
+                "Label"       .Labels.Detail.Value
+                "Value"       .NumericValue
+                "Required"    true
+                "Min"         .ScoreMin
+                "Max"         .ScoreMax
+                "Placeholder" ""
+            )}}
+        </div>
+
+        {{else if eq .CriteriaType "PASS_FAIL"}}
+        <div class="form-row single">
+            {{template "toggle" (dict
+                "Name"    "pass_fail"
+                "Label"   .Labels.Detail.Value
+                "Checked" .PassFailValue
+            )}}
+        </div>
+
+        {{else if eq .CriteriaType "CATEGORICAL"}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"     "select"
+                "Name"     "selected_option"
+                "Label"    .Labels.Detail.Value
+                "Value"    .SelectedOption
+                "Options"  .CriteriaOptions
+                "Required" true
+            )}}
+        </div>
+
+        {{else if eq .CriteriaType "TEXT"}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "textarea"
+                "Name"        "text_value"
+                "Label"       .Labels.Detail.Value
+                "Value"       .TextValue
+                "Required"    true
+                "Placeholder" ""
+                "Rows"        4
+            )}}
+        </div>
+
+        {{else if eq .CriteriaType "MULTI_CHECK"}}
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label">{{.Labels.Detail.Value}}</label>
+                <div class="to-form-checklist">
+                    {{range .CriteriaOptions}}
+                    <label class="to-form-check-item">
+                        <input
+                            type="checkbox"
+                            name="checked_options"
+                            value="{{.Value}}"
+                            {{if .Selected}}checked{{end}}
+                        >
+                        <span class="to-form-check-label">{{.Label}}</span>
+                    </label>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+
+        {{else}}
+        {{/* Fallback: generic text input for unknown criteria types */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "text_value"
+                "Label"       .Labels.Detail.Value
+                "Value"       .TextValue
+                "Required"    true
+                "Placeholder" ""
+            )}}
+        </div>
+        {{end}}
+
+        {{/* --- Notes (always shown) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "textarea"
+                "Name"        "notes"
+                "Label"       .Labels.Detail.DeterminationNote
+                "Value"       .Notes
+                "Required"    false
+                "Placeholder" ""
+                "Rows"        3
+            )}}
+        </div>
+
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

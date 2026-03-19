@@ -29,6 +29,7 @@ type PageData struct {
 	PhasesTable         *types.TableConfig
 	ActivitiesTable     *types.TableConfig
 	SettlementTable     *types.TableConfig
+	OutcomesTable       *types.TableConfig
 	AttachmentTable     *types.TableConfig
 	AttachmentUploadURL string
 }
@@ -214,6 +215,7 @@ func buildTabItems(l fayna.JobLabels, id string, routes fayna.JobRoutes) []pyeza
 		{Key: "phases", Label: l.Tabs.Phases, Href: base + "?tab=phases", HxGet: action + "phases", Icon: "icon-list"},
 		{Key: "activities", Label: l.Tabs.Activities, Href: base + "?tab=activities", HxGet: action + "activities", Icon: "icon-clock"},
 		{Key: "settlement", Label: l.Tabs.Settlement, Href: base + "?tab=settlement", HxGet: action + "settlement", Icon: "icon-wallet"},
+		{Key: "outcomes", Label: l.Tabs.Outcomes, Href: base + "?tab=outcomes", HxGet: action + "outcomes", Icon: "icon-check-circle"},
 		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
 	}
 }
@@ -229,6 +231,9 @@ func loadTabData(ctx context.Context, deps *Deps, pageData *PageData, id string,
 		loadActivitiesTab(ctx, deps, pageData, id)
 	case "settlement":
 		loadSettlementTab(ctx, deps, pageData, id)
+	case "outcomes":
+		// TODO: wire ListTaskOutcomesByJob when available
+		pageData.OutcomesTable = nil
 	case "attachments":
 		if deps.ListAttachments != nil {
 			cfg := attachmentConfig(deps)

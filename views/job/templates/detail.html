@@ -5,14 +5,14 @@
 
 {{/* Content-only partial — for HTMX navigation */}}
 {{define "job-detail-content"}}
-<div class="page-content sale-detail-layout">
+<div class="page-content job-detail-layout" data-page-css="/assets/css/fayna/fayna-job-detail.css?v={{.CacheVersion}}">
     {{/* --- Tabs --- */}}
-    <div class="detail-tabs">
+    <div class="job-detail-tabs">
         {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "job-tabs")}}
     </div>
 
     {{/* --- Tab Body --- */}}
-    <div id="tabContent" class="sale-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+    <div id="tabContent" class="job-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
         {{if eq .ActiveTab "info"}}
         {{template "job-tab-info" .}}
         {{else if eq .ActiveTab "phases"}}
@@ -21,6 +21,8 @@
         {{template "job-tab-activities" .}}
         {{else if eq .ActiveTab "settlement"}}
         {{template "job-tab-settlement" .}}
+        {{else if eq .ActiveTab "outcomes"}}
+        {{template "job-tab-outcomes" .}}
         {{else if eq .ActiveTab "attachments"}}
         {{template "attachment-tab" .}}
         {{end}}
@@ -32,40 +34,40 @@
 
 {{/* Basic Information Tab */}}
 {{define "job-tab-info"}}
-<div class="tab-scroll">
-    <h4 class="sale-section-title">Job Information</h4>
-    <div class="sale-info-grid">
-        <div class="sale-info-item">
-            <span class="sale-info-label">{{.Labels.Columns.Name}}</span>
-            <span class="sale-info-value">{{index .Job "name"}}</span>
+<div class="tab-scroll" aria-label="{{.Labels.Detail.SectionInfo}}">
+    <h4 class="job-section-title">{{.Labels.Detail.SectionInfo}}</h4>
+    <div class="job-info-grid">
+        <div class="job-info-item">
+            <span class="job-info-label">{{.Labels.Columns.Name}}</span>
+            <span class="job-info-value">{{index .Job "name"}}</span>
         </div>
-        <div class="sale-info-item">
-            <span class="sale-info-label">{{.Labels.Columns.Client}}</span>
-            <span class="sale-info-value">{{index .Job "client"}}</span>
+        <div class="job-info-item">
+            <span class="job-info-label">{{.Labels.Columns.Client}}</span>
+            <span class="job-info-value">{{index .Job "client"}}</span>
         </div>
-        <div class="sale-info-item">
-            <span class="sale-info-label">{{.Labels.Columns.Location}}</span>
-            <span class="sale-info-value">{{index .Job "location"}}</span>
+        <div class="job-info-item">
+            <span class="job-info-label">{{.Labels.Columns.Location}}</span>
+            <span class="job-info-value">{{index .Job "location"}}</span>
         </div>
-        <div class="sale-info-item">
-            <span class="sale-info-label">{{.Labels.Columns.Status}}</span>
+        <div class="job-info-item">
+            <span class="job-info-label">{{.Labels.Columns.Status}}</span>
             <span>
                 <span class="badge badge--{{index .Job "status_variant"}}">
                     {{index .Job "status"}}
                 </span>
             </span>
         </div>
-        <div class="sale-info-item">
-            <span class="sale-info-label">Approval</span>
+        <div class="job-info-item">
+            <span class="job-info-label">{{.Labels.Detail.Approval}}</span>
             <span>
                 <span class="badge badge--{{index .Job "approval_variant"}}">
                     {{index .Job "approval_status"}}
                 </span>
             </span>
         </div>
-        <div class="sale-info-item">
-            <span class="sale-info-label">{{.Labels.Columns.Created}}</span>
-            <span class="sale-info-value">{{index .Job "date_created_string"}}</span>
+        <div class="job-info-item">
+            <span class="job-info-label">{{.Labels.Columns.Created}}</span>
+            <span class="job-info-value">{{index .Job "date_created_string"}}</span>
         </div>
     </div>
 </div>
@@ -78,8 +80,8 @@
         {{template "table-card" .PhasesTable}}
     {{else}}
         <div class="coming-soon-panel">
-            <div class="coming-soon-title">No phases</div>
-            <p class="coming-soon-text">This job has no phases defined yet.</p>
+            <div class="coming-soon-title">{{.Labels.Empty.PhasesTitle}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.PhasesMessage}}</p>
         </div>
     {{end}}
 </div>
@@ -92,8 +94,8 @@
         {{template "table-card" .ActivitiesTable}}
     {{else}}
         <div class="coming-soon-panel">
-            <div class="coming-soon-title">No activities</div>
-            <p class="coming-soon-text">No activity entries have been recorded for this job yet.</p>
+            <div class="coming-soon-title">{{.Labels.Empty.ActivitiesTitle}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.ActivitiesMessage}}</p>
         </div>
     {{end}}
 </div>
@@ -106,8 +108,22 @@
         {{template "table-card" .SettlementTable}}
     {{else}}
         <div class="coming-soon-panel">
-            <div class="coming-soon-title">No settlements</div>
-            <p class="coming-soon-text">No cost allocations have been settled for this job yet.</p>
+            <div class="coming-soon-title">{{.Labels.Empty.SettlementTitle}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.SettlementMessage}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Outcomes Tab (Layer 7) */}}
+{{define "job-tab-outcomes"}}
+<div class="tab-scroll">
+    {{if .OutcomesTable}}
+        {{template "table-card" .OutcomesTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.OutcomesTitle}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.OutcomesMessage}}</p>
         </div>
     {{end}}
 </div>

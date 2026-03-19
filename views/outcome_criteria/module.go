@@ -61,8 +61,12 @@ func NewModule(deps *ModuleDeps) *Module {
 			CommonLabels:         deps.CommonLabels,
 			TableLabels:          deps.TableLabels,
 		}),
-		Detail:    outcomecriteriadetail.NewView(detailDeps),
-		TabAction: outcomecriteriadetail.NewTabAction(detailDeps),
+		Detail:     outcomecriteriadetail.NewView(detailDeps),
+		TabAction:  outcomecriteriadetail.NewTabAction(detailDeps),
+		Add:        newAddAction(deps),
+		Edit:       newEditAction(deps),
+		Delete:     newDeleteAction(deps),
+		BulkDelete: newBulkDeleteAction(deps),
 	}
 }
 
@@ -71,4 +75,12 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	r.GET(m.routes.ListURL, m.List)
 	r.GET(m.routes.DetailURL, m.Detail)
 	r.GET(m.routes.TabActionURL, m.TabAction)
+
+	// CRUD actions (GET = drawer form, POST = process submission)
+	r.GET(m.routes.AddURL, m.Add)
+	r.POST(m.routes.AddURL, m.Add)
+	r.GET(m.routes.EditURL, m.Edit)
+	r.POST(m.routes.EditURL, m.Edit)
+	r.POST(m.routes.DeleteURL, m.Delete)
+	r.POST(m.routes.BulkDeleteURL, m.BulkDelete)
 }

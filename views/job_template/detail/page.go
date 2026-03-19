@@ -221,7 +221,7 @@ func NewTabAction(deps *Deps) view.View {
 
 		loadTabData(ctx, deps, pageData, id, tab)
 
-		templateName := "job-tab-" + tab
+		templateName := "jt-tab-" + tab
 		if tab == "attachments" {
 			templateName = "attachment-tab"
 		}

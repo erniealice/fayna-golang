@@ -1,0 +1,87 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "phase-outcome-summary"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "phase-outcome-summary-content"}}
+<div class="page-content os-summary-layout" data-page-css="/assets/css/fayna/fayna-summary.css?v={{.CacheVersion}}">
+
+    {{/* --- Header: job phase ID + phase determination badge --- */}}
+    <div class="os-summary-header">
+        <div class="os-summary-header-main">
+            <span class="os-summary-job-id mono">{{index .Summary "job_phase_id"}}</span>
+        </div>
+        <div class="os-summary-header-badge">
+            <span class="badge badge--lg badge--{{index .Summary "determination_variant"}}">
+                {{index .Summary "phase_determination"}}
+            </span>
+        </div>
+        <div class="os-summary-header-meta">
+            <span class="os-summary-meta-label">{{.Labels.Detail.PhaseDetermination}}</span>
+        </div>
+    </div>
+
+    {{/* --- Score display + progress bar --- */}}
+    <div class="os-summary-score">
+        <div class="os-score-label">{{.Labels.Detail.Score}}</div>
+        <div class="os-score-value mono">{{index .Summary "summary_score"}}</div>
+        <div class="os-score-bar" role="progressbar" aria-label="{{.Labels.Detail.Score}}">
+            <div class="os-score-fill" style="width: {{index .Summary "summary_score"}}%"></div>
+        </div>
+        <div class="os-scoring-method">
+            <span class="os-meta-label">{{.Labels.Detail.ScoringMethod}}</span>
+            <span class="os-meta-value">{{index .Summary "scoring_method"}}</span>
+        </div>
+    </div>
+
+    {{/* --- Criteria breakdown grid --- */}}
+    <div class="os-criteria-breakdown">
+        <div class="os-criteria-item os-criteria-item--total">
+            <span class="os-criteria-count mono">{{index .Summary "total_criteria_count"}}</span>
+            <span class="os-criteria-label">{{.Labels.Detail.TotalCriteria}}</span>
+        </div>
+        <div class="os-criteria-item os-criteria-item--pass">
+            <span class="os-criteria-count mono">{{index .Summary "pass_count"}}</span>
+            <span class="os-criteria-label">{{.Labels.Detail.PassCount}}</span>
+        </div>
+        <div class="os-criteria-item os-criteria-item--fail">
+            <span class="os-criteria-count mono">{{index .Summary "fail_count"}}</span>
+            <span class="os-criteria-label">{{.Labels.Detail.FailCount}}</span>
+        </div>
+        <div class="os-criteria-item os-criteria-item--conditional">
+            <span class="os-criteria-count mono">{{index .Summary "conditional_count"}}</span>
+            <span class="os-criteria-label">{{.Labels.Detail.ConditionalCount}}</span>
+        </div>
+        <div class="os-criteria-item os-criteria-item--deferred">
+            <span class="os-criteria-count mono">{{index .Summary "deferred_count"}}</span>
+            <span class="os-criteria-label">{{.Labels.Detail.DeferredCount}}</span>
+        </div>
+        <div class="os-criteria-item os-criteria-item--na">
+            <span class="os-criteria-count mono">{{index .Summary "na_count"}}</span>
+            <span class="os-criteria-label">{{.Labels.Detail.NaCount}}</span>
+        </div>
+    </div>
+
+    {{/* --- Narrative --- */}}
+    {{if index .Summary "narrative"}}
+    <div class="os-narrative-section">
+        <div class="os-section-heading">{{.Labels.Detail.Narrative}}</div>
+        <div class="os-narrative-block">{{index .Summary "narrative"}}</div>
+    </div>
+    {{end}}
+
+    {{/* --- Metadata: issued by, issued date --- */}}
+    <div class="os-summary-meta">
+        <div class="os-meta-item">
+            <span class="os-meta-label">{{.Labels.Detail.IssuedBy}}</span>
+            <span class="os-meta-value">{{index .Summary "issued_by"}}</span>
+        </div>
+        <div class="os-meta-item">
+            <span class="os-meta-label">{{.Labels.Detail.IssuedDate}}</span>
+            <span class="os-meta-value">{{index .Summary "date_created_string"}}</span>
+        </div>
+    </div>
+
+</div>
+{{end}}

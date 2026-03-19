@@ -1,0 +1,108 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "task-outcome-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "task-outcome-detail-content"}}
+<div class="page-content to-detail-layout" data-page-css="/assets/css/fayna/fayna-outcome-detail.css?v={{.CacheVersion}}">
+
+    {{/* --- Identity section --- */}}
+    <div class="to-identity-section">
+        <h2 class="to-entity-title">{{index .Outcome "task_name"}}</h2>
+        <span class="badge badge--{{index .Outcome "determination_variant"}}">
+            {{index .Outcome "determination"}}
+        </span>
+    </div>
+
+    {{/* --- Primary info grid --- */}}
+    <div class="to-info-grid">
+
+        {{/* Task */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.Task}}</span>
+            <span class="to-info-value">{{index .Outcome "task_name"}}</span>
+        </div>
+
+        {{/* Criteria */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.Criteria}}</span>
+            <span class="to-info-value">{{index .Outcome "criteria_name"}}</span>
+        </div>
+
+        {{/* Criteria Type */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.CriteriaType}}</span>
+            <span>
+                <span class="badge badge--default">{{index .Outcome "criteria_type"}}</span>
+            </span>
+        </div>
+
+        {{/* Value — adapts to criteria type */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.Value}}</span>
+            {{$criteriaType := index .Outcome "criteria_type"}}
+            {{$value := index .Outcome "value"}}
+            {{if or (eq $criteriaType "Numeric Range") (eq $criteriaType "Numeric Score")}}
+            <span class="to-info-value mono">{{$value}}</span>
+            {{else if eq $criteriaType "Categorical"}}
+            <span>
+                <span class="badge badge--info">{{$value}}</span>
+            </span>
+            {{else}}
+            <span class="to-info-value">{{$value}}</span>
+            {{end}}
+        </div>
+
+        {{/* Determination */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.Determination}}</span>
+            <span>
+                <span class="badge badge--{{index .Outcome "determination_variant"}} to-determination-badge">
+                    {{index .Outcome "determination"}}
+                </span>
+            </span>
+        </div>
+
+        {{/* Determination Source */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.DeterminationSource}}</span>
+            <span class="to-info-value">{{index .Outcome "determination_source"}}</span>
+        </div>
+
+        {{/* Recorded By */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.RecordedBy}}</span>
+            <span class="to-info-value">{{index .Outcome "recorded_by_name"}}</span>
+        </div>
+
+        {{/* Recorded Date */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.RecordedDate}}</span>
+            <span class="to-info-value">{{index .Outcome "date_created_string"}}</span>
+        </div>
+
+        {{/* Revision Number */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.RevisionNumber}}</span>
+            <span class="to-info-value mono">{{index .Outcome "revision_number"}}</span>
+        </div>
+
+        {{/* Created Date */}}
+        <div class="to-info-item">
+            <span class="to-info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="to-info-value">{{index .Outcome "date_created_string"}}</span>
+        </div>
+
+    </div>
+
+    {{/* --- Determination Note --- */}}
+    {{if index .Outcome "determination_note"}}
+    <div class="to-notes-section">
+        <h4 class="to-section-title">{{.Labels.Detail.DeterminationNote}}</h4>
+        <div class="to-notes-block">{{index .Outcome "determination_note"}}</div>
+    </div>
+    {{end}}
+
+</div>
+{{end}}

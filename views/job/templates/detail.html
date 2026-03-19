@@ -12,7 +12,7 @@
     </div>
 
     {{/* --- Tab Body --- */}}
-    <div id="tabContent" class="sale-detail-body">
+    <div id="tabContent" class="sale-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
         {{if eq .ActiveTab "info"}}
         {{template "job-tab-info" .}}
         {{else if eq .ActiveTab "phases"}}

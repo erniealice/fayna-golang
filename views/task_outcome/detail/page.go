@@ -144,7 +144,7 @@ func determinationVariant(d enums.Determination) string {
 }
 
 // NewView creates the task outcome detail view.
-func NewView(deps *Deps) view.View {
+func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		id := viewCtx.Request.PathValue("id")
 

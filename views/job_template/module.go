@@ -6,6 +6,7 @@ import (
 	fayna "github.com/erniealice/fayna-golang"
 
 	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
@@ -54,21 +55,23 @@ type Module struct {
 
 // NewModule creates the job template module with all views wired.
 func NewModule(deps *ModuleDeps) *Module {
-	detailDeps := &jobtemplatedetail.Deps{
+	detailDeps := &jobtemplatedetail.DetailViewDeps{
+		AttachmentOps: attachment.AttachmentOps{
+			UploadFile:       deps.UploadFile,
+			ListAttachments:  deps.ListAttachments,
+			CreateAttachment: deps.CreateAttachment,
+			DeleteAttachment: deps.DeleteAttachment,
+			NewAttachmentID:  deps.NewID,
+		},
 		Routes:                  deps.Routes,
 		ReadJobTemplate:         deps.ReadJobTemplate,
 		ListPhasesByJobTemplate: deps.ListPhasesByJobTemplate,
 		Labels:                  deps.Labels,
 		CommonLabels:            deps.CommonLabels,
 		TableLabels:             deps.TableLabels,
-		UploadFile:              deps.UploadFile,
-		ListAttachments:         deps.ListAttachments,
-		CreateAttachment:        deps.CreateAttachment,
-		DeleteAttachment:        deps.DeleteAttachment,
-		NewID:                   deps.NewID,
 	}
 
-	listView := jobtemplatelist.NewView(&jobtemplatelist.Deps{
+	listView := jobtemplatelist.NewView(&jobtemplatelist.ListViewDeps{
 		Routes:                     deps.Routes,
 		GetJobTemplateListPageData: deps.GetJobTemplateListPageData,
 		Labels:                     deps.Labels,

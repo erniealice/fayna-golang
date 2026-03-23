@@ -1,0 +1,13 @@
+{{/* Returns tab — list of FulfillmentReturn records with their items */}}
+{{define "fulfillment-tab-returns"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Returns}}">
+    {{if .ReturnsTable}}
+        {{template "table-card" .ReturnsTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.ReturnsTitle}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.ReturnsMessage}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}

@@ -8,6 +8,7 @@ import (
 	fayna "github.com/erniealice/fayna-golang"
 
 	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/hybra-golang/views/auditlog"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
@@ -30,6 +31,11 @@ type PageData struct {
 	OptionsTable    *types.TableConfig
 	TemplatesTable  *types.TableConfig
 	VersionsTable   *types.TableConfig
+	// Audit history tab
+	AuditEntries    []auditlog.AuditEntryView
+	AuditHasNext    bool
+	AuditNextCursor string
+	AuditHistoryURL string
 }
 
 // criteriaToMap converts an OutcomeCriteria protobuf to a map[string]any for template use.
@@ -112,7 +118,7 @@ func versionStatusVariant(s enums.VersionStatus) string {
 
 // loadTabData populates the tab-specific table fields on pageData based on the active tab.
 // Each case sets its table to nil for now — the template renders a coming-soon panel when nil.
-func loadTabData(pd *PageData) {
+func loadTabData(ctx context.Context, deps *DetailViewDeps, pd *PageData, id string, viewCtx *view.ViewContext) {
 	switch pd.ActiveTab {
 	case "thresholds":
 		// TODO: load thresholds table data
@@ -126,11 +132,30 @@ func loadTabData(pd *PageData) {
 	case "versions":
 		// TODO: load versions table data
 		pd.VersionsTable = nil
+	case "audit-history":
+		if deps.ListAuditHistory != nil {
+			cursor := viewCtx.QueryParams["cursor"]
+			auditResp, err := deps.ListAuditHistory(ctx, &auditlog.ListAuditRequest{
+				EntityType:  "outcome_criteria",
+				EntityID:    id,
+				Limit:       20,
+				CursorToken: cursor,
+			})
+			if err != nil {
+				log.Printf("Failed to load audit history: %v", err)
+			}
+			if auditResp != nil {
+				pd.AuditEntries = auditResp.Entries
+				pd.AuditHasNext = auditResp.HasNext
+				pd.AuditNextCursor = auditResp.NextCursor
+			}
+		}
+		pd.AuditHistoryURL = route.ResolveURL(deps.Routes.TabActionURL, "id", id, "tab", "") + "audit-history"
 	}
 }
 
 // NewView creates the outcome criteria detail view.
-func NewView(deps *Deps) view.View {
+func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		id := viewCtx.Request.PathValue("id")
 
@@ -175,7 +200,7 @@ func NewView(deps *Deps) view.View {
 			TabItems:        tabItems,
 		}
 
-		loadTabData(pageData)
+		loadTabData(ctx, deps, pageData, id, viewCtx)
 
 		return view.OK("outcome-criteria-detail", pageData)
 	})
@@ -190,11 +215,12 @@ func buildTabItems(l fayna.OutcomeCriteriaLabels, id string, routes fayna.Outcom
 		{Key: "options", Label: l.Tabs.Options, Href: base + "?tab=options", HxGet: action + "options", Icon: "icon-list"},
 		{Key: "templates", Label: l.Tabs.Templates, Href: base + "?tab=templates", HxGet: action + "templates", Icon: "icon-file"},
 		{Key: "versions", Label: l.Tabs.Versions, Href: base + "?tab=versions", HxGet: action + "versions", Icon: "icon-clock"},
+		{Key: "audit-history", Label: "History", Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
 	}
 }
 
 // NewTabAction creates the tab action view (partial — returns only the tab content).
-func NewTabAction(deps *Deps) view.View {
+func NewTabAction(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		id := viewCtx.Request.PathValue("id")
 		tab := viewCtx.Request.PathValue("tab")
@@ -228,9 +254,12 @@ func NewTabAction(deps *Deps) view.View {
 			TabItems:  buildTabItems(l, id, deps.Routes),
 		}
 
-		loadTabData(pageData)
+		loadTabData(ctx, deps, pageData, id, viewCtx)
 
 		templateName := "outcome-criteria-tab-" + tab
+		if tab == "audit-history" {
+			templateName = "audit-history-tab"
+		}
 		return view.OK(templateName, pageData)
 	})
 }

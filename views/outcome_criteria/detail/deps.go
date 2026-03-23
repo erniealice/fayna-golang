@@ -6,13 +6,16 @@ import (
 	fayna "github.com/erniealice/fayna-golang"
 
 	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/hybra-golang/views/auditlog"
 	"github.com/erniealice/pyeza-golang/types"
 
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 )
 
-// Deps holds view dependencies for the outcome criteria detail views.
-type Deps struct {
+// DetailViewDeps holds view dependencies for the outcome criteria detail views.
+type DetailViewDeps struct {
+	auditlog.AuditOps
+
 	Routes       fayna.OutcomeCriteriaRoutes
 	Labels       fayna.OutcomeCriteriaLabels
 	CommonLabels pyeza.CommonLabels

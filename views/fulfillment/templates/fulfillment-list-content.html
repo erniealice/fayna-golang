@@ -1,0 +1,53 @@
+{{/*
+Fulfillment list content partial — returned on filter/sort/page changes via HTMX.
+Renders tbody rows inside #fulfillments-table and swaps pagination OOB.
+Data: .Rows ([]types.TableRow), .Pagination (*types.PaginationConfig)
+*/}}
+{{define "fulfillment-list-rows"}}
+{{range .Rows}}
+<tr class="table-row" data-id="{{.ID}}"
+    {{range $k, $v := .DataAttrs}}data-{{$k}}="{{$v}}" {{end}}>
+    <td class="table-cell table-cell--check">
+        <input type="checkbox" class="row-checkbox" value="{{.ID}}" aria-label="{{.ID}}">
+    </td>
+    {{range .Cells}}
+    <td class="table-cell{{if .Class}} {{.Class}}{{end}}"{{if .Style}} style="{{.Style}}"{{end}}>
+        {{if eq .Type "badge"}}
+        <span class="badge badge--{{.Variant}}">{{.Value}}</span>
+        {{else if eq .Type "link"}}
+        <a class="table-link" href="{{.Href}}">{{.Value}}</a>
+        {{else}}
+        {{.Value}}
+        {{end}}
+    </td>
+    {{end}}
+    <td class="table-cell table-cell--actions">
+        <div class="row-actions">
+            {{range .Actions}}
+            {{if eq .Type "view"}}
+            <a class="action-btn" href="{{.Href}}" title="{{.Label}}">{{.Label}}</a>
+            {{else if eq .Type "edit"}}
+            <button class="action-btn"
+                hx-get="{{.URL}}"
+                hx-target="#sheetContent"
+                hx-swap="innerHTML"
+                data-drawer-title="{{.DrawerTitle}}"
+                {{if .Disabled}}disabled title="{{.DisabledTooltip}}"{{else}}title="{{.Label}}"{{end}}>{{.Label}}</button>
+            {{else if eq .Type "delete"}}
+            <button class="action-btn action-btn--danger"
+                hx-delete="{{.URL}}"
+                hx-confirm="{{.Label}} {{.ItemName}}?"
+                {{if .Disabled}}disabled title="{{.DisabledTooltip}}"{{else}}title="{{.Label}}"{{end}}>{{.Label}}</button>
+            {{end}}
+            {{end}}
+        </div>
+    </td>
+</tr>
+{{else}}
+<tr class="table-row table-row--empty">
+    <td class="table-cell table-cell--empty" colspan="10">
+        {{.EmptyState.Title}}
+    </td>
+</tr>
+{{end}}
+{{end}}

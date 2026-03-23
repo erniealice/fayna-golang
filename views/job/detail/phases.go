@@ -14,7 +14,7 @@ import (
 )
 
 // loadPhasesTab populates the PageData with phases and tasks table data.
-func loadPhasesTab(ctx context.Context, deps *Deps, pageData *PageData, jobID string) {
+func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData, jobID string) {
 	if deps.ListJobPhases == nil {
 		return
 	}

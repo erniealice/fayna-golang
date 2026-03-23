@@ -60,3 +60,14 @@ const (
 	OutcomeSummaryJobURL   = "/app/jobs/detail/{id}/summary"
 	OutcomeSummaryPhaseURL = "/app/jobs/detail/{id}/phase/{phase_id}/summary"
 )
+
+// Fulfillment routes
+const (
+	FulfillmentListURL       = "/app/fulfillment/list/{status}"
+	FulfillmentDetailURL     = "/app/fulfillment/detail/{id}"
+	FulfillmentAddURL        = "/action/fulfillment/add"
+	FulfillmentEditURL       = "/action/fulfillment/edit/{id}"
+	FulfillmentDeleteURL     = "/action/fulfillment/delete"
+	FulfillmentTransitionURL = "/action/fulfillment/transition/{id}"
+	FulfillmentReturnURL     = "/action/fulfillment/return/{id}"
+)

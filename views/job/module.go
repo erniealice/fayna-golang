@@ -6,6 +6,7 @@ import (
 	fayna "github.com/erniealice/fayna-golang"
 
 	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
@@ -73,7 +74,14 @@ type Module struct {
 
 // NewModule creates a new job module with all views wired.
 func NewModule(deps *ModuleDeps) *Module {
-	detailDeps := &jobdetail.Deps{
+	detailDeps := &jobdetail.DetailViewDeps{
+		AttachmentOps: attachment.AttachmentOps{
+			UploadFile:       deps.UploadFile,
+			ListAttachments:  deps.ListAttachments,
+			CreateAttachment: deps.CreateAttachment,
+			DeleteAttachment: deps.DeleteAttachment,
+			NewAttachmentID:  deps.NewID,
+		},
 		Routes:             deps.Routes,
 		Labels:             deps.Labels,
 		CommonLabels:       deps.CommonLabels,
@@ -83,11 +91,6 @@ func NewModule(deps *ModuleDeps) *Module {
 		ListJobTasks:       deps.ListJobTasks,
 		ListJobActivities:  deps.ListJobActivities,
 		ListJobSettlements: deps.ListJobSettlements,
-		UploadFile:         deps.UploadFile,
-		ListAttachments:    deps.ListAttachments,
-		CreateAttachment:   deps.CreateAttachment,
-		DeleteAttachment:   deps.DeleteAttachment,
-		NewID:              deps.NewID,
 	}
 
 	actionDeps := &jobaction.Deps{
@@ -102,7 +105,7 @@ func NewModule(deps *ModuleDeps) *Module {
 
 	return &Module{
 		routes: deps.Routes,
-		List: joblist.NewView(&joblist.Deps{
+		List: joblist.NewView(&joblist.ListViewDeps{
 			Routes:       deps.Routes,
 			ListJobs:     deps.ListJobs,
 			Labels:       deps.Labels,

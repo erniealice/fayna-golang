@@ -16,8 +16,8 @@ import (
 	outcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 )
 
-// Deps holds view dependencies.
-type Deps struct {
+// ListViewDeps holds view dependencies.
+type ListViewDeps struct {
 	Routes           fayna.TaskOutcomeRoutes
 	ListTaskOutcomes func(ctx context.Context, req *outcomepb.ListTaskOutcomesRequest) (*outcomepb.ListTaskOutcomesResponse, error)
 	Labels           fayna.TaskOutcomeLabels
@@ -33,7 +33,7 @@ type PageData struct {
 }
 
 // NewView creates the task outcome list view.
-func NewView(deps *Deps) view.View {
+func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 

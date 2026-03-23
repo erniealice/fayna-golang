@@ -6,9 +6,11 @@ import (
 	"log"
 
 	fayna "github.com/erniealice/fayna-golang"
+	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/hybra-golang/views/attachment"
+	"github.com/erniealice/hybra-golang/views/auditlog"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
@@ -32,6 +34,11 @@ type PageData struct {
 	OutcomesTable       *types.TableConfig
 	AttachmentTable     *types.TableConfig
 	AttachmentUploadURL string
+	// Audit history tab
+	AuditEntries    []auditlog.AuditEntryView
+	AuditHasNext    bool
+	AuditNextCursor string
+	AuditHistoryURL string
 }
 
 // jobToMap converts a Job protobuf to a map[string]any for template use.
@@ -153,7 +160,7 @@ func approvalStatusVariant(s enums.ApprovalStatus) string {
 }
 
 // NewView creates the job detail view.
-func NewView(deps *Deps) view.View {
+func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		id := viewCtx.Request.PathValue("id")
 
@@ -200,8 +207,21 @@ func NewView(deps *Deps) view.View {
 			TabItems:        tabItems,
 		}
 
+		// KB help content
+		if viewCtx.Translations != nil {
+			if provider, ok := viewCtx.Translations.(*lynguaV1.TranslationProvider); ok {
+				if kb, _ := provider.LoadKBIfExists(viewCtx.Lang, viewCtx.BusinessType, "jobs-detail"); kb != nil {
+					pageData.HasHelp = true
+					pageData.HelpContent = kb.Body
+				}
+			}
+		}
+
 		// Load tab-specific data
 		loadTabData(ctx, deps, pageData, id, activeTab)
+		if activeTab == "audit-history" {
+			loadAuditHistoryTab(ctx, deps, pageData, id, viewCtx.QueryParams["cursor"])
+		}
 
 		return view.OK("job-detail", pageData)
 	})
@@ -217,11 +237,12 @@ func buildTabItems(l fayna.JobLabels, id string, routes fayna.JobRoutes) []pyeza
 		{Key: "settlement", Label: l.Tabs.Settlement, Href: base + "?tab=settlement", HxGet: action + "settlement", Icon: "icon-wallet"},
 		{Key: "outcomes", Label: l.Tabs.Outcomes, Href: base + "?tab=outcomes", HxGet: action + "outcomes", Icon: "icon-check-circle"},
 		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
+		{Key: "audit-history", Label: "History", Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
 	}
 }
 
 // loadTabData populates the PageData with tab-specific data.
-func loadTabData(ctx context.Context, deps *Deps, pageData *PageData, id string, activeTab string) {
+func loadTabData(ctx context.Context, deps *DetailViewDeps, pageData *PageData, id string, activeTab string) {
 	switch activeTab {
 	case "info":
 		// Job map has all the info fields
@@ -251,8 +272,30 @@ func loadTabData(ctx context.Context, deps *Deps, pageData *PageData, id string,
 	}
 }
 
+// loadAuditHistoryTab populates the audit history fields on PageData for the job entity.
+func loadAuditHistoryTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData, id string, cursor string) {
+	if deps.ListAuditHistory == nil {
+		return
+	}
+	auditResp, err := deps.ListAuditHistory(ctx, &auditlog.ListAuditRequest{
+		EntityType:  "job",
+		EntityID:    id,
+		Limit:       20,
+		CursorToken: cursor,
+	})
+	if err != nil {
+		log.Printf("Failed to load audit history: %v", err)
+	}
+	if auditResp != nil {
+		pageData.AuditEntries = auditResp.Entries
+		pageData.AuditHasNext = auditResp.HasNext
+		pageData.AuditNextCursor = auditResp.NextCursor
+	}
+	pageData.AuditHistoryURL = route.ResolveURL(deps.Routes.TabActionURL, "id", id, "tab", "") + "audit-history"
+}
+
 // NewTabAction creates the tab action view (partial -- returns only the tab content).
-func NewTabAction(deps *Deps) view.View {
+func NewTabAction(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		id := viewCtx.Request.PathValue("id")
 		tab := viewCtx.Request.PathValue("tab")
@@ -288,10 +331,16 @@ func NewTabAction(deps *Deps) view.View {
 
 		// Load tab-specific data
 		loadTabData(ctx, deps, pageData, id, tab)
+		if tab == "audit-history" {
+			loadAuditHistoryTab(ctx, deps, pageData, id, viewCtx.QueryParams["cursor"])
+		}
 
 		templateName := "job-tab-" + tab
 		if tab == "attachments" {
 			templateName = "attachment-tab"
+		}
+		if tab == "audit-history" {
+			templateName = "audit-history-tab"
 		}
 		return view.OK(templateName, pageData)
 	})

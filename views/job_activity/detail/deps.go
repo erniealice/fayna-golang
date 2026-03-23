@@ -6,6 +6,7 @@ import (
 	fayna "github.com/erniealice/fayna-golang"
 
 	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/hybra-golang/views/auditlog"
 
 	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
 	activitylaborpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_labor"
@@ -13,8 +14,10 @@ import (
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
 )
 
-// Deps holds view dependencies for the job activity detail views.
-type Deps struct {
+// DetailViewDeps holds view dependencies for the job activity detail views.
+type DetailViewDeps struct {
+	auditlog.AuditOps
+
 	Routes       fayna.JobActivityRoutes
 	Labels       fayna.JobActivityLabels
 	CommonLabels pyeza.CommonLabels

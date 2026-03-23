@@ -44,7 +44,7 @@ type Module struct {
 
 // NewModule creates a new outcome criteria module with all views wired.
 func NewModule(deps *ModuleDeps) *Module {
-	detailDeps := &outcomecriteriadetail.Deps{
+	detailDeps := &outcomecriteriadetail.DetailViewDeps{
 		Routes:              deps.Routes,
 		Labels:              deps.Labels,
 		CommonLabels:        deps.CommonLabels,
@@ -54,7 +54,7 @@ func NewModule(deps *ModuleDeps) *Module {
 
 	return &Module{
 		routes: deps.Routes,
-		List: outcomecriterialist.NewView(&outcomecriterialist.Deps{
+		List: outcomecriterialist.NewView(&outcomecriterialist.ListViewDeps{
 			Routes:               deps.Routes,
 			ListOutcomeCriterias: deps.ListOutcomeCriterias,
 			Labels:               deps.Labels,

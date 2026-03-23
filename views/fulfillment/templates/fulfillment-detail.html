@@ -1,0 +1,29 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "fulfillment-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "fulfillment-detail-content"}}
+<div class="page-content fulfillment-detail-layout" data-page-css="/assets/css/fayna/fayna-fulfillment-detail.css?v={{.CacheVersion}}">
+    {{/* --- Tabs --- */}}
+    <div class="fulfillment-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "fulfillment-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="fulfillment-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "fulfillment-tab-info" .}}
+        {{else if eq .ActiveTab "items"}}
+        {{template "fulfillment-tab-items" .}}
+        {{else if eq .ActiveTab "history"}}
+        {{template "fulfillment-tab-history" .}}
+        {{else if eq .ActiveTab "returns"}}
+        {{template "fulfillment-tab-returns" .}}
+        {{end}}
+    </div>
+</div>
+{{template "sheet-form" .}}
+<script src="/assets/js/pyeza/sheet.js?v={{.CacheVersion}}"></script>
+{{end}}

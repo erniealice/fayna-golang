@@ -1,0 +1,13 @@
+{{/* History tab — table of FulfillmentStatusEvents */}}
+{{define "fulfillment-tab-history"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.History}}">
+    {{if .HistoryTable}}
+        {{template "table-card" .HistoryTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.HistoryTitle}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.HistoryMessage}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}

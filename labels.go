@@ -905,6 +905,88 @@ func DefaultOutcomeSummaryLabels() OutcomeSummaryLabels {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Fulfillment labels
+// ---------------------------------------------------------------------------
+
+// FulfillmentLabels holds all labels for fulfillment views.
+type FulfillmentLabels struct {
+	PageTitle string `json:"page_title"`
+	AppLabel  string `json:"app_label"`
+	Title     string `json:"title"`
+
+	Status  FulfillmentStatusLabels  `json:"status"`
+	Type    FulfillmentTypeLabels    `json:"type"`
+	Columns FulfillmentColumnLabels  `json:"columns"`
+	Tabs    FulfillmentTabLabels     `json:"tabs"`
+	Actions FulfillmentActionLabels  `json:"actions"`
+	Buttons FulfillmentButtonLabels  `json:"buttons"`
+	Empty   FulfillmentEmptyLabels   `json:"empty"`
+	Errors  FulfillmentErrorLabels   `json:"errors"`
+}
+
+type FulfillmentStatusLabels struct {
+	Pending            string `json:"pending"`
+	Ready              string `json:"ready"`
+	InTransit          string `json:"in_transit"`
+	Delivered          string `json:"delivered"`
+	PartiallyDelivered string `json:"partially_delivered"`
+	Failed             string `json:"failed"`
+	Cancelled          string `json:"cancelled"`
+}
+
+type FulfillmentTypeLabels struct {
+	Physical    string `json:"physical"`
+	Service     string `json:"service"`
+	Digital     string `json:"digital"`
+	MakeToOrder string `json:"make_to_order"`
+}
+
+type FulfillmentColumnLabels struct {
+	FulfillmentMethod string `json:"fulfillment_method"`
+	Status            string `json:"status"`
+	SupplierName      string `json:"supplier_name"`
+	ScheduledAt       string `json:"scheduled_at"`
+	ItemCount         string `json:"item_count"`
+	Notes             string `json:"notes"`
+}
+
+type FulfillmentTabLabels struct {
+	Info    string `json:"info"`
+	Items   string `json:"items"`
+	History string `json:"history"`
+	Returns string `json:"returns"`
+}
+
+type FulfillmentActionLabels struct {
+	MarkReady      string `json:"mark_ready"`
+	Dispatch       string `json:"dispatch"`
+	Deliver        string `json:"deliver"`
+	DeliverPartial string `json:"deliver_partial"`
+	MarkFailed     string `json:"mark_failed"`
+	Cancel         string `json:"cancel"`
+	Retry          string `json:"retry"`
+}
+
+type FulfillmentButtonLabels struct {
+	AddFulfillment string `json:"add_fulfillment"`
+	Edit           string `json:"edit"`
+	Delete         string `json:"delete"`
+	Transition     string `json:"transition"`
+	Return         string `json:"return"`
+}
+
+type FulfillmentEmptyLabels struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
+type FulfillmentErrorLabels struct {
+	PermissionDenied string `json:"permission_denied"`
+	LoadFailed       string `json:"load_failed"`
+	TransitionFailed string `json:"transition_failed"`
+}
+
 // DefaultJobLabels returns JobLabels with sensible English defaults.
 func DefaultJobLabels() JobLabels {
 	return JobLabels{

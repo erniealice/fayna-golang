@@ -60,7 +60,7 @@ type Module struct {
 
 // NewModule creates the job activity module with all views wired.
 func NewModule(deps *ModuleDeps) *Module {
-	listView := jobactivitylist.NewView(&jobactivitylist.Deps{
+	listView := jobactivitylist.NewView(&jobactivitylist.ListViewDeps{
 		Routes:                     deps.Routes,
 		GetJobActivityListPageData: deps.GetJobActivityListPageData,
 		Labels:                     deps.Labels,
@@ -68,7 +68,7 @@ func NewModule(deps *ModuleDeps) *Module {
 		TableLabels:                deps.TableLabels,
 	})
 
-	detailDeps := &jobactivitydetail.Deps{
+	detailDeps := &jobactivitydetail.DetailViewDeps{
 		Routes:               deps.Routes,
 		ReadJobActivity:      deps.ReadJobActivity,
 		ReadActivityLabor:    deps.ReadActivityLabor,

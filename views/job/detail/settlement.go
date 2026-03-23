@@ -14,7 +14,7 @@ import (
 )
 
 // loadSettlementTab populates the PageData with settlement table data.
-func loadSettlementTab(ctx context.Context, deps *Deps, pageData *PageData, jobID string) {
+func loadSettlementTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData, jobID string) {
 	if deps.ListJobSettlements == nil {
 		return
 	}

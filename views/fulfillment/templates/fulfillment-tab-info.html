@@ -1,0 +1,83 @@
+{{/* Info tab — core fulfillment fields */}}
+{{define "fulfillment-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="fulfillment-section-title">{{.Labels.Detail.SectionInfo}}</h4>
+    <div class="fulfillment-info-grid">
+
+        {{/* Method */}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Columns.Method}}</span>
+            <span>
+                <span class="badge badge--default">{{index .Fulfillment "fulfillment_method"}}</span>
+            </span>
+        </div>
+
+        {{/* Status */}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Columns.Status}}</span>
+            <span>
+                <span class="badge badge--{{index .Fulfillment "status_variant"}}">
+                    {{index .Fulfillment "status"}}
+                </span>
+            </span>
+        </div>
+
+        {{/* Provider Reference */}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Detail.ProviderReference}}</span>
+            <span class="fulfillment-info-value">{{index .Fulfillment "provider_reference"}}</span>
+        </div>
+
+        {{/* Provider Status */}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Detail.ProviderStatus}}</span>
+            <span class="fulfillment-info-value">{{index .Fulfillment "provider_status"}}</span>
+        </div>
+
+        {{/* Delivery Cost */}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Detail.DeliveryCost}}</span>
+            <span class="fulfillment-info-value mono">{{index .Fulfillment "delivery_cost"}} {{index .Fulfillment "currency"}}</span>
+        </div>
+
+        {{/* Scheduled At */}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Detail.ScheduledAt}}</span>
+            <span class="fulfillment-info-value">{{index .Fulfillment "scheduled_at"}}</span>
+        </div>
+
+        {{/* Delivered At */}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Detail.DeliveredAt}}</span>
+            <span class="fulfillment-info-value">{{index .Fulfillment "delivered_at"}}</span>
+        </div>
+
+        {{/* Supplier */}}
+        {{if index .Fulfillment "supplier_id"}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Detail.Supplier}}</span>
+            <span class="fulfillment-info-value">{{index .Fulfillment "supplier_id"}}</span>
+        </div>
+        {{end}}
+
+        {{/* Notes */}}
+        <div class="fulfillment-info-item fulfillment-info-item--full">
+            <span class="fulfillment-info-label">{{.Labels.Detail.Notes}}</span>
+            <span class="fulfillment-info-value">{{index .Fulfillment "notes"}}</span>
+        </div>
+
+        {{/* Created */}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Columns.Created}}</span>
+            <span class="fulfillment-info-value">{{index .Fulfillment "date_created_string"}}</span>
+        </div>
+
+        {{/* Modified */}}
+        <div class="fulfillment-info-item">
+            <span class="fulfillment-info-label">{{.Labels.Detail.ModifiedDate}}</span>
+            <span class="fulfillment-info-value">{{index .Fulfillment "date_modified_string"}}</span>
+        </div>
+
+    </div>
+</div>
+{{end}}

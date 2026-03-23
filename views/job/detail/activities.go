@@ -14,7 +14,7 @@ import (
 )
 
 // loadActivitiesTab populates the PageData with the activities table data.
-func loadActivitiesTab(ctx context.Context, deps *Deps, pageData *PageData, jobID string) {
+func loadActivitiesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData, jobID string) {
 	if deps.ListJobActivities == nil {
 		return
 	}

@@ -1,0 +1,49 @@
+{{/*
+Fulfillment timeline partial — reusable status event entry.
+Renders a single FulfillmentStatusEvent row in the history timeline.
+Data: map[string]any with keys:
+  from_status, to_status, provider_status, provider_reference,
+  triggered_by, reason, occurred_at, status_variant
+*/}}
+{{define "fulfillment-timeline"}}
+<div class="fulfillment-timeline-event">
+
+    {{/* --- Status transition arrow --- */}}
+    <div class="fulfillment-timeline-transition">
+        {{if index . "from_status"}}
+        <span class="badge badge--default">{{index . "from_status"}}</span>
+        <span class="fulfillment-timeline-arrow" aria-hidden="true">&#8594;</span>
+        {{end}}
+        <span class="badge badge--{{index . "status_variant"}}">{{index . "to_status"}}</span>
+    </div>
+
+    {{/* --- Event metadata --- */}}
+    <div class="fulfillment-timeline-meta">
+
+        {{/* Timestamp */}}
+        <span class="fulfillment-timeline-time">{{index . "occurred_at"}}</span>
+
+        {{/* Actor */}}
+        {{if index . "triggered_by"}}
+        <span class="fulfillment-timeline-actor">{{index . "triggered_by"}}</span>
+        {{end}}
+
+        {{/* Provider status / reference */}}
+        {{if index . "provider_status"}}
+        <span class="fulfillment-timeline-provider">
+            {{index . "provider_status"}}
+            {{if index . "provider_reference"}}
+            &middot; {{index . "provider_reference"}}
+            {{end}}
+        </span>
+        {{end}}
+
+        {{/* Reason */}}
+        {{if index . "reason"}}
+        <p class="fulfillment-timeline-reason">{{index . "reason"}}</p>
+        {{end}}
+
+    </div>
+
+</div>
+{{end}}

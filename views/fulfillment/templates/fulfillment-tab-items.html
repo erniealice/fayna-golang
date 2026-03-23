@@ -1,0 +1,13 @@
+{{/* Items tab — table of FulfillmentItems */}}
+{{define "fulfillment-tab-items"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Items}}">
+    {{if .ItemsTable}}
+        {{template "table-card" .ItemsTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.ItemsTitle}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.ItemsMessage}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}

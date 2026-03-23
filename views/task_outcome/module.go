@@ -46,7 +46,7 @@ type Module struct {
 
 // NewModule creates a new task outcome module with all views wired.
 func NewModule(deps *ModuleDeps) *Module {
-	detailDeps := &taskoutcomedetail.Deps{
+	detailDeps := &taskoutcomedetail.DetailViewDeps{
 		Routes:          deps.Routes,
 		Labels:          deps.Labels,
 		CommonLabels:    deps.CommonLabels,
@@ -55,7 +55,7 @@ func NewModule(deps *ModuleDeps) *Module {
 
 	return &Module{
 		routes: deps.Routes,
-		List: taskoutcomelist.NewView(&taskoutcomelist.Deps{
+		List: taskoutcomelist.NewView(&taskoutcomelist.ListViewDeps{
 			Routes:           deps.Routes,
 			ListTaskOutcomes: deps.ListTaskOutcomes,
 			Labels:           deps.Labels,

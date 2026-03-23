@@ -1,0 +1,47 @@
+{{/*
+Fulfillment add drawer form — loaded into #sheetContent via HTMX.
+Data: .FormAction, .CommonLabels, .Labels, .MethodOptions
+*/}}
+{{define "fulfillment-add-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="Sheet.handleResponse(event)">
+
+    <div class="sheet-body">
+
+        {{/* --- Fulfillment Method --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "fulfillment_method"
+                "Label" .Labels.Columns.Method
+                "Value" ""
+                "Required" true
+                "Options" .MethodOptions
+            )}}
+        </div>
+
+        {{/* --- Scheduled At --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "datetime-local"
+                "Name" "scheduled_at"
+                "Label" .Labels.Detail.ScheduledAt
+                "Value" ""
+            )}}
+        </div>
+
+        {{/* --- Notes --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "notes"
+                "Label" .Labels.Detail.Notes
+                "Value" ""
+                "Placeholder" .Labels.Form.NotesPlaceholder
+            )}}
+        </div>
+
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" false)}}
+</form>
+{{end}}

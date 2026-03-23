@@ -318,3 +318,40 @@ func (r OutcomeSummaryRoutes) RouteMap() map[string]string {
 		"outcome_summary.phase": r.PhaseSummaryURL,
 	}
 }
+
+// FulfillmentRoutes holds URL patterns for fulfillment views.
+type FulfillmentRoutes struct {
+	ListURL       string `json:"list_url"`
+	DetailURL     string `json:"detail_url"`
+	AddURL        string `json:"add_url"`
+	EditURL       string `json:"edit_url"`
+	DeleteURL     string `json:"delete_url"`
+	TransitionURL string `json:"transition_url"`
+	ReturnURL     string `json:"return_url"`
+}
+
+// DefaultFulfillmentRoutes returns the standard fulfillment route configuration.
+func DefaultFulfillmentRoutes() FulfillmentRoutes {
+	return FulfillmentRoutes{
+		ListURL:       FulfillmentListURL,
+		DetailURL:     FulfillmentDetailURL,
+		AddURL:        FulfillmentAddURL,
+		EditURL:       FulfillmentEditURL,
+		DeleteURL:     FulfillmentDeleteURL,
+		TransitionURL: FulfillmentTransitionURL,
+		ReturnURL:     FulfillmentReturnURL,
+	}
+}
+
+// RouteMap returns all fulfillment routes as a map for template URL resolution.
+func (r FulfillmentRoutes) RouteMap() map[string]string {
+	return map[string]string{
+		"fulfillmentList":       r.ListURL,
+		"fulfillmentDetail":     r.DetailURL,
+		"fulfillmentAdd":        r.AddURL,
+		"fulfillmentEdit":       r.EditURL,
+		"fulfillmentDelete":     r.DeleteURL,
+		"fulfillmentTransition": r.TransitionURL,
+		"fulfillmentReturn":     r.ReturnURL,
+	}
+}

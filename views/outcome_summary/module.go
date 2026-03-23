@@ -45,7 +45,7 @@ type Module struct {
 func NewModule(deps *ModuleDeps) *Module {
 	return &Module{
 		routes: deps.Routes,
-		List: summarylist.NewView(&summarylist.Deps{
+		List: summarylist.NewView(&summarylist.ListViewDeps{
 			Routes:                 deps.Routes,
 			ListJobOutcomeSummarys: deps.ListJobOutcomeSummarys,
 			Labels:                 deps.Labels,

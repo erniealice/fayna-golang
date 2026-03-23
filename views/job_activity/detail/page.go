@@ -66,7 +66,7 @@ func activityToMap(a *jobactivitypb.JobActivity) map[string]any {
 }
 
 // NewView creates the job activity detail view.
-func NewView(deps *Deps) view.View {
+func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		id := viewCtx.Request.PathValue("id")
 
@@ -123,7 +123,7 @@ func NewView(deps *Deps) view.View {
 }
 
 // loadSubtypeData fetches entry-type-specific detail data.
-func loadSubtypeData(ctx context.Context, deps *Deps, id string, entryType jobactivitypb.EntryType) map[string]any {
+func loadSubtypeData(ctx context.Context, deps *DetailViewDeps, id string, entryType jobactivitypb.EntryType) map[string]any {
 	result := map[string]any{}
 
 	switch entryType {

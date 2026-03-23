@@ -6,6 +6,7 @@ import (
 	"log"
 
 	fayna "github.com/erniealice/fayna-golang"
+	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
@@ -16,8 +17,8 @@ import (
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 )
 
-// Deps holds view dependencies.
-type Deps struct {
+// ListViewDeps holds view dependencies.
+type ListViewDeps struct {
 	Routes       fayna.JobRoutes
 	ListJobs     func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 	Labels       fayna.JobLabels
@@ -33,7 +34,7 @@ type PageData struct {
 }
 
 // NewView creates the job list view.
-func NewView(deps *Deps) view.View {
+func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 
@@ -94,6 +95,16 @@ func NewView(deps *Deps) view.View {
 			},
 			ContentTemplate: "job-list-content",
 			Table:           tableConfig,
+		}
+
+		// KB help content
+		if viewCtx.Translations != nil {
+			if provider, ok := viewCtx.Translations.(*lynguaV1.TranslationProvider); ok {
+				if kb, _ := provider.LoadKBIfExists(viewCtx.Lang, viewCtx.BusinessType, "jobs"); kb != nil {
+					pageData.HasHelp = true
+					pageData.HelpContent = kb.Body
+				}
+			}
 		}
 
 		return view.OK("job-list", pageData)

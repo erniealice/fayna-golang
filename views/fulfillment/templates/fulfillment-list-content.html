@@ -27,7 +27,8 @@ Data: .Rows ([]types.TableRow), .Pagination (*types.PaginationConfig)
             {{if eq .Type "view"}}
             <a class="action-btn" href="{{.Href}}" title="{{.Label}}">{{.Label}}</a>
             {{else if eq .Type "edit"}}
-            <button class="action-btn"
+            <button type="button" class="action-btn"
+                aria-haspopup="dialog"
                 hx-get="{{.URL}}"
                 hx-target="#sheetContent"
                 hx-swap="innerHTML"

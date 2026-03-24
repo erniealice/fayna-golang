@@ -1,12 +1,12 @@
 # fayna-golang
 
-**Operational work execution domain for the Ryta OS monorepo.**
+**Operational work execution domain for the Ichizen OS monorepo.**
 
 `fayna-golang` owns the job lifecycle — templates, execution, activities, cost capture, and outcome assessment. It's the domain package for everything that answers "what work was done?" and "was it any good?"
 
 ## Etymology
 
-**fayna** — from Filipino *faena* (Spanish origin), meaning labor, work, or a task that demands effort. Grittier than "operation" — it evokes the production floor, the job site, the hands-on work. In bullfighting, *faena* is the final act — the decisive performance. In Ryta OS, fayna is where the work gets done and measured.
+**fayna** — from Filipino *faena* (Spanish origin), meaning labor, work, or a task that demands effort. Grittier than "operation" — it evokes the production floor, the job site, the hands-on work. In bullfighting, *faena* is the final act — the decisive performance. In Ichizen OS, fayna is where the work gets done and measured.
 
 ## Architecture
 

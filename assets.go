@@ -1,4 +1,4 @@
-// Package fayna provides operational work execution views for the Ryta OS monorepo.
+// Package fayna provides operational work execution views for the Ichizen OS monorepo.
 //
 // fayna owns the job lifecycle: templates (design-time), execution (runtime),
 // activities (cost capture), and outcomes (Layer 7 quality assessment).

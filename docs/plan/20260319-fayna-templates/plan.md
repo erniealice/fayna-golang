@@ -3,7 +3,7 @@
 **Date:** 2026-03-19
 **Branch:** `dev/20260319-fayna-templates`
 **Status:** Draft
-**Package:** fayna-golang-ryta
+**Package:** fayna-golang
 
 ---
 
@@ -243,27 +243,27 @@ Create CSS files in `apps/service-admin/assets/css/fayna/`:
 
 | File | Change | Phase |
 |------|--------|-------|
-| `packages/fayna-golang-ryta/labels.go` | Add missing Empty labels for job tabs, Approval label, OutcomeSummary Empty struct | 1 |
-| `packages/fayna-golang-ryta/views/job_activity/embed.go` | **New file** — template embedding | 1 |
-| `packages/fayna-golang-ryta/views/outcome_criteria/embed.go` | **New file** — template embedding | 1 |
-| `packages/fayna-golang-ryta/views/task_outcome/embed.go` | **New file** — template embedding | 1 |
-| `packages/fayna-golang-ryta/views/outcome_summary/embed.go` | **New file** — template embedding | 1 |
-| `packages/fayna-golang-ryta/views/job/templates/detail.html` | Fix `sale-*` → `job-*` CSS, replace hardcoded strings, add outcomes tab | 2 |
-| `packages/fayna-golang-ryta/views/job/templates/drawer-form.html` | Replace hardcoded placeholders with labels | 2 |
-| `packages/fayna-golang-ryta/views/job_template/templates/detail.html` | Normalize to info-grid pattern, add tabs, add sheet | 2 |
-| `packages/fayna-golang-ryta/views/job_template/templates/list.html` | Add sheet-form for drawer support | 2 |
-| `packages/fayna-golang-ryta/views/job_activity/templates/list.html` | **New file** — activity list page | 3 |
-| `packages/fayna-golang-ryta/views/job_activity/templates/detail.html` | **New file** — activity detail with type sections | 3 |
-| `packages/fayna-golang-ryta/views/job_activity/templates/drawer-form.html` | **New file** — dynamic form per entry type | 3 |
-| `packages/fayna-golang-ryta/views/outcome_criteria/templates/list.html` | **New file** — criteria library list | 4 |
-| `packages/fayna-golang-ryta/views/outcome_criteria/templates/detail.html` | **New file** — criteria detail with 5 tabs | 4 |
-| `packages/fayna-golang-ryta/views/outcome_criteria/templates/drawer-form.html` | **New file** — criteria create/edit form | 4 |
-| `packages/fayna-golang-ryta/views/task_outcome/templates/list.html` | **New file** — outcomes list | 5 |
-| `packages/fayna-golang-ryta/views/task_outcome/templates/detail.html` | **New file** — outcome detail with determination | 5 |
-| `packages/fayna-golang-ryta/views/task_outcome/templates/recording-form.html` | **New file** — dynamic recording form per criteria type | 5 |
-| `packages/fayna-golang-ryta/views/outcome_summary/templates/list.html` | **New file** — report cards list | 6 |
-| `packages/fayna-golang-ryta/views/outcome_summary/templates/job-summary.html` | **New file** — job report card with score bar | 6 |
-| `packages/fayna-golang-ryta/views/outcome_summary/templates/phase-summary.html` | **New file** — phase report | 6 |
+| `packages/fayna-golang/labels.go` | Add missing Empty labels for job tabs, Approval label, OutcomeSummary Empty struct | 1 |
+| `packages/fayna-golang/views/job_activity/embed.go` | **New file** — template embedding | 1 |
+| `packages/fayna-golang/views/outcome_criteria/embed.go` | **New file** — template embedding | 1 |
+| `packages/fayna-golang/views/task_outcome/embed.go` | **New file** — template embedding | 1 |
+| `packages/fayna-golang/views/outcome_summary/embed.go` | **New file** — template embedding | 1 |
+| `packages/fayna-golang/views/job/templates/detail.html` | Fix `sale-*` → `job-*` CSS, replace hardcoded strings, add outcomes tab | 2 |
+| `packages/fayna-golang/views/job/templates/drawer-form.html` | Replace hardcoded placeholders with labels | 2 |
+| `packages/fayna-golang/views/job_template/templates/detail.html` | Normalize to info-grid pattern, add tabs, add sheet | 2 |
+| `packages/fayna-golang/views/job_template/templates/list.html` | Add sheet-form for drawer support | 2 |
+| `packages/fayna-golang/views/job_activity/templates/list.html` | **New file** — activity list page | 3 |
+| `packages/fayna-golang/views/job_activity/templates/detail.html` | **New file** — activity detail with type sections | 3 |
+| `packages/fayna-golang/views/job_activity/templates/drawer-form.html` | **New file** — dynamic form per entry type | 3 |
+| `packages/fayna-golang/views/outcome_criteria/templates/list.html` | **New file** — criteria library list | 4 |
+| `packages/fayna-golang/views/outcome_criteria/templates/detail.html` | **New file** — criteria detail with 5 tabs | 4 |
+| `packages/fayna-golang/views/outcome_criteria/templates/drawer-form.html` | **New file** — criteria create/edit form | 4 |
+| `packages/fayna-golang/views/task_outcome/templates/list.html` | **New file** — outcomes list | 5 |
+| `packages/fayna-golang/views/task_outcome/templates/detail.html` | **New file** — outcome detail with determination | 5 |
+| `packages/fayna-golang/views/task_outcome/templates/recording-form.html` | **New file** — dynamic recording form per criteria type | 5 |
+| `packages/fayna-golang/views/outcome_summary/templates/list.html` | **New file** — report cards list | 6 |
+| `packages/fayna-golang/views/outcome_summary/templates/job-summary.html` | **New file** — job report card with score bar | 6 |
+| `packages/fayna-golang/views/outcome_summary/templates/phase-summary.html` | **New file** — phase report | 6 |
 | `apps/service-admin/assets/css/fayna/fayna-job-detail.css` | **New file** — job detail styling | 7 |
 | `apps/service-admin/assets/css/fayna/fayna-job-template-detail.css` | **New file** — job template detail styling | 7 |
 | `apps/service-admin/assets/css/fayna/fayna-activity-detail.css` | **New file** — activity detail styling | 7 |

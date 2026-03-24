@@ -121,8 +121,8 @@ All 7 phases are COMPLETE. Remaining work:
 5. Commit
 
 Key references:
-- **Existing Go views**: `packages/fayna-golang-ryta/views/*/list/page.go` (check ContentTemplate names)
-- **Labels struct**: `packages/fayna-golang-ryta/labels.go` (all 6 modules defined)
+- **Existing Go views**: `packages/fayna-golang/views/*/list/page.go` (check ContentTemplate names)
+- **Labels struct**: `packages/fayna-golang/labels.go` (all 6 modules defined)
 - **Centymo CSS pattern**: `apps/service-admin/assets/css/centymo/centymo-sales-detail.css`
 - **Pyeza base**: `apps/service-admin/assets/css/pyeza/detail-layout.css`
-- **Template pattern**: `packages/centymo-golang-ryta/views/inventory/templates/detail.html`
+- **Template pattern**: `packages/centymo-golang/views/inventory/templates/detail.html`

@@ -5,6 +5,7 @@ go 1.25.1
 require github.com/erniealice/pyeza-golang v0.0.8-alpha
 
 require (
+	github.com/erniealice/espyna-golang v0.0.0-20260324142444-f83ca6989174
 	github.com/erniealice/esqyma v0.0.0
 	github.com/erniealice/hybra-golang v0.0.0
 	github.com/erniealice/lyngua v0.0.0-00010101000000-000000000000

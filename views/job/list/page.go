@@ -142,7 +142,7 @@ func buildTableRows(jobs []*jobpb.Job, status string, l fayna.JobLabels, routes 
 				}
 			}
 			if clientName == "" {
-				clientName = c.GetCompanyName()
+				clientName = c.GetName()
 			}
 		}
 

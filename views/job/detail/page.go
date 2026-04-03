@@ -54,7 +54,7 @@ func jobToMap(j *jobpb.Job) map[string]any {
 			}
 		}
 		if clientName == "" {
-			clientName = c.GetCompanyName()
+			clientName = c.GetName()
 		}
 	}
 

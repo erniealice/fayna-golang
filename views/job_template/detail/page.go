@@ -7,9 +7,9 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
-	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/hybra-golang/views/auditlog"
+	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
@@ -193,19 +193,19 @@ func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData
 		})
 	}
 	pageData.PhasesTable = &types.TableConfig{
-		ID:      "job-template-phases-table",
+		ID: "job-template-phases-table",
 		Columns: []types.TableColumn{
 			{Key: "order", Label: "#", Sortable: true, Width: "60px"},
 			{Key: "name", Label: deps.Labels.Columns.Name, Sortable: true},
 		},
-		Rows:         rows,
-		Labels:       deps.TableLabels,
-		ShowSearch:   false,
-		ShowActions:  false,
-		ShowSort:     false,
-		ShowColumns:  false,
-		ShowDensity:  false,
-		ShowEntries:  false,
+		Rows:        rows,
+		Labels:      deps.TableLabels,
+		ShowSearch:  false,
+		ShowActions: false,
+		ShowSort:    false,
+		ShowColumns: false,
+		ShowDensity: false,
+		ShowEntries: false,
 	}
 	types.ApplyColumnStyles(pageData.PhasesTable.Columns, pageData.PhasesTable.Rows)
 }

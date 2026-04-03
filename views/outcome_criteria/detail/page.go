@@ -7,8 +7,8 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
-	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/hybra-golang/views/auditlog"
+	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
@@ -41,20 +41,20 @@ type PageData struct {
 // criteriaToMap converts an OutcomeCriteria protobuf to a map[string]any for template use.
 func criteriaToMap(c *criteriapb.OutcomeCriteria) map[string]any {
 	return map[string]any{
-		"id":                    c.GetId(),
-		"name":                  c.GetName(),
-		"description":           c.GetDescription(),
-		"criteria_type":         criteriaTypeString(c.GetCriteriaType()),
-		"scope":                 criteriaScopeString(c.GetScope()),
-		"version":               c.GetVersion(),
-		"version_status":        versionStatusString(c.GetVersionStatus()),
+		"id":                     c.GetId(),
+		"name":                   c.GetName(),
+		"description":            c.GetDescription(),
+		"criteria_type":          criteriaTypeString(c.GetCriteriaType()),
+		"scope":                  criteriaScopeString(c.GetScope()),
+		"version":                c.GetVersion(),
+		"version_status":         versionStatusString(c.GetVersionStatus()),
 		"version_status_variant": versionStatusVariant(c.GetVersionStatus()),
-		"required":              c.GetRequired(),
-		"weight":                c.GetWeight(),
-		"active":                c.GetActive(),
-		"created_by":            c.GetCreatedBy(),
-		"date_created_string":   c.GetDateCreatedString(),
-		"date_modified_string":  c.GetDateModifiedString(),
+		"required":               c.GetRequired(),
+		"weight":                 c.GetWeight(),
+		"active":                 c.GetActive(),
+		"created_by":             c.GetCreatedBy(),
+		"date_created_string":    c.GetDateCreatedString(),
+		"date_modified_string":   c.GetDateModifiedString(),
 	}
 }
 

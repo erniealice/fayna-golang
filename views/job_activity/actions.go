@@ -3,6 +3,7 @@ package job_activity
 import (
 	"context"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 
@@ -80,19 +81,22 @@ func newCreateAction(deps *ModuleDeps) view.View {
 
 		description := r.FormValue("description")
 
+		unitCostCentavos := int64(math.Round(unitCost * 100))
+		totalCostCentavos := int64(math.Round(quantity * unitCost * 100))
+
 		_, err := deps.CreateJobActivity(ctx, &jobactivitypb.CreateJobActivityRequest{
 			Data: &jobactivitypb.JobActivity{
 				Id:             id,
 				JobId:          r.FormValue("job_id"),
 				EntryType:      entryType,
-				Quantity:        quantity,
-				UnitCost:        unitCost * 100, // store in cents
-				TotalCost:       quantity * unitCost * 100,
-				Currency:        r.FormValue("currency"),
-				Description:     &description,
-				BillableStatus:  parseBillableStatus(r.FormValue("billable_status")),
-				ApprovalStatus:  jobactivitypb.ActivityApprovalStatus_ACTIVITY_APPROVAL_STATUS_DRAFT,
-				Active:          true,
+				Quantity:       quantity,
+				UnitCost:       unitCostCentavos,
+				TotalCost:      totalCostCentavos,
+				Currency:       r.FormValue("currency"),
+				Description:    &description,
+				BillableStatus: parseBillableStatus(r.FormValue("billable_status")),
+				ApprovalStatus: jobactivitypb.ActivityApprovalStatus_ACTIVITY_APPROVAL_STATUS_DRAFT,
+				Active:         true,
 			},
 		})
 		if err != nil {
@@ -144,7 +148,7 @@ func newUpdateAction(deps *ModuleDeps) view.View {
 				EntryType:      record.GetEntryType().String(),
 				Description:    desc,
 				Quantity:       record.GetQuantity(),
-				UnitCost:       record.GetUnitCost() / 100,
+				UnitCost:       float64(record.GetUnitCost()) / 100,
 				Currency:       record.GetCurrency(),
 				BillableStatus: record.GetBillableStatus().String(),
 				Labels:         deps.Labels,
@@ -170,17 +174,20 @@ func newUpdateAction(deps *ModuleDeps) view.View {
 
 		description := r.FormValue("description")
 
+		unitCostCentavos := int64(math.Round(unitCost * 100))
+		totalCostCentavos := int64(math.Round(quantity * unitCost * 100))
+
 		_, err := deps.UpdateJobActivity(ctx, &jobactivitypb.UpdateJobActivityRequest{
 			Data: &jobactivitypb.JobActivity{
 				Id:             id,
 				JobId:          r.FormValue("job_id"),
 				EntryType:      entryType,
-				Quantity:        quantity,
-				UnitCost:        unitCost * 100,
-				TotalCost:       quantity * unitCost * 100,
-				Currency:        r.FormValue("currency"),
-				Description:     &description,
-				BillableStatus:  parseBillableStatus(r.FormValue("billable_status")),
+				Quantity:       quantity,
+				UnitCost:       unitCostCentavos,
+				TotalCost:      totalCostCentavos,
+				Currency:       r.FormValue("currency"),
+				Description:    &description,
+				BillableStatus: parseBillableStatus(r.FormValue("billable_status")),
 			},
 		})
 		if err != nil {

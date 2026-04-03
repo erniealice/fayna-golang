@@ -3,6 +3,7 @@ package action
 import (
 	"context"
 	"log"
+	"math"
 	"strconv"
 
 	fayna "github.com/erniealice/fayna-golang"
@@ -44,10 +45,11 @@ func NewReturnAction(deps *Deps) view.View {
 			Status:        "PENDING",
 		}
 
-		// Parse optional refund amount.
+		// Parse optional refund amount (form value is decimal, convert to centavos).
 		if amtStr := r.FormValue("refund_amount"); amtStr != "" {
 			if amt, err := strconv.ParseFloat(amtStr, 64); err == nil {
-				returnData.RefundAmount = &amt
+				centavos := int64(math.Round(amt * 100))
+				returnData.RefundAmount = &centavos
 			}
 		}
 

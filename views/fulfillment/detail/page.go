@@ -45,7 +45,7 @@ func fulfillmentToMap(f *fulfillmentpb.Fulfillment) map[string]any {
 		"status_variant":     fulfillmentStatusVariant(f.GetStatus()),
 		"provider_status":    f.GetProviderStatus(),
 		"provider_reference": f.GetProviderReference(),
-		"delivery_cost":      f.GetDeliveryCost(),
+		"delivery_cost":      fmt.Sprintf("%.2f", float64(f.GetDeliveryCost())/100.0),
 		"currency":           f.GetCurrency(),
 		"notes":              f.GetNotes(),
 		"active":             f.GetActive(),

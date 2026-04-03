@@ -12,7 +12,6 @@ import (
 
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	outcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
-
 )
 
 // PageData holds the data for the task outcome detail page.
@@ -45,23 +44,23 @@ func outcomeToMap(o *outcomepb.TaskOutcome) map[string]any {
 	value := buildValueDisplay(o)
 
 	return map[string]any{
-		"id":                   o.GetId(),
-		"job_task_id":          o.GetJobTaskId(),
-		"task_name":            taskName,
-		"criteria_version_id":  o.GetCriteriaVersionId(),
-		"criteria_name":        criteriaName,
-		"criteria_type":        criteriaTypeString(o.GetCriteriaType()),
-		"value":                value,
-		"determination":        determinationString(o.GetDetermination()),
+		"id":                    o.GetId(),
+		"job_task_id":           o.GetJobTaskId(),
+		"task_name":             taskName,
+		"criteria_version_id":   o.GetCriteriaVersionId(),
+		"criteria_name":         criteriaName,
+		"criteria_type":         criteriaTypeString(o.GetCriteriaType()),
+		"value":                 value,
+		"determination":         determinationString(o.GetDetermination()),
 		"determination_variant": determinationVariant(o.GetDetermination()),
-		"determination_source": o.GetDeterminationSource().String(),
-		"determination_note":   o.GetDeterminationNote(),
-		"recorded_by":          o.GetRecordedBy(),
-		"recorded_by_name":     o.GetRecordedByName(),
-		"revision_number":      o.GetRevisionNumber(),
-		"active":               o.GetActive(),
-		"date_created_string":  o.GetDateCreatedString(),
-		"date_modified_string": o.GetDateModifiedString(),
+		"determination_source":  o.GetDeterminationSource().String(),
+		"determination_note":    o.GetDeterminationNote(),
+		"recorded_by":           o.GetRecordedBy(),
+		"recorded_by_name":      o.GetRecordedByName(),
+		"revision_number":       o.GetRevisionNumber(),
+		"active":                o.GetActive(),
+		"date_created_string":   o.GetDateCreatedString(),
+		"date_modified_string":  o.GetDateModifiedString(),
 	}
 }
 

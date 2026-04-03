@@ -12,8 +12,8 @@ import (
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 
-	summarylist "github.com/erniealice/fayna-golang/views/outcome_summary/list"
 	jobsummary "github.com/erniealice/fayna-golang/views/outcome_summary/job_summary"
+	summarylist "github.com/erniealice/fayna-golang/views/outcome_summary/list"
 	phasesummary "github.com/erniealice/fayna-golang/views/outcome_summary/phase_summary"
 )
 

@@ -27,7 +27,7 @@
         <div class="os-score-label">{{.Labels.Detail.Score}}</div>
         <div class="os-score-value mono">{{index .Summary "summary_score"}}</div>
         <div class="os-score-bar" role="progressbar" aria-label="{{.Labels.Detail.Score}}">
-            <div class="os-score-fill" style="width: {{index .Summary "summary_score"}}%"></div>
+            <div class="os-score-fill" style="--os-score-percent: {{index .Summary "summary_score"}}%;"></div>
         </div>
         <div class="os-scoring-method">
             <span class="os-meta-label">{{.Labels.Detail.ScoringMethod}}</span>

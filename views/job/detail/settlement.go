@@ -72,7 +72,7 @@ func buildSettlementTable(
 		id := s.GetId()
 		targetType := settlementTargetTypeString(s.GetTargetType())
 		targetID := s.GetTargetId()
-		allocatedAmt := fmt.Sprintf("%.2f", s.GetAllocatedAmount())
+		allocatedAmt := fmt.Sprintf("%.2f", float64(s.GetAllocatedAmount())/100.0)
 		settlementDate := s.GetSettlementDateString()
 		status := settlementStatusString(s.GetStatus())
 

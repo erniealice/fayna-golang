@@ -117,7 +117,7 @@ func buildTableRows(activities []*jobactivitypb.JobActivity, l fayna.JobActivity
 		description := a.GetDescription()
 		currency := a.GetCurrency()
 		quantity := fmt.Sprintf("%.2f", a.GetQuantity())
-		amount := utils.FormatCentavoAmount(float64(a.GetTotalCost()), currency)
+		amount := utils.FormatCentavoAmount(a.GetTotalCost(), currency)
 		approvalStatus := approvalStatusString(a.GetApprovalStatus())
 
 		jobName := ""

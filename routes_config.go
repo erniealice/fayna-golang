@@ -45,7 +45,7 @@ type JobRoutes struct {
 // route constants defined in routes.go.
 func DefaultJobRoutes() JobRoutes {
 	return JobRoutes{
-		ActiveNav:    "jobs",
+		ActiveNav:    "job",
 		ActiveSubNav: "jobs",
 
 		ListURL:          JobListURL,
@@ -110,7 +110,7 @@ type JobTemplateRoutes struct {
 // package-level route constants defined in routes.go.
 func DefaultJobTemplateRoutes() JobTemplateRoutes {
 	return JobTemplateRoutes{
-		ActiveNav:    "jobs",
+		ActiveNav:    "job",
 		ActiveSubNav: "job-templates",
 
 		ListURL:          JobTemplateListURL,
@@ -212,7 +212,7 @@ type OutcomeCriteriaRoutes struct {
 // the package-level route constants defined in routes.go.
 func DefaultOutcomeCriteriaRoutes() OutcomeCriteriaRoutes {
 	return OutcomeCriteriaRoutes{
-		ActiveNav:    "jobs",
+		ActiveNav:    "job",
 		ActiveSubNav: "criteria",
 
 		ListURL:       OutcomeCriteriaListURL,
@@ -257,7 +257,7 @@ type TaskOutcomeRoutes struct {
 // package-level route constants defined in routes.go.
 func DefaultTaskOutcomeRoutes() TaskOutcomeRoutes {
 	return TaskOutcomeRoutes{
-		ActiveNav:    "jobs",
+		ActiveNav:    "job",
 		ActiveSubNav: "outcomes",
 
 		ListURL:   TaskOutcomeListURL,
@@ -299,7 +299,7 @@ type OutcomeSummaryRoutes struct {
 // the package-level route constants defined in routes.go.
 func DefaultOutcomeSummaryRoutes() OutcomeSummaryRoutes {
 	return OutcomeSummaryRoutes{
-		ActiveNav:        "jobs",
+		ActiveNav:        "job",
 		ActiveSubNav:     "jobs",
 		ListActiveSubNav: "report-cards",
 

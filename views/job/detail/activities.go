@@ -59,8 +59,8 @@ func buildActivitiesTable(
 		entryDate := a.GetEntryDateString()
 		description := a.GetDescription()
 		quantity := fmt.Sprintf("%.2f", a.GetQuantity())
-		unitCost := utils.FormatCentavoAmount(a.GetUnitCost(), a.GetCurrency())
-		totalCost := utils.FormatCentavoAmount(a.GetTotalCost(), a.GetCurrency())
+		unitCost := utils.FormatCentavoAmount(float64(a.GetUnitCost()), a.GetCurrency())
+		totalCost := utils.FormatCentavoAmount(float64(a.GetTotalCost()), a.GetCurrency())
 
 		rows = append(rows, types.TableRow{
 			ID: id,

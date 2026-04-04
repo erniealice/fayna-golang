@@ -41,8 +41,8 @@ func activityToMap(a *jobactivitypb.JobActivity) map[string]any {
 	}
 
 	currency := a.GetCurrency()
-	unitCost := utils.FormatCentavoAmount(a.GetUnitCost(), currency)
-	totalCost := utils.FormatCentavoAmount(a.GetTotalCost(), currency)
+	unitCost := utils.FormatCentavoAmount(float64(a.GetUnitCost()), currency)
+	totalCost := utils.FormatCentavoAmount(float64(a.GetTotalCost()), currency)
 
 	return map[string]any{
 		"id":              a.GetId(),
@@ -86,7 +86,7 @@ func NewView(deps *DetailViewDeps) view.View {
 		activity := activityToMap(record)
 
 		currency := record.GetCurrency()
-		amount := utils.FormatCentavoAmount(record.GetTotalCost(), currency)
+		amount := utils.FormatCentavoAmount(float64(record.GetTotalCost()), currency)
 		entryType := entryTypeString(record.GetEntryType())
 		approvalStatus := approvalStatusString(record.GetApprovalStatus())
 
@@ -100,7 +100,7 @@ func NewView(deps *DetailViewDeps) view.View {
 				CacheVersion:   viewCtx.CacheVersion,
 				Title:          headerTitle,
 				CurrentPath:    viewCtx.CurrentPath,
-				ActiveNav:      "jobs",
+				ActiveNav:      "job",
 				ActiveSubNav:   "activities",
 				HeaderTitle:    headerTitle,
 				HeaderSubtitle: l.Detail.PageTitle,

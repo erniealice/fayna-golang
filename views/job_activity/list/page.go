@@ -81,7 +81,7 @@ func NewView(deps *ListViewDeps) view.View {
 				CacheVersion:   viewCtx.CacheVersion,
 				Title:          l.Page.Heading,
 				CurrentPath:    viewCtx.CurrentPath,
-				ActiveNav:      "jobs",
+				ActiveNav:      "job",
 				ActiveSubNav:   "activities",
 				HeaderTitle:    l.Page.Heading,
 				HeaderSubtitle: l.Page.Caption,
@@ -117,7 +117,7 @@ func buildTableRows(activities []*jobactivitypb.JobActivity, l fayna.JobActivity
 		description := a.GetDescription()
 		currency := a.GetCurrency()
 		quantity := fmt.Sprintf("%.2f", a.GetQuantity())
-		amount := utils.FormatCentavoAmount(a.GetTotalCost(), currency)
+		amount := utils.FormatCentavoAmount(float64(a.GetTotalCost()), currency)
 		approvalStatus := approvalStatusString(a.GetApprovalStatus())
 
 		jobName := ""

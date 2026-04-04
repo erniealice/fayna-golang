@@ -166,15 +166,15 @@ func DefaultJobTemplateLabels() JobTemplateLabels {
 
 // JobActivityLabels holds all translatable strings for the job activity module.
 type JobActivityLabels struct {
-	Page    JobActivityPageLabels    `json:"page"`
-	Buttons JobActivityButtonLabels  `json:"buttons"`
-	Columns JobActivityColumnLabels  `json:"columns"`
-	Empty   JobActivityEmptyLabels   `json:"empty"`
-	Form    JobActivityFormLabels    `json:"form"`
-	Actions JobActivityActionLabels  `json:"actions"`
-	Detail  JobActivityDetailLabels  `json:"detail"`
-	Status  JobActivityStatusLabels  `json:"status"`
-	Errors  JobActivityErrorLabels   `json:"errors"`
+	Page    JobActivityPageLabels   `json:"page"`
+	Buttons JobActivityButtonLabels `json:"buttons"`
+	Columns JobActivityColumnLabels `json:"columns"`
+	Empty   JobActivityEmptyLabels  `json:"empty"`
+	Form    JobActivityFormLabels   `json:"form"`
+	Actions JobActivityActionLabels `json:"actions"`
+	Detail  JobActivityDetailLabels `json:"detail"`
+	Status  JobActivityStatusLabels `json:"status"`
+	Errors  JobActivityErrorLabels  `json:"errors"`
 }
 
 type JobActivityPageLabels struct {
@@ -403,16 +403,16 @@ type JobColumnLabels struct {
 }
 
 type JobEmptyLabels struct {
-	Title              string `json:"title"`
-	Message            string `json:"message"`
-	PhasesTitle        string `json:"phasesTitle"`
-	PhasesMessage      string `json:"phasesMessage"`
-	ActivitiesTitle    string `json:"activitiesTitle"`
-	ActivitiesMessage  string `json:"activitiesMessage"`
-	SettlementTitle    string `json:"settlementTitle"`
-	SettlementMessage  string `json:"settlementMessage"`
-	OutcomesTitle      string `json:"outcomesTitle"`
-	OutcomesMessage    string `json:"outcomesMessage"`
+	Title             string `json:"title"`
+	Message           string `json:"message"`
+	PhasesTitle       string `json:"phasesTitle"`
+	PhasesMessage     string `json:"phasesMessage"`
+	ActivitiesTitle   string `json:"activitiesTitle"`
+	ActivitiesMessage string `json:"activitiesMessage"`
+	SettlementTitle   string `json:"settlementTitle"`
+	SettlementMessage string `json:"settlementMessage"`
+	OutcomesTitle     string `json:"outcomesTitle"`
+	OutcomesMessage   string `json:"outcomesMessage"`
 }
 
 type JobFormLabels struct {
@@ -705,18 +705,18 @@ type TaskOutcomeActionLabels struct {
 }
 
 type TaskOutcomeDetailLabels struct {
-	PageTitle             string `json:"pageTitle"`
-	Task                  string `json:"task"`
-	Criteria              string `json:"criteria"`
-	CriteriaType          string `json:"criteriaType"`
-	Value                 string `json:"value"`
-	Determination         string `json:"determination"`
-	DeterminationSource   string `json:"determinationSource"`
-	DeterminationNote     string `json:"determinationNote"`
-	RecordedBy            string `json:"recordedBy"`
-	RecordedDate          string `json:"recordedDate"`
-	RevisionNumber        string `json:"revisionNumber"`
-	CreatedDate           string `json:"createdDate"`
+	PageTitle           string `json:"pageTitle"`
+	Task                string `json:"task"`
+	Criteria            string `json:"criteria"`
+	CriteriaType        string `json:"criteriaType"`
+	Value               string `json:"value"`
+	Determination       string `json:"determination"`
+	DeterminationSource string `json:"determinationSource"`
+	DeterminationNote   string `json:"determinationNote"`
+	RecordedBy          string `json:"recordedBy"`
+	RecordedDate        string `json:"recordedDate"`
+	RevisionNumber      string `json:"revisionNumber"`
+	CreatedDate         string `json:"createdDate"`
 }
 
 type TaskOutcomeConfirmLabels struct {
@@ -799,12 +799,12 @@ func DefaultTaskOutcomeLabels() TaskOutcomeLabels {
 
 // OutcomeSummaryLabels holds all translatable strings for the outcome summary module.
 type OutcomeSummaryLabels struct {
-	Page    OutcomeSummaryPageLabels    `json:"page"`
-	Buttons OutcomeSummaryButtonLabels  `json:"buttons"`
-	Columns OutcomeSummaryColumnLabels  `json:"columns"`
-	Empty   OutcomeSummaryEmptyLabels   `json:"empty"`
-	Detail  OutcomeSummaryDetailLabels  `json:"detail"`
-	Errors  OutcomeSummaryErrorLabels   `json:"errors"`
+	Page    OutcomeSummaryPageLabels   `json:"page"`
+	Buttons OutcomeSummaryButtonLabels `json:"buttons"`
+	Columns OutcomeSummaryColumnLabels `json:"columns"`
+	Empty   OutcomeSummaryEmptyLabels  `json:"empty"`
+	Detail  OutcomeSummaryDetailLabels `json:"detail"`
+	Errors  OutcomeSummaryErrorLabels  `json:"errors"`
 }
 
 type OutcomeSummaryColumnLabels struct {
@@ -915,14 +915,14 @@ type FulfillmentLabels struct {
 	AppLabel  string `json:"app_label"`
 	Title     string `json:"title"`
 
-	Status  FulfillmentStatusLabels  `json:"status"`
-	Type    FulfillmentTypeLabels    `json:"type"`
-	Columns FulfillmentColumnLabels  `json:"columns"`
-	Tabs    FulfillmentTabLabels     `json:"tabs"`
-	Actions FulfillmentActionLabels  `json:"actions"`
-	Buttons FulfillmentButtonLabels  `json:"buttons"`
-	Empty   FulfillmentEmptyLabels   `json:"empty"`
-	Errors  FulfillmentErrorLabels   `json:"errors"`
+	Status  FulfillmentStatusLabels `json:"status"`
+	Type    FulfillmentTypeLabels   `json:"type"`
+	Columns FulfillmentColumnLabels `json:"columns"`
+	Tabs    FulfillmentTabLabels    `json:"tabs"`
+	Actions FulfillmentActionLabels `json:"actions"`
+	Buttons FulfillmentButtonLabels `json:"buttons"`
+	Empty   FulfillmentEmptyLabels  `json:"empty"`
+	Errors  FulfillmentErrorLabels  `json:"errors"`
 }
 
 type FulfillmentStatusLabels struct {

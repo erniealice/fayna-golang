@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 )
@@ -20,13 +19,12 @@ import (
 //   - currency: the currency code (e.g., "PHP"). Falls back to "PHP" if empty.
 //
 // Returns a formatted string like "PHP 50,000.00" or "-PHP 50,000.00".
-func FormatCentavoAmount(centavos float64, currency string) string {
+func FormatCentavoAmount(centavos int64, currency string) string {
 	if currency == "" {
 		currency = "PHP"
 	}
 
-	// Convert float64 to int64 safely (proto uses double, DB stores centavos)
-	raw := int64(math.Round(centavos))
+	raw := centavos
 
 	// Handle negative amounts safely
 	isNegative := raw < 0

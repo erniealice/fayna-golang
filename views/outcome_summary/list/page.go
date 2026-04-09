@@ -88,14 +88,14 @@ func NewView(deps *ListViewDeps) view.View {
 
 func summaryColumns(l fayna.OutcomeSummaryLabels) []types.TableColumn {
 	return []types.TableColumn{
-		{Key: "job", Label: l.Columns.Job, Sortable: true, MinWidth: "140px"},
-		{Key: "determination", Label: l.Detail.OverallDetermination, Sortable: true, MinWidth: "120px"},
-		{Key: "score", Label: l.Detail.Score, Sortable: true, MinWidth: "80px"},
-		{Key: "scoring_method", Label: l.Detail.ScoringMethod, Sortable: true, MinWidth: "120px"},
-		{Key: "total", Label: l.Detail.TotalCriteria, Sortable: true, MinWidth: "60px"},
-		{Key: "pass", Label: l.Detail.PassCount, Sortable: true, MinWidth: "60px"},
-		{Key: "fail", Label: l.Detail.FailCount, Sortable: true, MinWidth: "60px"},
-		{Key: "issued_by", Label: l.Detail.IssuedBy, Sortable: true, MinWidth: "100px"},
+		{Key: "job", Label: l.Columns.Job, Sortable: true, MinWidth: "8.75rem"},
+		{Key: "determination", Label: l.Detail.OverallDetermination, Sortable: true, MinWidth: "7.5rem"},
+		{Key: "score", Label: l.Detail.Score, Sortable: true, MinWidth: "5rem"},
+		{Key: "scoring_method", Label: l.Detail.ScoringMethod, Sortable: true, MinWidth: "7.5rem"},
+		{Key: "total", Label: l.Detail.TotalCriteria, Sortable: true, MinWidth: "3.75rem"},
+		{Key: "pass", Label: l.Detail.PassCount, Sortable: true, MinWidth: "3.75rem"},
+		{Key: "fail", Label: l.Detail.FailCount, Sortable: true, MinWidth: "3.75rem"},
+		{Key: "issued_by", Label: l.Detail.IssuedBy, Sortable: true, MinWidth: "6.25rem"},
 	}
 }
 

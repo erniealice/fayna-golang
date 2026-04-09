@@ -154,7 +154,7 @@ func jobTemplateColumns(l fayna.JobTemplateLabels) []types.TableColumn {
 	return []types.TableColumn{
 		{Key: "name", Label: l.Columns.Name, Sortable: true},
 		{Key: "description", Label: l.Columns.Description, Sortable: true},
-		{Key: "status", Label: l.Columns.Status, Sortable: true, Width: "120px"},
+		{Key: "status", Label: l.Columns.Status, Sortable: true, WidthClass: "col-2xl"},
 	}
 }
 

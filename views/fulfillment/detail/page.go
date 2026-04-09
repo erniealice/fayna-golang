@@ -175,9 +175,9 @@ func buildItemsTable(items []*fulfillmentpb.FulfillmentItem, l fayna.Fulfillment
 	columns := []types.TableColumn{
 		{Key: "product_id", Label: "Product", Sortable: false},
 		{Key: "fulfillment_method", Label: l.Columns.FulfillmentMethod, Sortable: false},
-		{Key: "quantity_ordered", Label: "Qty Ordered", Sortable: false, Width: "120px"},
-		{Key: "quantity_delivered", Label: "Qty Delivered", Sortable: false, Width: "130px"},
-		{Key: "status", Label: l.Columns.Status, Sortable: false, Width: "120px"},
+		{Key: "quantity_ordered", Label: "Qty Ordered", Sortable: false, WidthClass: "col-2xl"},
+		{Key: "quantity_delivered", Label: "Qty Delivered", Sortable: false, WidthClass: "col-3xl"},
+		{Key: "status", Label: l.Columns.Status, Sortable: false, WidthClass: "col-2xl"},
 	}
 
 	rows := make([]types.TableRow, 0, len(items))
@@ -212,7 +212,7 @@ func buildHistoryTable(events []*fulfillmentpb.FulfillmentStatusEvent, l fayna.F
 		{Key: "from_status", Label: "From Status", Sortable: false},
 		{Key: "to_status", Label: "To Status", Sortable: false},
 		{Key: "reason", Label: "Reason", Sortable: false},
-		{Key: "occurred_at", Label: "Date", Sortable: false, Width: "150px"},
+		{Key: "occurred_at", Label: "Date", Sortable: false, WidthClass: "col-4xl"},
 	}
 
 	rows := make([]types.TableRow, 0, len(events))
@@ -247,10 +247,10 @@ func buildHistoryTable(events []*fulfillmentpb.FulfillmentStatusEvent, l fayna.F
 func buildReturnsTable(returns []*fulfillmentpb.FulfillmentReturn, l fayna.FulfillmentLabels, tableLabels types.TableLabels) *types.TableConfig {
 	_ = l // labels reserved for future use
 	columns := []types.TableColumn{
-		{Key: "status", Label: "Status", Sortable: false, Width: "120px"},
+		{Key: "status", Label: "Status", Sortable: false, WidthClass: "col-2xl"},
 		{Key: "reason", Label: "Reason", Sortable: false},
 		{Key: "notes", Label: "Notes", Sortable: false},
-		{Key: "date_created", Label: "Date", Sortable: false, Width: "150px"},
+		{Key: "date_created", Label: "Date", Sortable: false, WidthClass: "col-4xl"},
 	}
 
 	rows := make([]types.TableRow, 0, len(returns))

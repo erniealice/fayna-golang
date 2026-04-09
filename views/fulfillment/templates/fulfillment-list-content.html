@@ -35,7 +35,7 @@ Data: .Rows ([]types.TableRow), .Pagination (*types.PaginationConfig)
                 data-drawer-title="{{.DrawerTitle}}"
                 {{if .Disabled}}disabled title="{{.DisabledTooltip}}"{{else}}title="{{.Label}}"{{end}}>{{.Label}}</button>
             {{else if eq .Type "delete"}}
-            <button class="action-btn action-btn--danger"
+            <button class="action-btn action-btn-danger"
                 hx-delete="{{.URL}}"
                 hx-confirm="{{.Label}} {{.ItemName}}?"
                 {{if .Disabled}}disabled title="{{.DisabledTooltip}}"{{else}}title="{{.Label}}"{{end}}>{{.Label}}</button>

@@ -103,10 +103,10 @@ func NewView(deps *ListViewDeps) view.View {
 func criteriaColumns(l fayna.OutcomeCriteriaLabels) []types.TableColumn {
 	return []types.TableColumn{
 		{Key: "name", Label: l.Columns.Name, Sortable: true},
-		{Key: "type", Label: l.Columns.Type, Sortable: true, Width: "150px"},
-		{Key: "scope", Label: l.Columns.Scope, Sortable: true, Width: "130px"},
-		{Key: "version", Label: l.Columns.Version, Sortable: true, Width: "100px"},
-		{Key: "status", Label: l.Columns.Status, Sortable: true, Width: "130px"},
+		{Key: "type", Label: l.Columns.Type, Sortable: true, WidthClass: "col-4xl"},
+		{Key: "scope", Label: l.Columns.Scope, Sortable: true, WidthClass: "col-3xl"},
+		{Key: "version", Label: l.Columns.Version, Sortable: true, WidthClass: "col-lg"},
+		{Key: "status", Label: l.Columns.Status, Sortable: true, WidthClass: "col-3xl"},
 	}
 }
 

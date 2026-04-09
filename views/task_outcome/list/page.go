@@ -104,10 +104,10 @@ func outcomeColumns(l fayna.TaskOutcomeLabels) []types.TableColumn {
 	return []types.TableColumn{
 		{Key: "task", Label: l.Columns.Task, Sortable: true},
 		{Key: "criteria", Label: l.Columns.Criteria, Sortable: true},
-		{Key: "value", Label: l.Columns.Value, Sortable: false, Width: "120px"},
-		{Key: "determination", Label: l.Columns.Determination, Sortable: true, Width: "150px"},
-		{Key: "recorded_by", Label: l.Columns.RecordedBy, Sortable: true, Width: "150px"},
-		{Key: "date", Label: l.Columns.Date, Sortable: true, Width: "150px"},
+		{Key: "value", Label: l.Columns.Value, Sortable: false, WidthClass: "col-2xl"},
+		{Key: "determination", Label: l.Columns.Determination, Sortable: true, WidthClass: "col-4xl"},
+		{Key: "recorded_by", Label: l.Columns.RecordedBy, Sortable: true, WidthClass: "col-4xl"},
+		{Key: "date", Label: l.Columns.Date, Sortable: true, WidthClass: "col-4xl"},
 	}
 }
 

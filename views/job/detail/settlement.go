@@ -60,11 +60,11 @@ func buildSettlementTable(
 	tableLabels types.TableLabels,
 ) *types.TableConfig {
 	columns := []types.TableColumn{
-		{Key: "target_type", Label: l.Detail.TargetType, Sortable: true, Width: "160px"},
+		{Key: "target_type", Label: l.Detail.TargetType, Sortable: true, WidthClass: "col-5xl"},
 		{Key: "target_id", Label: l.Detail.TargetID, Sortable: false},
-		{Key: "allocated_amount", Label: l.Detail.AllocatedAmt, Sortable: true, Width: "140px"},
-		{Key: "settlement_date", Label: l.Detail.SettleDate, Sortable: true, Width: "140px"},
-		{Key: "status", Label: l.Detail.SettleStatus, Sortable: true, Width: "120px"},
+		{Key: "allocated_amount", Label: l.Detail.AllocatedAmt, Sortable: true, WidthClass: "col-3xl"},
+		{Key: "settlement_date", Label: l.Detail.SettleDate, Sortable: true, WidthClass: "col-3xl"},
+		{Key: "status", Label: l.Detail.SettleStatus, Sortable: true, WidthClass: "col-2xl"},
 	}
 
 	rows := []types.TableRow{}

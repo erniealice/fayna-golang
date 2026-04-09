@@ -64,9 +64,9 @@ func buildPhasesTable(
 	tableLabels types.TableLabels,
 ) *types.TableConfig {
 	columns := []types.TableColumn{
-		{Key: "order", Label: l.Detail.PhaseOrder, Sortable: false, Width: "60px"},
+		{Key: "order", Label: l.Detail.PhaseOrder, Sortable: false, WidthClass: "col-sm"},
 		{Key: "name", Label: l.Detail.PhaseName, Sortable: true},
-		{Key: "status", Label: l.Detail.PhaseStatus, Sortable: true, Width: "120px"},
+		{Key: "status", Label: l.Detail.PhaseStatus, Sortable: true, WidthClass: "col-2xl"},
 		{Key: "tasks", Label: l.Detail.TaskName, Sortable: false},
 	}
 

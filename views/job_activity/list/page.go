@@ -98,13 +98,13 @@ func NewView(deps *ListViewDeps) view.View {
 
 func activityColumns(l fayna.JobActivityLabels) []types.TableColumn {
 	return []types.TableColumn{
-		{Key: "date", Label: l.Columns.Date, Sortable: true, Width: "140px"},
+		{Key: "date", Label: l.Columns.Date, Sortable: true, WidthClass: "col-3xl"},
 		{Key: "job", Label: l.Columns.Job, Sortable: true},
-		{Key: "entry_type", Label: l.Columns.EntryType, Sortable: true, Width: "120px"},
+		{Key: "entry_type", Label: l.Columns.EntryType, Sortable: true, WidthClass: "col-2xl"},
 		{Key: "description", Label: l.Columns.Description, Sortable: true},
-		{Key: "quantity", Label: l.Columns.Quantity, Sortable: true, Width: "100px", Align: "right"},
-		{Key: "amount", Label: l.Columns.Amount, Sortable: true, Width: "140px", Align: "right"},
-		{Key: "status", Label: l.Columns.Status, Sortable: true, Width: "120px"},
+		{Key: "quantity", Label: l.Columns.Quantity, Sortable: true, WidthClass: "col-lg", Align: "right"},
+		{Key: "amount", Label: l.Columns.Amount, Sortable: true, WidthClass: "col-3xl", Align: "right"},
+		{Key: "status", Label: l.Columns.Status, Sortable: true, WidthClass: "col-2xl"},
 	}
 }
 

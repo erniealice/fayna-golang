@@ -9,8 +9,8 @@ import (
 func fulfillmentColumns(l fayna.FulfillmentLabels) []types.TableColumn {
 	return []types.TableColumn{
 		{Key: "fulfillment_method", Label: l.Columns.FulfillmentMethod, Sortable: true},
-		{Key: "status", Label: l.Columns.Status, Sortable: true, Width: "160px"},
+		{Key: "status", Label: l.Columns.Status, Sortable: true, WidthClass: "col-5xl"},
 		{Key: "supplier_name", Label: l.Columns.SupplierName, Sortable: true},
-		{Key: "item_count", Label: l.Columns.ItemCount, Sortable: false, Width: "100px"},
+		{Key: "item_count", Label: l.Columns.ItemCount, Sortable: false, WidthClass: "col-lg"},
 	}
 }

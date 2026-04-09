@@ -58,9 +58,7 @@
         <div class="to-info-item">
             <span class="to-info-label">{{.Labels.Detail.Determination}}</span>
             <span>
-                <span class="badge badge--{{index .Outcome "determination_variant"}} to-determination-badge">
-                    {{index .Outcome "determination"}}
-                </span>
+                {{template "status-badge" (dict "Status" (index .Outcome "determination_variant") "Label" (index .Outcome "determination"))}}
             </span>
         </div>
 

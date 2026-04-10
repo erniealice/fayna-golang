@@ -102,10 +102,10 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	r.GET(m.routes.DetailURL+"/content", m.Detail)
 
 	// CRUD actions (GET = drawer form, POST = process submission)
-	r.GET(m.routes.CreateURL, m.Create)
-	r.POST(m.routes.CreateURL, m.Create)
-	r.GET(m.routes.UpdateURL, m.Update)
-	r.POST(m.routes.UpdateURL, m.Update)
+	r.GET(m.routes.AddURL, m.Create)
+	r.POST(m.routes.AddURL, m.Create)
+	r.GET(m.routes.EditURL, m.Update)
+	r.POST(m.routes.EditURL, m.Update)
 	r.POST(m.routes.DeleteURL, m.Delete)
 
 	// Approval workflow

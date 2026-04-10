@@ -59,7 +59,7 @@ func newCreateAction(deps *ModuleDeps) view.View {
 
 		if viewCtx.Request.Method == http.MethodGet {
 			return view.OK("job-activity-drawer-form", &activityFormData{
-				FormAction:   deps.Routes.CreateURL,
+				FormAction:   deps.Routes.AddURL,
 				JobID:        viewCtx.Request.URL.Query().Get("job_id"),
 				Labels:       deps.Labels,
 				CommonLabels: nil, // injected by ViewAdapter
@@ -141,7 +141,7 @@ func newUpdateAction(deps *ModuleDeps) view.View {
 			}
 
 			return view.OK("job-activity-drawer-form", &activityFormData{
-				FormAction:     route.ResolveURL(deps.Routes.UpdateURL, "id", id),
+				FormAction:     route.ResolveURL(deps.Routes.EditURL, "id", id),
 				IsEdit:         true,
 				ID:             id,
 				JobID:          record.GetJobId(),

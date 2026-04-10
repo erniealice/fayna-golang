@@ -4,7 +4,7 @@ Method is locked (immutable after creation) — shown as read-only badge, not a 
 Data: .ID, .FormAction, .Method, .ScheduledAt, .Notes, .CommonLabels, .Labels
 */}}
 {{define "fulfillment-edit-form"}}
-<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="Sheet.handleResponse(event)">
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="fulfillment-edit-form">
     <input type="hidden" name="id" value="{{.ID}}">
 
     <div class="sheet-body">

@@ -154,8 +154,8 @@ func (r JobTemplateRoutes) RouteMap() map[string]string {
 type JobActivityRoutes struct {
 	ListURL    string `json:"list_url"`
 	DetailURL  string `json:"detail_url"`
-	CreateURL  string `json:"create_url"`
-	UpdateURL  string `json:"update_url"`
+	AddURL     string `json:"add_url"`
+	EditURL    string `json:"edit_url"`
 	DeleteURL  string `json:"delete_url"`
 	SubmitURL  string `json:"submit_url"`
 	ApproveURL string `json:"approve_url"`
@@ -168,8 +168,8 @@ func DefaultJobActivityRoutes() JobActivityRoutes {
 	return JobActivityRoutes{
 		ListURL:    JobActivityListURL,
 		DetailURL:  JobActivityDetailURL,
-		CreateURL:  JobActivityCreateURL,
-		UpdateURL:  JobActivityUpdateURL,
+		AddURL:     JobActivityAddURL,
+		EditURL:    JobActivityEditURL,
 		DeleteURL:  JobActivityDeleteURL,
 		SubmitURL:  JobActivitySubmitURL,
 		ApproveURL: JobActivityApproveURL,
@@ -183,8 +183,8 @@ func (r JobActivityRoutes) RouteMap() map[string]string {
 	return map[string]string{
 		"job_activity.list":    r.ListURL,
 		"job_activity.detail":  r.DetailURL,
-		"job_activity.create":  r.CreateURL,
-		"job_activity.update":  r.UpdateURL,
+		"job_activity.add":     r.AddURL,
+		"job_activity.edit":    r.EditURL,
 		"job_activity.delete":  r.DeleteURL,
 		"job_activity.submit":  r.SubmitURL,
 		"job_activity.approve": r.ApproveURL,
@@ -346,12 +346,12 @@ func DefaultFulfillmentRoutes() FulfillmentRoutes {
 // RouteMap returns all fulfillment routes as a map for template URL resolution.
 func (r FulfillmentRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"fulfillmentList":       r.ListURL,
-		"fulfillmentDetail":     r.DetailURL,
-		"fulfillmentAdd":        r.AddURL,
-		"fulfillmentEdit":       r.EditURL,
-		"fulfillmentDelete":     r.DeleteURL,
-		"fulfillmentTransition": r.TransitionURL,
-		"fulfillmentReturn":     r.ReturnURL,
+		"fulfillment.list":       r.ListURL,
+		"fulfillment.detail":     r.DetailURL,
+		"fulfillment.add":        r.AddURL,
+		"fulfillment.edit":       r.EditURL,
+		"fulfillment.delete":     r.DeleteURL,
+		"fulfillment.transition": r.TransitionURL,
+		"fulfillment.return":     r.ReturnURL,
 	}
 }

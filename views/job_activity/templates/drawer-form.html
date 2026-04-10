@@ -6,7 +6,7 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
       .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
 */}}
 {{define "job-activity-drawer-form"}}
-<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="Sheet.handleResponse(event)">
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-activity-form">
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
 
     <div class="sheet-body">

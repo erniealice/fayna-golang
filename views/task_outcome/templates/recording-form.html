@@ -6,7 +6,7 @@ Data: .TaskID, .CriteriaID, .CriteriaName, .CriteriaType, .CriteriaOptions,
       .CommonLabels, .Labels (fayna.TaskOutcomeLabels)
 */}}
 {{define "task-outcome-recording-form"}}
-<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="Sheet.handleResponse(event)">
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="task-outcome-form">
 
     {{/* --- Hidden identifiers --- */}}
     <input type="hidden" name="task_id" value="{{.TaskID}}">

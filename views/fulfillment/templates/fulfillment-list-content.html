@@ -29,6 +29,7 @@ Data: .Rows ([]types.TableRow), .Pagination (*types.PaginationConfig)
             {{else if eq .Type "edit"}}
             <button type="button" class="action-btn"
                 aria-haspopup="dialog"
+                data-testid="fulfillment-edit-btn"
                 hx-get="{{.URL}}"
                 hx-target="#sheetContent"
                 hx-swap="innerHTML"
@@ -36,6 +37,7 @@ Data: .Rows ([]types.TableRow), .Pagination (*types.PaginationConfig)
                 {{if .Disabled}}disabled title="{{.DisabledTooltip}}"{{else}}title="{{.Label}}"{{end}}>{{.Label}}</button>
             {{else if eq .Type "delete"}}
             <button class="action-btn action-btn-danger"
+                data-testid="fulfillment-delete-btn"
                 hx-delete="{{.URL}}"
                 hx-confirm="{{.Label}} {{.ItemName}}?"
                 {{if .Disabled}}disabled title="{{.DisabledTooltip}}"{{else}}title="{{.Label}}"{{end}}>{{.Label}}</button>

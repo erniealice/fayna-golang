@@ -68,7 +68,7 @@ func NewView(deps *ListViewDeps) view.View {
 			},
 			PrimaryAction: &types.PrimaryAction{
 				Label:           l.Buttons.AddActivity,
-				ActionURL:       deps.Routes.CreateURL,
+				ActionURL:       deps.Routes.AddURL,
 				Icon:            "icon-plus",
 				Disabled:        !perms.Can("job_activity", "create"),
 				DisabledTooltip: l.Errors.PermissionDenied,
@@ -128,7 +128,7 @@ func buildTableRows(activities []*jobactivitypb.JobActivity, l fayna.JobActivity
 		detailURL := route.ResolveURL(routes.DetailURL, "id", id)
 		actions := []types.TableAction{
 			{Type: "view", Label: l.Actions.View, Action: "view", Href: detailURL},
-			{Type: "edit", Label: l.Actions.Edit, Action: "edit", URL: route.ResolveURL(routes.UpdateURL, "id", id), DrawerTitle: l.Actions.Edit, Disabled: !perms.Can("job_activity", "update"), DisabledTooltip: l.Errors.PermissionDenied},
+			{Type: "edit", Label: l.Actions.Edit, Action: "edit", URL: route.ResolveURL(routes.EditURL, "id", id), DrawerTitle: l.Actions.Edit, Disabled: !perms.Can("job_activity", "update"), DisabledTooltip: l.Errors.PermissionDenied},
 			{Type: "delete", Label: l.Actions.Delete, Action: "delete", URL: routes.DeleteURL, ItemName: id, Disabled: !perms.Can("job_activity", "delete"), DisabledTooltip: l.Errors.PermissionDenied},
 		}
 

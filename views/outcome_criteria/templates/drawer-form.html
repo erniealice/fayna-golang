@@ -4,7 +4,7 @@ Used by both Add and Edit actions.
 Data: .Name, .Type, .Scope, .Description, .Required, .Weight, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
 */}}
 {{define "outcome-criteria-drawer-form"}}
-<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="Sheet.handleResponse(event)">
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="outcome-criteria-form">
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
 
     <div class="sheet-body">

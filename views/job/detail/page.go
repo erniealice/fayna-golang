@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 
 	fayna "github.com/erniealice/fayna-golang"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
@@ -18,6 +19,7 @@ import (
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 )
 
 // PageData holds the data for the job detail page.
@@ -343,5 +345,50 @@ func NewTabAction(deps *DetailViewDeps) view.View {
 			templateName = "audit-history-tab"
 		}
 		return view.OK(templateName, pageData)
+	})
+}
+
+// NewAssignTaskAction handles POST /action/job/{id}/task/{taskId}/assign.
+// It reads staff_id from the form, updates JobTask.assigned_to,
+// and returns an HTMX response that refreshes the phases tab.
+func NewAssignTaskAction(deps *DetailViewDeps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		id := viewCtx.Request.PathValue("id")
+		taskID := viewCtx.Request.PathValue("taskId")
+
+		if err := viewCtx.Request.ParseForm(); err != nil {
+			log.Printf("Failed to parse form for assign task: %v", err)
+			return view.Error(fmt.Errorf("invalid form data"))
+		}
+		staffID := viewCtx.Request.FormValue("staff_id")
+		if staffID == "" {
+			log.Printf("Assign task: staff_id is required for task %s on job %s", taskID, id)
+			return view.Error(fmt.Errorf("staff_id is required"))
+		}
+
+		if deps.UpdateJobTask == nil {
+			log.Printf("Assign task: UpdateJobTask dependency is not wired")
+			return view.Error(fmt.Errorf("task assignment not available"))
+		}
+
+		_, err := deps.UpdateJobTask(ctx, &jobtaskpb.UpdateJobTaskRequest{
+			Data: &jobtaskpb.JobTask{
+				Id:         taskID,
+				AssignedTo: &staffID,
+			},
+		})
+		if err != nil {
+			log.Printf("Failed to assign task %s to staff %s: %v", taskID, staffID, err)
+			return view.Error(fmt.Errorf("failed to assign task: %w", err))
+		}
+
+		// Return HTMX redirect to re-render the phases tab.
+		tabActionURL := route.ResolveURL(deps.Routes.TabActionURL, "id", id, "tab", "phases")
+		return view.ViewResult{
+			StatusCode: http.StatusNoContent,
+			Headers: map[string]string{
+				"HX-Redirect": tabActionURL,
+			},
+		}
 	})
 }

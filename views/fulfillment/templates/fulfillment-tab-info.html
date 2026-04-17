@@ -8,7 +8,7 @@
         <div class="fulfillment-info-item">
             <span class="fulfillment-info-label">{{.Labels.Columns.Method}}</span>
             <span>
-                <span class="badge badge--default">{{index .Fulfillment "fulfillment_method"}}</span>
+                <span class="badge badge--default">{{index .Fulfillment "delivery_mode"}}</span>
             </span>
         </div>
 
@@ -37,7 +37,7 @@
         {{/* Delivery Cost */}}
         <div class="fulfillment-info-item">
             <span class="fulfillment-info-label">{{.Labels.Detail.DeliveryCost}}</span>
-            <span class="fulfillment-info-value mono">{{index .Fulfillment "delivery_cost"}} {{index .Fulfillment "currency"}}</span>
+            <span class="fulfillment-info-value mono">{{template "table-cell-money" (index .Fulfillment "delivery_cost")}}</span>
         </div>
 
         {{/* Scheduled At */}}

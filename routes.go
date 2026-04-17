@@ -15,6 +15,7 @@ const (
 	JobTabActionURL        = "/action/job/detail/{id}/tab/{tab}"
 	JobAttachmentUploadURL = "/action/job/detail/{id}/attachments/upload"
 	JobAttachmentDeleteURL = "/action/job/detail/{id}/attachments/delete"
+	JobTaskAssignURL       = "/action/job/{id}/task/{taskId}/assign"
 
 	// Job Template routes
 	JobTemplateListURL             = "/app/job-templates/list/{status}"
@@ -34,10 +35,13 @@ const (
 	JobActivityDetailURL  = "/app/activities/detail/{id}"
 	JobActivityAddURL     = "/action/activity/add"
 	JobActivityEditURL    = "/action/activity/edit/{id}"
-	JobActivityDeleteURL  = "/action/activity/delete"
-	JobActivitySubmitURL  = "/action/activity/submit"
-	JobActivityApproveURL = "/action/activity/approve"
-	JobActivityRejectURL  = "/action/activity/reject"
+	JobActivityDeleteURL              = "/action/activity/delete"
+	JobActivitySubmitURL              = "/action/activity/submit"
+	JobActivityApproveURL             = "/action/activity/approve"
+	JobActivityRejectURL              = "/action/activity/reject"
+	JobActivityPostURL                = "/action/activity/post"
+	JobActivityReverseURL             = "/action/activity/reverse"
+	JobActivityBulkGenerateInvoiceURL = "/action/activity/bulk-generate-invoice"
 
 	// Outcome Criteria routes (criteria library)
 	OutcomeCriteriaListURL       = "/app/criteria/list/{status}"

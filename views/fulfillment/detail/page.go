@@ -40,12 +40,12 @@ func fulfillmentToMap(f *fulfillmentpb.Fulfillment) map[string]any {
 		"workspace_id":       f.GetWorkspaceId(),
 		"revenue_id":         f.GetRevenueId(),
 		"supplier_id":        f.GetSupplierId(),
-		"fulfillment_method": f.GetFulfillmentMethod(),
+		"delivery_mode": f.GetDeliveryMode(),
 		"status":             f.GetStatus(),
 		"status_variant":     fulfillmentStatusVariant(f.GetStatus()),
 		"provider_status":    f.GetProviderStatus(),
 		"provider_reference": f.GetProviderReference(),
-		"delivery_cost":      fmt.Sprintf("%.2f", float64(f.GetDeliveryCost())/100.0),
+		"delivery_cost":      types.MoneyCell(float64(f.GetDeliveryCost()), f.GetCurrency(), true),
 		"currency":           f.GetCurrency(),
 		"notes":              f.GetNotes(),
 		"active":             f.GetActive(),
@@ -174,7 +174,7 @@ func loadTabData(
 func buildItemsTable(items []*fulfillmentpb.FulfillmentItem, l fayna.FulfillmentLabels, tableLabels types.TableLabels) *types.TableConfig {
 	columns := []types.TableColumn{
 		{Key: "product_id", Label: "Product", Sortable: false},
-		{Key: "fulfillment_method", Label: l.Columns.FulfillmentMethod, Sortable: false},
+		{Key: "delivery_mode", Label: l.Columns.DeliveryMode, Sortable: false},
 		{Key: "quantity_ordered", Label: "Qty Ordered", Sortable: false, WidthClass: "col-2xl"},
 		{Key: "quantity_delivered", Label: "Qty Delivered", Sortable: false, WidthClass: "col-3xl"},
 		{Key: "status", Label: l.Columns.Status, Sortable: false, WidthClass: "col-2xl"},
@@ -186,7 +186,7 @@ func buildItemsTable(items []*fulfillmentpb.FulfillmentItem, l fayna.Fulfillment
 			ID: item.GetId(),
 			Cells: []types.TableCell{
 				{Type: "text", Value: item.GetProductId()},
-				{Type: "text", Value: item.GetFulfillmentMethod()},
+				{Type: "text", Value: item.GetDeliveryMode()},
 				{Type: "text", Value: fmt.Sprintf("%.2f", item.GetQuantityOrdered())},
 				{Type: "text", Value: fmt.Sprintf("%.2f", item.GetQuantityDelivered())},
 				{Type: "badge", Value: item.GetStatus(), Variant: "default"},

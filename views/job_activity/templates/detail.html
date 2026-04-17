@@ -47,13 +47,13 @@
                 {{/* Unit Cost */}}
                 <div class="act-info-item">
                     <span class="act-info-label">{{.Labels.Detail.UnitCost}}</span>
-                    <span class="act-info-value mono">{{index .Activity "unit_cost"}}</span>
+                    <span class="act-info-value mono">{{template "table-cell-money" (index .Activity "unit_cost")}}</span>
                 </div>
 
                 {{/* Total Cost */}}
                 <div class="act-info-item">
                     <span class="act-info-label">{{.Labels.Detail.TotalCost}}</span>
-                    <span class="act-info-value mono">{{index .Activity "total_cost"}}</span>
+                    <span class="act-info-value mono">{{template "table-cell-money" (index .Activity "total_cost")}}</span>
                 </div>
 
                 {{/* Billable Status */}}

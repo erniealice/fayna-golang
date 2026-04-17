@@ -6,7 +6,6 @@ import (
 	"log"
 
 	fayna "github.com/erniealice/fayna-golang"
-	"github.com/erniealice/fayna-golang/utils"
 
 	"github.com/erniealice/pyeza-golang/types"
 
@@ -59,8 +58,7 @@ func buildActivitiesTable(
 		entryDate := a.GetEntryDateString()
 		description := a.GetDescription()
 		quantity := fmt.Sprintf("%.2f", a.GetQuantity())
-		unitCost := utils.FormatCentavoAmount(a.GetUnitCost(), a.GetCurrency())
-		totalCost := utils.FormatCentavoAmount(a.GetTotalCost(), a.GetCurrency())
+		currency := a.GetCurrency()
 
 		rows = append(rows, types.TableRow{
 			ID: id,
@@ -69,8 +67,8 @@ func buildActivitiesTable(
 				types.DateTimeCell(entryDate, types.DateReadable),
 				{Type: "text", Value: description},
 				{Type: "text", Value: quantity},
-				{Type: "text", Value: unitCost},
-				{Type: "text", Value: totalCost},
+				types.MoneyCell(float64(a.GetUnitCost()), currency, true),
+				types.MoneyCell(float64(a.GetTotalCost()), currency, true),
 			},
 			DataAttrs: map[string]string{
 				"entry_type": entryType,

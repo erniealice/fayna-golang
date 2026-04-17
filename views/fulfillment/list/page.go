@@ -45,10 +45,10 @@ type PageData struct {
 }
 
 var fulfillmentAllowedSortCols = []string{
-	"date_created", "date_modified", "status", "fulfillment_method",
+	"date_created", "date_modified", "status", "delivery_mode",
 }
 
-var fulfillmentSearchFields = []string{"reference_number", "fulfillment_method"}
+var fulfillmentSearchFields = []string{"reference_number", "delivery_mode"}
 
 // NewView creates the fulfillment list view.
 func NewView(deps *ListViewDeps) view.View {
@@ -237,7 +237,7 @@ func buildTableRows(rows []*fulfillmentpb.FulfillmentListRow, status string, l f
 
 		id := f.GetId()
 		supplierName := row.GetSupplierName()
-		method := f.GetFulfillmentMethod()
+		method := f.GetDeliveryMode()
 		itemCount := fmt.Sprintf("%d", row.GetItemCount())
 		detailURL := route.ResolveURL(routes.DetailURL, "id", id)
 
@@ -251,7 +251,7 @@ func buildTableRows(rows []*fulfillmentpb.FulfillmentListRow, status string, l f
 				{Type: "text", Value: itemCount},
 			},
 			DataAttrs: map[string]string{
-				"fulfillment_method": method,
+				"delivery_mode": method,
 				"status":             fStatus,
 				"supplier_name":      supplierName,
 				"item_count":         itemCount,

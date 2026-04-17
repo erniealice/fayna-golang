@@ -2,7 +2,6 @@ package detail
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	fayna "github.com/erniealice/fayna-golang"
@@ -28,6 +27,7 @@ func loadSettlementTab(ctx context.Context, deps *DetailViewDeps, pageData *Page
 	// Collect activity IDs for this job to filter settlements.
 	// Settlements are linked via job_activity_id, not directly to job_id.
 	activityIDs := map[string]bool{}
+	currency := ""
 	if deps.ListJobActivities != nil {
 		actResp, actErr := deps.ListJobActivities(ctx, &jobactivitypb.ListJobActivitiesRequest{})
 		if actErr != nil {
@@ -36,6 +36,9 @@ func loadSettlementTab(ctx context.Context, deps *DetailViewDeps, pageData *Page
 			for _, a := range actResp.GetData() {
 				if a.GetJobId() == jobID {
 					activityIDs[a.GetId()] = true
+					if currency == "" {
+						currency = a.GetCurrency()
+					}
 				}
 			}
 		}
@@ -50,7 +53,7 @@ func loadSettlementTab(ctx context.Context, deps *DetailViewDeps, pageData *Page
 	}
 
 	l := deps.Labels
-	pageData.SettlementTable = buildSettlementTable(settlements, l, deps.TableLabels)
+	pageData.SettlementTable = buildSettlementTable(settlements, l, deps.TableLabels, currency)
 }
 
 // buildSettlementTable builds the settlement table config.
@@ -58,6 +61,7 @@ func buildSettlementTable(
 	settlements []*jobsettlementpb.JobSettlement,
 	l fayna.JobLabels,
 	tableLabels types.TableLabels,
+	currency string,
 ) *types.TableConfig {
 	columns := []types.TableColumn{
 		{Key: "target_type", Label: l.Detail.TargetType, Sortable: true, WidthClass: "col-5xl"},
@@ -72,7 +76,7 @@ func buildSettlementTable(
 		id := s.GetId()
 		targetType := settlementTargetTypeString(s.GetTargetType())
 		targetID := s.GetTargetId()
-		allocatedAmt := fmt.Sprintf("%.2f", float64(s.GetAllocatedAmount())/100.0)
+		allocatedAmtCell := types.MoneyCell(float64(s.GetAllocatedAmount()), currency, true)
 		settlementDate := s.GetSettlementDateString()
 		status := settlementStatusString(s.GetStatus())
 
@@ -81,13 +85,13 @@ func buildSettlementTable(
 			Cells: []types.TableCell{
 				{Type: "badge", Value: targetType, Variant: "info"},
 				{Type: "text", Value: targetID},
-				{Type: "text", Value: allocatedAmt},
+				allocatedAmtCell,
 				types.DateTimeCell(settlementDate, types.DateReadable),
 				{Type: "badge", Value: status, Variant: settlementStatusVariant(status)},
 			},
 			DataAttrs: map[string]string{
 				"target_type":      targetType,
-				"allocated_amount": allocatedAmt,
+				"allocated_amount": allocatedAmtCell.Value,
 				"status":           status,
 			},
 		})

@@ -40,7 +40,8 @@ type ModuleDeps struct {
 	ListJobPhases func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
 
 	// Job task operations
-	ListJobTasks func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
+	ListJobTasks  func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
+	UpdateJobTask func(ctx context.Context, req *jobtaskpb.UpdateJobTaskRequest) (*jobtaskpb.UpdateJobTaskResponse, error)
 
 	// Job activity operations
 	ListJobActivities func(ctx context.Context, req *jobactivitypb.ListJobActivitiesRequest) (*jobactivitypb.ListJobActivitiesResponse, error)
@@ -70,6 +71,7 @@ type Module struct {
 	BulkSetStatus    view.View
 	AttachmentUpload view.View
 	AttachmentDelete view.View
+	AssignTask       view.View
 }
 
 // NewModule creates a new job module with all views wired.
@@ -89,6 +91,7 @@ func NewModule(deps *ModuleDeps) *Module {
 		ReadJob:            deps.ReadJob,
 		ListJobPhases:      deps.ListJobPhases,
 		ListJobTasks:       deps.ListJobTasks,
+		UpdateJobTask:      deps.UpdateJobTask,
 		ListJobActivities:  deps.ListJobActivities,
 		ListJobSettlements: deps.ListJobSettlements,
 	}
@@ -122,6 +125,7 @@ func NewModule(deps *ModuleDeps) *Module {
 		BulkSetStatus:    jobaction.NewBulkSetStatusAction(actionDeps),
 		AttachmentUpload: jobdetail.NewAttachmentUploadAction(detailDeps),
 		AttachmentDelete: jobdetail.NewAttachmentDeleteAction(detailDeps),
+		AssignTask:       jobdetail.NewAssignTaskAction(detailDeps),
 	}
 }
 
@@ -143,5 +147,9 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 		r.GET(m.routes.AttachmentUploadURL, m.AttachmentUpload)
 		r.POST(m.routes.AttachmentUploadURL, m.AttachmentUpload)
 		r.POST(m.routes.AttachmentDeleteURL, m.AttachmentDelete)
+	}
+	// Task actions
+	if m.routes.TaskAssignURL != "" {
+		r.POST(m.routes.TaskAssignURL, m.AssignTask)
 	}
 }

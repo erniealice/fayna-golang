@@ -6,7 +6,6 @@ import (
 	"log"
 
 	fayna "github.com/erniealice/fayna-golang"
-	"github.com/erniealice/fayna-golang/utils"
 
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
@@ -29,7 +28,7 @@ type PageData struct {
 	EntryType      string
 	ApprovalStatus string
 	StatusVariant  string
-	Amount         string
+	Amount         types.TableCell
 	Currency       string
 }
 
@@ -41,8 +40,8 @@ func activityToMap(a *jobactivitypb.JobActivity) map[string]any {
 	}
 
 	currency := a.GetCurrency()
-	unitCost := utils.FormatCentavoAmount(a.GetUnitCost(), currency)
-	totalCost := utils.FormatCentavoAmount(a.GetTotalCost(), currency)
+	unitCostCell := types.MoneyCell(float64(a.GetUnitCost()), currency, true)
+	totalCostCell := types.MoneyCell(float64(a.GetTotalCost()), currency, true)
 
 	return map[string]any{
 		"id":              a.GetId(),
@@ -53,8 +52,8 @@ func activityToMap(a *jobactivitypb.JobActivity) map[string]any {
 		"entry_date":      a.GetEntryDateString(),
 		"description":     a.GetDescription(),
 		"quantity":        fmt.Sprintf("%.2f", a.GetQuantity()),
-		"unit_cost":       unitCost,
-		"total_cost":      totalCost,
+		"unit_cost":       unitCostCell,
+		"total_cost":      totalCostCell,
 		"currency":        currency,
 		"billable_status": billableStatusString(a.GetBillableStatus()),
 		"approval_status": approvalStatusString(a.GetApprovalStatus()),
@@ -86,7 +85,6 @@ func NewView(deps *DetailViewDeps) view.View {
 		activity := activityToMap(record)
 
 		currency := record.GetCurrency()
-		amount := utils.FormatCentavoAmount(record.GetTotalCost(), currency)
 		entryType := entryTypeString(record.GetEntryType())
 		approvalStatus := approvalStatusString(record.GetApprovalStatus())
 
@@ -114,7 +112,7 @@ func NewView(deps *DetailViewDeps) view.View {
 			EntryType:       entryType,
 			ApprovalStatus:  approvalStatus,
 			StatusVariant:   approvalStatusVariant(approvalStatus),
-			Amount:          amount,
+			Amount:          types.MoneyCell(float64(record.GetTotalCost()), currency, true),
 			Currency:        currency,
 		}
 

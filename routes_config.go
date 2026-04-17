@@ -39,6 +39,9 @@ type JobRoutes struct {
 	// Attachment routes
 	AttachmentUploadURL string `json:"attachment_upload_url"`
 	AttachmentDeleteURL string `json:"attachment_delete_url"`
+
+	// Task action routes
+	TaskAssignURL string `json:"task_assign_url"`
 }
 
 // DefaultJobRoutes returns a JobRoutes populated from the package-level
@@ -61,6 +64,8 @@ func DefaultJobRoutes() JobRoutes {
 
 		AttachmentUploadURL: JobAttachmentUploadURL,
 		AttachmentDeleteURL: JobAttachmentDeleteURL,
+
+		TaskAssignURL: JobTaskAssignURL,
 	}
 }
 
@@ -81,6 +86,8 @@ func (r JobRoutes) RouteMap() map[string]string {
 
 		"job.attachment.upload": r.AttachmentUploadURL,
 		"job.attachment.delete": r.AttachmentDeleteURL,
+
+		"job.task.assign": r.TaskAssignURL,
 	}
 }
 
@@ -160,6 +167,10 @@ type JobActivityRoutes struct {
 	SubmitURL  string `json:"submit_url"`
 	ApproveURL string `json:"approve_url"`
 	RejectURL  string `json:"reject_url"`
+	PostURL    string `json:"post_url"`
+	ReverseURL string `json:"reverse_url"`
+
+	BulkGenerateInvoiceURL string `json:"bulk_generate_invoice_url"`
 }
 
 // DefaultJobActivityRoutes returns a JobActivityRoutes populated from the
@@ -174,6 +185,10 @@ func DefaultJobActivityRoutes() JobActivityRoutes {
 		SubmitURL:  JobActivitySubmitURL,
 		ApproveURL: JobActivityApproveURL,
 		RejectURL:  JobActivityRejectURL,
+		PostURL:    JobActivityPostURL,
+		ReverseURL: JobActivityReverseURL,
+
+		BulkGenerateInvoiceURL: JobActivityBulkGenerateInvoiceURL,
 	}
 }
 
@@ -181,14 +196,17 @@ func DefaultJobActivityRoutes() JobActivityRoutes {
 // job activity routes.
 func (r JobActivityRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"job_activity.list":    r.ListURL,
-		"job_activity.detail":  r.DetailURL,
-		"job_activity.add":     r.AddURL,
-		"job_activity.edit":    r.EditURL,
-		"job_activity.delete":  r.DeleteURL,
-		"job_activity.submit":  r.SubmitURL,
-		"job_activity.approve": r.ApproveURL,
-		"job_activity.reject":  r.RejectURL,
+		"job_activity.list":                   r.ListURL,
+		"job_activity.detail":                 r.DetailURL,
+		"job_activity.add":                    r.AddURL,
+		"job_activity.edit":                   r.EditURL,
+		"job_activity.delete":                 r.DeleteURL,
+		"job_activity.submit":                 r.SubmitURL,
+		"job_activity.approve":                r.ApproveURL,
+		"job_activity.reject":                 r.RejectURL,
+		"job_activity.post":                   r.PostURL,
+		"job_activity.reverse":                r.ReverseURL,
+		"job_activity.bulk_generate_invoice":  r.BulkGenerateInvoiceURL,
 	}
 }
 

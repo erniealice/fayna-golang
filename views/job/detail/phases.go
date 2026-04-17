@@ -7,6 +7,7 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
@@ -53,51 +54,73 @@ func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData
 	}
 
 	l := deps.Labels
-	pageData.PhasesTable = buildPhasesTable(phases, tasksByPhase, l, deps.TableLabels)
+	pageData.PhasesTable = buildPhasesTable(phases, tasksByPhase, jobID, l, deps.Routes, deps.TableLabels)
 }
 
-// buildPhasesTable builds the phases table config.
+// buildPhasesTable builds a flat tasks table with phase name denormalized per row.
 func buildPhasesTable(
 	phases []*jobphasepb.JobPhase,
 	tasksByPhase map[string][]*jobtaskpb.JobTask,
+	jobID string,
 	l fayna.JobLabels,
+	routes fayna.JobRoutes,
 	tableLabels types.TableLabels,
 ) *types.TableConfig {
 	columns := []types.TableColumn{
-		{Key: "order", Label: l.Detail.PhaseOrder, Sortable: false, WidthClass: "col-sm"},
-		{Key: "name", Label: l.Detail.PhaseName, Sortable: true},
+		{Key: "phase", Label: l.Detail.PhaseName, Sortable: true},
+		{Key: "order", Label: "#", Sortable: false, WidthClass: "col-sm"},
+		{Key: "name", Label: l.Detail.TaskName, Sortable: true},
 		{Key: "status", Label: l.Detail.PhaseStatus, Sortable: true, WidthClass: "col-2xl"},
-		{Key: "tasks", Label: l.Detail.TaskName, Sortable: false},
+		{Key: "assigned_to", Label: "Assigned To", Sortable: false, WidthClass: "col-2xl"},
 	}
 
 	rows := []types.TableRow{}
 	for _, phase := range phases {
-		id := phase.GetId()
-		name := phase.GetName()
-		order := fmt.Sprintf("%d", phase.GetPhaseOrder())
-		status := phaseStatusString(phase.GetStatus())
+		phaseID := phase.GetId()
+		phaseName := phase.GetName()
+		tasks := tasksByPhase[phaseID]
+		for _, task := range tasks {
+			taskID := task.GetId()
+			stepOrder := fmt.Sprintf("%d", task.GetStepOrder())
+			taskName := task.GetName()
+			status := taskStatusString(task.GetStatus())
 
-		// Build task summary
-		tasks := tasksByPhase[id]
-		taskSummary := ""
-		if len(tasks) > 0 {
-			taskSummary = fmt.Sprintf("%d task(s)", len(tasks))
+			assignee := "Unassigned"
+			if a := task.GetAssignedTo(); a != "" {
+				assignee = a
+			}
+
+			taskActions := []types.TableAction{}
+			if routes.TaskAssignURL != "" {
+				assignURL := route.ResolveURL(routes.TaskAssignURL, "id", jobID, "taskId", taskID)
+				taskActions = append(taskActions, types.TableAction{
+					Type:   "edit",
+					Label:  "Assign",
+					Action: "edit",
+					URL:    assignURL,
+				})
+			}
+
+			rows = append(rows, types.TableRow{
+				ID: taskID,
+				Cells: []types.TableCell{
+					{Type: "text", Value: phaseName},
+					{Type: "text", Value: stepOrder},
+					{Type: "text", Value: taskName},
+					{Type: "badge", Value: status, Variant: taskStatusVariant(status)},
+					{Type: "text", Value: assignee},
+				},
+				DataAttrs: map[string]string{
+					"phase":       phaseID,
+					"phase_name":  phaseName,
+					"step_order":  stepOrder,
+					"name":        taskName,
+					"status":      status,
+					"assigned_to": assignee,
+				},
+				Actions: taskActions,
+			})
 		}
-
-		rows = append(rows, types.TableRow{
-			ID: id,
-			Cells: []types.TableCell{
-				{Type: "text", Value: order},
-				{Type: "text", Value: name},
-				{Type: "badge", Value: status, Variant: phaseStatusVariant(status)},
-				{Type: "text", Value: taskSummary},
-			},
-			DataAttrs: map[string]string{
-				"order":  order,
-				"name":   name,
-				"status": status,
-			},
-		})
 	}
 
 	types.ApplyColumnStyles(columns, rows)
@@ -109,9 +132,41 @@ func buildPhasesTable(
 		ShowSearch: false,
 		Labels:     tableLabels,
 		EmptyState: types.TableEmptyState{
-			Title:   "No phases",
-			Message: "This job has no phases defined yet.",
+			Title:   "No tasks",
+			Message: "This job has no tasks defined yet.",
 		},
+	}
+}
+
+// taskStatusString converts a TaskStatus enum to a display string.
+func taskStatusString(s jobtaskpb.TaskStatus) string {
+	switch s {
+	case jobtaskpb.TaskStatus_TASK_STATUS_PENDING:
+		return "pending"
+	case jobtaskpb.TaskStatus_TASK_STATUS_IN_PROGRESS:
+		return "in_progress"
+	case jobtaskpb.TaskStatus_TASK_STATUS_COMPLETED:
+		return "completed"
+	case jobtaskpb.TaskStatus_TASK_STATUS_SKIPPED:
+		return "skipped"
+	default:
+		return "pending"
+	}
+}
+
+// taskStatusVariant returns the badge variant for a task status string.
+func taskStatusVariant(status string) string {
+	switch status {
+	case "pending":
+		return "warning"
+	case "in_progress":
+		return "success"
+	case "completed":
+		return "info"
+	case "skipped":
+		return "default"
+	default:
+		return "default"
 	}
 }
 

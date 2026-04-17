@@ -54,7 +54,7 @@ func NewAddAction(deps *Deps) view.View {
 			Data: &fulfillmentpb.Fulfillment{
 				RevenueId:         r.FormValue("revenue_id"),
 				SupplierId:        strPtr(supplierID),
-				FulfillmentMethod: r.FormValue("fulfillment_method"),
+				DeliveryMode: r.FormValue("delivery_mode"),
 				Notes:             r.FormValue("notes"),
 				Status:            "PENDING",
 			},

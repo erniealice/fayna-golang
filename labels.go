@@ -223,6 +223,8 @@ type JobActivityActionLabels struct {
 	Submit  string `json:"submit"`
 	Approve string `json:"approve"`
 	Reject  string `json:"reject"`
+	Post    string `json:"post"`
+	Reverse string `json:"reverse"`
 }
 
 type JobActivityDetailLabels struct {
@@ -315,6 +317,8 @@ func DefaultJobActivityLabels() JobActivityLabels {
 			Submit:  "Submit for Approval",
 			Approve: "Approve",
 			Reject:  "Reject",
+			Post:    "Post",
+			Reverse: "Reverse",
 		},
 		Detail: JobActivityDetailLabels{
 			PageTitle:       "Activity Details",
@@ -916,7 +920,7 @@ type FulfillmentLabels struct {
 	Title     string `json:"title"`
 
 	Status  FulfillmentStatusLabels `json:"status"`
-	Type    FulfillmentTypeLabels   `json:"type"`
+	Type    DeliveryModeLabels      `json:"type"`
 	Columns FulfillmentColumnLabels `json:"columns"`
 	Tabs    FulfillmentTabLabels    `json:"tabs"`
 	Actions FulfillmentActionLabels `json:"actions"`
@@ -935,20 +939,22 @@ type FulfillmentStatusLabels struct {
 	Cancelled          string `json:"cancelled"`
 }
 
-type FulfillmentTypeLabels struct {
-	Physical    string `json:"physical"`
-	Service     string `json:"service"`
-	Digital     string `json:"digital"`
-	MakeToOrder string `json:"make_to_order"`
+type DeliveryModeLabels struct {
+	Instant      string `json:"instant"`
+	Scheduled    string `json:"scheduled"`
+	Shipped      string `json:"shipped"`
+	Digital      string `json:"digital"`
+	Project      string `json:"project"`
+	Subscription string `json:"subscription"`
 }
 
 type FulfillmentColumnLabels struct {
-	FulfillmentMethod string `json:"fulfillment_method"`
-	Status            string `json:"status"`
-	SupplierName      string `json:"supplier_name"`
-	ScheduledAt       string `json:"scheduled_at"`
-	ItemCount         string `json:"item_count"`
-	Notes             string `json:"notes"`
+	DeliveryMode string `json:"delivery_mode"`
+	Status       string `json:"status"`
+	SupplierName string `json:"supplier_name"`
+	ScheduledAt  string `json:"scheduled_at"`
+	ItemCount    string `json:"item_count"`
+	Notes        string `json:"notes"`
 }
 
 type FulfillmentTabLabels struct {

@@ -36,6 +36,8 @@ type ModuleDeps struct {
 	SubmitForApproval func(ctx context.Context, req *jobactivitypb.SubmitForApprovalRequest) (*jobactivitypb.SubmitForApprovalResponse, error)
 	ApproveActivity   func(ctx context.Context, req *jobactivitypb.ApproveJobActivityRequest) (*jobactivitypb.ApproveJobActivityResponse, error)
 	RejectActivity    func(ctx context.Context, req *jobactivitypb.RejectJobActivityRequest) (*jobactivitypb.RejectJobActivityResponse, error)
+	PostActivity      func(ctx context.Context, req *jobactivitypb.PostJobActivityRequest) (*jobactivitypb.PostJobActivityResponse, error)
+	ReverseActivity   func(ctx context.Context, req *jobactivitypb.ReverseJobActivityRequest) (*jobactivitypb.ReverseJobActivityResponse, error)
 
 	// Activity subtype read functions (for detail page)
 	ReadActivityLabor    func(ctx context.Context, req *activitylaborpb.ReadActivityLaborRequest) (*activitylaborpb.ReadActivityLaborResponse, error)
@@ -43,19 +45,26 @@ type ModuleDeps struct {
 	ReadActivityExpense  func(ctx context.Context, req *activityexpensepb.ReadActivityExpenseRequest) (*activityexpensepb.ReadActivityExpenseResponse, error)
 
 	NewID func() string
+
+	// GenerateInvoiceFromActivities creates a revenue record from a set of
+	// activity IDs. Returns the new revenue ID on success.
+	GenerateInvoiceFromActivities func(ctx context.Context, activityIDs []string, clientID, locationID, currency, name string) (string, error)
 }
 
 // Module holds all constructed job activity views.
 type Module struct {
-	routes  fayna.JobActivityRoutes
-	List    view.View
-	Detail  view.View
-	Create  view.View
-	Update  view.View
-	Delete  view.View
-	Submit  view.View
-	Approve view.View
-	Reject  view.View
+	routes              fayna.JobActivityRoutes
+	List                view.View
+	Detail              view.View
+	Create              view.View
+	Update              view.View
+	Delete              view.View
+	Submit              view.View
+	Approve             view.View
+	Reject              view.View
+	Post                view.View
+	Reverse             view.View
+	BulkGenerateInvoice view.View
 }
 
 // NewModule creates the job activity module with all views wired.
@@ -79,15 +88,18 @@ func NewModule(deps *ModuleDeps) *Module {
 	}
 
 	return &Module{
-		routes:  deps.Routes,
-		List:    listView,
-		Detail:  jobactivitydetail.NewView(detailDeps),
-		Create:  newCreateAction(deps),
-		Update:  newUpdateAction(deps),
-		Delete:  newDeleteAction(deps),
-		Submit:  newSubmitAction(deps),
-		Approve: newApproveAction(deps),
-		Reject:  newRejectAction(deps),
+		routes:              deps.Routes,
+		List:                listView,
+		Detail:              jobactivitydetail.NewView(detailDeps),
+		Create:              newCreateAction(deps),
+		Update:              newUpdateAction(deps),
+		Delete:              newDeleteAction(deps),
+		Submit:              newSubmitAction(deps),
+		Approve:             newApproveAction(deps),
+		Reject:              newRejectAction(deps),
+		Post:                newPostAction(deps),
+		Reverse:             newReverseAction(deps),
+		BulkGenerateInvoice: newBulkGenerateInvoiceAction(deps),
 	}
 }
 
@@ -112,4 +124,11 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	r.POST(m.routes.SubmitURL, m.Submit)
 	r.POST(m.routes.ApproveURL, m.Approve)
 	r.POST(m.routes.RejectURL, m.Reject)
+
+	// Posting workflow
+	r.POST(m.routes.PostURL, m.Post)
+	r.POST(m.routes.ReverseURL, m.Reverse)
+
+	// Bulk actions
+	r.POST(m.routes.BulkGenerateInvoiceURL, m.BulkGenerateInvoice)
 }

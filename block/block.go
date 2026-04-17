@@ -283,14 +283,16 @@ func defaultFulfillmentLabels() fayna.FulfillmentLabels {
 			Failed:             "Failed",
 			Cancelled:          "Cancelled",
 		},
-		Type: fayna.FulfillmentTypeLabels{
-			Physical:    "Physical",
-			Service:     "Service",
-			Digital:     "Digital",
-			MakeToOrder: "Make to Order",
+		Type: fayna.DeliveryModeLabels{
+			Instant:      "Instant",
+			Scheduled:    "Scheduled",
+			Shipped:      "Shipped",
+			Digital:      "Digital",
+			Project:      "Project",
+			Subscription: "Subscription",
 		},
 		Columns: fayna.FulfillmentColumnLabels{
-			FulfillmentMethod: "Method",
+			DeliveryMode: "Method",
 			Status:            "Status",
 			SupplierName:      "Supplier",
 			ScheduledAt:       "Scheduled",

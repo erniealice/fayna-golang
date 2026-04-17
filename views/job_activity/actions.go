@@ -2,6 +2,7 @@ package job_activity
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -318,6 +319,67 @@ func newRejectAction(deps *ModuleDeps) view.View {
 	})
 }
 
+// newPostAction creates the post-activity action (POST).
+func newPostAction(deps *ModuleDeps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job_activity", "post") && !perms.Can("job_activity", "manage") {
+			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+		}
+
+		if err := viewCtx.Request.ParseForm(); err != nil {
+			return fayna.HTMXError("Invalid form data")
+		}
+
+		id := viewCtx.Request.FormValue("id")
+		if id == "" {
+			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+		}
+
+		_, err := deps.PostActivity(ctx, &jobactivitypb.PostJobActivityRequest{
+			ActivityId: id,
+			PostedBy:   viewCtx.Request.FormValue("posted_by"),
+		})
+		if err != nil {
+			log.Printf("Failed to post job activity %s: %v", id, err)
+			return fayna.HTMXError(err.Error())
+		}
+
+		return fayna.HTMXSuccess("activities-table")
+	})
+}
+
+// newReverseAction creates the reverse-activity action (POST).
+func newReverseAction(deps *ModuleDeps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job_activity", "manage") {
+			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+		}
+
+		if err := viewCtx.Request.ParseForm(); err != nil {
+			return fayna.HTMXError("Invalid form data")
+		}
+
+		id := viewCtx.Request.FormValue("id")
+		if id == "" {
+			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+		}
+
+		_, err := deps.ReverseActivity(ctx, &jobactivitypb.ReverseJobActivityRequest{
+			ActivityId: id,
+			ReversedBy: viewCtx.Request.FormValue("reversed_by"),
+			Reason:     viewCtx.Request.FormValue("reason"),
+		})
+		if err != nil {
+			log.Printf("Failed to reverse job activity %s: %v", id, err)
+			return fayna.HTMXError(err.Error())
+		}
+
+		return fayna.HTMXSuccess("activities-table")
+	})
+}
+
 // parseEntryType converts a form string to the EntryType enum.
 func parseEntryType(s string) jobactivitypb.EntryType {
 	switch s {
@@ -330,6 +392,45 @@ func parseEntryType(s string) jobactivitypb.EntryType {
 	default:
 		return jobactivitypb.EntryType_ENTRY_TYPE_UNSPECIFIED
 	}
+}
+
+// newBulkGenerateInvoiceAction creates the bulk generate invoice action (POST).
+// It receives a list of selected activity IDs via multipart form-data and calls
+// GenerateInvoiceFromActivities, then redirects to the new revenue detail page.
+func newBulkGenerateInvoiceAction(deps *ModuleDeps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		r := viewCtx.Request
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			// Fall back to regular form parse (non-multipart submissions)
+			if err2 := r.ParseForm(); err2 != nil {
+				return fayna.HTMXError("Invalid form data")
+			}
+		}
+
+		ids := r.Form["id"]
+		if len(ids) == 0 {
+			return fayna.HTMXError("No activities selected")
+		}
+
+		if deps.GenerateInvoiceFromActivities == nil {
+			return fayna.HTMXError("Invoice generation not available")
+		}
+
+		revenueID, err := deps.GenerateInvoiceFromActivities(ctx, ids, "", "", "PHP", "")
+		if err != nil {
+			log.Printf("Failed to generate invoice from activities: %v", err)
+			return fayna.HTMXError(fmt.Sprintf("Failed to generate invoice: %v", err))
+		}
+
+		redirectURL := fmt.Sprintf("/app/revenue/detail/%s?tab=items", revenueID)
+		return view.ViewResult{
+			StatusCode: http.StatusOK,
+			Headers: map[string]string{
+				"HX-Redirect": redirectURL,
+				"HX-Trigger":  `{"formSuccess":true}`,
+			},
+		}
+	})
 }
 
 // parseBillableStatus converts a form string to the BillableStatus enum.

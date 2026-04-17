@@ -49,7 +49,7 @@ func NewEditAction(deps *Deps) view.View {
 				ID:           id,
 				RevenueID:    f.GetRevenueId(),
 				SupplierID:   supplierID,
-				Method:       f.GetFulfillmentMethod(),
+				Method:       f.GetDeliveryMode(),
 				Notes:        f.GetNotes(),
 				Labels:       deps.Labels,
 				CommonLabels: nil, // injected by ViewAdapter
@@ -68,7 +68,7 @@ func NewEditAction(deps *Deps) view.View {
 			Data: &fulfillmentpb.Fulfillment{
 				Id:                id,
 				SupplierId:        strPtr(supplierID),
-				FulfillmentMethod: r.FormValue("fulfillment_method"),
+				DeliveryMode: r.FormValue("delivery_mode"),
 				Notes:             r.FormValue("notes"),
 			},
 		})

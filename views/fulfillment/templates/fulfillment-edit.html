@@ -9,7 +9,7 @@ Data: .ID, .FormAction, .Method, .ScheduledAt, .Notes, .CommonLabels, .Labels
 
     <div class="sheet-body">
 
-        {{/* --- Fulfillment Method (read-only — immutable after creation) --- */}}
+        {{/* --- Delivery Mode (read-only — immutable after creation) --- */}}
         <div class="form-row single">
             <div class="form-group">
                 <label class="form-label">{{.Labels.Columns.Method}}</label>
@@ -17,7 +17,7 @@ Data: .ID, .FormAction, .Method, .ScheduledAt, .Notes, .CommonLabels, .Labels
                     <span class="badge badge--default">{{.Method}}</span>
                     <span class="form-locked-note">{{.Labels.Form.MethodLocked}}</span>
                 </div>
-                <input type="hidden" name="fulfillment_method" value="{{.Method}}">
+                <input type="hidden" name="delivery_mode" value="{{.Method}}">
             </div>
         </div>
 

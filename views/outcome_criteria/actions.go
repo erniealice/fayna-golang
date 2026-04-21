@@ -9,16 +9,11 @@ import (
 	fayna "github.com/erniealice/fayna-golang"
 
 	"github.com/erniealice/pyeza-golang/route"
+	pyeza "github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 )
-
-// formOption is a generic key-value option for select fields.
-type formOption struct {
-	Value string
-	Label string
-}
 
 // criteriaFormData is the template data for the outcome criteria drawer form.
 type criteriaFormData struct {
@@ -31,15 +26,15 @@ type criteriaFormData struct {
 	Description  string
 	Required     bool
 	Weight       float64
-	TypeOptions  []formOption
-	ScopeOptions []formOption
+	TypeOptions  []pyeza.SelectOption
+	ScopeOptions []pyeza.SelectOption
 	Labels       fayna.OutcomeCriteriaLabels
 	CommonLabels any
 }
 
 // defaultTypeOptions returns the selectable criteria types.
-func defaultTypeOptions(labels fayna.OutcomeCriteriaLabels) []formOption {
-	return []formOption{
+func defaultTypeOptions(labels fayna.OutcomeCriteriaLabels) []pyeza.SelectOption {
+	return []pyeza.SelectOption{
 		{Value: "NUMERIC_RANGE", Label: "Numeric Range"},
 		{Value: "NUMERIC_SCORE", Label: "Numeric Score"},
 		{Value: "PASS_FAIL", Label: "Pass / Fail"},
@@ -50,8 +45,8 @@ func defaultTypeOptions(labels fayna.OutcomeCriteriaLabels) []formOption {
 }
 
 // defaultScopeOptions returns the selectable criteria scopes.
-func defaultScopeOptions(labels fayna.OutcomeCriteriaLabels) []formOption {
-	return []formOption{
+func defaultScopeOptions(labels fayna.OutcomeCriteriaLabels) []pyeza.SelectOption {
+	return []pyeza.SelectOption{
 		{Value: "TASK", Label: "Task"},
 		{Value: "PHASE", Label: "Phase"},
 		{Value: "JOB", Label: "Job"},

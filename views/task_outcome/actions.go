@@ -9,17 +9,11 @@ import (
 	fayna "github.com/erniealice/fayna-golang"
 
 	"github.com/erniealice/pyeza-golang/route"
+	pyeza "github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	outcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 )
-
-// recordingFormOption is a key/label option for the multi-check and categorical select fields.
-type recordingFormOption struct {
-	Value    string
-	Label    string
-	Selected bool
-}
 
 // recordingFormData is the template data for the task outcome recording form.
 type recordingFormData struct {
@@ -30,7 +24,7 @@ type recordingFormData struct {
 	CriteriaID      string
 	CriteriaName    string
 	CriteriaType    string
-	CriteriaOptions []recordingFormOption
+	CriteriaOptions []pyeza.SelectOption
 	NumericValue    float64
 	TextValue       string
 	Notes           string

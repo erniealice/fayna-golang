@@ -214,6 +214,10 @@ type JobActivityFormLabels struct {
 	UnitCost       string `json:"unitCost"`
 	Amount         string `json:"amount"`
 	Category       string `json:"category"`
+	EntryTypeInfo      string `json:"entryTypeInfo"`
+	BillableStatusInfo string `json:"billableStatusInfo"`
+	QuantityInfo       string `json:"quantityInfo"`
+	UnitCostInfo       string `json:"unitCostInfo"`
 }
 
 type JobActivityActionLabels struct {
@@ -297,18 +301,22 @@ func DefaultJobActivityLabels() JobActivityLabels {
 			Message: "No activity entries to display.",
 		},
 		Form: JobActivityFormLabels{
-			Job:            "Job",
-			Task:           "Task",
-			EntryType:      "Entry Type",
-			Description:    "Description",
-			BillableStatus: "Billable Status",
-			Hours:          "Hours",
-			HourlyRate:     "Hourly Rate",
-			Product:        "Product",
-			Quantity:       "Quantity",
-			UnitCost:       "Unit Cost",
-			Amount:         "Amount",
-			Category:       "Category",
+			Job:                "Job",
+			Task:               "Task",
+			EntryType:          "Entry Type",
+			Description:        "Description",
+			BillableStatus:     "Billable Status",
+			Hours:              "Hours",
+			HourlyRate:         "Hourly Rate",
+			Product:            "Product",
+			Quantity:           "Quantity",
+			UnitCost:           "Unit Cost",
+			Amount:             "Amount",
+			Category:           "Category",
+			EntryTypeInfo:      "Labor = time-based; Material = goods used; Expense = cost incurred.",
+			BillableStatusInfo: "Whether this activity is charged to the client.",
+			QuantityInfo:       "Number of units or hours recorded for this activity entry.",
+			UnitCostInfo:       "Cost per unit or per hour for this activity entry.",
 		},
 		Actions: JobActivityActionLabels{
 			View:    "View Activity",
@@ -423,6 +431,9 @@ type JobFormLabels struct {
 	NamePlaceholder     string `json:"namePlaceholder"`
 	ClientPlaceholder   string `json:"clientPlaceholder"`
 	LocationPlaceholder string `json:"locationPlaceholder"`
+	NameInfo            string `json:"nameInfo"`
+	ClientInfo          string `json:"clientInfo"`
+	LocationInfo        string `json:"locationInfo"`
 }
 
 type JobActionLabels struct {
@@ -532,6 +543,9 @@ type OutcomeCriteriaFormLabels struct {
 	DescPlaceholder string `json:"descriptionPlaceholder"`
 	Required        string `json:"required"`
 	Weight          string `json:"weight"`
+	TypeInfo        string `json:"typeInfo"`
+	ScopeInfo       string `json:"scopeInfo"`
+	WeightInfo      string `json:"weightInfo"`
 }
 
 type OutcomeCriteriaActionLabels struct {
@@ -613,6 +627,9 @@ func DefaultOutcomeCriteriaLabels() OutcomeCriteriaLabels {
 			DescPlaceholder: "Enter criterion description...",
 			Required:        "Required",
 			Weight:          "Weight",
+			TypeInfo:        "The evaluation method used to measure this criterion (e.g. numeric score, pass/fail).",
+			ScopeInfo:       "Whether this criterion applies at the task, phase, or job level.",
+			WeightInfo:      "Relative importance of this criterion when computing an aggregate score.",
 		},
 		Actions: OutcomeCriteriaActionLabels{
 			View:   "View Criterion",
@@ -1034,6 +1051,9 @@ func DefaultJobLabels() JobLabels {
 			NamePlaceholder:     "Enter job name",
 			ClientPlaceholder:   "Select client",
 			LocationPlaceholder: "Select location",
+			NameInfo:            "The name of the job as it appears in lists and documents.",
+			ClientInfo:          "The client this job is being performed for.",
+			LocationInfo:        "The location or site where this job takes place.",
 		},
 		Actions: JobActionLabels{
 			View:   "View Job",

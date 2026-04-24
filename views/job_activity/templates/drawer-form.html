@@ -35,6 +35,7 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
                     (dict "Value" "material" "Label" .Labels.Detail.Product)
                     (dict "Value" "expense" "Label" .Labels.Detail.ExpenseCategory)
                 )
+                "Info" .Labels.Form.EntryTypeInfo
             )}}
         </div>
 
@@ -56,6 +57,7 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
                 "Label" .Labels.Detail.Quantity
                 "Value" .Quantity
                 "Required" true
+                "Info" .Labels.Form.QuantityInfo
             )}}
             {{template "form-group" (dict
                 "Type" "number"
@@ -63,6 +65,7 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
                 "Label" .Labels.Detail.UnitCost
                 "Value" .UnitCost
                 "Required" true
+                "Info" .Labels.Form.UnitCostInfo
             )}}
         </div>
 
@@ -89,6 +92,7 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
                     (dict "Value" "included" "Label" .Labels.Detail.BillableStatus)
                     (dict "Value" "write_off" "Label" .Labels.Detail.BillableStatus)
                 )
+                "Info" .Labels.Form.BillableStatusInfo
             )}}
         </div>
 

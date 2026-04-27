@@ -190,6 +190,14 @@ func loadSubtypeData(ctx context.Context, deps *DetailViewDeps, id string, entry
 			result["receipt_url"] = exp.GetReceiptUrl()
 			result["reimbursable"] = exp.GetReimbursable()
 		}
+
+	case jobactivitypb.EntryType_ENTRY_TYPE_EQUIPMENT:
+		// Wave 3 will add ActivityEquipment table
+		return result
+
+	case jobactivitypb.EntryType_ENTRY_TYPE_SUBCONTRACT:
+		// Wave 3 will add ActivitySubcontract table; for now ActivityExpense.is_subcontract flag covers this case
+		return result
 	}
 
 	return result
@@ -203,6 +211,10 @@ func entryTypeString(t jobactivitypb.EntryType) string {
 		return "material"
 	case jobactivitypb.EntryType_ENTRY_TYPE_EXPENSE:
 		return "expense"
+	case jobactivitypb.EntryType_ENTRY_TYPE_EQUIPMENT:
+		return "Equipment"
+	case jobactivitypb.EntryType_ENTRY_TYPE_SUBCONTRACT:
+		return "Subcontract"
 	default:
 		return "unspecified"
 	}

@@ -232,6 +232,10 @@ func entryTypeString(t jobactivitypb.EntryType) string {
 		return "material"
 	case jobactivitypb.EntryType_ENTRY_TYPE_EXPENSE:
 		return "expense"
+	case jobactivitypb.EntryType_ENTRY_TYPE_EQUIPMENT:
+		return "Equipment"
+	case jobactivitypb.EntryType_ENTRY_TYPE_SUBCONTRACT:
+		return "Subcontract"
 	default:
 		return "unspecified"
 	}

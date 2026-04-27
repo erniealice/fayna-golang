@@ -389,6 +389,10 @@ func parseEntryType(s string) jobactivitypb.EntryType {
 		return jobactivitypb.EntryType_ENTRY_TYPE_MATERIAL
 	case "EXPENSE", "expense":
 		return jobactivitypb.EntryType_ENTRY_TYPE_EXPENSE
+	case "EQUIPMENT", "equipment":
+		return jobactivitypb.EntryType_ENTRY_TYPE_EQUIPMENT
+	case "SUBCONTRACT", "subcontract":
+		return jobactivitypb.EntryType_ENTRY_TYPE_SUBCONTRACT
 	default:
 		return jobactivitypb.EntryType_ENTRY_TYPE_UNSPECIFIED
 	}

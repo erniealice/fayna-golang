@@ -149,6 +149,10 @@ func taskStatusString(s jobtaskpb.TaskStatus) string {
 		return "completed"
 	case jobtaskpb.TaskStatus_TASK_STATUS_SKIPPED:
 		return "skipped"
+	case jobtaskpb.TaskStatus_TASK_STATUS_HOLD:
+		return "On Hold"
+	case jobtaskpb.TaskStatus_TASK_STATUS_REWORK:
+		return "Rework"
 	default:
 		return "pending"
 	}
@@ -165,6 +169,10 @@ func taskStatusVariant(status string) string {
 		return "info"
 	case "skipped":
 		return "default"
+	case "On Hold":
+		return "secondary"
+	case "Rework":
+		return "danger"
 	default:
 		return "default"
 	}

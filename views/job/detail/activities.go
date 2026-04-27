@@ -102,6 +102,10 @@ func activityEntryTypeString(t jobactivitypb.EntryType) string {
 		return "material"
 	case jobactivitypb.EntryType_ENTRY_TYPE_EXPENSE:
 		return "expense"
+	case jobactivitypb.EntryType_ENTRY_TYPE_EQUIPMENT:
+		return "Equipment"
+	case jobactivitypb.EntryType_ENTRY_TYPE_SUBCONTRACT:
+		return "Subcontract"
 	default:
 		return "labor"
 	}
@@ -116,6 +120,10 @@ func activityEntryTypeVariant(entryType string) string {
 		return "warning"
 	case "expense":
 		return "danger"
+	case "Equipment":
+		return "secondary"
+	case "Subcontract":
+		return "secondary"
 	default:
 		return "default"
 	}

@@ -180,6 +180,10 @@ func jobStatusString(s enums.JobStatus) string {
 		return "draft"
 	case enums.JobStatus_JOB_STATUS_PENDING:
 		return "pending"
+	case enums.JobStatus_JOB_STATUS_PLANNED:
+		return "planned"
+	case enums.JobStatus_JOB_STATUS_RELEASED:
+		return "released"
 	case enums.JobStatus_JOB_STATUS_ACTIVE:
 		return "active"
 	case enums.JobStatus_JOB_STATUS_PAUSED:
@@ -199,6 +203,10 @@ func jobStatusVariant(status string) string {
 		return "default"
 	case "pending":
 		return "warning"
+	case "planned":
+		return "secondary"
+	case "released":
+		return "success"
 	case "active":
 		return "success"
 	case "paused":
@@ -216,6 +224,10 @@ func statusPageTitle(l fayna.JobLabels, status string) string {
 	switch status {
 	case "draft":
 		return l.Page.HeadingDraft
+	case "planned":
+		return "Planned"
+	case "released":
+		return "Released"
 	case "active":
 		return l.Page.HeadingActive
 	case "completed":
@@ -231,6 +243,10 @@ func statusPageCaption(l fayna.JobLabels, status string) string {
 	switch status {
 	case "draft":
 		return l.Page.CaptionDraft
+	case "planned":
+		return "Jobs scheduled for future execution"
+	case "released":
+		return "Jobs released and ready to execute"
 	case "active":
 		return l.Page.CaptionActive
 	case "completed":

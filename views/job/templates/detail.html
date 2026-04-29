@@ -85,9 +85,54 @@
 {{/* Phases & Tasks Tab */}}
 {{define "job-tab-phases"}}
 <div class="tab-scroll">
+    {{if .PhasesList}}
+        {{/* Phases mini-list with Mark Complete CTA — drives the milestone
+             billing OnJobPhaseCompleted hook. 2026-04-29 milestone-billing §4. */}}
+        <section class="job-phases-card" aria-label="{{.Labels.Detail.PhasesSectionTitle}}">
+            <h4 class="job-section-title">{{.Labels.Detail.PhasesSectionTitle}}</h4>
+            <table class="job-phases-list" data-testid="job-phases-list">
+                <thead>
+                    <tr>
+                        <th>{{.Labels.Detail.PhaseOrder}}</th>
+                        <th>{{.Labels.Detail.PhaseName}}</th>
+                        <th>{{.Labels.Detail.PhaseStatus}}</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .PhasesList}}
+                    <tr data-testid="job-phase-row-{{.ID}}" data-phase-id="{{.ID}}">
+                        <td>{{.Order}}</td>
+                        <td>{{.Name}}</td>
+                        <td>
+                            <span class="badge badge--{{.StatusVariant}}"
+                                  data-testid="job-phase-status-{{.Status}}"
+                                  data-phase-id="{{.ID}}">
+                                {{.StatusLabel}}
+                            </span>
+                        </td>
+                        <td>
+                            {{if .MarkURL}}
+                            <button type="button"
+                                    class="btn btn--sm btn--secondary"
+                                    data-testid="job-phase-mark-complete"
+                                    data-phase-id="{{.ID}}"
+                                    hx-post="{{.MarkURL}}"
+                                    hx-swap="none"
+                                    {{if .IsCompleted}}disabled aria-disabled="true"{{end}}>
+                                {{$.Labels.Detail.PhaseMarkComplete}}
+                            </button>
+                            {{end}}
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </section>
+    {{end}}
     {{if .PhasesTable}}
         {{template "table-card" .PhasesTable}}
-    {{else}}
+    {{else if not .PhasesList}}
         <div class="coming-soon-panel">
             <div class="coming-soon-title">{{.Labels.Empty.PhasesTitle}}</div>
             <p class="coming-soon-text">{{.Labels.Empty.PhasesMessage}}</p>

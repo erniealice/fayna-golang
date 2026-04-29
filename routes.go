@@ -16,6 +16,12 @@ const (
 	JobAttachmentUploadURL = "/action/job/detail/{id}/attachments/upload"
 	JobAttachmentDeleteURL = "/action/job/detail/{id}/attachments/delete"
 	JobTaskAssignURL       = "/action/job/{id}/task/{taskId}/assign"
+	// JobPhaseSetStatusURL — operator-facing phase status flip (PENDING ↔ ACTIVE
+	// ↔ COMPLETED). Reads `id` and `status` from query string. Drives the
+	// milestone-billing flow: COMPLETED transitions fire the espyna
+	// `OnJobPhaseCompleted` hook (BillingEvent → READY).
+	// 2026-04-29 milestone-billing plan §4.
+	JobPhaseSetStatusURL = "/action/job-phase/set-status"
 
 	// Job Template routes
 	JobTemplateListURL             = "/app/job-templates/list/{status}"

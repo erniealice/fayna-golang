@@ -37,6 +37,10 @@ type PageData struct {
 	SettlementTable     *types.TableConfig
 	OutcomesTable       *types.TableConfig
 	AttachmentTable     *types.TableConfig
+	// PhasesList is the per-phase mini-list rendered above the denormalized
+	// task table on the Phases tab. Drives the "Mark Complete" CTA that
+	// flips JobPhase.status to COMPLETED. 2026-04-29 milestone-billing §4.
+	PhasesList []PhaseRow
 	AttachmentUploadURL string
 	// Audit history tab
 	AuditEntries    []auditlog.AuditEntryView

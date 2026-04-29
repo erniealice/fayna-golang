@@ -14,6 +14,20 @@ import (
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 )
 
+// PhaseRow is the per-phase view-model rendered on the Phases tab. Used by
+// the `job-phases-card` template to expose the Mark Complete CTA + status
+// badge alongside each phase. 2026-04-29 milestone-billing plan §4.
+type PhaseRow struct {
+	ID            string
+	Name          string
+	Order         string
+	Status        string // pending | active | completed (lowercase shorthand)
+	StatusVariant string // badge variant (warning|success|info|default)
+	StatusLabel   string // translated badge text
+	IsCompleted   bool   // disables the Mark Complete CTA
+	MarkURL       string // POST URL with id=… &status=PHASE_STATUS_COMPLETED
+}
+
 // loadPhasesTab populates the PageData with phases and tasks table data.
 func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData, jobID string) {
 	if deps.ListJobPhases == nil {
@@ -55,6 +69,59 @@ func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData
 
 	l := deps.Labels
 	pageData.PhasesTable = buildPhasesTable(phases, tasksByPhase, jobID, l, deps.Routes, deps.TableLabels)
+	pageData.PhasesList = buildPhasesList(phases, l, deps.Routes)
+}
+
+// buildPhasesList builds the per-phase view-model (separate from the
+// denormalized phases+tasks table) so the Phases tab can render a "Mark
+// Complete" CTA and status badge for each phase.
+func buildPhasesList(
+	phases []*jobphasepb.JobPhase,
+	l fayna.JobLabels,
+	routes fayna.JobRoutes,
+) []PhaseRow {
+	rows := make([]PhaseRow, 0, len(phases))
+	for _, p := range phases {
+		status := phaseStatusString(p.GetStatus())
+		row := PhaseRow{
+			ID:            p.GetId(),
+			Name:          p.GetName(),
+			Order:         fmt.Sprintf("%d", p.GetPhaseOrder()),
+			Status:        status,
+			StatusVariant: phaseStatusVariant(status),
+			StatusLabel:   phaseStatusLabel(status, l),
+			IsCompleted:   p.GetStatus() == jobphasepb.PhaseStatus_PHASE_STATUS_COMPLETED,
+		}
+		if routes.PhaseSetStatusURL != "" {
+			row.MarkURL = fmt.Sprintf("%s?id=%s&status=PHASE_STATUS_COMPLETED",
+				routes.PhaseSetStatusURL, row.ID)
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// phaseStatusLabel returns the translated badge text for a phase status.
+func phaseStatusLabel(status string, l fayna.JobLabels) string {
+	switch status {
+	case "pending":
+		if l.Detail.PhaseStatusPending != "" {
+			return l.Detail.PhaseStatusPending
+		}
+		return "Pending"
+	case "active":
+		if l.Detail.PhaseStatusActive != "" {
+			return l.Detail.PhaseStatusActive
+		}
+		return "Active"
+	case "completed":
+		if l.Detail.PhaseStatusCompleted != "" {
+			return l.Detail.PhaseStatusCompleted
+		}
+		return "Completed"
+	default:
+		return status
+	}
 }
 
 // buildPhasesTable builds a flat tasks table with phase name denormalized per row.

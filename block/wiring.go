@@ -164,6 +164,15 @@ func wireJobDeps(deps *jobmod.ModuleDeps, uc *ucAggregate) {
 		if fn, ok := execFn(jp, "ListJobPhases").(func(context.Context, *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)); ok {
 			deps.ListJobPhases = fn
 		}
+		// 2026-04-29 milestone-billing plan §4 — phase set-status surface
+		// needs Read (for the existing-name lookup) and Update (which fires
+		// the OnJobPhaseCompleted hook).
+		if fn, ok := execFn(jp, "ReadJobPhase").(func(context.Context, *jobphasepb.ReadJobPhaseRequest) (*jobphasepb.ReadJobPhaseResponse, error)); ok {
+			deps.ReadJobPhase = fn
+		}
+		if fn, ok := execFn(jp, "UpdateJobPhase").(func(context.Context, *jobphasepb.UpdateJobPhaseRequest) (*jobphasepb.UpdateJobPhaseResponse, error)); ok {
+			deps.UpdateJobPhase = fn
+		}
 	}
 
 	jt := ptrField(op, "JobTask")

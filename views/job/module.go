@@ -38,7 +38,9 @@ type ModuleDeps struct {
 	ListJobs  func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 
 	// Job phase operations
-	ListJobPhases func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	ListJobPhases  func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	ReadJobPhase   func(ctx context.Context, req *jobphasepb.ReadJobPhaseRequest) (*jobphasepb.ReadJobPhaseResponse, error)
+	UpdateJobPhase func(ctx context.Context, req *jobphasepb.UpdateJobPhaseRequest) (*jobphasepb.UpdateJobPhaseResponse, error)
 
 	// Job task operations
 	ListJobTasks  func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
@@ -78,6 +80,7 @@ type Module struct {
 	AttachmentUpload view.View
 	AttachmentDelete view.View
 	AssignTask       view.View
+	PhaseSetStatus   view.View
 }
 
 // NewModule creates a new job module with all views wired.
@@ -115,6 +118,13 @@ func NewModule(deps *ModuleDeps) *Module {
 		ListJobs:  deps.ListJobs,
 	}
 
+	phaseDeps := &jobaction.PhaseDeps{
+		Routes:         deps.Routes,
+		Labels:         deps.Labels,
+		ReadJobPhase:   deps.ReadJobPhase,
+		UpdateJobPhase: deps.UpdateJobPhase,
+	}
+
 	return &Module{
 		routes: deps.Routes,
 		List: joblist.NewView(&joblist.ListViewDeps{
@@ -135,6 +145,7 @@ func NewModule(deps *ModuleDeps) *Module {
 		AttachmentUpload: jobdetail.NewAttachmentUploadAction(detailDeps),
 		AttachmentDelete: jobdetail.NewAttachmentDeleteAction(detailDeps),
 		AssignTask:       jobdetail.NewAssignTaskAction(detailDeps),
+		PhaseSetStatus:   jobaction.NewPhaseSetStatusAction(phaseDeps),
 	}
 }
 
@@ -160,5 +171,9 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	// Task actions
 	if m.routes.TaskAssignURL != "" {
 		r.POST(m.routes.TaskAssignURL, m.AssignTask)
+	}
+	// Phase actions (2026-04-29 milestone-billing plan §4)
+	if m.routes.PhaseSetStatusURL != "" && m.PhaseSetStatus != nil {
+		r.POST(m.routes.PhaseSetStatusURL, m.PhaseSetStatus)
 	}
 }

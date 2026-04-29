@@ -470,6 +470,16 @@ type JobDetailLabels struct {
 	// link rendered when Job.origin_type = ORIGIN_TYPE_SUBSCRIPTION pointing
 	// back to the centymo subscription detail page.
 	OriginSubscriptionLink string `json:"originSubscriptionLink"`
+
+	// 2026-04-29 milestone-billing plan §4 — phase set-status surface on the
+	// Job detail Phases tab. PhasesSectionTitle heads the per-phase mini-table;
+	// PhaseMarkComplete is the row CTA; PhaseStatusPending / PhaseStatusActive /
+	// PhaseStatusCompleted render the status badge.
+	PhasesSectionTitle    string `json:"phasesSectionTitle"`
+	PhaseMarkComplete     string `json:"phaseMarkComplete"`
+	PhaseStatusPending    string `json:"phaseStatusPending"`
+	PhaseStatusActive     string `json:"phaseStatusActive"`
+	PhaseStatusCompleted  string `json:"phaseStatusCompleted"`
 }
 
 type JobTabLabels struct {
@@ -1090,6 +1100,12 @@ func DefaultJobLabels() JobLabels {
 			SettleStatus: "Settlement Status",
 			// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 / §9.
 			OriginSubscriptionLink: "Spawned from Subscription",
+			// 2026-04-29 milestone-billing plan §4 — phase set-status surface.
+			PhasesSectionTitle:   "Phases",
+			PhaseMarkComplete:    "Mark Complete",
+			PhaseStatusPending:   "Pending",
+			PhaseStatusActive:    "Active",
+			PhaseStatusCompleted: "Completed",
 		},
 		Tabs: JobTabLabels{
 			Info:        "Information",

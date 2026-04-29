@@ -42,6 +42,9 @@ type JobRoutes struct {
 
 	// Task action routes
 	TaskAssignURL string `json:"task_assign_url"`
+
+	// Phase action routes (2026-04-29 milestone-billing plan §4)
+	PhaseSetStatusURL string `json:"phase_set_status_url"`
 }
 
 // DefaultJobRoutes returns a JobRoutes populated from the package-level
@@ -66,6 +69,8 @@ func DefaultJobRoutes() JobRoutes {
 		AttachmentDeleteURL: JobAttachmentDeleteURL,
 
 		TaskAssignURL: JobTaskAssignURL,
+
+		PhaseSetStatusURL: JobPhaseSetStatusURL,
 	}
 }
 
@@ -87,7 +92,8 @@ func (r JobRoutes) RouteMap() map[string]string {
 		"job.attachment.upload": r.AttachmentUploadURL,
 		"job.attachment.delete": r.AttachmentDeleteURL,
 
-		"job.task.assign": r.TaskAssignURL,
+		"job.task.assign":       r.TaskAssignURL,
+		"job.phase.set_status":  r.PhaseSetStatusURL,
 	}
 }
 

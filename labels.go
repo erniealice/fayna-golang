@@ -228,6 +228,7 @@ type JobActivityFormLabels struct {
 	BillableStatusIncluded    string `json:"billableStatusIncluded"`
 	BillableStatusBillable    string `json:"billableStatusBillable"`
 	BillableStatusNonBillable string `json:"billableStatusNonBillable"`
+	BillableStatusWriteOff    string `json:"billableStatusWriteOff"`
 	EntryTypeLabor            string `json:"entryTypeLabor"`
 	EntryTypeMaterial         string `json:"entryTypeMaterial"`
 	EntryTypeExpense          string `json:"entryTypeExpense"`
@@ -339,6 +340,7 @@ func DefaultJobActivityLabels() JobActivityLabels {
 			BillableStatusIncluded:    "Included",
 			BillableStatusBillable:    "Billable (T&M)",
 			BillableStatusNonBillable: "Non-billable",
+			BillableStatusWriteOff:    "Write-off",
 			EntryTypeLabor:            "Labor",
 			EntryTypeMaterial:         "Material",
 			EntryTypeExpense:          "Expense",

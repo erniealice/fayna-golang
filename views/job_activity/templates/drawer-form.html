@@ -40,7 +40,12 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
             </div>
         </div>
 
-        {{/* --- Billable Status (drives milestone vs T&M revenue routing) --- */}}
+        {{/* --- Billable Status (drives milestone vs T&M revenue routing) ---
+             2026-04-30 enum-select-canonicalize plan §2 (Wave 2) — option list
+             is the source of truth; do not move it back into a Go option-builder.
+             Drift test: views/job_activity/templates/templates_test.go
+             (TestBillableStatusOptionsMatchProto) diffs these against
+             jobactivitypb.BillableStatus_name. Skip UNSPECIFIED. */}}
         <div class="form-row single">
             <div class="form-group">
                 <label class="form-label" for="job-activity-billable-status">{{.Labels.Form.BillableStatus}}</label>
@@ -49,9 +54,10 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
                         class="form-select"
                         required
                         data-testid="job-activity-billable-status-select">
-                    <option value="included"     {{if eq .BillableStatus "included"}}selected{{end}}{{if eq .BillableStatus "BILLABLE_STATUS_INCLUDED"}}selected{{end}}>{{.Labels.Form.BillableStatusIncluded}}</option>
-                    <option value="billable"     {{if eq .BillableStatus "billable"}}selected{{end}}{{if eq .BillableStatus "BILLABLE_STATUS_BILLABLE"}}selected{{end}}>{{.Labels.Form.BillableStatusBillable}}</option>
-                    <option value="non_billable" {{if eq .BillableStatus "non_billable"}}selected{{end}}{{if eq .BillableStatus "BILLABLE_STATUS_NON_BILLABLE"}}selected{{end}}>{{.Labels.Form.BillableStatusNonBillable}}</option>
+                    <option value="BILLABLE_STATUS_INCLUDED"     {{if eq .BillableStatus "BILLABLE_STATUS_INCLUDED"}}selected{{end}}>{{.Labels.Form.BillableStatusIncluded}}</option>
+                    <option value="BILLABLE_STATUS_BILLABLE"     {{if eq .BillableStatus "BILLABLE_STATUS_BILLABLE"}}selected{{end}}>{{.Labels.Form.BillableStatusBillable}}</option>
+                    <option value="BILLABLE_STATUS_NON_BILLABLE" {{if eq .BillableStatus "BILLABLE_STATUS_NON_BILLABLE"}}selected{{end}}>{{.Labels.Form.BillableStatusNonBillable}}</option>
+                    <option value="BILLABLE_STATUS_WRITE_OFF"    {{if eq .BillableStatus "BILLABLE_STATUS_WRITE_OFF"}}selected{{end}}>{{.Labels.Form.BillableStatusWriteOff}}</option>
                 </select>
             </div>
         </div>

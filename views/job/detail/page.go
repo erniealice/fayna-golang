@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	fayna "github.com/erniealice/fayna-golang"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
@@ -20,6 +21,7 @@ import (
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
+	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 )
 
 // PageData holds the data for the job detail page.
@@ -41,6 +43,13 @@ type PageData struct {
 	AuditHasNext    bool
 	AuditNextCursor string
 	AuditHistoryURL string
+
+	// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 — origin
+	// breadcrumb. Populated only when Job.origin_type = SUBSCRIPTION and
+	// the consuming app supplied SubscriptionDetailURL via deps.
+	OriginSubscriptionShown bool
+	OriginSubscriptionURL   string
+	OriginSubscriptionCode  string
 }
 
 // jobToMap converts a Job protobuf to a map[string]any for template use.
@@ -219,6 +228,11 @@ func NewView(deps *DetailViewDeps) view.View {
 			}
 		}
 
+		// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 — populate
+		// the subscription-origin breadcrumb when applicable. Best-effort:
+		// nil deps or read failures keep the breadcrumb hidden.
+		applyOriginSubscriptionData(ctx, deps, pageData, data[0])
+
 		// Load tab-specific data
 		loadTabData(ctx, deps, pageData, id, activeTab)
 		if activeTab == "audit-history" {
@@ -346,6 +360,37 @@ func NewTabAction(deps *DetailViewDeps) view.View {
 		}
 		return view.OK(templateName, pageData)
 	})
+}
+
+// applyOriginSubscriptionData populates the subscription-origin breadcrumb
+// fields on PageData when the Job was spawned from a Subscription. Best-
+// effort: silent no-op when origin_type is not SUBSCRIPTION, when origin_id
+// is empty, when ReadSubscription is nil, or when the subscription read
+// fails.
+//
+// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4.
+func applyOriginSubscriptionData(ctx context.Context, deps *DetailViewDeps, pageData *PageData, j *jobpb.Job) {
+	if j == nil || j.GetOriginType() != enums.OriginType_ORIGIN_TYPE_SUBSCRIPTION {
+		return
+	}
+	subscriptionID := j.GetOriginId()
+	if subscriptionID == "" || deps.SubscriptionDetailURL == "" {
+		return
+	}
+	pageData.OriginSubscriptionShown = true
+	pageData.OriginSubscriptionURL = strings.ReplaceAll(deps.SubscriptionDetailURL, "{id}", subscriptionID)
+	if deps.ReadSubscription != nil {
+		if resp, err := deps.ReadSubscription(ctx, &subscriptionpb.ReadSubscriptionRequest{
+			Data: &subscriptionpb.Subscription{Id: subscriptionID},
+		}); err == nil && resp != nil && len(resp.GetData()) > 0 {
+			if code := resp.GetData()[0].GetCode(); code != "" {
+				pageData.OriginSubscriptionCode = code
+			}
+		}
+	}
+	if pageData.OriginSubscriptionCode == "" {
+		pageData.OriginSubscriptionCode = subscriptionID
+	}
 }
 
 // NewAssignTaskAction handles POST /action/job/{id}/task/{taskId}/assign.

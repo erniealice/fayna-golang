@@ -15,6 +15,7 @@ import (
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobsettlementpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_settlement"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
+	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 )
 
 // DetailViewDeps holds view dependencies for the job detail views.
@@ -36,4 +37,13 @@ type DetailViewDeps struct {
 	UpdateJobTask      func(ctx context.Context, req *jobtaskpb.UpdateJobTaskRequest) (*jobtaskpb.UpdateJobTaskResponse, error)
 	ListJobActivities  func(ctx context.Context, req *jobactivitypb.ListJobActivitiesRequest) (*jobactivitypb.ListJobActivitiesResponse, error)
 	ListJobSettlements func(ctx context.Context, req *jobsettlementpb.ListJobSettlementsRequest) (*jobsettlementpb.ListJobSettlementsResponse, error)
+
+	// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 — subscription
+	// origin breadcrumb deps. ReadSubscription resolves the linked
+	// Subscription's code; SubscriptionDetailURL is the cross-package URL
+	// pattern (e.g. "/app/subscriptions/detail/{id}") supplied by the
+	// consuming app via fayna.WithSubscriptionDetailURL. Both nil/empty =
+	// the breadcrumb is omitted.
+	ReadSubscription        func(ctx context.Context, req *subscriptionpb.ReadSubscriptionRequest) (*subscriptionpb.ReadSubscriptionResponse, error)
+	SubscriptionDetailURL string
 }

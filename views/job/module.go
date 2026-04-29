@@ -16,6 +16,7 @@ import (
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobsettlementpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_settlement"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
+	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 
 	jobaction "github.com/erniealice/fayna-golang/views/job/action"
 	jobdetail "github.com/erniealice/fayna-golang/views/job/detail"
@@ -48,6 +49,11 @@ type ModuleDeps struct {
 
 	// Job settlement operations
 	ListJobSettlements func(ctx context.Context, req *jobsettlementpb.ListJobSettlementsRequest) (*jobsettlementpb.ListJobSettlementsResponse, error)
+
+	// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 — subscription
+	// origin breadcrumb deps. Both nil/empty = breadcrumb hidden.
+	ReadSubscription      func(ctx context.Context, req *subscriptionpb.ReadSubscriptionRequest) (*subscriptionpb.ReadSubscriptionResponse, error)
+	SubscriptionDetailURL string
 
 	// Attachment operations
 	UploadFile       func(ctx context.Context, bucket, key string, content []byte, contentType string) error
@@ -94,6 +100,9 @@ func NewModule(deps *ModuleDeps) *Module {
 		UpdateJobTask:      deps.UpdateJobTask,
 		ListJobActivities:  deps.ListJobActivities,
 		ListJobSettlements: deps.ListJobSettlements,
+		// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4.
+		ReadSubscription:      deps.ReadSubscription,
+		SubscriptionDetailURL: deps.SubscriptionDetailURL,
 	}
 
 	actionDeps := &jobaction.Deps{

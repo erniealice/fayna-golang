@@ -6,6 +6,17 @@
 {{/* Content-only partial — for HTMX navigation */}}
 {{define "job-detail-content"}}
 <div class="page-content job-detail-layout" data-page-css="/assets/css/fayna/fayna-job-detail.css?v={{.CacheVersion}}">
+    {{/* --- Subscription origin breadcrumb (auto-spawn plan §5.4) --- */}}
+    {{if .OriginSubscriptionShown}}
+    <nav class="detail-origin-breadcrumb" aria-label="origin">
+        <a href="{{.OriginSubscriptionURL}}"
+           data-testid="job-origin-subscription-link"
+           class="detail-origin-link">
+            {{.Labels.Detail.OriginSubscriptionLink}} {{.OriginSubscriptionCode}}
+        </a>
+    </nav>
+    {{end}}
+
     {{/* --- Tabs --- */}}
     <div class="job-detail-tabs">
         {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "job-tabs")}}

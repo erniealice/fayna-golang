@@ -465,6 +465,11 @@ type JobDetailLabels struct {
 	AllocatedAmt string `json:"allocatedAmount"`
 	SettleDate   string `json:"settlementDate"`
 	SettleStatus string `json:"settlementStatus"`
+
+	// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 / §9 — breadcrumb
+	// link rendered when Job.origin_type = ORIGIN_TYPE_SUBSCRIPTION pointing
+	// back to the centymo subscription detail page.
+	OriginSubscriptionLink string `json:"originSubscriptionLink"`
 }
 
 type JobTabLabels struct {
@@ -1083,6 +1088,8 @@ func DefaultJobLabels() JobLabels {
 			AllocatedAmt: "Allocated Amount",
 			SettleDate:   "Settlement Date",
 			SettleStatus: "Settlement Status",
+			// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 / §9.
+			OriginSubscriptionLink: "Spawned from Subscription",
 		},
 		Tabs: JobTabLabels{
 			Info:        "Information",

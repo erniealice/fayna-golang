@@ -48,6 +48,10 @@ type blockConfig struct {
 	taskOutcome     bool
 	outcomeSummary  bool
 	fulfillment     bool
+	// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 — cross-package
+	// URL pattern (e.g. "/app/subscriptions/detail/{id}") supplied by the
+	// consuming app via WithSubscriptionDetailURL. Empty = breadcrumb hidden.
+	subscriptionDetailURL string
 }
 
 // WithJob registers the Job module (list, detail, CRUD, attachment ops).
@@ -70,6 +74,16 @@ func WithOutcomeSummary() BlockOption { return func(c *blockConfig) { c.outcomeS
 
 // WithFulfillment registers the Fulfillment module (list, detail, CRUD, status transitions).
 func WithFulfillment() BlockOption { return func(c *blockConfig) { c.fulfillment = true } }
+
+// WithSubscriptionDetailURL supplies the centymo subscription-detail path
+// template (e.g. "/app/subscriptions/detail/{id}") so the Job detail page
+// can render a "Spawned from Subscription" breadcrumb when
+// Job.origin_type = SUBSCRIPTION. Optional — when unset the breadcrumb is
+// hidden.
+// 2026-04-29 auto-spawn-jobs-from-subscription Phase D.
+func WithSubscriptionDetailURL(url string) BlockOption {
+	return func(c *blockConfig) { c.subscriptionDetailURL = url }
+}
 
 func (c *blockConfig) wantJob() bool             { return c.enableAll || c.job }
 func (c *blockConfig) wantJobTemplate() bool     { return c.enableAll || c.jobTemplate }
@@ -165,6 +179,8 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				CreateAttachment: createAttachment,
 				DeleteAttachment: deleteAttachment,
 				NewID:            newAttachmentID,
+				// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4.
+				SubscriptionDetailURL: cfg.subscriptionDetailURL,
 			}
 			if uc != nil {
 				wireJobDeps(jobDeps, uc)

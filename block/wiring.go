@@ -39,6 +39,7 @@ import (
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phaseoutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
+	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 
 	fulfillmentmod "github.com/erniealice/fayna-golang/views/fulfillment"
 	jobmod "github.com/erniealice/fayna-golang/views/job"
@@ -176,6 +177,18 @@ func wireJobDeps(deps *jobmod.ModuleDeps, uc *ucAggregate) {
 	if ja.IsValid() {
 		if fn, ok := execFn(ja, "ListJobActivities").(func(context.Context, *jobactivitypb.ListJobActivitiesRequest) (*jobactivitypb.ListJobActivitiesResponse, error)); ok {
 			deps.ListJobActivities = fn
+		}
+	}
+
+	// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 — wire the
+	// cross-domain Subscription read for the Job detail's origin breadcrumb.
+	sub := ptrField(uc.v, "Subscription")
+	if sub.IsValid() {
+		s := ptrField(sub, "Subscription")
+		if s.IsValid() {
+			if fn, ok := execFn(s, "ReadSubscription").(func(context.Context, *subscriptionpb.ReadSubscriptionRequest) (*subscriptionpb.ReadSubscriptionResponse, error)); ok {
+				deps.ReadSubscription = fn
+			}
 		}
 	}
 }

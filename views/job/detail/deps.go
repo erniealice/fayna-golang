@@ -28,6 +28,13 @@ type DetailViewDeps struct {
 	CommonLabels pyeza.CommonLabels
 	TableLabels  types.TableLabels
 
+	// 2026-04-29 milestone-billing plan §5/§6 — Activities tab needs the
+	// JobActivity add/edit URLs so the "+ Add Activity" CTA on Job detail
+	// can launch the JobActivity drawer (with the BillableStatus selector
+	// required by phase5 specs 09 and 11). Empty = CTA suppressed.
+	JobActivityRoutes fayna.JobActivityRoutes
+	JobActivityLabels fayna.JobActivityLabels
+
 	// Job read
 	ReadJob func(ctx context.Context, req *jobpb.ReadJobRequest) (*jobpb.ReadJobResponse, error)
 

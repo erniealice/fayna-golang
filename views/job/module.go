@@ -30,6 +30,13 @@ type ModuleDeps struct {
 	CommonLabels pyeza.CommonLabels
 	TableLabels  types.TableLabels
 
+	// 2026-04-29 milestone-billing plan §5/§6 — Activities tab on Job detail
+	// renders an "+ Add Activity" CTA + per-row Edit CTA targeting the
+	// JobActivity drawer. Both sets are optional; empty = legacy behaviour
+	// (table-card only, no CTAs).
+	JobActivityRoutes fayna.JobActivityRoutes
+	JobActivityLabels fayna.JobActivityLabels
+
 	// Job CRUD
 	CreateJob func(ctx context.Context, req *jobpb.CreateJobRequest) (*jobpb.CreateJobResponse, error)
 	ReadJob   func(ctx context.Context, req *jobpb.ReadJobRequest) (*jobpb.ReadJobResponse, error)
@@ -97,6 +104,9 @@ func NewModule(deps *ModuleDeps) *Module {
 		Labels:             deps.Labels,
 		CommonLabels:       deps.CommonLabels,
 		TableLabels:        deps.TableLabels,
+		// 2026-04-29 milestone-billing plan §5/§6.
+		JobActivityRoutes: deps.JobActivityRoutes,
+		JobActivityLabels: deps.JobActivityLabels,
 		ReadJob:            deps.ReadJob,
 		ListJobPhases:      deps.ListJobPhases,
 		ListJobTasks:       deps.ListJobTasks,

@@ -1,197 +1,158 @@
 {{/*
 Job activity drawer form — loaded into #sheetContent via HTMX.
 Used by both Add and Edit actions.
+
+2026-04-29 milestone-billing plan §5/§6 — operator-facing surface to log
+JobActivity rows with `billable_status = INCLUDED` (M2 absorbed cost) or
+`billable_status = BILLABLE` (T&M overage). data-testid attributes are
+required by phase5 specs 09 and 11.
+
 Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
-      .BillableStatus, .Hours, .Product, .UnitOfMeasure, .ExpenseCategory,
-      .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+      .BillableStatus, .BillRate, .BillAmount, .Hours, .Product,
+      .UnitOfMeasure, .ExpenseCategory, .ID, .FormAction, .IsEdit,
+      .CommonLabels, .Labels
 */}}
 {{define "job-activity-drawer-form"}}
-<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-activity-form">
+<form hx-post="{{.FormAction}}"
+      hx-swap="none"
+      hx-on::after-request="lf.Sheet.handleResponse(event)"
+      data-testid="job-activity-form">
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+    {{/* job_id is sourced from the launching Job detail page via the ?job_id
+         query param on GET; we round-trip it as a hidden input on POST. */}}
+    <input type="hidden" name="job_id" value="{{.JobID}}" data-testid="job-activity-job-id">
 
     <div class="sheet-body">
 
-        {{/* --- Job --- */}}
-        <div class="form-row single">
-            {{template "form-group" (dict
-                "Type" "text"
-                "Name" "job_id"
-                "Label" .Labels.Detail.Job
-                "Value" .JobID
-                "Required" true
-            )}}
-        </div>
-
         {{/* --- Entry Type --- */}}
         <div class="form-row single">
-            {{template "form-group" (dict
-                "Type" "select"
-                "Name" "entry_type"
-                "Label" .Labels.Detail.EntryType
-                "Value" .EntryType
-                "Required" true
-                "Options" (list
-                    (dict "Value" "labor" "Label" .Labels.Columns.EntryType)
-                    (dict "Value" "material" "Label" .Labels.Detail.Product)
-                    (dict "Value" "expense" "Label" .Labels.Detail.ExpenseCategory)
-                )
-                "Info" .Labels.Form.EntryTypeInfo
-            )}}
+            <div class="form-group">
+                <label class="form-label" for="job-activity-entry-type">{{.Labels.Form.EntryType}}</label>
+                <select name="entry_type"
+                        id="job-activity-entry-type"
+                        class="form-select"
+                        required
+                        data-testid="job-activity-entry-type-select">
+                    <option value="labor"      {{if eq .EntryType "labor"}}selected{{end}}{{if eq .EntryType "ENTRY_TYPE_LABOR"}}selected{{end}}>{{.Labels.Form.EntryTypeLabor}}</option>
+                    <option value="material"   {{if eq .EntryType "material"}}selected{{end}}{{if eq .EntryType "ENTRY_TYPE_MATERIAL"}}selected{{end}}>{{.Labels.Form.EntryTypeMaterial}}</option>
+                    <option value="expense"    {{if eq .EntryType "expense"}}selected{{end}}{{if eq .EntryType "ENTRY_TYPE_EXPENSE"}}selected{{end}}>{{.Labels.Form.EntryTypeExpense}}</option>
+                </select>
+            </div>
+        </div>
+
+        {{/* --- Billable Status (drives milestone vs T&M revenue routing) --- */}}
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="job-activity-billable-status">{{.Labels.Form.BillableStatus}}</label>
+                <select name="billable_status"
+                        id="job-activity-billable-status"
+                        class="form-select"
+                        required
+                        data-testid="job-activity-billable-status-select">
+                    <option value="included"     {{if eq .BillableStatus "included"}}selected{{end}}{{if eq .BillableStatus "BILLABLE_STATUS_INCLUDED"}}selected{{end}}>{{.Labels.Form.BillableStatusIncluded}}</option>
+                    <option value="billable"     {{if eq .BillableStatus "billable"}}selected{{end}}{{if eq .BillableStatus "BILLABLE_STATUS_BILLABLE"}}selected{{end}}>{{.Labels.Form.BillableStatusBillable}}</option>
+                    <option value="non_billable" {{if eq .BillableStatus "non_billable"}}selected{{end}}{{if eq .BillableStatus "BILLABLE_STATUS_NON_BILLABLE"}}selected{{end}}>{{.Labels.Form.BillableStatusNonBillable}}</option>
+                </select>
+            </div>
         </div>
 
         {{/* --- Description --- */}}
         <div class="form-row single">
-            {{template "form-group" (dict
-                "Type" "textarea"
-                "Name" "description"
-                "Label" .Labels.Detail.Description
-                "Value" .Description
-            )}}
+            <div class="form-group">
+                <label class="form-label" for="job-activity-description">{{.Labels.Form.Description}}</label>
+                <textarea name="description"
+                          id="job-activity-description"
+                          class="form-textarea"
+                          rows="3"
+                          maxlength="500"
+                          data-testid="job-activity-description">{{.Description}}</textarea>
+            </div>
         </div>
 
         {{/* --- Quantity & Unit Cost --- */}}
         <div class="form-row">
-            {{template "form-group" (dict
-                "Type" "number"
-                "Name" "quantity"
-                "Label" .Labels.Detail.Quantity
-                "Value" .Quantity
-                "Required" true
-                "Info" .Labels.Form.QuantityInfo
-            )}}
-            {{template "form-group" (dict
-                "Type" "number"
-                "Name" "unit_cost"
-                "Label" .Labels.Detail.UnitCost
-                "Value" .UnitCost
-                "Required" true
-                "Info" .Labels.Form.UnitCostInfo
-            )}}
+            <div class="form-group">
+                <label class="form-label" for="job-activity-quantity">{{.Labels.Form.Quantity}}</label>
+                <input type="number"
+                       name="quantity"
+                       id="job-activity-quantity"
+                       class="form-input"
+                       step="0.01"
+                       min="0"
+                       value="{{.Quantity}}"
+                       required
+                       data-testid="job-activity-quantity">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="job-activity-unit-cost">{{.Labels.Form.UnitCost}}</label>
+                <input type="number"
+                       name="unit_cost"
+                       id="job-activity-unit-cost"
+                       class="form-input"
+                       step="0.01"
+                       min="0"
+                       value="{{.UnitCost}}"
+                       required
+                       data-testid="job-activity-unit-cost">
+            </div>
+        </div>
+
+        {{/* --- Bill Rate & Bill Amount (only relevant when billable_status = BILLABLE)
+             Both stored as proto centavo fields (`bill_rate`, `bill_amount`); UI
+             takes major-units and the handler ×100s on submit. */}}
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label" for="job-activity-bill-rate">{{.Labels.Form.BillRate}}</label>
+                <input type="number"
+                       name="bill_rate"
+                       id="job-activity-bill-rate"
+                       class="form-input"
+                       step="0.01"
+                       min="0"
+                       value="{{.BillRate}}"
+                       data-testid="job-activity-bill-rate">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="job-activity-bill-amount">{{.Labels.Form.BillAmount}}</label>
+                <input type="number"
+                       name="bill_amount"
+                       id="job-activity-bill-amount"
+                       class="form-input"
+                       step="0.01"
+                       min="0"
+                       value="{{.BillAmount}}"
+                       data-testid="job-activity-bill-amount">
+            </div>
         </div>
 
         {{/* --- Currency --- */}}
         <div class="form-row single">
-            {{template "form-group" (dict
-                "Type" "text"
-                "Name" "currency"
-                "Label" .Labels.Detail.Currency
-                "Value" .Currency
-            )}}
-        </div>
-
-        {{/* --- Billable Status --- */}}
-        <div class="form-row single">
-            {{template "form-group" (dict
-                "Type" "select"
-                "Name" "billable_status"
-                "Label" .Labels.Detail.BillableStatus
-                "Value" .BillableStatus
-                "Options" (list
-                    (dict "Value" "billable" "Label" .Labels.Detail.BillableStatus)
-                    (dict "Value" "non_billable" "Label" .Labels.Detail.BillableStatus)
-                    (dict "Value" "included" "Label" .Labels.Detail.BillableStatus)
-                    (dict "Value" "write_off" "Label" .Labels.Detail.BillableStatus)
-                )
-                "Info" .Labels.Form.BillableStatusInfo
-            )}}
-        </div>
-
-        {{/* --- Labor fields (shown when entry_type = labor) --- */}}
-        <div class="act-entry-section act-entry-section--labor">
-            <div class="form-row">
-                {{template "form-group" (dict
-                    "Type" "number"
-                    "Name" "hours"
-                    "Label" .Labels.Detail.Hours
-                    "Value" .Hours
-                )}}
-                {{template "form-group" (dict
-                    "Type" "number"
-                    "Name" "hourly_rate"
-                    "Label" .Labels.Detail.UnitCost
-                    "Value" .HourlyRate
-                )}}
-            </div>
-            <div class="form-row single">
-                {{template "form-group" (dict
-                    "Type" "text"
-                    "Name" "staff_id"
-                    "Label" .Labels.Detail.Staff
-                    "Value" .StaffID
-                )}}
-            </div>
-        </div>
-
-        {{/* --- Material fields (shown when entry_type = material) --- */}}
-        <div class="act-entry-section act-entry-section--material">
-            <div class="form-row single">
-                {{template "form-group" (dict
-                    "Type" "text"
-                    "Name" "product_id"
-                    "Label" .Labels.Detail.Product
-                    "Value" .ProductID
-                )}}
-            </div>
-            <div class="form-row">
-                {{template "form-group" (dict
-                    "Type" "number"
-                    "Name" "quantity"
-                    "Label" .Labels.Detail.Quantity
-                    "Value" .Quantity
-                )}}
-                {{template "form-group" (dict
-                    "Type" "number"
-                    "Name" "unit_cost"
-                    "Label" .Labels.Detail.UnitCost
-                    "Value" .UnitCost
-                )}}
-            </div>
-            <div class="form-row">
-                {{template "form-group" (dict
-                    "Type" "text"
-                    "Name" "unit_of_measure"
-                    "Label" .Labels.Detail.UnitOfMeasure
-                    "Value" .UnitOfMeasure
-                )}}
-                {{template "form-group" (dict
-                    "Type" "text"
-                    "Name" "lot_number"
-                    "Label" .Labels.Detail.LotNumber
-                    "Value" .LotNumber
-                )}}
-            </div>
-        </div>
-
-        {{/* --- Expense fields (shown when entry_type = expense) --- */}}
-        <div class="act-entry-section act-entry-section--expense">
-            <div class="form-row single">
-                {{template "form-group" (dict
-                    "Type" "number"
-                    "Name" "amount"
-                    "Label" .Labels.Columns.Amount
-                    "Value" .Amount
-                )}}
-            </div>
-            <div class="form-row single">
-                {{template "form-group" (dict
-                    "Type" "text"
-                    "Name" "expense_category"
-                    "Label" .Labels.Detail.ExpenseCategory
-                    "Value" .ExpenseCategory
-                )}}
-            </div>
-            <div class="form-row single">
-                {{template "form-group" (dict
-                    "Type" "text"
-                    "Name" "vendor_ref"
-                    "Label" .Labels.Detail.Vendor
-                    "Value" .VendorRef
-                )}}
+            <div class="form-group">
+                <label class="form-label" for="job-activity-currency">{{.Labels.Detail.Currency}}</label>
+                <input type="text"
+                       name="currency"
+                       id="job-activity-currency"
+                       class="form-input"
+                       value="{{if .Currency}}{{.Currency}}{{else}}PHP{{end}}"
+                       data-testid="job-activity-currency">
             </div>
         </div>
 
     </div>
 
-    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+    {{/* Custom footer so the submit button carries a stable data-testid. */}}
+    <div class="sheet-footer">
+        <button type="button"
+                class="btn btn-secondary"
+                onclick="lf.Sheet.close()"
+                data-testid="job-activity-cancel">
+            {{.CommonLabels.Buttons.Cancel}}
+        </button>
+        <button type="submit"
+                class="btn btn-primary"
+                data-testid="job-activity-submit">
+            {{if .IsEdit}}{{.Labels.Form.SubmitUpdate}}{{else}}{{.Labels.Form.SubmitCreate}}{{end}}
+        </button>
+    </div>
 </form>
 {{end}}

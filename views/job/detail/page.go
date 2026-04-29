@@ -34,6 +34,13 @@ type PageData struct {
 	TabItems            []pyeza.TabItem
 	PhasesTable         *types.TableConfig
 	ActivitiesTable     *types.TableConfig
+	// 2026-04-29 milestone-billing plan §5/§6 — Activities tab additions:
+	// per-row mini list (with billable-status badge + edit CTA) and the add
+	// CTA URL. Both empty when the JobActivityRoutes deps are not wired.
+	ActivitiesList    []ActivityRow
+	JobActivityLabels fayna.JobActivityLabels
+	AddActivityURL    string
+	EditActivityURL   string
 	SettlementTable     *types.TableConfig
 	OutcomesTable       *types.TableConfig
 	AttachmentTable     *types.TableConfig

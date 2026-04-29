@@ -218,6 +218,21 @@ type JobActivityFormLabels struct {
 	BillableStatusInfo string `json:"billableStatusInfo"`
 	QuantityInfo       string `json:"quantityInfo"`
 	UnitCostInfo       string `json:"unitCostInfo"`
+
+	// 2026-04-29 milestone-billing plan §5/§6 — operator-facing JobActivity
+	// drawer fields and tab CTAs. The selectors driving phase5 specs 09/11
+	// reference these labels via lyngua.
+	AddCta                    string `json:"addCta"`
+	BillRate                  string `json:"billRate"`
+	BillAmount                string `json:"billAmount"`
+	BillableStatusIncluded    string `json:"billableStatusIncluded"`
+	BillableStatusBillable    string `json:"billableStatusBillable"`
+	BillableStatusNonBillable string `json:"billableStatusNonBillable"`
+	EntryTypeLabor            string `json:"entryTypeLabor"`
+	EntryTypeMaterial         string `json:"entryTypeMaterial"`
+	EntryTypeExpense          string `json:"entryTypeExpense"`
+	SubmitCreate              string `json:"submitCreate"`
+	SubmitUpdate              string `json:"submitUpdate"`
 }
 
 type JobActivityActionLabels struct {
@@ -317,6 +332,18 @@ func DefaultJobActivityLabels() JobActivityLabels {
 			BillableStatusInfo: "Whether this activity is charged to the client.",
 			QuantityInfo:       "Number of units or hours recorded for this activity entry.",
 			UnitCostInfo:       "Cost per unit or per hour for this activity entry.",
+			// 2026-04-29 milestone-billing plan §5/§6.
+			AddCta:                    "+ Add Activity",
+			BillRate:                  "Bill Rate",
+			BillAmount:                "Bill Amount",
+			BillableStatusIncluded:    "Included",
+			BillableStatusBillable:    "Billable (T&M)",
+			BillableStatusNonBillable: "Non-billable",
+			EntryTypeLabor:            "Labor",
+			EntryTypeMaterial:         "Material",
+			EntryTypeExpense:          "Expense",
+			SubmitCreate:              "Save",
+			SubmitUpdate:              "Update",
 		},
 		Actions: JobActivityActionLabels{
 			View:    "View Activity",

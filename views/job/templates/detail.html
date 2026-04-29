@@ -142,15 +142,90 @@
 {{end}}
 
 {{/* Activities Tab */}}
+{{/* 2026-04-29 milestone-billing plan §5/§6 — operator-facing surface to log
+     JobActivity rows with billable_status = INCLUDED (M2 absorbed cost) or
+     BILLABLE (T&M overage). data-testid attributes are required by phase5
+     specs 09 and 11. */}}
 {{define "job-tab-activities"}}
 <div class="tab-scroll">
-    {{if .ActivitiesTable}}
-        {{template "table-card" .ActivitiesTable}}
-    {{else}}
+    {{if .AddActivityURL}}
+    <div class="job-activities-toolbar">
+        <button type="button"
+                class="btn btn--primary"
+                data-testid="job-activity-add-cta"
+                hx-get="{{.AddActivityURL}}"
+                hx-target="#sheetContent"
+                hx-swap="innerHTML">
+            {{.JobActivityLabels.Form.AddCta}}
+        </button>
+    </div>
+    {{end}}
+
+    {{if .ActivitiesList}}
+    <section class="job-activities-card" aria-label="Activities">
+        <table class="job-activities-list" data-testid="job-activities-list">
+            <thead>
+                <tr>
+                    <th>{{.Labels.Detail.EntryType}}</th>
+                    <th>{{.JobActivityLabels.Form.BillableStatus}}</th>
+                    <th>{{.Labels.Detail.Description}}</th>
+                    <th>{{.Labels.Detail.Quantity}}</th>
+                    <th>{{.Labels.Detail.UnitCost}}</th>
+                    <th>{{.Labels.Detail.TotalCost}}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .ActivitiesList}}
+                <tr data-testid="job-activity-row"
+                    data-activity-id="{{.ID}}"
+                    data-entry-type="{{.EntryType}}"
+                    data-billable-status="{{.BillableStatus}}">
+                    <td>
+                        <span class="badge badge--default"
+                              data-testid="job-activity-entry-type-badge"
+                              data-entry-type="{{.EntryType}}">
+                            {{.EntryTypeLabel}}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge badge--{{.BillableStatusVariant}}"
+                              data-testid="job-activity-billable-status-badge"
+                              data-billable-status="{{.BillableStatus}}">
+                            {{.BillableStatusLabel}}
+                        </span>
+                    </td>
+                    <td data-testid="job-activity-description">{{.Description}}</td>
+                    <td data-testid="job-activity-quantity-display">{{.Quantity}}</td>
+                    <td data-testid="job-activity-unit-cost-display">{{.UnitCost}}</td>
+                    <td data-testid="job-activity-total-cost-display">{{.TotalCost}} {{.Currency}}</td>
+                    <td>
+                        {{if .EditURL}}
+                        <button type="button"
+                                class="btn btn--sm btn--secondary"
+                                data-testid="job-activity-edit-cta"
+                                data-activity-id="{{.ID}}"
+                                hx-get="{{.EditURL}}"
+                                hx-target="#sheetContent"
+                                hx-swap="innerHTML">
+                            {{$.JobActivityLabels.Actions.Edit}}
+                        </button>
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </section>
+    {{else if not .AddActivityURL}}
         <div class="coming-soon-panel">
             <div class="coming-soon-title">{{.Labels.Empty.ActivitiesTitle}}</div>
             <p class="coming-soon-text">{{.Labels.Empty.ActivitiesMessage}}</p>
         </div>
+    {{end}}
+
+    {{if .ActivitiesTable}}
+        {{template "table-card" .ActivitiesTable}}
     {{end}}
 </div>
 {{end}}

@@ -181,6 +181,11 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				NewID:            newAttachmentID,
 				// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4.
 				SubscriptionDetailURL: cfg.subscriptionDetailURL,
+				// 2026-04-29 milestone-billing plan §5/§6 — Activities tab on
+				// Job detail uses the JobActivity routes/labels to render the
+				// "+ Add Activity" CTA + per-row Edit CTA.
+				JobActivityRoutes: jaRoutes,
+				JobActivityLabels: jaLabels,
 			}
 			if uc != nil {
 				wireJobDeps(jobDeps, uc)

@@ -28,6 +28,11 @@ type activityFormData struct {
 	UnitCost       float64
 	Currency       string
 	BillableStatus string
+	// 2026-04-29 milestone-billing plan §5/§6 — bill_rate and bill_amount drive
+	// the BILLABLE (T&M overage) path. Stored on JobActivity proto in centavos;
+	// UI carries major units and the handler ×100s on submit.
+	BillRate   float64
+	BillAmount float64
 	// Labor fields
 	Hours      float64
 	HourlyRate float64
@@ -79,26 +84,44 @@ func newCreateAction(deps *ModuleDeps) view.View {
 
 		quantity := parseFormFloat(r.FormValue("quantity"))
 		unitCost := parseFormFloat(r.FormValue("unit_cost"))
+		billRate := parseFormFloat(r.FormValue("bill_rate"))
+		billAmount := parseFormFloat(r.FormValue("bill_amount"))
 
 		description := r.FormValue("description")
 
 		unitCostCentavos := int64(math.Round(unitCost * 100))
 		totalCostCentavos := int64(math.Round(quantity * unitCost * 100))
+		billRateCentavos := int64(math.Round(billRate * 100))
+		billAmountCentavos := int64(math.Round(billAmount * 100))
+		// When operator provided a bill_rate but not a bill_amount, derive
+		// bill_amount = quantity × bill_rate so the BILLABLE T&M path
+		// (flow.md §6) doesn't require a manual second entry.
+		if billAmountCentavos == 0 && billRateCentavos > 0 && quantity > 0 {
+			billAmountCentavos = int64(math.Round(quantity * billRate * 100))
+		}
+
+		activity := &jobactivitypb.JobActivity{
+			Id:             id,
+			JobId:          r.FormValue("job_id"),
+			EntryType:      entryType,
+			Quantity:       quantity,
+			UnitCost:       unitCostCentavos,
+			TotalCost:      totalCostCentavos,
+			Currency:       r.FormValue("currency"),
+			Description:    &description,
+			BillableStatus: parseBillableStatus(r.FormValue("billable_status")),
+			ApprovalStatus: jobactivitypb.ActivityApprovalStatus_ACTIVITY_APPROVAL_STATUS_DRAFT,
+			Active:         true,
+		}
+		if billRateCentavos > 0 {
+			activity.BillRate = &billRateCentavos
+		}
+		if billAmountCentavos > 0 {
+			activity.BillAmount = &billAmountCentavos
+		}
 
 		_, err := deps.CreateJobActivity(ctx, &jobactivitypb.CreateJobActivityRequest{
-			Data: &jobactivitypb.JobActivity{
-				Id:             id,
-				JobId:          r.FormValue("job_id"),
-				EntryType:      entryType,
-				Quantity:       quantity,
-				UnitCost:       unitCostCentavos,
-				TotalCost:      totalCostCentavos,
-				Currency:       r.FormValue("currency"),
-				Description:    &description,
-				BillableStatus: parseBillableStatus(r.FormValue("billable_status")),
-				ApprovalStatus: jobactivitypb.ActivityApprovalStatus_ACTIVITY_APPROVAL_STATUS_DRAFT,
-				Active:         true,
-			},
+			Data: activity,
 		})
 		if err != nil {
 			log.Printf("Failed to create job activity: %v", err)
@@ -141,6 +164,14 @@ func newUpdateAction(deps *ModuleDeps) view.View {
 				desc = *record.Description
 			}
 
+			billRate := float64(0)
+			if record.BillRate != nil {
+				billRate = float64(*record.BillRate) / 100
+			}
+			billAmount := float64(0)
+			if record.BillAmount != nil {
+				billAmount = float64(*record.BillAmount) / 100
+			}
 			return view.OK("job-activity-drawer-form", &activityFormData{
 				FormAction:     route.ResolveURL(deps.Routes.EditURL, "id", id),
 				IsEdit:         true,
@@ -152,6 +183,8 @@ func newUpdateAction(deps *ModuleDeps) view.View {
 				UnitCost:       float64(record.GetUnitCost()) / 100,
 				Currency:       record.GetCurrency(),
 				BillableStatus: record.GetBillableStatus().String(),
+				BillRate:       billRate,
+				BillAmount:     billAmount,
 				Labels:         deps.Labels,
 				CommonLabels:   nil, // injected by ViewAdapter
 			})
@@ -172,24 +205,39 @@ func newUpdateAction(deps *ModuleDeps) view.View {
 
 		quantity := parseFormFloat(r.FormValue("quantity"))
 		unitCost := parseFormFloat(r.FormValue("unit_cost"))
+		billRate := parseFormFloat(r.FormValue("bill_rate"))
+		billAmount := parseFormFloat(r.FormValue("bill_amount"))
 
 		description := r.FormValue("description")
 
 		unitCostCentavos := int64(math.Round(unitCost * 100))
 		totalCostCentavos := int64(math.Round(quantity * unitCost * 100))
+		billRateCentavos := int64(math.Round(billRate * 100))
+		billAmountCentavos := int64(math.Round(billAmount * 100))
+		if billAmountCentavos == 0 && billRateCentavos > 0 && quantity > 0 {
+			billAmountCentavos = int64(math.Round(quantity * billRate * 100))
+		}
+
+		activity := &jobactivitypb.JobActivity{
+			Id:             id,
+			JobId:          r.FormValue("job_id"),
+			EntryType:      entryType,
+			Quantity:       quantity,
+			UnitCost:       unitCostCentavos,
+			TotalCost:      totalCostCentavos,
+			Currency:       r.FormValue("currency"),
+			Description:    &description,
+			BillableStatus: parseBillableStatus(r.FormValue("billable_status")),
+		}
+		if billRateCentavos > 0 {
+			activity.BillRate = &billRateCentavos
+		}
+		if billAmountCentavos > 0 {
+			activity.BillAmount = &billAmountCentavos
+		}
 
 		_, err := deps.UpdateJobActivity(ctx, &jobactivitypb.UpdateJobActivityRequest{
-			Data: &jobactivitypb.JobActivity{
-				Id:             id,
-				JobId:          r.FormValue("job_id"),
-				EntryType:      entryType,
-				Quantity:       quantity,
-				UnitCost:       unitCostCentavos,
-				TotalCost:      totalCostCentavos,
-				Currency:       r.FormValue("currency"),
-				Description:    &description,
-				BillableStatus: parseBillableStatus(r.FormValue("billable_status")),
-			},
+			Data: activity,
 		})
 		if err != nil {
 			log.Printf("Failed to update job activity %s: %v", id, err)
@@ -438,15 +486,18 @@ func newBulkGenerateInvoiceAction(deps *ModuleDeps) view.View {
 }
 
 // parseBillableStatus converts a form string to the BillableStatus enum.
+// Accepts both shorthand ("billable") and proto enum form
+// ("BILLABLE_STATUS_BILLABLE") so e2e selectors and form submits stay
+// flexible.
 func parseBillableStatus(s string) jobactivitypb.BillableStatus {
 	switch s {
-	case "billable":
+	case "billable", "BILLABLE_STATUS_BILLABLE":
 		return jobactivitypb.BillableStatus_BILLABLE_STATUS_BILLABLE
-	case "non_billable":
+	case "non_billable", "BILLABLE_STATUS_NON_BILLABLE":
 		return jobactivitypb.BillableStatus_BILLABLE_STATUS_NON_BILLABLE
-	case "included":
+	case "included", "BILLABLE_STATUS_INCLUDED":
 		return jobactivitypb.BillableStatus_BILLABLE_STATUS_INCLUDED
-	case "write_off":
+	case "write_off", "BILLABLE_STATUS_WRITE_OFF":
 		return jobactivitypb.BillableStatus_BILLABLE_STATUS_WRITE_OFF
 	default:
 		return jobactivitypb.BillableStatus_BILLABLE_STATUS_UNSPECIFIED

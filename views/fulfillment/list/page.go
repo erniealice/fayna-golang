@@ -7,6 +7,7 @@ import (
 	"math"
 
 	espynahttp "github.com/erniealice/espyna-golang/contrib/http"
+	"github.com/erniealice/espyna-golang/tableparams"
 	fayna "github.com/erniealice/fayna-golang"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 
@@ -44,10 +45,6 @@ type PageData struct {
 	ActiveStatus    string
 }
 
-var fulfillmentAllowedSortCols = []string{
-	"date_created", "date_modified", "status", "delivery_mode",
-}
-
 var fulfillmentSearchFields = []string{"reference_number", "delivery_mode"}
 
 // NewView creates the fulfillment list view.
@@ -58,12 +55,13 @@ func NewView(deps *ListViewDeps) view.View {
 			status = "PENDING"
 		}
 
-		p, err := espynahttp.ParseTableParams(viewCtx.Request, fulfillmentAllowedSortCols)
+		columns := fulfillmentColumns(deps.Labels)
+		p, err := espynahttp.ParseTableParams(viewCtx.Request, types.SortableKeys(columns), "date_created", "desc")
 		if err != nil {
 			return view.Error(err)
 		}
 
-		tableConfig, err := buildTableConfig(ctx, deps, status, p)
+		tableConfig, err := buildTableConfig(ctx, deps, status, p, columns)
 		if err != nil {
 			return view.Error(err)
 		}
@@ -110,12 +108,13 @@ func NewTableView(deps *ListViewDeps) view.View {
 			status = "PENDING"
 		}
 
-		p, err := espynahttp.ParseTableParams(viewCtx.Request, fulfillmentAllowedSortCols)
+		columns := fulfillmentColumns(deps.Labels)
+		p, err := espynahttp.ParseTableParams(viewCtx.Request, types.SortableKeys(columns), "date_created", "desc")
 		if err != nil {
 			return view.Error(err)
 		}
 
-		tableConfig, err := buildTableConfig(ctx, deps, status, p)
+		tableConfig, err := buildTableConfig(ctx, deps, status, p, columns)
 		if err != nil {
 			return view.Error(err)
 		}
@@ -125,7 +124,7 @@ func NewTableView(deps *ListViewDeps) view.View {
 }
 
 // buildTableConfig fetches fulfillment data and builds the table configuration.
-func buildTableConfig(ctx context.Context, deps *ListViewDeps, status string, p espynahttp.TableQueryParams) (*types.TableConfig, error) {
+func buildTableConfig(ctx context.Context, deps *ListViewDeps, status string, p tableparams.TableQueryParams, columns []types.TableColumn) (*types.TableConfig, error) {
 	perms := view.GetUserPermissions(ctx)
 
 	listParams := espynahttp.ToListParams(p, fulfillmentSearchFields)
@@ -141,7 +140,6 @@ func buildTableConfig(ctx context.Context, deps *ListViewDeps, status string, p 
 	}
 
 	l := deps.Labels
-	columns := fulfillmentColumns(l)
 	rows := buildTableRows(resp.GetRows(), status, l, deps.Routes, perms)
 	types.ApplyColumnStyles(columns, rows)
 

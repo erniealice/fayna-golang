@@ -113,10 +113,10 @@ func NewView(deps *ListViewDeps) view.View {
 
 func jobColumns(l fayna.JobLabels) []types.TableColumn {
 	return []types.TableColumn{
-		{Key: "name", Label: l.Columns.Name, Sortable: true},
-		{Key: "client", Label: l.Columns.Client, Sortable: true},
-		{Key: "status", Label: l.Columns.Status, Sortable: true, WidthClass: "col-3xl"},
-		{Key: "created", Label: l.Columns.Created, Sortable: true, WidthClass: "col-4xl"},
+		{Key: "name", Label: l.Columns.Name},
+		{Key: "client", Label: l.Columns.Client},
+		{Key: "status", Label: l.Columns.Status, WidthClass: "col-3xl"},
+		{Key: "created", Label: l.Columns.Created, WidthClass: "col-4xl"},
 	}
 }
 

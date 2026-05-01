@@ -34,7 +34,6 @@ type PageData struct {
 	Table           *types.TableConfig
 }
 
-var jobTemplateAllowedSortCols = []string{"date_created", "date_modified", "name"}
 var jobTemplateSearchFields = []string{"name", "description"}
 
 // NewView creates the job template list view.
@@ -47,7 +46,8 @@ func NewView(deps *ListViewDeps) view.View {
 			status = "active"
 		}
 
-		p, err := espynahttp.ParseTableParams(viewCtx.Request, jobTemplateAllowedSortCols)
+		columns := jobTemplateColumns(deps.Labels)
+		p, err := espynahttp.ParseTableParams(viewCtx.Request, types.SortableKeys(columns), "name", "asc")
 		if err != nil {
 			return view.Error(err)
 		}
@@ -78,7 +78,6 @@ func NewView(deps *ListViewDeps) view.View {
 		}
 
 		l := deps.Labels
-		columns := jobTemplateColumns(l)
 		rows := buildTableRows(resp.GetJobTemplateList(), status, l, deps.Routes, perms)
 		types.ApplyColumnStyles(columns, rows)
 
@@ -152,9 +151,9 @@ func NewView(deps *ListViewDeps) view.View {
 
 func jobTemplateColumns(l fayna.JobTemplateLabels) []types.TableColumn {
 	return []types.TableColumn{
-		{Key: "name", Label: l.Columns.Name, Sortable: true},
-		{Key: "description", Label: l.Columns.Description, Sortable: true},
-		{Key: "status", Label: l.Columns.Status, Sortable: true, WidthClass: "col-2xl"},
+		{Key: "name", Label: l.Columns.Name},
+		{Key: "description", Label: l.Columns.Description, NoSort: true},
+		{Key: "status", Label: l.Columns.Status, NoSort: true, WidthClass: "col-2xl"},
 	}
 }
 

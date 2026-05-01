@@ -173,11 +173,11 @@ func loadTabData(
 
 func buildItemsTable(items []*fulfillmentpb.FulfillmentItem, l fayna.FulfillmentLabels, tableLabels types.TableLabels) *types.TableConfig {
 	columns := []types.TableColumn{
-		{Key: "product_id", Label: "Product", Sortable: false},
-		{Key: "delivery_mode", Label: l.Columns.DeliveryMode, Sortable: false},
-		{Key: "quantity_ordered", Label: "Qty Ordered", Sortable: false, WidthClass: "col-2xl"},
-		{Key: "quantity_delivered", Label: "Qty Delivered", Sortable: false, WidthClass: "col-3xl"},
-		{Key: "status", Label: l.Columns.Status, Sortable: false, WidthClass: "col-2xl"},
+		{Key: "product_id", Label: "Product", NoSort: true},
+		{Key: "delivery_mode", Label: l.Columns.DeliveryMode, NoSort: true},
+		{Key: "quantity_ordered", Label: "Qty Ordered", NoSort: true, WidthClass: "col-2xl"},
+		{Key: "quantity_delivered", Label: "Qty Delivered", NoSort: true, WidthClass: "col-3xl"},
+		{Key: "status", Label: l.Columns.Status, NoSort: true, WidthClass: "col-2xl"},
 	}
 
 	rows := make([]types.TableRow, 0, len(items))
@@ -209,10 +209,10 @@ func buildItemsTable(items []*fulfillmentpb.FulfillmentItem, l fayna.Fulfillment
 func buildHistoryTable(events []*fulfillmentpb.FulfillmentStatusEvent, l fayna.FulfillmentLabels, tableLabels types.TableLabels) *types.TableConfig {
 	_ = l // labels reserved for future use
 	columns := []types.TableColumn{
-		{Key: "from_status", Label: "From Status", Sortable: false},
-		{Key: "to_status", Label: "To Status", Sortable: false},
-		{Key: "reason", Label: "Reason", Sortable: false},
-		{Key: "occurred_at", Label: "Date", Sortable: false, WidthClass: "col-4xl"},
+		{Key: "from_status", Label: "From Status", NoSort: true},
+		{Key: "to_status", Label: "To Status", NoSort: true},
+		{Key: "reason", Label: "Reason", NoSort: true},
+		{Key: "occurred_at", Label: "Date", NoSort: true, WidthClass: "col-4xl"},
 	}
 
 	rows := make([]types.TableRow, 0, len(events))
@@ -247,10 +247,10 @@ func buildHistoryTable(events []*fulfillmentpb.FulfillmentStatusEvent, l fayna.F
 func buildReturnsTable(returns []*fulfillmentpb.FulfillmentReturn, l fayna.FulfillmentLabels, tableLabels types.TableLabels) *types.TableConfig {
 	_ = l // labels reserved for future use
 	columns := []types.TableColumn{
-		{Key: "status", Label: "Status", Sortable: false, WidthClass: "col-2xl"},
-		{Key: "reason", Label: "Reason", Sortable: false},
-		{Key: "notes", Label: "Notes", Sortable: false},
-		{Key: "date_created", Label: "Date", Sortable: false, WidthClass: "col-4xl"},
+		{Key: "status", Label: "Status", NoSort: true, WidthClass: "col-2xl"},
+		{Key: "reason", Label: "Reason", NoSort: true},
+		{Key: "notes", Label: "Notes", NoSort: true},
+		{Key: "date_created", Label: "Date", NoSort: true, WidthClass: "col-4xl"},
 	}
 
 	rows := make([]types.TableRow, 0, len(returns))

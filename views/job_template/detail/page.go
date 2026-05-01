@@ -195,8 +195,8 @@ func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData
 	pageData.PhasesTable = &types.TableConfig{
 		ID: "job-template-phases-table",
 		Columns: []types.TableColumn{
-			{Key: "order", Label: "#", Sortable: true, WidthClass: "col-sm"},
-			{Key: "name", Label: deps.Labels.Columns.Name, Sortable: true},
+			{Key: "order", Label: "#", WidthClass: "col-sm"},
+			{Key: "name", Label: deps.Labels.Columns.Name},
 		},
 		Rows:        rows,
 		Labels:      deps.TableLabels,

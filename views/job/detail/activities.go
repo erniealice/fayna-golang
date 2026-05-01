@@ -209,12 +209,12 @@ func buildActivitiesTable(
 	tableLabels types.TableLabels,
 ) *types.TableConfig {
 	columns := []types.TableColumn{
-		{Key: "entry_type", Label: l.Detail.EntryType, Sortable: true, WidthClass: "col-xl"},
-		{Key: "entry_date", Label: l.Detail.EntryDate, Sortable: true, WidthClass: "col-3xl"},
-		{Key: "description", Label: l.Detail.Description, Sortable: false},
-		{Key: "quantity", Label: l.Detail.Quantity, Sortable: false, WidthClass: "col-md"},
-		{Key: "unit_cost", Label: l.Detail.UnitCost, Sortable: false, WidthClass: "col-2xl"},
-		{Key: "total_cost", Label: l.Detail.TotalCost, Sortable: false, WidthClass: "col-2xl"},
+		{Key: "entry_type", Label: l.Detail.EntryType, WidthClass: "col-xl"},
+		{Key: "entry_date", Label: l.Detail.EntryDate, WidthClass: "col-3xl"},
+		{Key: "description", Label: l.Detail.Description, NoSort: true},
+		{Key: "quantity", Label: l.Detail.Quantity, NoSort: true, WidthClass: "col-md"},
+		{Key: "unit_cost", Label: l.Detail.UnitCost, NoSort: true, WidthClass: "col-2xl"},
+		{Key: "total_cost", Label: l.Detail.TotalCost, NoSort: true, WidthClass: "col-2xl"},
 	}
 
 	rows := []types.TableRow{}

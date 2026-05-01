@@ -102,12 +102,12 @@ func NewView(deps *ListViewDeps) view.View {
 
 func outcomeColumns(l fayna.TaskOutcomeLabels) []types.TableColumn {
 	return []types.TableColumn{
-		{Key: "task", Label: l.Columns.Task, Sortable: true},
-		{Key: "criteria", Label: l.Columns.Criteria, Sortable: true},
-		{Key: "value", Label: l.Columns.Value, Sortable: false, WidthClass: "col-2xl"},
-		{Key: "determination", Label: l.Columns.Determination, Sortable: true, WidthClass: "col-4xl"},
-		{Key: "recorded_by", Label: l.Columns.RecordedBy, Sortable: true, WidthClass: "col-4xl"},
-		{Key: "date", Label: l.Columns.Date, Sortable: true, WidthClass: "col-4xl"},
+		{Key: "task", Label: l.Columns.Task},
+		{Key: "criteria", Label: l.Columns.Criteria},
+		{Key: "value", Label: l.Columns.Value, NoSort: true, WidthClass: "col-2xl"},
+		{Key: "determination", Label: l.Columns.Determination, WidthClass: "col-4xl"},
+		{Key: "recorded_by", Label: l.Columns.RecordedBy, WidthClass: "col-4xl"},
+		{Key: "date", Label: l.Columns.Date, WidthClass: "col-4xl"},
 	}
 }
 

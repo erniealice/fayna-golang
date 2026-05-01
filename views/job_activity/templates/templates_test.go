@@ -46,6 +46,18 @@ func TestBillableStatusOptionsMatchProto(t *testing.T) {
 	assertSameSet(t, "billable_status", want, got)
 }
 
+// TestEntryTypeOptionsMatchProto guards the EntryType <option> list in
+// drawer-form.html against drift from jobactivitypb.EntryType_name. Wave 4
+// of the enum-select-canonicalize plan added EQUIPMENT and SUBCONTRACT and
+// dropped the legacy lowercase shorthand.
+func TestEntryTypeOptionsMatchProto(t *testing.T) {
+	t.Parallel()
+	body := readTemplate(t, "drawer-form.html")
+	got := extractEnumOptionValues(t, body, "entry_type")
+	want := protoEnumNames(jobactivitypb.EntryType_name)
+	assertSameSet(t, "entry_type", want, got)
+}
+
 // readTemplate loads a template file from the same directory as this test.
 // The test binary's CWD is the package directory at test time, so a relative
 // path is sufficient and avoids the embed-FS dance.

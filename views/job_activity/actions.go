@@ -428,18 +428,21 @@ func newReverseAction(deps *ModuleDeps) view.View {
 	})
 }
 
-// parseEntryType converts a form string to the EntryType enum.
+// parseEntryType converts a form string to the EntryType enum. The drawer
+// form posts canonical proto enum names (ENTRY_TYPE_*); legacy lowercase
+// shorthand ("labor", "material", ...) is still accepted so older tests and
+// any non-form caller don't break.
 func parseEntryType(s string) jobactivitypb.EntryType {
 	switch s {
-	case "LABOR", "labor":
+	case "ENTRY_TYPE_LABOR", "LABOR", "labor":
 		return jobactivitypb.EntryType_ENTRY_TYPE_LABOR
-	case "MATERIAL", "material":
+	case "ENTRY_TYPE_MATERIAL", "MATERIAL", "material":
 		return jobactivitypb.EntryType_ENTRY_TYPE_MATERIAL
-	case "EXPENSE", "expense":
+	case "ENTRY_TYPE_EXPENSE", "EXPENSE", "expense":
 		return jobactivitypb.EntryType_ENTRY_TYPE_EXPENSE
-	case "EQUIPMENT", "equipment":
+	case "ENTRY_TYPE_EQUIPMENT", "EQUIPMENT", "equipment":
 		return jobactivitypb.EntryType_ENTRY_TYPE_EQUIPMENT
-	case "SUBCONTRACT", "subcontract":
+	case "ENTRY_TYPE_SUBCONTRACT", "SUBCONTRACT", "subcontract":
 		return jobactivitypb.EntryType_ENTRY_TYPE_SUBCONTRACT
 	default:
 		return jobactivitypb.EntryType_ENTRY_TYPE_UNSPECIFIED

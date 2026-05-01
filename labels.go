@@ -232,6 +232,8 @@ type JobActivityFormLabels struct {
 	EntryTypeLabor            string `json:"entryTypeLabor"`
 	EntryTypeMaterial         string `json:"entryTypeMaterial"`
 	EntryTypeExpense          string `json:"entryTypeExpense"`
+	EntryTypeEquipment        string `json:"entryTypeEquipment"`
+	EntryTypeSubcontract      string `json:"entryTypeSubcontract"`
 	SubmitCreate              string `json:"submitCreate"`
 	SubmitUpdate              string `json:"submitUpdate"`
 }
@@ -344,6 +346,8 @@ func DefaultJobActivityLabels() JobActivityLabels {
 			EntryTypeLabor:            "Labor",
 			EntryTypeMaterial:         "Material",
 			EntryTypeExpense:          "Expense",
+			EntryTypeEquipment:        "Equipment",
+			EntryTypeSubcontract:      "Subcontract",
 			SubmitCreate:              "Save",
 			SubmitUpdate:              "Update",
 		},

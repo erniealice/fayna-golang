@@ -28,14 +28,22 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
         <div class="form-row single">
             <div class="form-group">
                 <label class="form-label" for="job-activity-entry-type">{{.Labels.Form.EntryType}}</label>
+                {{/* 2026-04-30 enum-select-canonicalize Wave 4 — option list is
+                     the source of truth; do not move it back into a Go
+                     option-builder. Drift test:
+                     views/job_activity/templates/templates_test.go
+                     (TestEntryTypeOptionsMatchProto) diffs these against
+                     jobactivitypb.EntryType_name. Skip UNSPECIFIED. */}}
                 <select name="entry_type"
                         id="job-activity-entry-type"
                         class="form-select"
                         required
                         data-testid="job-activity-entry-type-select">
-                    <option value="labor"      {{if eq .EntryType "labor"}}selected{{end}}{{if eq .EntryType "ENTRY_TYPE_LABOR"}}selected{{end}}>{{.Labels.Form.EntryTypeLabor}}</option>
-                    <option value="material"   {{if eq .EntryType "material"}}selected{{end}}{{if eq .EntryType "ENTRY_TYPE_MATERIAL"}}selected{{end}}>{{.Labels.Form.EntryTypeMaterial}}</option>
-                    <option value="expense"    {{if eq .EntryType "expense"}}selected{{end}}{{if eq .EntryType "ENTRY_TYPE_EXPENSE"}}selected{{end}}>{{.Labels.Form.EntryTypeExpense}}</option>
+                    <option value="ENTRY_TYPE_LABOR"       {{if eq .EntryType "ENTRY_TYPE_LABOR"}}selected{{end}}>{{.Labels.Form.EntryTypeLabor}}</option>
+                    <option value="ENTRY_TYPE_MATERIAL"    {{if eq .EntryType "ENTRY_TYPE_MATERIAL"}}selected{{end}}>{{.Labels.Form.EntryTypeMaterial}}</option>
+                    <option value="ENTRY_TYPE_EXPENSE"     {{if eq .EntryType "ENTRY_TYPE_EXPENSE"}}selected{{end}}>{{.Labels.Form.EntryTypeExpense}}</option>
+                    <option value="ENTRY_TYPE_EQUIPMENT"   {{if eq .EntryType "ENTRY_TYPE_EQUIPMENT"}}selected{{end}}>{{.Labels.Form.EntryTypeEquipment}}</option>
+                    <option value="ENTRY_TYPE_SUBCONTRACT" {{if eq .EntryType "ENTRY_TYPE_SUBCONTRACT"}}selected{{end}}>{{.Labels.Form.EntryTypeSubcontract}}</option>
                 </select>
             </div>
         </div>

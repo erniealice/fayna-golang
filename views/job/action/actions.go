@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	fayna "github.com/erniealice/fayna-golang"
+	jobform "github.com/erniealice/fayna-golang/views/job/form"
 
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
@@ -13,18 +14,6 @@ import (
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 )
-
-// FormData is the template data for the job drawer form.
-type FormData struct {
-	FormAction   string
-	IsEdit       bool
-	ID           string
-	Name         string
-	ClientID     string
-	LocationID   string
-	Labels       fayna.JobLabels
-	CommonLabels any
-}
 
 // Deps holds dependencies for job action handlers.
 type Deps struct {
@@ -46,7 +35,7 @@ func NewAddAction(deps *Deps) view.View {
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
-			return view.OK("job-drawer-form", &FormData{
+			return view.OK("job-drawer-form", &jobform.Data{
 				FormAction:   deps.Routes.AddURL,
 				Labels:       deps.Labels,
 				CommonLabels: nil, // injected by ViewAdapter
@@ -115,7 +104,7 @@ func NewEditAction(deps *Deps) view.View {
 			}
 			record := readData[0]
 
-			return view.OK("job-drawer-form", &FormData{
+			return view.OK("job-drawer-form", &jobform.Data{
 				FormAction:   route.ResolveURL(deps.Routes.EditURL, "id", id),
 				IsEdit:       true,
 				ID:           id,

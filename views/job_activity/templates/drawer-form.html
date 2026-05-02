@@ -143,12 +143,15 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
         <div class="form-row single">
             <div class="form-group">
                 <label class="form-label" for="job-activity-currency">{{.Labels.Detail.Currency}}</label>
-                <input type="text"
-                       name="currency"
-                       id="job-activity-currency"
-                       class="form-input"
-                       value="{{if .Currency}}{{.Currency}}{{else}}PHP{{end}}"
-                       data-testid="job-activity-currency">
+                <select name="currency"
+                        id="job-activity-currency"
+                        class="form-input"
+                        data-testid="job-activity-currency">
+                    {{$cur := or .Currency "PHP"}}
+                    {{range .CommonLabels.Currency.Options}}
+                    <option value="{{.Value}}" {{if eq .Value $cur}}selected{{end}}>{{.Label}}</option>
+                    {{end}}
+                </select>
             </div>
         </div>
 

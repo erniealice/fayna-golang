@@ -410,16 +410,45 @@ func DefaultJobActivityLabels() JobActivityLabels {
 
 // JobLabels holds all translatable strings for the job module.
 type JobLabels struct {
-	Page    JobPageLabels    `json:"page"`
-	Buttons JobButtonLabels  `json:"buttons"`
-	Columns JobColumnLabels  `json:"columns"`
-	Empty   JobEmptyLabels   `json:"empty"`
-	Form    JobFormLabels    `json:"form"`
-	Actions JobActionLabels  `json:"actions"`
-	Detail  JobDetailLabels  `json:"detail"`
-	Tabs    JobTabLabels     `json:"tabs"`
-	Confirm JobConfirmLabels `json:"confirm"`
-	Errors  JobErrorLabels   `json:"errors"`
+	Page      JobPageLabels       `json:"page"`
+	Buttons   JobButtonLabels     `json:"buttons"`
+	Columns   JobColumnLabels     `json:"columns"`
+	Empty     JobEmptyLabels      `json:"empty"`
+	Form      JobFormLabels       `json:"form"`
+	Actions   JobActionLabels     `json:"actions"`
+	Detail    JobDetailLabels     `json:"detail"`
+	Tabs      JobTabLabels        `json:"tabs"`
+	Confirm   JobConfirmLabels    `json:"confirm"`
+	Errors    JobErrorLabels      `json:"errors"`
+	// Dashboard labels for the Job live dashboard
+	// (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
+	Dashboard JobDashboardLabels  `json:"dashboard"`
+}
+
+// JobDashboardLabels holds translatable strings for the Job live dashboard.
+// (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
+type JobDashboardLabels struct {
+	Title    string `json:"title"`
+	Subtitle string `json:"subtitle"`
+	// Stats
+	StatActive       string `json:"statActive"`
+	StatDoneMonth    string `json:"statDoneMonth"`
+	StatOverdue      string `json:"statOverdue"`
+	StatHoursWeek    string `json:"statHoursWeek"`
+	// Widgets
+	HoursPerWeek      string `json:"hoursPerWeek"`
+	UpcomingDeadlines string `json:"upcomingDeadlines"`
+	RecentActivity    string `json:"recentActivity"`
+	NoDeadlines       string `json:"noDeadlines"`
+	NoActivity        string `json:"noActivity"`
+	// Quick actions
+	QuickNewJob       string `json:"quickNewJob"`
+	QuickNewTemplate  string `json:"quickNewTemplate"`
+	QuickLogHours     string `json:"quickLogHours"`
+	QuickJobCalendar  string `json:"quickJobCalendar"`
+	// Common
+	ViewAll    string `json:"viewAll"`
+	AxisHours  string `json:"axisHours"`
 }
 
 type JobPageLabels struct {
@@ -992,6 +1021,36 @@ type FulfillmentLabels struct {
 	Buttons FulfillmentButtonLabels `json:"buttons"`
 	Empty   FulfillmentEmptyLabels  `json:"empty"`
 	Errors  FulfillmentErrorLabels  `json:"errors"`
+	// Dashboard labels for the Fulfillment live dashboard.
+	// (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
+	Dashboard FulfillmentDashboardLabels `json:"dashboard"`
+}
+
+// FulfillmentDashboardLabels holds translatable strings for the Fulfillment
+// live dashboard. (Phase 3 — Pyeza dashboard block + per-app live dashboards
+// plan).
+type FulfillmentDashboardLabels struct {
+	Title    string `json:"title"`
+	Subtitle string `json:"subtitle"`
+	// Stats
+	StatPending        string `json:"statPending"`
+	StatInTransit      string `json:"statInTransit"`
+	StatDeliveredToday string `json:"statDeliveredToday"`
+	StatExceptions     string `json:"statExceptions"`
+	// Widgets
+	DailyDelivered   string `json:"dailyDelivered"`
+	StatusMix        string `json:"statusMix"`
+	RecentExceptions string `json:"recentExceptions"`
+	NoExceptions     string `json:"noExceptions"`
+	// Quick actions
+	QuickNewFulfillment string `json:"quickNewFulfillment"`
+	QuickPickPack       string `json:"quickPickPack"`
+	QuickProcessReturn  string `json:"quickProcessReturn"`
+	QuickMarkDelivered  string `json:"quickMarkDelivered"`
+	// Common
+	ViewAll       string `json:"viewAll"`
+	AxisCount     string `json:"axisCount"`
+	AvgFulfillmentDays string `json:"avgFulfillmentDays"`
 }
 
 type FulfillmentStatusLabels struct {
@@ -1155,6 +1214,25 @@ func DefaultJobLabels() JobLabels {
 		Errors: JobErrorLabels{
 			NotFound:         "Job not found",
 			PermissionDenied: "You do not have permission to perform this action",
+		},
+		Dashboard: JobDashboardLabels{
+			Title:             "Jobs Dashboard",
+			Subtitle:          "Active workload, upcoming deadlines, hours logged, and risk",
+			StatActive:        "Active Jobs",
+			StatDoneMonth:     "Done This Month",
+			StatOverdue:       "Overdue",
+			StatHoursWeek:     "Hours This Week",
+			HoursPerWeek:      "Hours per Week",
+			UpcomingDeadlines: "Upcoming Deadlines",
+			RecentActivity:    "Recent Activity",
+			NoDeadlines:       "No upcoming deadlines",
+			NoActivity:        "No recent activity",
+			QuickNewJob:       "New Job",
+			QuickNewTemplate:  "New Job Template",
+			QuickLogHours:     "Log Hours",
+			QuickJobCalendar:  "Job Calendar",
+			ViewAll:           "View All",
+			AxisHours:         "Hours",
 		},
 	}
 }

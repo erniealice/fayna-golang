@@ -9,45 +9,13 @@ import (
 	"strconv"
 
 	fayna "github.com/erniealice/fayna-golang"
+	jobactivityform "github.com/erniealice/fayna-golang/views/job_activity/form"
 
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
 
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
 )
-
-// activityFormData is the template data for the job activity drawer form.
-type activityFormData struct {
-	FormAction     string
-	IsEdit         bool
-	ID             string
-	JobID          string
-	EntryType      string
-	Description    string
-	Quantity       float64
-	UnitCost       float64
-	Currency       string
-	BillableStatus string
-	// 2026-04-29 milestone-billing plan §5/§6 — bill_rate and bill_amount drive
-	// the BILLABLE (T&M overage) path. Stored on JobActivity proto in centavos;
-	// UI carries major units and the handler ×100s on submit.
-	BillRate   float64
-	BillAmount float64
-	// Labor fields
-	Hours      float64
-	HourlyRate float64
-	StaffID    string
-	// Material fields
-	ProductID     string
-	UnitOfMeasure string
-	LotNumber     string
-	Amount        float64
-	// Expense fields
-	ExpenseCategory string
-	VendorRef       string
-	Labels          fayna.JobActivityLabels
-	CommonLabels    any
-}
 
 // parseFormFloat parses a float64 from a form value, returning 0 on error.
 func parseFormFloat(s string) float64 {
@@ -64,7 +32,7 @@ func newCreateAction(deps *ModuleDeps) view.View {
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
-			return view.OK("job-activity-drawer-form", &activityFormData{
+			return view.OK("job-activity-drawer-form", &jobactivityform.Data{
 				FormAction:   deps.Routes.AddURL,
 				JobID:        viewCtx.Request.URL.Query().Get("job_id"),
 				Labels:       deps.Labels,
@@ -172,7 +140,7 @@ func newUpdateAction(deps *ModuleDeps) view.View {
 			if record.BillAmount != nil {
 				billAmount = float64(*record.BillAmount) / 100
 			}
-			return view.OK("job-activity-drawer-form", &activityFormData{
+			return view.OK("job-activity-drawer-form", &jobactivityform.Data{
 				FormAction:     route.ResolveURL(deps.Routes.EditURL, "id", id),
 				IsEdit:         true,
 				ID:             id,

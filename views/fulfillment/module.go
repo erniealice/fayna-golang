@@ -12,6 +12,7 @@ import (
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
 
 	fulfillmentaction "github.com/erniealice/fayna-golang/views/fulfillment/action"
+	fulfillmentdashboard "github.com/erniealice/fayna-golang/views/fulfillment/dashboard"
 	fulfillmentdetail "github.com/erniealice/fayna-golang/views/fulfillment/detail"
 	fulfillmentlist "github.com/erniealice/fayna-golang/views/fulfillment/list"
 )
@@ -37,6 +38,9 @@ type ModuleDeps struct {
 
 	// Return initiation
 	CreateFulfillmentReturn func(ctx context.Context, req *fulfillmentpb.FulfillmentReturn) (*fulfillmentpb.FulfillmentReturn, error)
+
+	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+	GetFulfillmentDashboardPageData func(ctx context.Context, req *fulfillmentdashboard.Request) (*fulfillmentdashboard.Response, error)
 }
 
 // Module holds all constructed fulfillment views.
@@ -49,6 +53,9 @@ type Module struct {
 	Delete     view.View
 	Transition view.View
 	Return     view.View
+
+	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+	Dashboard view.View
 }
 
 // NewModule creates a new fulfillment module with all views wired.
@@ -72,6 +79,14 @@ func NewModule(deps *ModuleDeps) *Module {
 		CreateFulfillmentReturn:    deps.CreateFulfillmentReturn,
 	}
 
+	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+	dashboardDeps := &fulfillmentdashboard.Deps{
+		Routes:               deps.Routes,
+		Labels:               deps.Labels,
+		CommonLabels:         deps.CommonLabels,
+		GetDashboardPageData: deps.GetFulfillmentDashboardPageData,
+	}
+
 	return &Module{
 		routes: deps.Routes,
 		List: fulfillmentlist.NewView(&fulfillmentlist.ListViewDeps{
@@ -87,11 +102,17 @@ func NewModule(deps *ModuleDeps) *Module {
 		Delete:     fulfillmentaction.NewDeleteAction(actionDeps),
 		Transition: fulfillmentaction.NewTransitionAction(actionDeps),
 		Return:     fulfillmentaction.NewReturnAction(actionDeps),
+		// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+		Dashboard: fulfillmentdashboard.NewView(dashboardDeps),
 	}
 }
 
 // RegisterRoutes registers all fulfillment routes.
 func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
+	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+	if m.Dashboard != nil && m.routes.DashboardURL != "" {
+		r.GET(m.routes.DashboardURL, m.Dashboard)
+	}
 	r.GET(m.routes.ListURL, m.List)
 	r.GET(m.routes.DetailURL, m.Detail)
 	r.GET(m.routes.AddURL, m.Add)

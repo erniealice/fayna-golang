@@ -19,6 +19,7 @@ import (
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 
 	jobaction "github.com/erniealice/fayna-golang/views/job/action"
+	jobdashboard "github.com/erniealice/fayna-golang/views/job/dashboard"
 	jobdetail "github.com/erniealice/fayna-golang/views/job/detail"
 	joblist "github.com/erniealice/fayna-golang/views/job/list"
 )
@@ -36,6 +37,10 @@ type ModuleDeps struct {
 	// (table-card only, no CTAs).
 	JobActivityRoutes fayna.JobActivityRoutes
 	JobActivityLabels fayna.JobActivityLabels
+
+	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+	JobTemplateRoutes        fayna.JobTemplateRoutes
+	GetJobDashboardPageData  func(ctx context.Context, req *jobdashboard.Request) (*jobdashboard.Response, error)
 
 	// Job CRUD
 	CreateJob func(ctx context.Context, req *jobpb.CreateJobRequest) (*jobpb.CreateJobResponse, error)
@@ -88,6 +93,9 @@ type Module struct {
 	AttachmentDelete view.View
 	AssignTask       view.View
 	PhaseSetStatus   view.View
+
+	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+	Dashboard view.View
 }
 
 // NewModule creates a new job module with all views wired.
@@ -135,6 +143,16 @@ func NewModule(deps *ModuleDeps) *Module {
 		UpdateJobPhase: deps.UpdateJobPhase,
 	}
 
+	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+	dashboardDeps := &jobdashboard.Deps{
+		Routes:               deps.Routes,
+		JobTemplateRoutes:    deps.JobTemplateRoutes,
+		JobActivityRoutes:    deps.JobActivityRoutes,
+		Labels:               deps.Labels,
+		CommonLabels:         deps.CommonLabels,
+		GetDashboardPageData: deps.GetJobDashboardPageData,
+	}
+
 	return &Module{
 		routes: deps.Routes,
 		List: joblist.NewView(&joblist.ListViewDeps{
@@ -156,11 +174,17 @@ func NewModule(deps *ModuleDeps) *Module {
 		AttachmentDelete: jobdetail.NewAttachmentDeleteAction(detailDeps),
 		AssignTask:       jobdetail.NewAssignTaskAction(detailDeps),
 		PhaseSetStatus:   jobaction.NewPhaseSetStatusAction(phaseDeps),
+		// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+		Dashboard: jobdashboard.NewView(dashboardDeps),
 	}
 }
 
 // RegisterRoutes registers all job routes.
 func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
+	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
+	if m.Dashboard != nil && m.routes.DashboardURL != "" {
+		r.GET(m.routes.DashboardURL, m.Dashboard)
+	}
 	r.GET(m.routes.ListURL, m.List)
 	r.GET(m.routes.DetailURL, m.Detail)
 	r.GET(m.routes.TabActionURL, m.TabAction)

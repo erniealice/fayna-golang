@@ -1,0 +1,13 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "fulfillment-dashboard"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "fulfillment-dashboard-content"}}
+<div class="page-content"
+     data-page-css="/assets/css/fayna/fayna-fulfillment-dashboard.css?v={{.CacheVersion}}"
+     data-testid="dashboard-fulfillment">
+    {{template "dashboard" .Dashboard}}
+</div>
+{{end}}

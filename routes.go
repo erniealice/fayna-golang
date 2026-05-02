@@ -3,6 +3,9 @@ package fayna
 // Default route constants for fayna views.
 // Consumer apps can use these or define their own.
 const (
+	// Job dashboard route (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
+	JobDashboardURL = "/app/jobs/dashboard"
+
 	// Job (operational activity) routes
 	JobListURL             = "/app/jobs/list/{status}"
 	JobDetailURL           = "/app/jobs/detail/{id}"
@@ -73,6 +76,9 @@ const (
 
 // Fulfillment routes
 const (
+	// Fulfillment dashboard route (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
+	FulfillmentDashboardURL = "/app/fulfillment/dashboard"
+
 	FulfillmentListURL       = "/app/fulfillment/list/{status}"
 	FulfillmentDetailURL     = "/app/fulfillment/detail/{id}"
 	FulfillmentAddURL        = "/action/fulfillment/add"

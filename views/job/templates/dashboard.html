@@ -1,0 +1,13 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-dashboard"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "job-dashboard-content"}}
+<div class="page-content"
+     data-page-css="/assets/css/fayna/fayna-job-dashboard.css?v={{.CacheVersion}}"
+     data-testid="dashboard-job">
+    {{template "dashboard" .Dashboard}}
+</div>
+{{end}}

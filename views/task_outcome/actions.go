@@ -7,34 +7,13 @@ import (
 	"strconv"
 
 	fayna "github.com/erniealice/fayna-golang"
+	taskoutcomeform "github.com/erniealice/fayna-golang/views/task_outcome/form"
 
 	"github.com/erniealice/pyeza-golang/route"
-	pyeza "github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	outcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 )
-
-// recordingFormData is the template data for the task outcome recording form.
-type recordingFormData struct {
-	FormAction      string
-	IsEdit          bool
-	ID              string
-	TaskID          string
-	CriteriaID      string
-	CriteriaName    string
-	CriteriaType    string
-	CriteriaOptions []pyeza.SelectOption
-	NumericValue    float64
-	TextValue       string
-	Notes           string
-	PassFailValue   bool
-	SelectedOption  string
-	ScoreMin        float64
-	ScoreMax        float64
-	Labels          fayna.TaskOutcomeLabels
-	CommonLabels    any
-}
 
 // newAddAction creates the task outcome add action (GET = recording form, POST = create).
 func newAddAction(deps *ModuleDeps) view.View {
@@ -46,7 +25,7 @@ func newAddAction(deps *ModuleDeps) view.View {
 
 		if viewCtx.Request.Method == http.MethodGet {
 			q := viewCtx.Request.URL.Query()
-			return view.OK("task-outcome-recording-form", &recordingFormData{
+			return view.OK("task-outcome-recording-form", &taskoutcomeform.Data{
 				FormAction:   deps.Routes.AddURL,
 				TaskID:       q.Get("task_id"),
 				CriteriaID:   q.Get("criteria_id"),
@@ -134,7 +113,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 				criteriaName = cv.GetName()
 			}
 
-			return view.OK("task-outcome-recording-form", &recordingFormData{
+			return view.OK("task-outcome-recording-form", &taskoutcomeform.Data{
 				FormAction:    route.ResolveURL(deps.Routes.EditURL, "id", id),
 				IsEdit:        true,
 				ID:            id,

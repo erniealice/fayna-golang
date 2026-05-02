@@ -7,51 +7,13 @@ import (
 	"strconv"
 
 	fayna "github.com/erniealice/fayna-golang"
+	outcomecriteriaform "github.com/erniealice/fayna-golang/views/outcome_criteria/form"
 
 	"github.com/erniealice/pyeza-golang/route"
-	pyeza "github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 )
-
-// criteriaFormData is the template data for the outcome criteria drawer form.
-type criteriaFormData struct {
-	FormAction   string
-	IsEdit       bool
-	ID           string
-	Name         string
-	Type         string
-	Scope        string
-	Description  string
-	Required     bool
-	Weight       float64
-	TypeOptions  []pyeza.SelectOption
-	ScopeOptions []pyeza.SelectOption
-	Labels       fayna.OutcomeCriteriaLabels
-	CommonLabels any
-}
-
-// defaultTypeOptions returns the selectable criteria types.
-func defaultTypeOptions(labels fayna.OutcomeCriteriaLabels) []pyeza.SelectOption {
-	return []pyeza.SelectOption{
-		{Value: "NUMERIC_RANGE", Label: "Numeric Range"},
-		{Value: "NUMERIC_SCORE", Label: "Numeric Score"},
-		{Value: "PASS_FAIL", Label: "Pass / Fail"},
-		{Value: "CATEGORICAL", Label: "Categorical"},
-		{Value: "TEXT", Label: "Text"},
-		{Value: "MULTI_CHECK", Label: "Multi-check"},
-	}
-}
-
-// defaultScopeOptions returns the selectable criteria scopes.
-func defaultScopeOptions(labels fayna.OutcomeCriteriaLabels) []pyeza.SelectOption {
-	return []pyeza.SelectOption{
-		{Value: "TASK", Label: "Task"},
-		{Value: "PHASE", Label: "Phase"},
-		{Value: "JOB", Label: "Job"},
-	}
-}
 
 // newAddAction creates the outcome criteria add action (GET = form, POST = create).
 func newAddAction(deps *ModuleDeps) view.View {
@@ -62,10 +24,10 @@ func newAddAction(deps *ModuleDeps) view.View {
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
-			return view.OK("outcome-criteria-drawer-form", &criteriaFormData{
+			return view.OK("outcome-criteria-drawer-form", &outcomecriteriaform.Data{
 				FormAction:   deps.Routes.AddURL,
-				TypeOptions:  defaultTypeOptions(deps.Labels),
-				ScopeOptions: defaultScopeOptions(deps.Labels),
+				TypeOptions:  outcomecriteriaform.DefaultTypeOptions(deps.Labels),
+				ScopeOptions: outcomecriteriaform.DefaultScopeOptions(deps.Labels),
 				Labels:       deps.Labels,
 				CommonLabels: nil, // injected by ViewAdapter
 			})
@@ -128,7 +90,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 			}
 			record := readData[0]
 
-			return view.OK("outcome-criteria-drawer-form", &criteriaFormData{
+			return view.OK("outcome-criteria-drawer-form", &outcomecriteriaform.Data{
 				FormAction:   route.ResolveURL(deps.Routes.EditURL, "id", id),
 				IsEdit:       true,
 				ID:           id,
@@ -138,8 +100,8 @@ func newEditAction(deps *ModuleDeps) view.View {
 				Description:  record.GetDescription(),
 				Required:     record.GetRequired(),
 				Weight:       record.GetWeight(),
-				TypeOptions:  defaultTypeOptions(deps.Labels),
-				ScopeOptions: defaultScopeOptions(deps.Labels),
+				TypeOptions:  outcomecriteriaform.DefaultTypeOptions(deps.Labels),
+				ScopeOptions: outcomecriteriaform.DefaultScopeOptions(deps.Labels),
 				Labels:       deps.Labels,
 				CommonLabels: nil, // injected by ViewAdapter
 			})

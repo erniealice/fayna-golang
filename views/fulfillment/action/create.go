@@ -6,25 +6,13 @@ import (
 	"net/http"
 
 	fayna "github.com/erniealice/fayna-golang"
+	fulfillmentform "github.com/erniealice/fayna-golang/views/fulfillment/form"
 
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
 
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
 )
-
-// FormData is the template data for the fulfillment drawer form.
-type FormData struct {
-	FormAction   string
-	IsEdit       bool
-	ID           string
-	RevenueID    string
-	SupplierID   string
-	Method       string
-	Notes        string
-	Labels       fayna.FulfillmentLabels
-	CommonLabels any
-}
 
 // NewAddAction creates the fulfillment add action (GET = form, POST = create).
 func NewAddAction(deps *Deps) view.View {
@@ -35,7 +23,7 @@ func NewAddAction(deps *Deps) view.View {
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
-			return view.OK("fulfillment-drawer-form", &FormData{
+			return view.OK("fulfillment-drawer-form", &fulfillmentform.Data{
 				FormAction:   deps.Routes.AddURL,
 				Labels:       deps.Labels,
 				CommonLabels: nil, // injected by ViewAdapter

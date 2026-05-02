@@ -25,6 +25,9 @@ type JobRoutes struct {
 	ActiveNav    string `json:"active_nav"`
 	ActiveSubNav string `json:"active_sub_nav"`
 
+	// DashboardURL — read-only Job dashboard (Phase 3 — Pyeza dashboard block plan).
+	DashboardURL string `json:"dashboard_url"`
+
 	ListURL          string `json:"list_url"`
 	DetailURL        string `json:"detail_url"`
 	AddURL           string `json:"add_url"`
@@ -54,6 +57,8 @@ func DefaultJobRoutes() JobRoutes {
 		ActiveNav:    "job",
 		ActiveSubNav: "jobs",
 
+		DashboardURL: JobDashboardURL,
+
 		ListURL:          JobListURL,
 		DetailURL:        JobDetailURL,
 		AddURL:           JobAddURL,
@@ -78,6 +83,7 @@ func DefaultJobRoutes() JobRoutes {
 // job routes.
 func (r JobRoutes) RouteMap() map[string]string {
 	return map[string]string{
+		"job.dashboard":       r.DashboardURL,
 		"job.list":            r.ListURL,
 		"job.detail":          r.DetailURL,
 		"job.add":             r.AddURL,
@@ -345,6 +351,8 @@ func (r OutcomeSummaryRoutes) RouteMap() map[string]string {
 
 // FulfillmentRoutes holds URL patterns for fulfillment views.
 type FulfillmentRoutes struct {
+	// DashboardURL — read-only Fulfillment dashboard (Phase 3 — Pyeza dashboard block plan).
+	DashboardURL  string `json:"dashboard_url"`
 	ListURL       string `json:"list_url"`
 	DetailURL     string `json:"detail_url"`
 	AddURL        string `json:"add_url"`
@@ -357,6 +365,7 @@ type FulfillmentRoutes struct {
 // DefaultFulfillmentRoutes returns the standard fulfillment route configuration.
 func DefaultFulfillmentRoutes() FulfillmentRoutes {
 	return FulfillmentRoutes{
+		DashboardURL:  FulfillmentDashboardURL,
 		ListURL:       FulfillmentListURL,
 		DetailURL:     FulfillmentDetailURL,
 		AddURL:        FulfillmentAddURL,
@@ -370,6 +379,7 @@ func DefaultFulfillmentRoutes() FulfillmentRoutes {
 // RouteMap returns all fulfillment routes as a map for template URL resolution.
 func (r FulfillmentRoutes) RouteMap() map[string]string {
 	return map[string]string{
+		"fulfillment.dashboard":  r.DashboardURL,
 		"fulfillment.list":       r.ListURL,
 		"fulfillment.detail":     r.DetailURL,
 		"fulfillment.add":        r.AddURL,

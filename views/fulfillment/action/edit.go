@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	fayna "github.com/erniealice/fayna-golang"
+	fulfillmentform "github.com/erniealice/fayna-golang/views/fulfillment/form"
 
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
@@ -43,7 +44,7 @@ func NewEditAction(deps *Deps) view.View {
 				supplierID = f.GetSupplierId()
 			}
 
-			return view.OK("fulfillment-drawer-form", &FormData{
+			return view.OK("fulfillment-drawer-form", &fulfillmentform.Data{
 				FormAction:   route.ResolveURL(deps.Routes.EditURL, "id", id),
 				IsEdit:       true,
 				ID:           id,

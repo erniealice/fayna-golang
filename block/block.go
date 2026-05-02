@@ -189,6 +189,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			}
 			if uc != nil {
 				wireJobDeps(jobDeps, uc)
+				wireJobDashboard(jobDeps, uc)
 			}
 			jobmod.NewModule(jobDeps).RegisterRoutes(ctx.Routes)
 		}
@@ -279,6 +280,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			}
 			if uc != nil {
 				wireFulfillmentDeps(ffDeps, uc)
+				wireFulfillmentDashboard(ffDeps, uc)
 			}
 			fulfillmentmod.NewModule(ffDeps).RegisterRoutes(ctx.Routes)
 		}

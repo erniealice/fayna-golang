@@ -27,6 +27,7 @@ package block
 import (
 	"context"
 	"reflect"
+	"time"
 
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
@@ -42,7 +43,9 @@ import (
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 
 	fulfillmentmod "github.com/erniealice/fayna-golang/views/fulfillment"
+	fulfillmentdashboard "github.com/erniealice/fayna-golang/views/fulfillment/dashboard"
 	jobmod "github.com/erniealice/fayna-golang/views/job"
+	jobdashboard "github.com/erniealice/fayna-golang/views/job/dashboard"
 	jobactivitymod "github.com/erniealice/fayna-golang/views/job_activity"
 	jobtemplatemod "github.com/erniealice/fayna-golang/views/job_template"
 	outcomecriteriaMod "github.com/erniealice/fayna-golang/views/outcome_criteria"
@@ -408,5 +411,154 @@ func wireFulfillmentDeps(deps *fulfillmentmod.ModuleDeps, uc *ucAggregate) {
 	}
 	if fn, ok := execFn(ff, "TransitionStatus").(func(context.Context, *fulfillmentpb.TransitionStatusRequest) (*fulfillmentpb.TransitionStatusResponse, error)); ok {
 		deps.TransitionStatus = fn
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard wiring helpers (reflection-based; avoids espyna internal import)
+// ---------------------------------------------------------------------------
+
+// callDashboardExecute invokes a *GetXxxDashboardPageDataUseCase.Execute via
+// reflection. The use-case pointer is obtained via ptrField. The request struct
+// is created reflectively with WorkspaceID and Now set by field name.
+// Returns the dereferenced response struct value and an error.
+func callDashboardExecute(ucPtr reflect.Value, ctx context.Context, workspaceID string, now time.Time) (reflect.Value, error) {
+	if !ucPtr.IsValid() {
+		return reflect.Value{}, nil
+	}
+	if ucPtr.Kind() != reflect.Ptr || ucPtr.IsNil() {
+		return reflect.Value{}, nil
+	}
+	m := ucPtr.MethodByName("Execute")
+	if !m.IsValid() {
+		return reflect.Value{}, nil
+	}
+	reqType := m.Type().In(1).Elem()
+	reqPtr := reflect.New(reqType)
+	if f := reqPtr.Elem().FieldByName("WorkspaceID"); f.IsValid() && f.CanSet() {
+		f.SetString(workspaceID)
+	}
+	if f := reqPtr.Elem().FieldByName("Now"); f.IsValid() && f.CanSet() {
+		f.Set(reflect.ValueOf(now))
+	}
+	results := m.Call([]reflect.Value{reflect.ValueOf(ctx), reqPtr})
+	if len(results) < 2 {
+		return reflect.Value{}, nil
+	}
+	if !results[1].IsNil() {
+		return reflect.Value{}, results[1].Interface().(error)
+	}
+	resp := results[0]
+	if resp.Kind() == reflect.Ptr && !resp.IsNil() {
+		return resp.Elem(), nil
+	}
+	return resp, nil
+}
+
+// ---------------------------------------------------------------------------
+// Job dashboard wiring
+// ---------------------------------------------------------------------------
+
+// wireJobDashboard sets deps.GetJobDashboardPageData from
+// Operation.Dashboard (GetJobDashboardPageDataUseCase).
+func wireJobDashboard(deps *jobmod.ModuleDeps, uc *ucAggregate) {
+	op := ptrField(uc.v, "Operation")
+	if !op.IsValid() {
+		return
+	}
+	dashField := op.FieldByName("Dashboard")
+	if !dashField.IsValid() || dashField.IsNil() {
+		return
+	}
+
+	deps.GetJobDashboardPageData = func(ctx context.Context, req *jobdashboard.Request) (*jobdashboard.Response, error) {
+		workspaceID := ""
+		var now time.Time
+		if req != nil {
+			workspaceID = req.WorkspaceID
+			now = req.Now
+		}
+		if now.IsZero() {
+			now = time.Now()
+		}
+		resp, err := callDashboardExecute(dashField, ctx, workspaceID, now)
+		if err != nil || !resp.IsValid() {
+			return nil, err
+		}
+
+		var result jobdashboard.Response
+		if s := resp.FieldByName("Stats"); s.IsValid() {
+			result.ActiveJobs = s.FieldByName("ActiveJobs").Int()
+			result.DoneThisMonth = s.FieldByName("DoneThisMonth").Int()
+			result.OverdueJobs = s.FieldByName("OverdueJobs").Int()
+			result.HoursThisWeek = s.FieldByName("HoursThisWeek").Float()
+		}
+		result.TrendLabels, _ = resp.FieldByName("TrendLabels").Interface().([]string)
+		result.TrendValues, _ = resp.FieldByName("TrendValues").Interface().([]float64)
+		result.UpcomingDeadlines, _ = resp.FieldByName("UpcomingDeadlines").Interface().([]*jobpb.Job)
+		result.RecentActivity, _ = resp.FieldByName("RecentActivity").Interface().([]*jobactivitypb.JobActivity)
+
+		// Map RiskTopRows: []JobRisk → []JobRiskRow
+		if riskF := resp.FieldByName("RiskTopRows"); riskF.IsValid() && !riskF.IsNil() {
+			for i := 0; i < riskF.Len(); i++ {
+				s := riskF.Index(i)
+				result.RiskTopRows = append(result.RiskTopRows, jobdashboard.JobRiskRow{
+					JobID:         s.FieldByName("JobID").String(),
+					Code:          s.FieldByName("Code").String(),
+					Name:          s.FieldByName("Name").String(),
+					CompletionPct: s.FieldByName("CompletionPct").Float(),
+					DateEnd:       s.FieldByName("DateEnd").Interface().(time.Time),
+				})
+			}
+		}
+		return &result, nil
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Fulfillment dashboard wiring
+// ---------------------------------------------------------------------------
+
+// wireFulfillmentDashboard sets deps.GetFulfillmentDashboardPageData from
+// Fulfillment.Dashboard (GetFulfillmentDashboardPageDataUseCase).
+func wireFulfillmentDashboard(deps *fulfillmentmod.ModuleDeps, uc *ucAggregate) {
+	ff := ptrField(uc.v, "Fulfillment")
+	if !ff.IsValid() {
+		return
+	}
+	dashField := ff.FieldByName("Dashboard")
+	if !dashField.IsValid() || dashField.IsNil() {
+		return
+	}
+
+	deps.GetFulfillmentDashboardPageData = func(ctx context.Context, req *fulfillmentdashboard.Request) (*fulfillmentdashboard.Response, error) {
+		workspaceID := ""
+		var now time.Time
+		if req != nil {
+			workspaceID = req.WorkspaceID
+			now = req.Now
+		}
+		if now.IsZero() {
+			now = time.Now()
+		}
+		resp, err := callDashboardExecute(dashField, ctx, workspaceID, now)
+		if err != nil || !resp.IsValid() {
+			return nil, err
+		}
+
+		var result fulfillmentdashboard.Response
+		if s := resp.FieldByName("Stats"); s.IsValid() {
+			result.Pending = s.FieldByName("Pending").Int()
+			result.InTransit = s.FieldByName("InTransit").Int()
+			result.DeliveredToday = s.FieldByName("DeliveredToday").Int()
+			result.Exceptions = s.FieldByName("Exceptions").Int()
+			result.AvgFulfillDays = s.FieldByName("AvgFulfillDays").Float()
+		}
+		result.StatusMixLabels, _ = resp.FieldByName("StatusMixLabels").Interface().([]string)
+		result.StatusMixValues, _ = resp.FieldByName("StatusMixValues").Interface().([]float64)
+		result.TrendLabels, _ = resp.FieldByName("TrendLabels").Interface().([]string)
+		result.TrendValues, _ = resp.FieldByName("TrendValues").Interface().([]float64)
+		result.RecentExceptions, _ = resp.FieldByName("RecentExceptions").Interface().([]*fulfillmentpb.Fulfillment)
+		return &result, nil
 	}
 }

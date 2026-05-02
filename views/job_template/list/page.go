@@ -6,8 +6,8 @@ import (
 	"log"
 	"math"
 
-	fayna "github.com/erniealice/fayna-golang"
 	espynahttp "github.com/erniealice/espyna-golang/contrib/http"
+	fayna "github.com/erniealice/fayna-golang"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
@@ -47,7 +47,7 @@ func NewView(deps *ListViewDeps) view.View {
 		}
 
 		columns := jobTemplateColumns(deps.Labels)
-		p, err := espynahttp.ParseTableParams(viewCtx.Request, types.SortableKeys(columns), "name", "asc")
+		p, err := espynahttp.ParseTableParamsWithFilters(viewCtx.Request, types.SortableKeys(columns), types.FilterableKeys(columns), "name", "asc")
 		if err != nil {
 			return view.Error(err)
 		}

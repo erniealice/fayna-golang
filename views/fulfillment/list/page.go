@@ -56,7 +56,7 @@ func NewView(deps *ListViewDeps) view.View {
 		}
 
 		columns := fulfillmentColumns(deps.Labels)
-		p, err := espynahttp.ParseTableParams(viewCtx.Request, types.SortableKeys(columns), "date_created", "desc")
+		p, err := espynahttp.ParseTableParamsWithFilters(viewCtx.Request, types.SortableKeys(columns), types.FilterableKeys(columns), "date_created", "desc")
 		if err != nil {
 			return view.Error(err)
 		}
@@ -109,7 +109,7 @@ func NewTableView(deps *ListViewDeps) view.View {
 		}
 
 		columns := fulfillmentColumns(deps.Labels)
-		p, err := espynahttp.ParseTableParams(viewCtx.Request, types.SortableKeys(columns), "date_created", "desc")
+		p, err := espynahttp.ParseTableParamsWithFilters(viewCtx.Request, types.SortableKeys(columns), types.FilterableKeys(columns), "date_created", "desc")
 		if err != nil {
 			return view.Error(err)
 		}
@@ -250,9 +250,9 @@ func buildTableRows(rows []*fulfillmentpb.FulfillmentListRow, status string, l f
 			},
 			DataAttrs: map[string]string{
 				"delivery_mode": method,
-				"status":             fStatus,
-				"supplier_name":      supplierName,
-				"item_count":         itemCount,
+				"status":        fStatus,
+				"supplier_name": supplierName,
+				"item_count":    itemCount,
 			},
 			Actions: []types.TableAction{
 				{Type: "view", Label: l.Buttons.Edit, Action: "view", Href: detailURL},

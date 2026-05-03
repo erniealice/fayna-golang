@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	fayna "github.com/erniealice/fayna-golang"
 	fulfillmentform "github.com/erniealice/fayna-golang/views/fulfillment/form"
@@ -12,6 +13,7 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // NewAddAction creates the fulfillment add action (GET = form, POST = create).
@@ -23,7 +25,7 @@ func NewAddAction(deps *Deps) view.View {
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
-			return view.OK("fulfillment-drawer-form", &fulfillmentform.Data{
+			return view.OK("fulfillment-add-form", &fulfillmentform.Data{
 				FormAction:   deps.Routes.AddURL,
 				Labels:       deps.Labels,
 				CommonLabels: nil, // injected by ViewAdapter
@@ -38,13 +40,24 @@ func NewAddAction(deps *Deps) view.View {
 		r := viewCtx.Request
 
 		supplierID := r.FormValue("supplier_id")
+
+		var scheduledAtProto *timestamppb.Timestamp
+		if raw := r.FormValue("scheduled_at"); raw != "" {
+			parsed, err := time.Parse("2006-01-02T15:04", raw)
+			if err != nil {
+				return fayna.HTMXError("Invalid form data")
+			}
+			scheduledAtProto = timestamppb.New(parsed.UTC())
+		}
+
 		resp, err := deps.CreateFulfillment(ctx, &fulfillmentpb.CreateFulfillmentRequest{
 			Data: &fulfillmentpb.Fulfillment{
-				RevenueId:         r.FormValue("revenue_id"),
-				SupplierId:        strPtr(supplierID),
+				RevenueId:    r.FormValue("revenue_id"),
+				SupplierId:   strPtr(supplierID),
 				DeliveryMode: r.FormValue("delivery_mode"),
-				Notes:             r.FormValue("notes"),
-				Status:            "PENDING",
+				ScheduledAt:  scheduledAtProto,
+				Notes:        r.FormValue("notes"),
+				Status:       "PENDING",
 			},
 		})
 		if err != nil {

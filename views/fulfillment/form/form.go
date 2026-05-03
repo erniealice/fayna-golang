@@ -15,6 +15,7 @@ type Data struct {
 	RevenueID    string
 	SupplierID   string
 	Method       string
+	ScheduledAt  string // datetime-local input value ("2006-01-02T15:04"); empty when unset
 	Notes        string
 	Labels       fayna.FulfillmentLabels
 	CommonLabels any

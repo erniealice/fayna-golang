@@ -21,6 +21,8 @@
         {{template "fulfillment-tab-history" .}}
         {{else if eq .ActiveTab "returns"}}
         {{template "fulfillment-tab-returns" .}}
+        {{else if eq .ActiveTab "attachments"}}
+        {{template "attachment-tab" .}}
         {{end}}
     </div>
 </div>

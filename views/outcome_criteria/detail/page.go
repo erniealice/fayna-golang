@@ -7,12 +7,14 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/hybra-golang/views/auditlog"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 )
@@ -31,6 +33,7 @@ type PageData struct {
 	OptionsTable    *types.TableConfig
 	TemplatesTable  *types.TableConfig
 	VersionsTable   *types.TableConfig
+	AttachmentTable *types.TableConfig
 	// Audit history tab
 	AuditEntries    []auditlog.AuditEntryView
 	AuditHasNext    bool
@@ -132,6 +135,19 @@ func loadTabData(ctx context.Context, deps *DetailViewDeps, pd *PageData, id str
 	case "versions":
 		// TODO: load versions table data
 		pd.VersionsTable = nil
+	case "attachments":
+		if deps.ListAttachments != nil {
+			cfg := attachmentConfig(deps)
+			resp, err := deps.ListAttachments(ctx, cfg.EntityType, id)
+			if err != nil {
+				log.Printf("Failed to list attachments for outcome criteria %s: %v", id, err)
+			}
+			var items []*attachmentpb.Attachment
+			if resp != nil {
+				items = resp.GetData()
+			}
+			pd.AttachmentTable = attachment.BuildTable(items, cfg, id)
+		}
 	case "audit-history":
 		if deps.ListAuditHistory != nil {
 			cursor := viewCtx.QueryParams["cursor"]
@@ -215,6 +231,7 @@ func buildTabItems(l fayna.OutcomeCriteriaLabels, id string, routes fayna.Outcom
 		{Key: "options", Label: l.Tabs.Options, Href: base + "?tab=options", HxGet: action + "options", Icon: "icon-list"},
 		{Key: "templates", Label: l.Tabs.Templates, Href: base + "?tab=templates", HxGet: action + "templates", Icon: "icon-file"},
 		{Key: "versions", Label: l.Tabs.Versions, Href: base + "?tab=versions", HxGet: action + "versions", Icon: "icon-clock"},
+		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
 		{Key: "audit-history", Label: "History", Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
 	}
 }
@@ -257,6 +274,9 @@ func NewTabAction(deps *DetailViewDeps) view.View {
 		loadTabData(ctx, deps, pageData, id, viewCtx)
 
 		templateName := "outcome-criteria-tab-" + tab
+		if tab == "attachments" {
+			templateName = "attachment-tab"
+		}
 		if tab == "audit-history" {
 			templateName = "audit-history-tab"
 		}

@@ -5,6 +5,7 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/hybra-golang/views/attachment"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 
@@ -13,6 +14,8 @@ import (
 
 // DetailViewDeps holds view dependencies for the fulfillment detail views.
 type DetailViewDeps struct {
+	attachment.AttachmentOps
+
 	Routes       fayna.FulfillmentRoutes
 	Labels       fayna.FulfillmentLabels
 	CommonLabels pyeza.CommonLabels

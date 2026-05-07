@@ -5,10 +5,12 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/hybra-golang/views/attachment"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
 	activitylaborpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_labor"
 	activitymaterialpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_material"
@@ -49,6 +51,12 @@ type ModuleDeps struct {
 	// GenerateInvoiceFromActivities creates a revenue record from a set of
 	// activity IDs. Returns the new revenue ID on success.
 	GenerateInvoiceFromActivities func(ctx context.Context, activityIDs []string, clientID, locationID, currency, name string) (string, error)
+
+	// Attachment operations
+	UploadFile       func(ctx context.Context, bucket, key string, content []byte, contentType string) error
+	ListAttachments  func(ctx context.Context, moduleKey, foreignKey string) (*attachmentpb.ListAttachmentsResponse, error)
+	CreateAttachment func(ctx context.Context, req *attachmentpb.CreateAttachmentRequest) (*attachmentpb.CreateAttachmentResponse, error)
+	DeleteAttachment func(ctx context.Context, req *attachmentpb.DeleteAttachmentRequest) (*attachmentpb.DeleteAttachmentResponse, error)
 }
 
 // Module holds all constructed job activity views.
@@ -56,6 +64,7 @@ type Module struct {
 	routes              fayna.JobActivityRoutes
 	List                view.View
 	Detail              view.View
+	TabAction           view.View
 	Create              view.View
 	Update              view.View
 	Delete              view.View
@@ -65,6 +74,8 @@ type Module struct {
 	Post                view.View
 	Reverse             view.View
 	BulkGenerateInvoice view.View
+	AttachmentUpload    view.View
+	AttachmentDelete    view.View
 }
 
 // NewModule creates the job activity module with all views wired.
@@ -78,6 +89,13 @@ func NewModule(deps *ModuleDeps) *Module {
 	})
 
 	detailDeps := &jobactivitydetail.DetailViewDeps{
+		AttachmentOps: attachment.AttachmentOps{
+			UploadFile:       deps.UploadFile,
+			ListAttachments:  deps.ListAttachments,
+			CreateAttachment: deps.CreateAttachment,
+			DeleteAttachment: deps.DeleteAttachment,
+			NewAttachmentID:  deps.NewID,
+		},
 		Routes:               deps.Routes,
 		ReadJobActivity:      deps.ReadJobActivity,
 		ReadActivityLabor:    deps.ReadActivityLabor,
@@ -91,6 +109,7 @@ func NewModule(deps *ModuleDeps) *Module {
 		routes:              deps.Routes,
 		List:                listView,
 		Detail:              jobactivitydetail.NewView(detailDeps),
+		TabAction:           jobactivitydetail.NewTabAction(detailDeps),
 		Create:              newCreateAction(deps),
 		Update:              newUpdateAction(deps),
 		Delete:              newDeleteAction(deps),
@@ -100,6 +119,8 @@ func NewModule(deps *ModuleDeps) *Module {
 		Post:                newPostAction(deps),
 		Reverse:             newReverseAction(deps),
 		BulkGenerateInvoice: newBulkGenerateInvoiceAction(deps),
+		AttachmentUpload:    jobactivitydetail.NewAttachmentUploadAction(detailDeps),
+		AttachmentDelete:    jobactivitydetail.NewAttachmentDeleteAction(detailDeps),
 	}
 }
 
@@ -112,6 +133,9 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	// Detail
 	r.GET(m.routes.DetailURL, m.Detail)
 	r.GET(m.routes.DetailURL+"/content", m.Detail)
+	if m.routes.TabActionURL != "" {
+		r.GET(m.routes.TabActionURL, m.TabAction)
+	}
 
 	// CRUD actions (GET = drawer form, POST = process submission)
 	r.GET(m.routes.AddURL, m.Create)
@@ -131,4 +155,11 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 
 	// Bulk actions
 	r.POST(m.routes.BulkGenerateInvoiceURL, m.BulkGenerateInvoice)
+
+	// Attachments
+	if m.AttachmentUpload != nil {
+		r.GET(m.routes.AttachmentUploadURL, m.AttachmentUpload)
+		r.POST(m.routes.AttachmentUploadURL, m.AttachmentUpload)
+		r.POST(m.routes.AttachmentDeleteURL, m.AttachmentDelete)
+	}
 }

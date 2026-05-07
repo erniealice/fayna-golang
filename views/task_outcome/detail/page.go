@@ -7,9 +7,13 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/hybra-golang/views/attachment"
+	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	outcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 )
@@ -20,6 +24,9 @@ type PageData struct {
 	ContentTemplate string
 	Outcome         map[string]any
 	Labels          fayna.TaskOutcomeLabels
+	ActiveTab       string
+	TabItems        []pyeza.TabItem
+	AttachmentTable *types.TableConfig
 }
 
 // outcomeToMap converts a TaskOutcome protobuf to a map[string]any for template use.
@@ -164,6 +171,12 @@ func NewView(deps *DetailViewDeps) view.View {
 		l := deps.Labels
 		headerTitle := deps.Labels.Detail.PageTitle
 
+		activeTab := viewCtx.QueryParams["tab"]
+		if activeTab == "" {
+			activeTab = "info"
+		}
+		tabItems := buildTabItems(l, id, deps.Routes)
+
 		pageData := &PageData{
 			PageData: types.PageData{
 				CacheVersion:   viewCtx.CacheVersion,
@@ -178,8 +191,85 @@ func NewView(deps *DetailViewDeps) view.View {
 			ContentTemplate: "task-outcome-detail-content",
 			Outcome:         outcome,
 			Labels:          l,
+			ActiveTab:       activeTab,
+			TabItems:        tabItems,
 		}
 
+		loadAttachmentsTab(ctx, deps, pageData, id, activeTab)
+
 		return view.OK("task-outcome-detail", pageData)
+	})
+}
+
+func buildTabItems(l fayna.TaskOutcomeLabels, id string, routes fayna.TaskOutcomeRoutes) []pyeza.TabItem {
+	base := route.ResolveURL(routes.DetailURL, "id", id)
+	action := route.ResolveURL(routes.TabActionURL, "id", id, "tab", "")
+	return []pyeza.TabItem{
+		{Key: "info", Label: l.Tabs.Info, Href: base + "?tab=info", HxGet: action + "info", Icon: "icon-info"},
+		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
+	}
+}
+
+func loadAttachmentsTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData, id string, activeTab string) {
+	if activeTab != "attachments" {
+		return
+	}
+	if deps.ListAttachments == nil {
+		return
+	}
+	cfg := attachmentConfig(deps)
+	resp, err := deps.ListAttachments(ctx, cfg.EntityType, id)
+	if err != nil {
+		log.Printf("Failed to list attachments for task outcome %s: %v", id, err)
+	}
+	var items []*attachmentpb.Attachment
+	if resp != nil {
+		items = resp.GetData()
+	}
+	pageData.AttachmentTable = attachment.BuildTable(items, cfg, id)
+}
+
+// NewTabAction creates the tab action view (partial — returns only the tab content).
+func NewTabAction(deps *DetailViewDeps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		id := viewCtx.Request.PathValue("id")
+		tab := viewCtx.Request.PathValue("tab")
+		if tab == "" {
+			tab = "info"
+		}
+
+		resp, err := deps.ReadTaskOutcome(ctx, &outcomepb.ReadTaskOutcomeRequest{
+			Data: &outcomepb.TaskOutcome{Id: id},
+		})
+		if err != nil {
+			log.Printf("Failed to read task outcome %s: %v", id, err)
+			return view.Error(fmt.Errorf("failed to load outcome: %w", err))
+		}
+		data := resp.GetData()
+		if len(data) == 0 {
+			log.Printf("Task outcome %s not found", id)
+			return view.Error(fmt.Errorf("outcome not found"))
+		}
+		outcome := outcomeToMap(data[0])
+
+		l := deps.Labels
+		pageData := &PageData{
+			PageData: types.PageData{
+				CacheVersion: viewCtx.CacheVersion,
+				CommonLabels: deps.CommonLabels,
+			},
+			Outcome:   outcome,
+			Labels:    l,
+			ActiveTab: tab,
+			TabItems:  buildTabItems(l, id, deps.Routes),
+		}
+
+		loadAttachmentsTab(ctx, deps, pageData, id, tab)
+
+		templateName := "task-outcome-tab-" + tab
+		if tab == "attachments" {
+			templateName = "attachment-tab"
+		}
+		return view.OK(templateName, pageData)
 	})
 }

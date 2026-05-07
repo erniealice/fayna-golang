@@ -7,9 +7,13 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/hybra-golang/views/attachment"
+	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
 	activitylaborpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_labor"
 	activitymaterialpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_material"
@@ -23,6 +27,9 @@ type PageData struct {
 	Activity        map[string]any
 	SubtypeData     map[string]any
 	Labels          fayna.JobActivityLabels
+	ActiveTab       string
+	TabItems        []pyeza.TabItem
+	AttachmentTable *types.TableConfig
 
 	// Convenience fields for template rendering
 	EntryType      string
@@ -93,6 +100,12 @@ func NewView(deps *DetailViewDeps) view.View {
 
 		subtypeData := loadSubtypeData(ctx, deps, id, record.GetEntryType())
 
+		activeTab := viewCtx.QueryParams["tab"]
+		if activeTab == "" {
+			activeTab = "info"
+		}
+		tabItems := buildTabItems(l, id, deps.Routes)
+
 		pageData := &PageData{
 			PageData: types.PageData{
 				CacheVersion:   viewCtx.CacheVersion,
@@ -109,6 +122,8 @@ func NewView(deps *DetailViewDeps) view.View {
 			Activity:        activity,
 			SubtypeData:     subtypeData,
 			Labels:          l,
+			ActiveTab:       activeTab,
+			TabItems:        tabItems,
 			EntryType:       entryType,
 			ApprovalStatus:  approvalStatus,
 			StatusVariant:   approvalStatusVariant(approvalStatus),
@@ -116,7 +131,92 @@ func NewView(deps *DetailViewDeps) view.View {
 			Currency:        currency,
 		}
 
+		loadAttachmentsTab(ctx, deps, pageData, id, activeTab)
+
 		return view.OK("job-activity-detail", pageData)
+	})
+}
+
+func buildTabItems(l fayna.JobActivityLabels, id string, routes fayna.JobActivityRoutes) []pyeza.TabItem {
+	base := route.ResolveURL(routes.DetailURL, "id", id)
+	action := route.ResolveURL(routes.TabActionURL, "id", id, "tab", "")
+	return []pyeza.TabItem{
+		{Key: "info", Label: l.Tabs.Info, Href: base + "?tab=info", HxGet: action + "info", Icon: "icon-info"},
+		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
+	}
+}
+
+func loadAttachmentsTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData, id string, activeTab string) {
+	if activeTab != "attachments" {
+		return
+	}
+	if deps.ListAttachments == nil {
+		return
+	}
+	cfg := attachmentConfig(deps)
+	resp, err := deps.ListAttachments(ctx, cfg.EntityType, id)
+	if err != nil {
+		log.Printf("Failed to list attachments for job activity %s: %v", id, err)
+	}
+	var items []*attachmentpb.Attachment
+	if resp != nil {
+		items = resp.GetData()
+	}
+	pageData.AttachmentTable = attachment.BuildTable(items, cfg, id)
+}
+
+// NewTabAction creates the tab action view (partial — returns only the tab content).
+func NewTabAction(deps *DetailViewDeps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		id := viewCtx.Request.PathValue("id")
+		tab := viewCtx.Request.PathValue("tab")
+		if tab == "" {
+			tab = "info"
+		}
+
+		resp, err := deps.ReadJobActivity(ctx, &jobactivitypb.ReadJobActivityRequest{
+			Data: &jobactivitypb.JobActivity{Id: id},
+		})
+		if err != nil {
+			log.Printf("Failed to read job activity %s: %v", id, err)
+			return view.Error(fmt.Errorf("failed to load activity: %w", err))
+		}
+		data := resp.GetData()
+		if len(data) == 0 {
+			log.Printf("Job activity %s not found", id)
+			return view.Error(fmt.Errorf("activity not found"))
+		}
+		record := data[0]
+		activity := activityToMap(record)
+
+		currency := record.GetCurrency()
+		entryType := entryTypeString(record.GetEntryType())
+		approvalStatus := approvalStatusString(record.GetApprovalStatus())
+
+		l := deps.Labels
+		pageData := &PageData{
+			PageData: types.PageData{
+				CacheVersion: viewCtx.CacheVersion,
+				CommonLabels: deps.CommonLabels,
+			},
+			Activity:       activity,
+			Labels:         l,
+			ActiveTab:      tab,
+			TabItems:       buildTabItems(l, id, deps.Routes),
+			EntryType:      entryType,
+			ApprovalStatus: approvalStatus,
+			StatusVariant:  approvalStatusVariant(approvalStatus),
+			Amount:         types.MoneyCell(float64(record.GetTotalCost()), currency, true),
+			Currency:       currency,
+		}
+
+		loadAttachmentsTab(ctx, deps, pageData, id, tab)
+
+		templateName := "job-activity-tab-" + tab
+		if tab == "attachments" {
+			templateName = "attachment-tab"
+		}
+		return view.OK(templateName, pageData)
 	})
 }
 

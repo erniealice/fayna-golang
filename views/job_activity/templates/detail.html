@@ -6,7 +6,17 @@
 {{/* Content-only partial — for HTMX navigation */}}
 {{define "job-activity-detail-content"}}
 <div class="page-content act-detail-layout" data-page-css="/assets/css/fayna/fayna-activity-detail.css?v={{.CacheVersion}}">
-    <div class="act-detail-body" role="tabpanel" aria-labelledby="act-detail-heading">
+    {{/* --- Tabs --- */}}
+    {{if .TabItems}}
+    <div class="act-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "act-tabs")}}
+    </div>
+    {{end}}
+
+    <div id="tabContent" class="act-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+    {{if eq .ActiveTab "attachments"}}
+    {{template "attachment-tab" .}}
+    {{else}}
 
         {{/* --- Core Information --- */}}
         <div class="act-info-section">
@@ -191,6 +201,7 @@
         </div>
         {{end}}
 
+    {{end}}{{/* end attachments else */}}
     </div>
 </div>
 {{end}}

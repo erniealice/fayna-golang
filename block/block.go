@@ -218,10 +218,15 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// use cases — these are nil until activity subtype use cases are added.
 		if cfg.wantJobActivity() {
 			jaDeps := &jobactivitymod.ModuleDeps{
-				Routes:       jaRoutes,
-				Labels:       jaLabels,
-				CommonLabels: ctx.Common,
-				TableLabels:  ctx.Table,
+				Routes:           jaRoutes,
+				Labels:           jaLabels,
+				CommonLabels:     ctx.Common,
+				TableLabels:      ctx.Table,
+				UploadFile:       uploadFile,
+				ListAttachments:  listAttachments,
+				CreateAttachment: createAttachment,
+				DeleteAttachment: deleteAttachment,
+				NewID:            newAttachmentID,
 			}
 			if uc != nil {
 				wireJobActivityDeps(jaDeps, uc)
@@ -232,10 +237,15 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// --- Register OutcomeCriteria module ---
 		if cfg.wantOutcomeCriteria() {
 			ocDeps := &outcomecriteriaMod.ModuleDeps{
-				Routes:       ocRoutes,
-				Labels:       ocLabels,
-				CommonLabels: ctx.Common,
-				TableLabels:  ctx.Table,
+				Routes:           ocRoutes,
+				Labels:           ocLabels,
+				CommonLabels:     ctx.Common,
+				TableLabels:      ctx.Table,
+				UploadFile:       uploadFile,
+				ListAttachments:  listAttachments,
+				CreateAttachment: createAttachment,
+				DeleteAttachment: deleteAttachment,
+				NewID:            newAttachmentID,
 			}
 			if uc != nil {
 				wireOutcomeCriteriaDeps(ocDeps, uc)
@@ -246,10 +256,15 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// --- Register TaskOutcome module ---
 		if cfg.wantTaskOutcome() {
 			toDeps := &taskoutcomeMod.ModuleDeps{
-				Routes:       toRoutes,
-				Labels:       toLabels,
-				CommonLabels: ctx.Common,
-				TableLabels:  ctx.Table,
+				Routes:           toRoutes,
+				Labels:           toLabels,
+				CommonLabels:     ctx.Common,
+				TableLabels:      ctx.Table,
+				UploadFile:       uploadFile,
+				ListAttachments:  listAttachments,
+				CreateAttachment: createAttachment,
+				DeleteAttachment: deleteAttachment,
+				NewID:            newAttachmentID,
 			}
 			if uc != nil {
 				wireTaskOutcomeDeps(toDeps, uc)
@@ -273,10 +288,15 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// --- Register Fulfillment module ---
 		if cfg.wantFulfillment() {
 			ffDeps := &fulfillmentmod.ModuleDeps{
-				Routes:       ffRoutes,
-				Labels:       ffLabels,
-				CommonLabels: ctx.Common,
-				TableLabels:  ctx.Table,
+				Routes:           ffRoutes,
+				Labels:           ffLabels,
+				CommonLabels:     ctx.Common,
+				TableLabels:      ctx.Table,
+				UploadFile:       uploadFile,
+				ListAttachments:  listAttachments,
+				CreateAttachment: createAttachment,
+				DeleteAttachment: deleteAttachment,
+				NewID:            newAttachmentID,
 			}
 			if uc != nil {
 				wireFulfillmentDeps(ffDeps, uc)
@@ -323,10 +343,11 @@ func defaultFulfillmentLabels() fayna.FulfillmentLabels {
 			Notes:             "Notes",
 		},
 		Tabs: fayna.FulfillmentTabLabels{
-			Info:    "Information",
-			Items:   "Items",
-			History: "History",
-			Returns: "Returns",
+			Info:        "Information",
+			Items:       "Items",
+			History:     "History",
+			Returns:     "Returns",
+			Attachments: "Attachments",
 		},
 		Actions: fayna.FulfillmentActionLabels{
 			MarkReady:      "Mark Ready",

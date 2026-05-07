@@ -8,11 +8,13 @@ import (
 	fayna "github.com/erniealice/fayna-golang"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 
+	"github.com/erniealice/hybra-golang/views/attachment"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
 )
 
@@ -27,6 +29,7 @@ type PageData struct {
 	ItemsTable       *types.TableConfig
 	HistoryTable     *types.TableConfig
 	ReturnsTable     *types.TableConfig
+	AttachmentTable  *types.TableConfig
 	AllowedEvents    []string
 	SupplierName     string
 	RevenueReference string
@@ -125,7 +128,7 @@ func NewView(deps *DetailViewDeps) view.View {
 		}
 
 		// Load tab-specific data
-		loadTabData(ctx, deps, pageData, resp, activeTab)
+		loadTabData(ctx, deps, pageData, resp, activeTab, id)
 
 		// KB help content
 		if viewCtx.Translations != nil {
@@ -143,20 +146,23 @@ func NewView(deps *DetailViewDeps) view.View {
 
 func buildTabItems(l fayna.FulfillmentLabels, id string, routes fayna.FulfillmentRoutes) []pyeza.TabItem {
 	base := route.ResolveURL(routes.DetailURL, "id", id)
+	action := route.ResolveURL(routes.TabActionURL, "id", id, "tab", "")
 	return []pyeza.TabItem{
-		{Key: "info", Label: l.Tabs.Info, Href: base + "?tab=info", Icon: "icon-info"},
-		{Key: "items", Label: l.Tabs.Items, Href: base + "?tab=items", Icon: "icon-list"},
-		{Key: "history", Label: l.Tabs.History, Href: base + "?tab=history", Icon: "icon-clock"},
-		{Key: "returns", Label: l.Tabs.Returns, Href: base + "?tab=returns", Icon: "icon-refresh-ccw"},
+		{Key: "info", Label: l.Tabs.Info, Href: base + "?tab=info", HxGet: action + "info", Icon: "icon-info"},
+		{Key: "items", Label: l.Tabs.Items, Href: base + "?tab=items", HxGet: action + "items", Icon: "icon-list"},
+		{Key: "history", Label: l.Tabs.History, Href: base + "?tab=history", HxGet: action + "history", Icon: "icon-clock"},
+		{Key: "returns", Label: l.Tabs.Returns, Href: base + "?tab=returns", HxGet: action + "returns", Icon: "icon-refresh-ccw"},
+		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
 	}
 }
 
 func loadTabData(
-	_ context.Context,
+	ctx context.Context,
 	deps *DetailViewDeps,
 	pageData *PageData,
 	resp *fulfillmentpb.GetFulfillmentItemPageDataResponse,
 	activeTab string,
+	id string,
 ) {
 	l := deps.Labels
 	switch activeTab {
@@ -168,6 +174,19 @@ func loadTabData(
 		pageData.HistoryTable = buildHistoryTable(resp.GetStatusEvents(), l, deps.TableLabels)
 	case "returns":
 		pageData.ReturnsTable = buildReturnsTable(resp.GetReturns(), l, deps.TableLabels)
+	case "attachments":
+		if deps.ListAttachments != nil {
+			cfg := attachmentConfig(deps)
+			attachResp, err := deps.ListAttachments(ctx, cfg.EntityType, id)
+			if err != nil {
+				log.Printf("Failed to list attachments for fulfillment %s: %v", id, err)
+			}
+			var items []*attachmentpb.Attachment
+			if attachResp != nil {
+				items = attachResp.GetData()
+			}
+			pageData.AttachmentTable = attachment.BuildTable(items, cfg, id)
+		}
 	}
 }
 
@@ -280,4 +299,54 @@ func buildReturnsTable(returns []*fulfillmentpb.FulfillmentReturn, l fayna.Fulfi
 			Message: "No return requests recorded yet.",
 		},
 	}
+}
+
+// NewTabAction creates the tab action view (partial — returns only the tab content).
+func NewTabAction(deps *DetailViewDeps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		id := viewCtx.Request.PathValue("id")
+		tab := viewCtx.Request.PathValue("tab")
+		if tab == "" {
+			tab = "info"
+		}
+
+		resp, err := deps.GetFulfillmentItemPageData(ctx, &fulfillmentpb.GetFulfillmentItemPageDataRequest{
+			Id: id,
+		})
+		if err != nil {
+			log.Printf("Failed to read fulfillment %s: %v", id, err)
+			return view.Error(fmt.Errorf("failed to load fulfillment: %w", err))
+		}
+
+		f := resp.GetFulfillment()
+		if f == nil {
+			log.Printf("Fulfillment %s not found", id)
+			return view.Error(fmt.Errorf("fulfillment not found"))
+		}
+
+		fulfillmentMap := fulfillmentToMap(f)
+		l := deps.Labels
+		pageData := &PageData{
+			PageData: types.PageData{
+				CacheVersion: viewCtx.CacheVersion,
+				CommonLabels: deps.CommonLabels,
+			},
+			Fulfillment:      fulfillmentMap,
+			Labels:           l,
+			ActiveTab:        tab,
+			TabItems:         buildTabItems(l, id, deps.Routes),
+			AllowedEvents:    resp.GetAllowedEvents(),
+			SupplierName:     resp.GetSupplierName(),
+			RevenueReference: resp.GetRevenueReference(),
+			TransitionURL:    route.ResolveURL(deps.Routes.TransitionURL, "id", id),
+		}
+
+		loadTabData(ctx, deps, pageData, resp, tab, id)
+
+		templateName := "fulfillment-tab-" + tab
+		if tab == "attachments" {
+			templateName = "attachment-tab"
+		}
+		return view.OK(templateName, pageData)
+	})
 }

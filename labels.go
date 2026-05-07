@@ -174,7 +174,14 @@ type JobActivityLabels struct {
 	Actions JobActivityActionLabels `json:"actions"`
 	Detail  JobActivityDetailLabels `json:"detail"`
 	Status  JobActivityStatusLabels `json:"status"`
+	Tabs    JobActivityTabLabels    `json:"tabs"`
 	Errors  JobActivityErrorLabels  `json:"errors"`
+}
+
+// JobActivityTabLabels holds tab labels for the job activity detail page.
+type JobActivityTabLabels struct {
+	Info        string `json:"info"`
+	Attachments string `json:"attachments"`
 }
 
 type JobActivityPageLabels struct {
@@ -395,6 +402,10 @@ func DefaultJobActivityLabels() JobActivityLabels {
 			Submitted: "Submitted",
 			Approved:  "Approved",
 			Rejected:  "Rejected",
+		},
+		Tabs: JobActivityTabLabels{
+			Info:        "Information",
+			Attachments: "Attachments",
 		},
 		Errors: JobActivityErrorLabels{
 			PermissionDenied: "You do not have permission to perform this action",
@@ -646,11 +657,12 @@ type OutcomeCriteriaDetailLabels struct {
 }
 
 type OutcomeCriteriaTabLabels struct {
-	Info       string `json:"info"`
-	Thresholds string `json:"thresholds"`
-	Options    string `json:"options"`
-	Templates  string `json:"templates"`
-	Versions   string `json:"versions"`
+	Info        string `json:"info"`
+	Thresholds  string `json:"thresholds"`
+	Options     string `json:"options"`
+	Templates   string `json:"templates"`
+	Versions    string `json:"versions"`
+	Attachments string `json:"attachments"`
 }
 
 type OutcomeCriteriaConfirmLabels struct {
@@ -727,11 +739,12 @@ func DefaultOutcomeCriteriaLabels() OutcomeCriteriaLabels {
 			ModifiedDate: "Last Modified",
 		},
 		Tabs: OutcomeCriteriaTabLabels{
-			Info:       "Information",
-			Thresholds: "Thresholds",
-			Options:    "Options",
-			Templates:  "Templates",
-			Versions:   "Versions",
+			Info:        "Information",
+			Thresholds:  "Thresholds",
+			Options:     "Options",
+			Templates:   "Templates",
+			Versions:    "Versions",
+			Attachments: "Attachments",
 		},
 		Confirm: OutcomeCriteriaConfirmLabels{
 			Delete:        "Delete Criterion",
@@ -760,8 +773,15 @@ type TaskOutcomeLabels struct {
 	Form    TaskOutcomeFormLabels    `json:"form"`
 	Actions TaskOutcomeActionLabels  `json:"actions"`
 	Detail  TaskOutcomeDetailLabels  `json:"detail"`
+	Tabs    TaskOutcomeTabLabels     `json:"tabs"`
 	Confirm TaskOutcomeConfirmLabels `json:"confirm"`
 	Errors  TaskOutcomeErrorLabels   `json:"errors"`
+}
+
+// TaskOutcomeTabLabels holds tab labels for the task outcome detail page.
+type TaskOutcomeTabLabels struct {
+	Info        string `json:"info"`
+	Attachments string `json:"attachments"`
 }
 
 type TaskOutcomePageLabels struct {
@@ -877,6 +897,10 @@ func DefaultTaskOutcomeLabels() TaskOutcomeLabels {
 			RecordedDate:        "Recorded Date",
 			RevisionNumber:      "Revision",
 			CreatedDate:         "Created",
+		},
+		Tabs: TaskOutcomeTabLabels{
+			Info:        "Information",
+			Attachments: "Attachments",
 		},
 		Confirm: TaskOutcomeConfirmLabels{
 			Delete:        "Delete Outcome",
@@ -1082,10 +1106,11 @@ type FulfillmentColumnLabels struct {
 }
 
 type FulfillmentTabLabels struct {
-	Info    string `json:"info"`
-	Items   string `json:"items"`
-	History string `json:"history"`
-	Returns string `json:"returns"`
+	Info        string `json:"info"`
+	Items       string `json:"items"`
+	History     string `json:"history"`
+	Returns     string `json:"returns"`
+	Attachments string `json:"attachments"`
 }
 
 type FulfillmentActionLabels struct {

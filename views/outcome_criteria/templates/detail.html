@@ -23,6 +23,8 @@
         {{template "outcome-criteria-tab-templates" .}}
         {{else if eq .ActiveTab "versions"}}
         {{template "outcome-criteria-tab-versions" .}}
+        {{else if eq .ActiveTab "attachments"}}
+        {{template "attachment-tab" .}}
         {{end}}
     </div>
 </div>

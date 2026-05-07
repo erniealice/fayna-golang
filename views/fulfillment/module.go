@@ -5,10 +5,12 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/hybra-golang/views/attachment"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
 
 	fulfillmentaction "github.com/erniealice/fayna-golang/views/fulfillment/action"
@@ -41,18 +43,28 @@ type ModuleDeps struct {
 
 	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
 	GetFulfillmentDashboardPageData func(ctx context.Context, req *fulfillmentdashboard.Request) (*fulfillmentdashboard.Response, error)
+
+	// Attachment operations
+	UploadFile       func(ctx context.Context, bucket, key string, content []byte, contentType string) error
+	ListAttachments  func(ctx context.Context, moduleKey, foreignKey string) (*attachmentpb.ListAttachmentsResponse, error)
+	CreateAttachment func(ctx context.Context, req *attachmentpb.CreateAttachmentRequest) (*attachmentpb.CreateAttachmentResponse, error)
+	DeleteAttachment func(ctx context.Context, req *attachmentpb.DeleteAttachmentRequest) (*attachmentpb.DeleteAttachmentResponse, error)
+	NewID            func() string
 }
 
 // Module holds all constructed fulfillment views.
 type Module struct {
-	routes     fayna.FulfillmentRoutes
-	List       view.View
-	Detail     view.View
-	Add        view.View
-	Edit       view.View
-	Delete     view.View
-	Transition view.View
-	Return     view.View
+	routes           fayna.FulfillmentRoutes
+	List             view.View
+	Detail           view.View
+	TabAction        view.View
+	Add              view.View
+	Edit             view.View
+	Delete           view.View
+	Transition       view.View
+	Return           view.View
+	AttachmentUpload view.View
+	AttachmentDelete view.View
 
 	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
 	Dashboard view.View
@@ -61,6 +73,13 @@ type Module struct {
 // NewModule creates a new fulfillment module with all views wired.
 func NewModule(deps *ModuleDeps) *Module {
 	detailDeps := &fulfillmentdetail.DetailViewDeps{
+		AttachmentOps: attachment.AttachmentOps{
+			UploadFile:       deps.UploadFile,
+			ListAttachments:  deps.ListAttachments,
+			CreateAttachment: deps.CreateAttachment,
+			DeleteAttachment: deps.DeleteAttachment,
+			NewAttachmentID:  deps.NewID,
+		},
 		Routes:                     deps.Routes,
 		Labels:                     deps.Labels,
 		CommonLabels:               deps.CommonLabels,
@@ -96,12 +115,15 @@ func NewModule(deps *ModuleDeps) *Module {
 			TableLabels:                deps.TableLabels,
 			GetFulfillmentListPageData: deps.GetFulfillmentListPageData,
 		}),
-		Detail:     fulfillmentdetail.NewView(detailDeps),
-		Add:        fulfillmentaction.NewAddAction(actionDeps),
-		Edit:       fulfillmentaction.NewEditAction(actionDeps),
-		Delete:     fulfillmentaction.NewDeleteAction(actionDeps),
-		Transition: fulfillmentaction.NewTransitionAction(actionDeps),
-		Return:     fulfillmentaction.NewReturnAction(actionDeps),
+		Detail:           fulfillmentdetail.NewView(detailDeps),
+		TabAction:        fulfillmentdetail.NewTabAction(detailDeps),
+		Add:              fulfillmentaction.NewAddAction(actionDeps),
+		Edit:             fulfillmentaction.NewEditAction(actionDeps),
+		Delete:           fulfillmentaction.NewDeleteAction(actionDeps),
+		Transition:       fulfillmentaction.NewTransitionAction(actionDeps),
+		Return:           fulfillmentaction.NewReturnAction(actionDeps),
+		AttachmentUpload: fulfillmentdetail.NewAttachmentUploadAction(detailDeps),
+		AttachmentDelete: fulfillmentdetail.NewAttachmentDeleteAction(detailDeps),
 		// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
 		Dashboard: fulfillmentdashboard.NewView(dashboardDeps),
 	}
@@ -115,6 +137,9 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	}
 	r.GET(m.routes.ListURL, m.List)
 	r.GET(m.routes.DetailURL, m.Detail)
+	if m.routes.TabActionURL != "" {
+		r.GET(m.routes.TabActionURL, m.TabAction)
+	}
 	r.GET(m.routes.AddURL, m.Add)
 	r.POST(m.routes.AddURL, m.Add)
 	r.GET(m.routes.EditURL, m.Edit)
@@ -122,4 +147,10 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	r.POST(m.routes.DeleteURL, m.Delete)
 	r.POST(m.routes.TransitionURL, m.Transition)
 	r.POST(m.routes.ReturnURL, m.Return)
+	// Attachments
+	if m.AttachmentUpload != nil {
+		r.GET(m.routes.AttachmentUploadURL, m.AttachmentUpload)
+		r.POST(m.routes.AttachmentUploadURL, m.AttachmentUpload)
+		r.POST(m.routes.AttachmentDeleteURL, m.AttachmentDelete)
+	}
 }

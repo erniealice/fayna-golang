@@ -5,10 +5,12 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/hybra-golang/views/attachment"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	outcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 
@@ -32,21 +34,38 @@ type ModuleDeps struct {
 
 	// Outcome criteria read (for linking criteria details)
 	ReadOutcomeCriteria func(ctx context.Context, req *criteriapb.ReadOutcomeCriteriaRequest) (*criteriapb.ReadOutcomeCriteriaResponse, error)
+
+	// Attachment operations
+	UploadFile       func(ctx context.Context, bucket, key string, content []byte, contentType string) error
+	ListAttachments  func(ctx context.Context, moduleKey, foreignKey string) (*attachmentpb.ListAttachmentsResponse, error)
+	CreateAttachment func(ctx context.Context, req *attachmentpb.CreateAttachmentRequest) (*attachmentpb.CreateAttachmentResponse, error)
+	DeleteAttachment func(ctx context.Context, req *attachmentpb.DeleteAttachmentRequest) (*attachmentpb.DeleteAttachmentResponse, error)
+	NewID            func() string
 }
 
 // Module holds all constructed task outcome views.
 type Module struct {
-	routes fayna.TaskOutcomeRoutes
-	List   view.View
-	Detail view.View
-	Add    view.View
-	Edit   view.View
-	Delete view.View
+	routes           fayna.TaskOutcomeRoutes
+	List             view.View
+	Detail           view.View
+	TabAction        view.View
+	Add              view.View
+	Edit             view.View
+	Delete           view.View
+	AttachmentUpload view.View
+	AttachmentDelete view.View
 }
 
 // NewModule creates a new task outcome module with all views wired.
 func NewModule(deps *ModuleDeps) *Module {
 	detailDeps := &taskoutcomedetail.DetailViewDeps{
+		AttachmentOps: attachment.AttachmentOps{
+			UploadFile:       deps.UploadFile,
+			ListAttachments:  deps.ListAttachments,
+			CreateAttachment: deps.CreateAttachment,
+			DeleteAttachment: deps.DeleteAttachment,
+			NewAttachmentID:  deps.NewID,
+		},
 		Routes:          deps.Routes,
 		Labels:          deps.Labels,
 		CommonLabels:    deps.CommonLabels,
@@ -62,10 +81,13 @@ func NewModule(deps *ModuleDeps) *Module {
 			CommonLabels:     deps.CommonLabels,
 			TableLabels:      deps.TableLabels,
 		}),
-		Detail: taskoutcomedetail.NewView(detailDeps),
-		Add:    newAddAction(deps),
-		Edit:   newEditAction(deps),
-		Delete: newDeleteAction(deps),
+		Detail:           taskoutcomedetail.NewView(detailDeps),
+		TabAction:        taskoutcomedetail.NewTabAction(detailDeps),
+		Add:              newAddAction(deps),
+		Edit:             newEditAction(deps),
+		Delete:           newDeleteAction(deps),
+		AttachmentUpload: taskoutcomedetail.NewAttachmentUploadAction(detailDeps),
+		AttachmentDelete: taskoutcomedetail.NewAttachmentDeleteAction(detailDeps),
 	}
 }
 
@@ -73,6 +95,9 @@ func NewModule(deps *ModuleDeps) *Module {
 func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	r.GET(m.routes.ListURL, m.List)
 	r.GET(m.routes.DetailURL, m.Detail)
+	if m.routes.TabActionURL != "" {
+		r.GET(m.routes.TabActionURL, m.TabAction)
+	}
 
 	// CRUD actions (GET = recording form, POST = process submission)
 	r.GET(m.routes.AddURL, m.Add)
@@ -80,4 +105,10 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	r.GET(m.routes.EditURL, m.Edit)
 	r.POST(m.routes.EditURL, m.Edit)
 	r.POST(m.routes.DeleteURL, m.Delete)
+	// Attachments
+	if m.AttachmentUpload != nil {
+		r.GET(m.routes.AttachmentUploadURL, m.AttachmentUpload)
+		r.POST(m.routes.AttachmentUploadURL, m.AttachmentUpload)
+		r.POST(m.routes.AttachmentDeleteURL, m.AttachmentDelete)
+	}
 }

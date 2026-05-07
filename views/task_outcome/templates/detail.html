@@ -7,6 +7,17 @@
 {{define "task-outcome-detail-content"}}
 <div class="page-content to-detail-layout" data-page-css="/assets/css/fayna/fayna-outcome-detail.css?v={{.CacheVersion}}">
 
+    {{/* --- Tabs --- */}}
+    {{if .TabItems}}
+    <div class="to-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "to-tabs")}}
+    </div>
+    {{end}}
+
+    {{if eq .ActiveTab "attachments"}}
+    {{template "attachment-tab" .}}
+    {{else}}
+
     {{/* --- Identity section --- */}}
     <div class="to-identity-section">
         <h2 class="to-entity-title">{{index .Outcome "task_name"}}</h2>
@@ -101,6 +112,8 @@
         <div class="to-notes-block">{{index .Outcome "determination_note"}}</div>
     </div>
     {{end}}
+
+    {{end}}{{/* end attachments else */}}
 
 </div>
 {{end}}

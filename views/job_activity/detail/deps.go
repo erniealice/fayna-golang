@@ -5,6 +5,7 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
+	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/hybra-golang/views/auditlog"
 	pyeza "github.com/erniealice/pyeza-golang"
 
@@ -16,6 +17,7 @@ import (
 
 // DetailViewDeps holds view dependencies for the job activity detail views.
 type DetailViewDeps struct {
+	attachment.AttachmentOps
 	auditlog.AuditOps
 
 	Routes       fayna.JobActivityRoutes

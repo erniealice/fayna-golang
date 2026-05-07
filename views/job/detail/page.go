@@ -48,7 +48,6 @@ type PageData struct {
 	// task table on the Phases tab. Drives the "Mark Complete" CTA that
 	// flips JobPhase.status to COMPLETED. 2026-04-29 milestone-billing §4.
 	PhasesList []PhaseRow
-	AttachmentUploadURL string
 	// Audit history tab
 	AuditEntries    []auditlog.AuditEntryView
 	AuditHasNext    bool
@@ -295,7 +294,6 @@ func loadTabData(ctx context.Context, deps *DetailViewDeps, pageData *PageData, 
 			}
 			pageData.AttachmentTable = attachment.BuildTable(items, cfg, id)
 		}
-		pageData.AttachmentUploadURL = route.ResolveURL(deps.Routes.AttachmentUploadURL, "id", id)
 	}
 }
 

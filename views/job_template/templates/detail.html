@@ -15,10 +15,21 @@
     <div id="tabContent" class="jt-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
         {{if eq .ActiveTab "info"}}
         {{template "jt-tab-info" .}}
-        {{else if eq .ActiveTab "phases"}}
+        {{end}}
+        {{if eq .ActiveTab "phases"}}
         {{template "jt-tab-phases" .}}
-        {{else if eq .ActiveTab "attachments"}}
+        {{end}}
+        {{if eq .ActiveTab "tasks"}}
+        {{template "jt-tab-tasks" .}}
+        {{end}}
+        {{if eq .ActiveTab "standards"}}
+        {{template "jt-tab-standards" .}}
+        {{end}}
+        {{if eq .ActiveTab "attachments"}}
         {{template "attachment-tab" .}}
+        {{end}}
+        {{if eq .ActiveTab "audit-history"}}
+        {{template "audit-history-tab" .}}
         {{end}}
     </div>
 </div>
@@ -60,12 +71,70 @@
 {{/* Phases Tab */}}
 {{define "jt-tab-phases"}}
 <div class="tab-scroll">
+    {{/* Add Phase CTA — shown when PhaseRoutes.AddURL is wired */}}
+    {{if .PhasesAddURL}}
+    <div class="tab-toolbar">
+        <a class="btn btn-primary btn-sm"
+           hx-get="{{.PhasesAddURL}}"
+           hx-target="#sheetContent"
+           hx-swap="innerHTML"
+           onclick="lf.Sheet.open()"
+           data-testid="add-phase-cta">
+            {{.Labels.Actions.Add}}
+        </a>
+    </div>
+    {{end}}
     {{if .PhasesTable}}
         {{template "table-card" .PhasesTable}}
     {{else}}
         <div class="coming-soon-panel">
             <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
             <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Tasks Tab */}}
+{{define "jt-tab-tasks"}}
+<div class="tab-scroll">
+    {{/* Add Task CTA — shown when TaskRoutes.AddURL is wired */}}
+    {{if .TasksAddURL}}
+    <div class="tab-toolbar">
+        <a class="btn btn-primary btn-sm"
+           hx-get="{{.TasksAddURL}}"
+           hx-target="#sheetContent"
+           hx-swap="innerHTML"
+           onclick="lf.Sheet.open()"
+           data-testid="add-task-cta">
+            {{.Labels.Actions.AddTask}}
+        </a>
+    </div>
+    {{end}}
+    {{if .TasksTable}}
+        {{template "table-card" .TasksTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">No tasks configured</div>
+            <p class="coming-soon-text">Tasks will appear here once phases and task definitions are added to this template.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Standards Tab — pinning UI deferred to a follow-up phase.
+     TODO: Standards pinning UI (multi-select OutcomeCriteria ↔ JobTemplateTask)
+     lands in a follow-up phase. It requires a multi-select across criteria and tasks,
+     which is more complex than the basic Add/Edit/Delete CTAs shipped here.
+*/}}
+{{define "jt-tab-standards"}}
+<div class="tab-scroll">
+    {{if .StandardsTable}}
+        {{template "table-card" .StandardsTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">No standards pinned</div>
+            <p class="coming-soon-text">Outcome criteria pinned to tasks will appear here once tasks are defined for this template.</p>
         </div>
     {{end}}
 </div>

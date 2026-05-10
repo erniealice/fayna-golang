@@ -19,6 +19,7 @@ import (
 type ListViewDeps struct {
 	Routes                     fayna.JobActivityRoutes
 	GetJobActivityListPageData func(ctx context.Context, req *jobactivitypb.GetJobActivityListPageDataRequest) (*jobactivitypb.GetJobActivityListPageDataResponse, error)
+	GetInUseIDs                func(ctx context.Context, ids []string) (map[string]bool, error)
 	Labels                     fayna.JobActivityLabels
 	CommonLabels               pyeza.CommonLabels
 	TableLabels                types.TableLabels
@@ -36,15 +37,57 @@ func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 
+		// Optional status filter from query param (e.g. ?status=draft).
+		statusFilter := viewCtx.Request.URL.Query().Get("status")
+
 		resp, err := deps.GetJobActivityListPageData(ctx, &jobactivitypb.GetJobActivityListPageDataRequest{})
 		if err != nil {
 			log.Printf("Failed to load job activity list page data: %v", err)
 			return view.Error(fmt.Errorf("failed to load activities: %w", err))
 		}
 
+		activities := resp.GetJobActivityList()
+
+		// Apply in-memory status filter when requested.
+		if statusFilter != "" {
+			var filtered []*jobactivitypb.JobActivity
+			for _, a := range activities {
+				switch statusFilter {
+				case "draft":
+					if a.GetApprovalStatus() == jobactivitypb.ActivityApprovalStatus_ACTIVITY_APPROVAL_STATUS_DRAFT {
+						filtered = append(filtered, a)
+					}
+				case "submitted":
+					if a.GetApprovalStatus() == jobactivitypb.ActivityApprovalStatus_ACTIVITY_APPROVAL_STATUS_SUBMITTED {
+						filtered = append(filtered, a)
+					}
+				case "approved":
+					if a.GetApprovalStatus() == jobactivitypb.ActivityApprovalStatus_ACTIVITY_APPROVAL_STATUS_APPROVED &&
+						a.GetPostingStatus() == jobactivitypb.ActivityPostingStatus_ACTIVITY_POSTING_STATUS_UNPOSTED {
+						filtered = append(filtered, a)
+					}
+				case "posted":
+					if a.GetPostingStatus() == jobactivitypb.ActivityPostingStatus_ACTIVITY_POSTING_STATUS_POSTED {
+						filtered = append(filtered, a)
+					}
+				}
+			}
+			activities = filtered
+		}
+
+		// Collect IDs and check which are in use (referenced by dependent tables).
+		var inUseIDs map[string]bool
+		if deps.GetInUseIDs != nil {
+			var itemIDs []string
+			for _, a := range activities {
+				itemIDs = append(itemIDs, a.GetId())
+			}
+			inUseIDs, _ = deps.GetInUseIDs(ctx, itemIDs)
+		}
+
 		l := deps.Labels
 		columns := activityColumns(l)
-		rows := buildTableRows(resp.GetJobActivityList(), l, deps.Routes, perms)
+		rows := buildTableRows(activities, l, deps.Routes, inUseIDs, perms)
 		types.ApplyColumnStyles(columns, rows)
 
 		tableConfig := &types.TableConfig{
@@ -88,6 +131,16 @@ func NewView(deps *ListViewDeps) view.View {
 					ConfirmTitle:   "Generate Invoice",
 					ConfirmMessage: "Generate invoice from {{count}} selected activity(s)?",
 				},
+				{
+					Key:              "delete",
+					Label:            "Delete",
+					Icon:             "icon-trash-2",
+					Variant:          "danger",
+					Endpoint:         deps.Routes.BulkDeleteURL,
+					ConfirmTitle:     "Delete activities?",
+					ConfirmMessage:   "Delete {count} activity(s)?",
+					RequiresDataAttr: "deletable",
+				},
 			},
 		}
 		types.ApplyTableSettings(tableConfig)
@@ -124,7 +177,7 @@ func activityColumns(l fayna.JobActivityLabels) []types.TableColumn {
 	}
 }
 
-func buildTableRows(activities []*jobactivitypb.JobActivity, l fayna.JobActivityLabels, routes fayna.JobActivityRoutes, perms *types.UserPermissions) []types.TableRow {
+func buildTableRows(activities []*jobactivitypb.JobActivity, l fayna.JobActivityLabels, routes fayna.JobActivityRoutes, inUseIDs map[string]bool, perms *types.UserPermissions) []types.TableRow {
 	rows := []types.TableRow{}
 	for _, a := range activities {
 		id := a.GetId()
@@ -141,6 +194,13 @@ func buildTableRows(activities []*jobactivitypb.JobActivity, l fayna.JobActivity
 			jobName = j.GetName()
 		}
 
+		inUse := inUseIDs[id]
+		deleteDisabled := inUse || !perms.Can("job_activity", "delete")
+		deleteTooltip := l.Errors.PermissionDenied
+		if inUse {
+			deleteTooltip = "Cannot delete: in use"
+		}
+
 		detailURL := route.ResolveURL(routes.DetailURL, "id", id)
 		actions := []types.TableAction{
 			{Type: "view", Label: l.Actions.View, Action: "view", Href: detailURL},
@@ -155,7 +215,7 @@ func buildTableRows(activities []*jobactivitypb.JobActivity, l fayna.JobActivity
 					ConfirmTitle: l.Actions.Submit, ConfirmMessage: l.Actions.Submit + " " + id + "?",
 					Disabled: !perms.Can("job_activity", "update"), DisabledTooltip: l.Errors.PermissionDenied,
 				},
-				types.TableAction{Type: "delete", Label: l.Actions.Delete, Action: "delete", URL: routes.DeleteURL, ItemName: id, Disabled: !perms.Can("job_activity", "delete"), DisabledTooltip: l.Errors.PermissionDenied},
+				types.TableAction{Type: "delete", Label: l.Actions.Delete, Action: "delete", URL: routes.DeleteURL, ItemName: id, Disabled: deleteDisabled, DisabledTooltip: deleteTooltip},
 			)
 		case "submitted":
 			actions = append(actions,
@@ -217,11 +277,19 @@ func buildTableRows(activities []*jobactivitypb.JobActivity, l fayna.JobActivity
 				"quantity":    quantity,
 				"amount":      fmt.Sprintf("%d", a.GetTotalCost()),
 				"status":      approvalStatus,
+				"deletable":   boolAttr(!inUse),
 			},
 			Actions: actions,
 		})
 	}
 	return rows
+}
+
+func boolAttr(v bool) string {
+	if v {
+		return "true"
+	}
+	return "false"
 }
 
 func entryTypeString(t jobactivitypb.EntryType) string {

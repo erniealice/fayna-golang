@@ -1,6 +1,9 @@
 package form
 
-import fayna "github.com/erniealice/fayna-golang"
+import (
+	fayna "github.com/erniealice/fayna-golang"
+	"github.com/erniealice/pyeza-golang/types"
+)
 
 // Data is the template-facing data shape for the job drawer form.
 // Used by both Add (FormAction = AddURL, IsEdit = false) and
@@ -15,6 +18,22 @@ type Data struct {
 	Name         string
 	ClientID     string
 	LocationID   string
+
+	// Lifecycle
+	Status            string
+	StatusOptions     []types.SelectOption
+	BillingRuleType   string
+	BillingRuleOptions []types.SelectOption
+
+	// Auto-complete display labels pre-filled on Edit.
+	ClientName   string
+	LocationName string
+
+	// Auto-complete search endpoints for the client and location pickers.
+	// Served by the fayna block at JobClientSearchURL / JobLocationSearchURL.
+	ClientSearchURL   string
+	LocationSearchURL string
+
 	Labels       fayna.JobLabels
 	CommonLabels any
 }

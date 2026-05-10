@@ -1,0 +1,63 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "activity-labor-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "activity-labor-detail-content"}}
+<div class="page-content act-detail-layout">
+
+    {{/* --- Info section (single tab, v1: no tab strip needed) --- */}}
+    <div class="act-info-section">
+        <div class="act-info-grid">
+
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.Staff}}</span>
+                <span class="act-info-value" data-testid="activity-labor-staff-id">{{.StaffID}}</span>
+            </div>
+
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.Hours}}</span>
+                <span class="act-info-value mono" data-testid="activity-labor-hours">{{.Hours}}</span>
+            </div>
+
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.RateType}}</span>
+                <span class="act-info-value" data-testid="activity-labor-rate-type">{{.RateType}}</span>
+            </div>
+
+            {{if .TimeStart}}
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.TimeStart}}</span>
+                <span class="act-info-value" data-testid="activity-labor-time-start">{{.TimeStart}}</span>
+            </div>
+            {{end}}
+
+            {{if .TimeEnd}}
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.TimeEnd}}</span>
+                <span class="act-info-value" data-testid="activity-labor-time-end">{{.TimeEnd}}</span>
+            </div>
+            {{end}}
+
+        </div>
+
+        {{/* Edit CTA — deep-links to the activity labor edit drawer */}}
+        {{if .EditURL}}
+        <div class="act-actions">
+            <a hx-get="{{.EditURL}}"
+               hx-target="#sheetContent"
+               hx-swap="innerHTML"
+               hx-on::after-request="lf.Sheet.open()"
+               class="btn btn-secondary"
+               title="{{.Labels.Buttons.Edit}}"
+               data-testid="activity-labor-edit-btn">
+                {{.Labels.Buttons.Edit}}
+            </a>
+        </div>
+        {{end}}
+
+    </div>
+
+</div>
+{{end}}

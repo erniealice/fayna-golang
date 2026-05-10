@@ -1,0 +1,50 @@
+{{/*
+Job template drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .Name, .Description, .Active, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "job-template-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-template-form">
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{template "form-section" (dict "Title" "Info")}}
+
+        {{/* --- Template Name --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.Form.Name
+                "Value" .Name
+                "Required" true
+                "Placeholder" .Labels.Form.NamePlaceholder
+            )}}
+        </div>
+
+        {{/* --- Description --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "description"
+                "Label" .Labels.Form.Description
+                "Value" .Description
+                "Placeholder" .Labels.Form.DescPlaceholder
+                "Rows" 3
+            )}}
+        </div>
+
+        {{/* --- Active toggle (Edit only) --- */}}
+        {{if .IsEdit}}
+        <div class="form-row single">
+            <div class="form-group form-group-toggle">
+                <label class="form-label" for="active">{{.Labels.Form.Active}}</label>
+                {{template "toggle" (dict "Name" "active" "Checked" .Active "Value" "true")}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

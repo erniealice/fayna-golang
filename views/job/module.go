@@ -16,6 +16,9 @@ import (
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobsettlementpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_settlement"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	jobtemplatetaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 
 	jobaction "github.com/erniealice/fayna-golang/views/job/action"
@@ -30,6 +33,12 @@ type ModuleDeps struct {
 	Labels       fayna.JobLabels
 	CommonLabels pyeza.CommonLabels
 	TableLabels  types.TableLabels
+
+	// GetInUseIDs checks which job IDs are referenced by child tables
+	// (job_activity, job_phase, job_settlement). When non-nil, matched rows
+	// have their delete action disabled and are excluded from bulk-delete
+	// selections via data-deletable="false".
+	GetInUseIDs func(ctx context.Context, ids []string) (map[string]bool, error)
 
 	// 2026-04-29 milestone-billing plan §5/§6 — Activities tab on Job detail
 	// renders an "+ Add Activity" CTA + per-row Edit CTA targeting the
@@ -49,10 +58,8 @@ type ModuleDeps struct {
 	DeleteJob func(ctx context.Context, req *jobpb.DeleteJobRequest) (*jobpb.DeleteJobResponse, error)
 	ListJobs  func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 
-	// Job phase operations
-	ListJobPhases  func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
-	ReadJobPhase   func(ctx context.Context, req *jobphasepb.ReadJobPhaseRequest) (*jobphasepb.ReadJobPhaseResponse, error)
-	UpdateJobPhase func(ctx context.Context, req *jobphasepb.UpdateJobPhaseRequest) (*jobphasepb.UpdateJobPhaseResponse, error)
+	// Job phase operations (list only — CRUD is now owned by the job_phase module)
+	ListJobPhases func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
 
 	// Job task operations
 	ListJobTasks  func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
@@ -68,6 +75,24 @@ type ModuleDeps struct {
 	// origin breadcrumb deps. Both nil/empty = breadcrumb hidden.
 	ReadSubscription      func(ctx context.Context, req *subscriptionpb.ReadSubscriptionRequest) (*subscriptionpb.ReadSubscriptionResponse, error)
 	SubscriptionDetailURL string
+
+	// Budget tab — reads the JobTemplate-derived phase/task hour plan for
+	// the budget tab. All three deps are optional; nil = budget tab renders
+	// empty state. Wave 3 will replace these with a JobInputPlan reader.
+	// TODO(composition): wire in packages/fayna-golang/block/wiring.go.
+	ReadJobTemplate                 func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)
+	ListJobTemplatePhasesByTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListJobTemplateTasksByPhase     func(ctx context.Context, req *jobtemplatetaskpb.ListJobTemplateTasksByPhaseRequest) (*jobtemplatetaskpb.ListJobTemplateTasksByPhaseResponse, error)
+
+	// Actuals tab — aggregated cost rollup from GetJobActivityRollup.
+	// Optional; nil = actuals tab renders empty state.
+	// TODO(composition): wire in packages/fayna-golang/block/wiring.go.
+	GetJobActivityRollup func(ctx context.Context, req *jobactivitypb.GetJobActivityRollupRequest) (*jobactivitypb.GetJobActivityRollupResponse, error)
+
+	// Search endpoints for the job drawer client + location pickers.
+	// Set from fayna.JobRoutes by the fayna block (JobClientSearchURL / JobLocationSearchURL).
+	ClientSearchURL   string
+	LocationSearchURL string
 
 	// Attachment operations
 	UploadFile       func(ctx context.Context, bucket, key string, content []byte, contentType string) error
@@ -92,7 +117,6 @@ type Module struct {
 	AttachmentUpload view.View
 	AttachmentDelete view.View
 	AssignTask       view.View
-	PhaseSetStatus   view.View
 
 	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
 	Dashboard view.View
@@ -124,23 +148,24 @@ func NewModule(deps *ModuleDeps) *Module {
 		// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4.
 		ReadSubscription:      deps.ReadSubscription,
 		SubscriptionDetailURL: deps.SubscriptionDetailURL,
+		// Budget tab deps (optional; nil = empty state).
+		ReadJobTemplate:                 deps.ReadJobTemplate,
+		ListJobTemplatePhasesByTemplate: deps.ListJobTemplatePhasesByTemplate,
+		ListJobTemplateTasksByPhase:     deps.ListJobTemplateTasksByPhase,
+		// Actuals tab dep (optional; nil = empty state).
+		GetJobActivityRollup: deps.GetJobActivityRollup,
 	}
 
 	actionDeps := &jobaction.Deps{
-		Routes:    deps.Routes,
-		Labels:    deps.Labels,
-		CreateJob: deps.CreateJob,
-		ReadJob:   deps.ReadJob,
-		UpdateJob: deps.UpdateJob,
-		DeleteJob: deps.DeleteJob,
-		ListJobs:  deps.ListJobs,
-	}
-
-	phaseDeps := &jobaction.PhaseDeps{
-		Routes:         deps.Routes,
-		Labels:         deps.Labels,
-		ReadJobPhase:   deps.ReadJobPhase,
-		UpdateJobPhase: deps.UpdateJobPhase,
+		Routes:            deps.Routes,
+		Labels:            deps.Labels,
+		CreateJob:         deps.CreateJob,
+		ReadJob:           deps.ReadJob,
+		UpdateJob:         deps.UpdateJob,
+		DeleteJob:         deps.DeleteJob,
+		ListJobs:          deps.ListJobs,
+		ClientSearchURL:   deps.ClientSearchURL,
+		LocationSearchURL: deps.LocationSearchURL,
 	}
 
 	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
@@ -158,6 +183,7 @@ func NewModule(deps *ModuleDeps) *Module {
 		List: joblist.NewView(&joblist.ListViewDeps{
 			Routes:       deps.Routes,
 			ListJobs:     deps.ListJobs,
+			GetInUseIDs:  deps.GetInUseIDs,
 			Labels:       deps.Labels,
 			CommonLabels: deps.CommonLabels,
 			TableLabels:  deps.TableLabels,
@@ -172,8 +198,7 @@ func NewModule(deps *ModuleDeps) *Module {
 		BulkSetStatus:    jobaction.NewBulkSetStatusAction(actionDeps),
 		AttachmentUpload: jobdetail.NewAttachmentUploadAction(detailDeps),
 		AttachmentDelete: jobdetail.NewAttachmentDeleteAction(detailDeps),
-		AssignTask:       jobdetail.NewAssignTaskAction(detailDeps),
-		PhaseSetStatus:   jobaction.NewPhaseSetStatusAction(phaseDeps),
+		AssignTask: jobdetail.NewAssignTaskAction(detailDeps),
 		// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
 		Dashboard: jobdashboard.NewView(dashboardDeps),
 	}
@@ -206,8 +231,6 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	if m.routes.TaskAssignURL != "" {
 		r.POST(m.routes.TaskAssignURL, m.AssignTask)
 	}
-	// Phase actions (2026-04-29 milestone-billing plan §4)
-	if m.routes.PhaseSetStatusURL != "" && m.PhaseSetStatus != nil {
-		r.POST(m.routes.PhaseSetStatusURL, m.PhaseSetStatus)
-	}
+	// Note: /action/job-phase/set-status is now owned by the job_phase module.
+	// Register it via JobPhaseModule.RegisterRoutes instead of here.
 }

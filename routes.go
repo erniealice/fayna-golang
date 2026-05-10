@@ -26,6 +26,45 @@ const (
 	// 2026-04-29 milestone-billing plan §4.
 	JobPhaseSetStatusURL = "/action/job-phase/set-status"
 
+	// JobPhase standalone module routes.
+	// The list page is a power-user/debugging surface — no sidebar entry.
+	// The detail page is the canonical single-phase view with tab strip.
+	JobPhaseListURL             = "/app/job-phases/list/{status}"
+	JobPhaseDetailURL           = "/app/job-phase/{id}"
+	JobPhaseAddURL              = "/action/job-phase/add"
+	JobPhaseEditURL             = "/action/job-phase/edit/{id}"
+	JobPhaseDeleteURL           = "/action/job-phase/delete"
+	JobPhaseBulkDeleteURL       = "/action/job-phase/bulk-delete"
+	JobPhaseBulkSetStatusURL    = "/action/job-phase/bulk-set-status"
+	JobPhaseTabActionURL        = "/action/job-phase/detail/{id}/tab/{tab}"
+	JobPhaseResourceSearchURL   = "/action/job-phase/search/resources"
+	JobPhaseAttachmentUploadURL = "/action/job-phase/detail/{id}/attachments/upload"
+	JobPhaseAttachmentDeleteURL = "/action/job-phase/detail/{id}/attachments/delete"
+
+	// JobTask standalone module routes.
+	// The list page is a power-user/debugging surface — no sidebar entry.
+	// The detail page is reached via JobPhase detail's Tasks tab deep links.
+	JobTaskListURL               = "/app/job-tasks/list/{status}"
+	JobTaskDetailURL             = "/app/job-task/{id}"
+	JobTaskAddURL                = "/action/job-task/add"
+	JobTaskEditURL               = "/action/job-task/edit/{id}"
+	JobTaskDeleteURL             = "/action/job-task/delete"
+	JobTaskBulkDeleteURL         = "/action/job-task/bulk-delete"
+	JobTaskSetStatusURL          = "/action/job-task/set-status"
+	JobTaskBulkSetStatusURL      = "/action/job-task/bulk-set-status"
+	JobTaskTabActionURL          = "/action/job-task/detail/{id}/tab/{tab}"
+	JobTaskStaffSearchURL        = "/action/job-task/search/staff"
+	JobTaskResourceSearchURL     = "/action/job-task/search/resources"
+	JobTaskTemplateTaskSearchURL = "/action/job-task/search/template-tasks"
+	JobTaskAttachmentUploadURL   = "/action/job-task/detail/{id}/attachments/upload"
+	JobTaskAttachmentDeleteURL   = "/action/job-task/detail/{id}/attachments/delete"
+
+	// Job auto-complete search endpoints.
+	// Accept ?q= and return [{"value":"id","label":"Name"},...] JSON.
+	// Registered by the fayna block; consumed by the job drawer form.
+	JobClientSearchURL   = "/action/job/search/clients"
+	JobLocationSearchURL = "/action/job/search/locations"
+
 	// Job Template routes
 	JobTemplateListURL             = "/app/job-templates/list/{status}"
 	JobTemplateDetailURL           = "/app/job-templates/detail/{id}"
@@ -39,6 +78,27 @@ const (
 	JobTemplateAttachmentUploadURL = "/action/job-template/detail/{id}/attachments/upload"
 	JobTemplateAttachmentDeleteURL = "/action/job-template/detail/{id}/attachments/delete"
 
+	// JobTemplatePhase drawer-only module routes.
+	// No list page, no detail page, no sidebar entry.
+	// Reached via JobTemplate detail Phases tab Add/Edit/Delete CTAs.
+	JobTemplatePhaseAddURL              = "/action/job-template-phase/add"
+	JobTemplatePhaseEditURL             = "/action/job-template-phase/edit/{id}"
+	JobTemplatePhaseDeleteURL           = "/action/job-template-phase/delete"
+	JobTemplatePhaseBulkDeleteURL       = "/action/job-template-phase/bulk-delete"
+	// JobTemplatePhaseResourceSearchURL reuses the job_phase resource search endpoint
+	// (same underlying resource entity — no separate handler needed).
+	JobTemplatePhaseResourceSearchURL = JobPhaseResourceSearchURL
+
+	// JobTemplateTask drawer-only module routes.
+	// No list page, no detail page, no sidebar entry.
+	// Reached via JobTemplate detail Tasks tab Add/Edit/Delete CTAs.
+	JobTemplateTaskAddURL            = "/action/job-template-task/add"
+	JobTemplateTaskEditURL           = "/action/job-template-task/edit/{id}"
+	JobTemplateTaskDeleteURL         = "/action/job-template-task/delete"
+	JobTemplateTaskBulkDeleteURL     = "/action/job-template-task/bulk-delete"
+	// JobTemplateTaskResourceSearchURL reuses the job_phase resource search endpoint.
+	JobTemplateTaskResourceSearchURL = JobPhaseResourceSearchURL
+
 	// Job Activity (timesheet / cross-job activity log) routes
 	JobActivityListURL                = "/app/activities"
 	JobActivityDetailURL              = "/app/activities/detail/{id}"
@@ -50,6 +110,7 @@ const (
 	JobActivityRejectURL              = "/action/activity/reject"
 	JobActivityPostURL                = "/action/activity/post"
 	JobActivityReverseURL             = "/action/activity/reverse"
+	JobActivityBulkDeleteURL          = "/action/activity/bulk-delete"
 	JobActivityBulkGenerateInvoiceURL = "/action/activity/bulk-generate-invoice"
 	JobActivityTabActionURL           = "/action/activity/detail/{id}/tab/{tab}"
 	JobActivityAttachmentUploadURL    = "/action/activity/detail/{id}/attachments/upload"
@@ -80,6 +141,43 @@ const (
 	OutcomeSummaryListURL  = "/app/outcomes/summaries"
 	OutcomeSummaryJobURL   = "/app/jobs/detail/{id}/summary"
 	OutcomeSummaryPhaseURL = "/app/jobs/detail/{id}/phase/{phase_id}/summary"
+)
+
+// Activity Labor routes (charge detail for ENTRY_TYPE_LABOR job activities).
+// ActivityLaborListURL is registered but NOT in the sidebar — power-user / debug only.
+// The primary surface is the JobActivity detail page's charge tab.
+const (
+	ActivityLaborListURL        = "/app/activity-labor/list"
+	ActivityLaborDetailURL      = "/app/activity-labor/{id}"
+	ActivityLaborAddURL         = "/action/activity-labor/add"
+	ActivityLaborEditURL        = "/action/activity-labor/edit/{id}"
+	ActivityLaborDeleteURL      = "/action/activity-labor/delete"
+	ActivityLaborStaffSearchURL = "/action/activity-labor/search/staff"
+)
+
+// Activity Material routes (charge detail for ENTRY_TYPE_MATERIAL job activities).
+// ActivityMaterialListURL is registered but NOT in the sidebar — power-user / debug only.
+// The primary surface is the JobActivity detail page's charge tab.
+const (
+	ActivityMaterialListURL           = "/app/activity-material/list"
+	ActivityMaterialDetailURL         = "/app/activity-material/{id}"
+	ActivityMaterialAddURL            = "/action/activity-material/add"
+	ActivityMaterialEditURL           = "/action/activity-material/edit/{id}"
+	ActivityMaterialDeleteURL         = "/action/activity-material/delete"
+	ActivityMaterialProductSearchURL  = "/action/activity-material/search/products"
+	ActivityMaterialLocationSearchURL = "/action/activity-material/search/locations"
+)
+
+// Activity Expense routes (charge detail for ENTRY_TYPE_EXPENSE job activities).
+// ActivityExpenseListURL is registered but NOT in the sidebar — power-user / debug only.
+// The primary surface is the JobActivity detail page's charge tab.
+const (
+	ActivityExpenseListURL                  = "/app/activity-expense/list"
+	ActivityExpenseDetailURL                = "/app/activity-expense/{id}"
+	ActivityExpenseAddURL                   = "/action/activity-expense/add"
+	ActivityExpenseEditURL                  = "/action/activity-expense/edit/{id}"
+	ActivityExpenseDeleteURL                = "/action/activity-expense/delete"
+	ActivityExpenseExpenseCategorySearchURL = "/action/activity-expense/search/expense-categories"
 )
 
 // Fulfillment routes

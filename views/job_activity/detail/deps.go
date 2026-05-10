@@ -24,6 +24,18 @@ type DetailViewDeps struct {
 	Labels       fayna.JobActivityLabels
 	CommonLabels pyeza.CommonLabels
 
+	// ActivityLaborRoutes is used by the charge tab to resolve the labor edit URL.
+	// Pass fayna.DefaultActivityLaborRoutes() from composition.
+	ActivityLaborRoutes fayna.ActivityLaborRoutes
+
+	// ActivityMaterialRoutes is used by the charge tab to resolve the material edit URL.
+	// Pass fayna.DefaultActivityMaterialRoutes() from composition.
+	ActivityMaterialRoutes fayna.ActivityMaterialRoutes
+
+	// ActivityExpenseRoutes is used by the charge tab to resolve the expense edit URL.
+	// Pass fayna.DefaultActivityExpenseRoutes() from composition.
+	ActivityExpenseRoutes fayna.ActivityExpenseRoutes
+
 	// Job activity read
 	ReadJobActivity func(ctx context.Context, req *jobactivitypb.ReadJobActivityRequest) (*jobactivitypb.ReadJobActivityResponse, error)
 

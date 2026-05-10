@@ -1,0 +1,115 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-phase-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "job-phase-detail-content"}}
+<div class="page-content job-phase-detail-layout">
+    {{/* --- Tabs --- */}}
+    <div class="job-phase-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "job-phase-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="job-phase-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "jp-tab-info" .}}
+        {{else if eq .ActiveTab "tasks"}}
+        {{template "jp-tab-tasks" .}}
+        {{else if eq .ActiveTab "activities"}}
+        {{template "jp-tab-activities" .}}
+        {{else if eq .ActiveTab "attachments"}}
+        {{template "attachment-tab" .}}
+        {{else if eq .ActiveTab "history"}}
+        {{template "audit-history-tab" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "jp-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <div class="job-phase-info-grid">
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.Name}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-name">{{index .Phase "name"}}</span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.Job}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-job">{{index .Phase "job_name"}}</span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.PhaseOrder}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-order">{{index .Phase "phase_order"}}</span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.Status}}</span>
+            <span>
+                <span class="badge badge--{{index .Phase "status_variant"}}"
+                      data-testid="job-phase-detail-status"
+                      data-phase-status="{{index .Phase "status"}}">
+                    {{index .Phase "status"}}
+                </span>
+            </span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.PlannedStart}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-planned-start">{{index .Phase "planned_start_string"}}</span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.PlannedEnd}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-planned-end">{{index .Phase "planned_end_string"}}</span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.ActualStart}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-actual-start">{{index .Phase "actual_start_string"}}</span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.ActualEnd}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-actual-end">{{index .Phase "actual_end_string"}}</span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.Resource}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-resource">{{index .Phase "resource_id"}}</span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.SetupMinutes}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-setup-minutes">{{index .Phase "setup_minutes"}}</span>
+        </div>
+        <div class="job-phase-info-item">
+            <span class="job-phase-info-label">{{.Labels.Detail.RunMinutesPerUnit}}</span>
+            <span class="job-phase-info-value" data-testid="job-phase-detail-run-minutes">{{index .Phase "run_minutes_per_unit"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{/* Tasks Tab — renders phase tasks via job_task module deep-links */}}
+{{define "jp-tab-tasks"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Tasks}}">
+    {{if .TasksTable}}
+        {{template "table-card" .TasksTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Tabs.Tasks}}</div>
+            <p class="coming-soon-text">No tasks recorded for this phase.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Activities Tab — in-memory filter of job activities by phase's job_id */}}
+{{define "jp-tab-activities"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Activities}}">
+    {{if .ActivitiesTable}}
+        {{template "table-card" .ActivitiesTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Tabs.Activities}}</div>
+            <p class="coming-soon-text">No activity entries found for this phase.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}

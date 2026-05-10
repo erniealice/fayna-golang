@@ -13,7 +13,10 @@ import (
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
+	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 
+	jobtemplateaction "github.com/erniealice/fayna-golang/views/job_template/action"
 	jobtemplatedetail "github.com/erniealice/fayna-golang/views/job_template/detail"
 	jobtemplatelist "github.com/erniealice/fayna-golang/views/job_template/list"
 )
@@ -25,6 +28,18 @@ type ModuleDeps struct {
 	CommonLabels pyeza.CommonLabels
 	TableLabels  types.TableLabels
 
+	// PhaseRoutes and TaskRoutes supply Edit/Delete/Add URLs for the Phases and Tasks
+	// tabs on the JobTemplate detail page. Both are optional — zero-value structs
+	// result in tabs with no CTA buttons (read-only view).
+	PhaseRoutes fayna.JobTemplatePhaseRoutes
+	TaskRoutes  fayna.JobTemplateTaskRoutes
+
+	// GetInUseIDs checks which job template IDs are referenced by jobs
+	// (via job.job_template_id). When non-nil, matched rows have their
+	// delete action disabled and are excluded from bulk-delete selections
+	// via data-deletable="false".
+	GetInUseIDs func(ctx context.Context, ids []string) (map[string]bool, error)
+
 	// Typed job template use case functions
 	CreateJobTemplate          func(ctx context.Context, req *jobtemplatepb.CreateJobTemplateRequest) (*jobtemplatepb.CreateJobTemplateResponse, error)
 	ReadJobTemplate            func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)
@@ -34,6 +49,11 @@ type ModuleDeps struct {
 
 	// Phase list (for detail phases tab)
 	ListPhasesByJobTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+
+	// Task + standards list stubs — wired in P6.template-children.
+	// Nil is safe: the detail loaders render empty-state panels.
+	ListTasksByPhase   func(ctx context.Context, req *jobtemplateTaskpb.ListJobTemplateTasksByPhaseRequest) (*jobtemplateTaskpb.ListJobTemplateTasksByPhaseResponse, error)
+	ListCriteriaByTask func(ctx context.Context, req *templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskResponse, error)
 
 	// Attachment operations
 	UploadFile       func(ctx context.Context, bucket, key string, content []byte, contentType string) error
@@ -49,6 +69,10 @@ type Module struct {
 	List             view.View
 	Detail           view.View
 	TabAction        view.View
+	Add              view.View
+	Edit             view.View
+	Delete           view.View
+	BulkDelete       view.View
 	AttachmentUpload view.View
 	AttachmentDelete view.View
 }
@@ -63,9 +87,13 @@ func NewModule(deps *ModuleDeps) *Module {
 			DeleteAttachment: deps.DeleteAttachment,
 			NewAttachmentID:  deps.NewID,
 		},
-		Routes:                  deps.Routes,
+		Routes:      deps.Routes,
+		PhaseRoutes: deps.PhaseRoutes,
+		TaskRoutes:  deps.TaskRoutes,
 		ReadJobTemplate:         deps.ReadJobTemplate,
 		ListPhasesByJobTemplate: deps.ListPhasesByJobTemplate,
+		ListTasksByPhase:        deps.ListTasksByPhase,
+		ListCriteriaByTask:      deps.ListCriteriaByTask,
 		Labels:                  deps.Labels,
 		CommonLabels:            deps.CommonLabels,
 		TableLabels:             deps.TableLabels,
@@ -74,16 +102,30 @@ func NewModule(deps *ModuleDeps) *Module {
 	listView := jobtemplatelist.NewView(&jobtemplatelist.ListViewDeps{
 		Routes:                     deps.Routes,
 		GetJobTemplateListPageData: deps.GetJobTemplateListPageData,
+		GetInUseIDs:                deps.GetInUseIDs,
 		Labels:                     deps.Labels,
 		CommonLabels:               deps.CommonLabels,
 		TableLabels:                deps.TableLabels,
 	})
+
+	actionDeps := &jobtemplateaction.Deps{
+		Routes:            deps.Routes,
+		Labels:            deps.Labels,
+		CreateJobTemplate: deps.CreateJobTemplate,
+		ReadJobTemplate:   deps.ReadJobTemplate,
+		UpdateJobTemplate: deps.UpdateJobTemplate,
+		DeleteJobTemplate: deps.DeleteJobTemplate,
+	}
 
 	return &Module{
 		routes:           deps.Routes,
 		List:             listView,
 		Detail:           jobtemplatedetail.NewView(detailDeps),
 		TabAction:        jobtemplatedetail.NewTabAction(detailDeps),
+		Add:              jobtemplateaction.NewAddAction(actionDeps),
+		Edit:             jobtemplateaction.NewEditAction(actionDeps),
+		Delete:           jobtemplateaction.NewDeleteAction(actionDeps),
+		BulkDelete:       jobtemplateaction.NewBulkDeleteAction(actionDeps),
 		AttachmentUpload: jobtemplatedetail.NewAttachmentUploadAction(detailDeps),
 		AttachmentDelete: jobtemplatedetail.NewAttachmentDeleteAction(detailDeps),
 	}
@@ -94,6 +136,15 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	r.GET(m.routes.ListURL, m.List)
 	r.GET(m.routes.DetailURL, m.Detail)
 	r.GET(m.routes.TabActionURL, m.TabAction)
+	// CRUD actions
+	r.GET(m.routes.AddURL, m.Add)
+	r.POST(m.routes.AddURL, m.Add)
+	r.GET(m.routes.EditURL, m.Edit)
+	r.POST(m.routes.EditURL, m.Edit)
+	r.POST(m.routes.DeleteURL, m.Delete)
+	if m.routes.BulkDeleteURL != "" {
+		r.POST(m.routes.BulkDeleteURL, m.BulkDelete)
+	}
 	// Attachments
 	if m.AttachmentUpload != nil {
 		r.GET(m.routes.AttachmentUploadURL, m.AttachmentUpload)

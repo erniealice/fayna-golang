@@ -205,3 +205,201 @@
     </div>
 </div>
 {{end}}
+
+{{/* Charge tab partial — loaded by NewTabAction when tab=charge */}}
+{{define "job-activity-tab-charge"}}
+<div class="act-info-section" id="activity-charge-section">
+
+    {{if eq .EntryType "labor"}}
+
+        {{if .ChargeLabor}}
+        {{/* Labor charge record found — display fields + edit CTA */}}
+        <div class="act-info-grid">
+
+            <div class="act-info-item">
+                <span class="act-info-label">Staff</span>
+                <span class="act-info-value" data-testid="charge-staff-id">{{.ChargeLabor.StaffID}}</span>
+            </div>
+
+            <div class="act-info-item">
+                <span class="act-info-label">Hours</span>
+                <span class="act-info-value mono" data-testid="charge-hours">{{.ChargeLabor.Hours}}</span>
+            </div>
+
+            <div class="act-info-item">
+                <span class="act-info-label">Rate Type</span>
+                <span class="act-info-value" data-testid="charge-rate-type">{{.ChargeLabor.RateType}}</span>
+            </div>
+
+            {{if .ChargeLabor.TimeStart}}
+            <div class="act-info-item">
+                <span class="act-info-label">Start Time</span>
+                <span class="act-info-value" data-testid="charge-time-start">{{.ChargeLabor.TimeStart}}</span>
+            </div>
+            {{end}}
+
+            {{if .ChargeLabor.TimeEnd}}
+            <div class="act-info-item">
+                <span class="act-info-label">End Time</span>
+                <span class="act-info-value" data-testid="charge-time-end">{{.ChargeLabor.TimeEnd}}</span>
+            </div>
+            {{end}}
+
+        </div>
+
+        {{if .ChargeLabor.EditURL}}
+        <div class="act-actions">
+            <a hx-get="{{.ChargeLabor.EditURL}}"
+               hx-target="#sheetContent"
+               hx-swap="innerHTML"
+               hx-on::after-request="lf.Sheet.open()"
+               class="btn btn-secondary btn-sm"
+               title="Edit labor charge"
+               data-testid="charge-labor-edit-btn">
+                Edit Labor Charge
+            </a>
+        </div>
+        {{end}}
+
+        {{else}}
+        {{/* No labor record yet — show empty state + Add CTA */}}
+        <div class="empty-state">
+            <p data-testid="charge-empty-message">No labor charge recorded.</p>
+        </div>
+        {{end}}
+
+    {{else if eq .EntryType "material"}}
+
+        {{if .ChargeMaterial}}
+        {{/* Material charge record found — display fields + edit CTA */}}
+        <div class="act-info-grid">
+
+            {{if .ChargeMaterial.ProductName}}
+            <div class="act-info-item">
+                <span class="act-info-label">Product</span>
+                <span class="act-info-value" data-testid="charge-product-name">{{.ChargeMaterial.ProductName}}</span>
+            </div>
+            {{else if .ChargeMaterial.ProductID}}
+            <div class="act-info-item">
+                <span class="act-info-label">Product</span>
+                <span class="act-info-value" data-testid="charge-product-name">{{.ChargeMaterial.ProductID}}</span>
+            </div>
+            {{end}}
+
+            {{if .ChargeMaterial.UnitOfMeasure}}
+            <div class="act-info-item">
+                <span class="act-info-label">Unit of Measure</span>
+                <span class="act-info-value mono" data-testid="charge-unit-of-measure">{{.ChargeMaterial.UnitOfMeasure}}</span>
+            </div>
+            {{end}}
+
+            {{if .ChargeMaterial.LotNumber}}
+            <div class="act-info-item">
+                <span class="act-info-label">Lot Number</span>
+                <span class="act-info-value mono" data-testid="charge-lot-number">{{.ChargeMaterial.LotNumber}}</span>
+            </div>
+            {{end}}
+
+            {{if .ChargeMaterial.LocationID}}
+            <div class="act-info-item">
+                <span class="act-info-label">Location</span>
+                <span class="act-info-value" data-testid="charge-location-id">{{.ChargeMaterial.LocationID}}</span>
+            </div>
+            {{end}}
+
+        </div>
+
+        {{if .ChargeMaterial.EditURL}}
+        <div class="act-actions">
+            <a hx-get="{{.ChargeMaterial.EditURL}}"
+               hx-target="#sheetContent"
+               hx-swap="innerHTML"
+               hx-on::after-request="lf.Sheet.open()"
+               class="btn btn-secondary btn-sm"
+               title="Edit material charge"
+               data-testid="charge-material-edit-btn">
+                Edit Material Charge
+            </a>
+        </div>
+        {{end}}
+
+        {{else}}
+        {{/* No material record yet — show empty state + Add CTA */}}
+        <div class="empty-state">
+            <p data-testid="charge-empty-message">No material charge recorded.</p>
+        </div>
+        {{end}}
+
+    {{else if eq .EntryType "expense"}}
+
+        {{if .ChargeExpense}}
+        {{/* Expense charge record found — display fields + edit CTA */}}
+        <div class="act-info-grid">
+
+            {{if .ChargeExpense.ExpenseCategoryID}}
+            <div class="act-info-item">
+                <span class="act-info-label">Expense Category</span>
+                <span class="act-info-value" data-testid="charge-expense-category">{{.ChargeExpense.ExpenseCategoryID}}</span>
+            </div>
+            {{end}}
+
+            {{if .ChargeExpense.VendorRef}}
+            <div class="act-info-item">
+                <span class="act-info-label">Vendor Ref</span>
+                <span class="act-info-value" data-testid="charge-vendor-ref">{{.ChargeExpense.VendorRef}}</span>
+            </div>
+            {{end}}
+
+            {{if .ChargeExpense.ReceiptURL}}
+            <div class="act-info-item act-info-item--wide">
+                <span class="act-info-label">Receipt URL</span>
+                <span class="act-info-value" data-testid="charge-receipt-url">{{.ChargeExpense.ReceiptURL}}</span>
+            </div>
+            {{end}}
+
+            {{if .ChargeExpense.PaymentMethod}}
+            <div class="act-info-item">
+                <span class="act-info-label">Payment Method</span>
+                <span class="act-info-value" data-testid="charge-payment-method">{{.ChargeExpense.PaymentMethod}}</span>
+            </div>
+            {{end}}
+
+            {{if .ChargeExpense.MarkupPctOverride}}
+            <div class="act-info-item">
+                <span class="act-info-label">Markup %</span>
+                <span class="act-info-value mono" data-testid="charge-markup-pct">{{.ChargeExpense.MarkupPctOverride}}%</span>
+            </div>
+            {{end}}
+
+        </div>
+
+        {{if .ChargeExpense.EditURL}}
+        <div class="act-actions">
+            <a hx-get="{{.ChargeExpense.EditURL}}"
+               hx-target="#sheetContent"
+               hx-swap="innerHTML"
+               hx-on::after-request="lf.Sheet.open()"
+               class="btn btn-secondary btn-sm"
+               title="Edit expense charge"
+               data-testid="charge-expense-edit-btn">
+                Edit Expense Charge
+            </a>
+        </div>
+        {{end}}
+
+        {{else}}
+        {{/* No expense record yet — show empty state + Add CTA */}}
+        <div class="empty-state">
+            <p data-testid="charge-empty-message">No expense charge recorded.</p>
+        </div>
+        {{end}}
+
+    {{else}}
+        {{/* EQUIPMENT / SUBCONTRACT / UNSPECIFIED — Wave 3 placeholder */}}
+        <div class="empty-state">
+            <p>Charge detail not available for this entry type.</p>
+        </div>
+    {{end}}
+
+</div>
+{{end}}

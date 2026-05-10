@@ -22,6 +22,7 @@ import (
 type ListViewDeps struct {
 	Routes                     fayna.JobTemplateRoutes
 	GetJobTemplateListPageData func(ctx context.Context, req *jobtemplatepb.GetJobTemplateListPageDataRequest) (*jobtemplatepb.GetJobTemplateListPageDataResponse, error)
+	GetInUseIDs                func(ctx context.Context, ids []string) (map[string]bool, error)
 	Labels                     fayna.JobTemplateLabels
 	CommonLabels               pyeza.CommonLabels
 	TableLabels                types.TableLabels
@@ -77,8 +78,18 @@ func NewView(deps *ListViewDeps) view.View {
 			return view.Error(fmt.Errorf("failed to load job templates: %w", err))
 		}
 
+		// Collect IDs and check which are in use (referenced by dependent tables).
+		var inUseIDs map[string]bool
+		if deps.GetInUseIDs != nil {
+			var itemIDs []string
+			for _, t := range resp.GetJobTemplateList() {
+				itemIDs = append(itemIDs, t.GetId())
+			}
+			inUseIDs, _ = deps.GetInUseIDs(ctx, itemIDs)
+		}
+
 		l := deps.Labels
-		rows := buildTableRows(resp.GetJobTemplateList(), status, l, deps.Routes, perms)
+		rows := buildTableRows(resp.GetJobTemplateList(), status, l, deps.Routes, inUseIDs, perms)
 		types.ApplyColumnStyles(columns, rows)
 
 		refreshURL := route.ResolveURL(deps.Routes.ListURL, "status", status)
@@ -126,6 +137,24 @@ func NewView(deps *ListViewDeps) view.View {
 				DisabledTooltip: l.Errors.NoPermission,
 			},
 			ServerPagination: sp,
+			BulkActions: &types.BulkActionsConfig{
+				Enabled:        true,
+				SelectAllLabel: l.BulkActions.SelectAll,
+				SelectedLabel:  l.BulkActions.SelectedCount,
+				CancelLabel:    l.BulkActions.Cancel,
+				Actions: []types.BulkAction{
+					{
+						Key:              "delete",
+						Label:            l.BulkActions.Delete,
+						Icon:             "icon-trash-2",
+						Variant:          "danger",
+						Endpoint:         deps.Routes.BulkDeleteURL,
+						ConfirmTitle:     l.BulkActions.BulkDeleteConfirmTitle,
+						ConfirmMessage:   l.BulkActions.BulkDeleteConfirmMsg,
+						RequiresDataAttr: "deletable",
+					},
+				},
+			},
 		}
 		types.ApplyTableSettings(tableConfig)
 
@@ -157,7 +186,7 @@ func jobTemplateColumns(l fayna.JobTemplateLabels) []types.TableColumn {
 	}
 }
 
-func buildTableRows(templates []*jobtemplatepb.JobTemplate, status string, l fayna.JobTemplateLabels, routes fayna.JobTemplateRoutes, perms *types.UserPermissions) []types.TableRow {
+func buildTableRows(templates []*jobtemplatepb.JobTemplate, status string, l fayna.JobTemplateLabels, routes fayna.JobTemplateRoutes, inUseIDs map[string]bool, perms *types.UserPermissions) []types.TableRow {
 	rows := []types.TableRow{}
 	for _, t := range templates {
 		active := t.GetActive()
@@ -169,6 +198,13 @@ func buildTableRows(templates []*jobtemplatepb.JobTemplate, status string, l fay
 		id := t.GetId()
 		name := t.GetName()
 		description := t.GetDescription()
+
+		inUse := inUseIDs[id]
+		deleteDisabled := inUse || !perms.Can("job_template", "delete")
+		deleteTooltip := l.Errors.NoPermission
+		if inUse {
+			deleteTooltip = l.Errors.InUse
+		}
 
 		detailURL := route.ResolveURL(routes.DetailURL, "id", id)
 
@@ -184,15 +220,23 @@ func buildTableRows(templates []*jobtemplatepb.JobTemplate, status string, l fay
 				"name":        name,
 				"description": description,
 				"status":      recordStatus,
+				"deletable":   boolAttr(!inUse),
 			},
 			Actions: []types.TableAction{
 				{Type: "view", Label: l.Actions.View, Action: "view", Href: detailURL},
 				{Type: "edit", Label: l.Actions.Edit, Action: "edit", URL: route.ResolveURL(routes.EditURL, "id", id), DrawerTitle: l.Actions.Edit, Disabled: !perms.Can("job_template", "update"), DisabledTooltip: l.Errors.NoPermission},
-				{Type: "delete", Label: l.Actions.Delete, Action: "delete", URL: routes.DeleteURL, ItemName: name, Disabled: !perms.Can("job_template", "delete"), DisabledTooltip: l.Errors.NoPermission},
+				{Type: "delete", Label: l.Actions.Delete, Action: "delete", URL: routes.DeleteURL, ItemName: name, Disabled: deleteDisabled, DisabledTooltip: deleteTooltip},
 			},
 		})
 	}
 	return rows
+}
+
+func boolAttr(v bool) string {
+	if v {
+		return "true"
+	}
+	return "false"
 }
 
 func statusTitle(l fayna.JobTemplateLabels, status string) string {

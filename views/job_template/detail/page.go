@@ -28,12 +28,18 @@ type PageData struct {
 	ActiveTab           string
 	TabItems            []pyeza.TabItem
 	PhasesTable     *types.TableConfig
+	TasksTable      *types.TableConfig
+	StandardsTable  *types.TableConfig
 	AttachmentTable *types.TableConfig
 	// Audit history tab
 	AuditEntries    []auditlog.AuditEntryView
 	AuditHasNext    bool
 	AuditNextCursor string
 	AuditHistoryURL string
+	// Add CTAs for the Phases and Tasks tabs.
+	// Pre-formatted with the job_template_id query parameter.
+	PhasesAddURL string
+	TasksAddURL  string
 }
 
 // jobTemplateToMap converts a JobTemplate protobuf to a map[string]any for template use.
@@ -112,13 +118,25 @@ func NewView(deps *DetailViewDeps) view.View {
 	})
 }
 
+// cmpLabelOrDefault returns s if non-empty, otherwise fallback.
+// Used to render stub tab labels before the lyngua P7 sweep adds
+// Tasks/Standards/History to JobTemplateTabLabels.
+func cmpLabelOrDefault(s, fallback string) string {
+	if s != "" {
+		return s
+	}
+	return fallback
+}
+
 func buildTabItems(l fayna.JobTemplateLabels, id string, routes fayna.JobTemplateRoutes) []pyeza.TabItem {
 	base := route.ResolveURL(routes.DetailURL, "id", id)
 	action := route.ResolveURL(routes.TabActionURL, "id", id, "tab", "")
 	return []pyeza.TabItem{
-		{Key: "info", Label: l.Tabs.Info, Href: base + "?tab=info", HxGet: action + "info", Icon: "icon-info"},
-		{Key: "phases", Label: l.Tabs.Phases, Href: base + "?tab=phases", HxGet: action + "phases", Icon: "icon-list"},
-		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
+		{Key: "info", Label: cmpLabelOrDefault(l.Tabs.Info, "Info"), Href: base + "?tab=info", HxGet: action + "info", Icon: "icon-info"},
+		{Key: "phases", Label: cmpLabelOrDefault(l.Tabs.Phases, "Phases"), Href: base + "?tab=phases", HxGet: action + "phases", Icon: "icon-list"},
+		{Key: "tasks", Label: "Tasks", Href: base + "?tab=tasks", HxGet: action + "tasks", Icon: "icon-check-square"},
+		{Key: "standards", Label: "Standards", Href: base + "?tab=standards", HxGet: action + "standards", Icon: "icon-target"},
+		{Key: "attachments", Label: cmpLabelOrDefault(l.Tabs.Attachments, "Attachments"), Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
 		{Key: "audit-history", Label: "History", Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
 	}
 }
@@ -129,6 +147,10 @@ func loadTabData(ctx context.Context, deps *DetailViewDeps, pageData *PageData, 
 		// all info fields available from jobTemplateToMap
 	case "phases":
 		loadPhasesTab(ctx, deps, pageData, id)
+	case "tasks":
+		loadTasksTab(ctx, deps, pageData, id)
+	case "standards":
+		loadStandardsTab(ctx, deps, pageData, id)
 	case "attachments":
 		if deps.ListAttachments != nil {
 			cfg := attachmentConfig(deps)
@@ -143,24 +165,7 @@ func loadTabData(ctx context.Context, deps *DetailViewDeps, pageData *PageData, 
 			pageData.AttachmentTable = attachment.BuildTable(items, cfg, id)
 		}
 	case "audit-history":
-		if deps.ListAuditHistory != nil {
-			cursor := viewCtx.QueryParams["cursor"]
-			auditResp, err := deps.ListAuditHistory(ctx, &auditlog.ListAuditRequest{
-				EntityType:  "job_template",
-				EntityID:    id,
-				Limit:       20,
-				CursorToken: cursor,
-			})
-			if err != nil {
-				log.Printf("Failed to load audit history: %v", err)
-			}
-			if auditResp != nil {
-				pageData.AuditEntries = auditResp.Entries
-				pageData.AuditHasNext = auditResp.HasNext
-				pageData.AuditNextCursor = auditResp.NextCursor
-			}
-		}
-		pageData.AuditHistoryURL = route.ResolveURL(deps.Routes.TabActionURL, "id", id, "tab", "") + "audit-history"
+		loadAuditHistoryTab(ctx, deps, pageData, id, viewCtx.QueryParams["cursor"])
 	}
 }
 
@@ -176,14 +181,43 @@ func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData
 		return
 	}
 	phases := resp.GetJobTemplatePhases()
+
+	// Wire Add CTA — pre-populated with the parent template FK.
+	if deps.PhaseRoutes.AddURL != "" {
+		pageData.PhasesAddURL = deps.PhaseRoutes.AddURL + "?job_template_id=" + id
+	}
+
 	rows := []types.TableRow{}
 	for _, p := range phases {
+		phaseID := p.GetId()
+		var actions []types.TableAction
+		if deps.PhaseRoutes.EditURL != "" {
+			editURL := route.ResolveURL(deps.PhaseRoutes.EditURL, "id", phaseID)
+			actions = append(actions, types.TableAction{
+				Type:        "edit",
+				Label:       "Edit Phase",
+				HxGet:       editURL,
+				HxTarget:    "#sheetContent",
+				HxSwap:      "innerHTML",
+				OnClick:     "lf.Sheet.open()",
+				DrawerTitle: "Edit Phase",
+			})
+		}
+		if deps.PhaseRoutes.DeleteURL != "" {
+			actions = append(actions, types.TableAction{
+				Type:     "delete",
+				Label:    "Delete Phase",
+				URL:      deps.PhaseRoutes.DeleteURL,
+				ItemName: p.GetName(),
+			})
+		}
 		rows = append(rows, types.TableRow{
-			ID: p.GetId(),
+			ID: phaseID,
 			Cells: []types.TableCell{
 				{Type: "text", Value: fmt.Sprintf("%d", p.GetPhaseOrder())},
 				{Type: "text", Value: p.GetName()},
 			},
+			Actions: actions,
 			DataAttrs: map[string]string{
 				"name":  p.GetName(),
 				"order": fmt.Sprintf("%d", p.GetPhaseOrder()),
@@ -199,7 +233,7 @@ func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData
 		Rows:        rows,
 		Labels:      deps.TableLabels,
 		ShowSearch:  false,
-		ShowActions: false,
+		ShowActions: len(rows) > 0 && (deps.PhaseRoutes.EditURL != "" || deps.PhaseRoutes.DeleteURL != ""),
 		ShowSort:    false,
 		ShowColumns: false,
 		ShowDensity: false,

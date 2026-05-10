@@ -16,6 +16,7 @@ import (
 	activitymaterialpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_material"
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
 
+	jobactivityaction "github.com/erniealice/fayna-golang/views/job_activity/action"
 	jobactivitydetail "github.com/erniealice/fayna-golang/views/job_activity/detail"
 	jobactivitylist "github.com/erniealice/fayna-golang/views/job_activity/list"
 )
@@ -26,6 +27,24 @@ type ModuleDeps struct {
 	Labels       fayna.JobActivityLabels
 	CommonLabels pyeza.CommonLabels
 	TableLabels  types.TableLabels
+
+	// ActivityLaborRoutes is passed to the detail view so the charge tab can
+	// resolve the labor edit URL without importing the activity_labor module.
+	ActivityLaborRoutes fayna.ActivityLaborRoutes
+
+	// ActivityMaterialRoutes is passed to the detail view so the charge tab can
+	// resolve the material edit URL without importing the activity_material module.
+	ActivityMaterialRoutes fayna.ActivityMaterialRoutes
+
+	// ActivityExpenseRoutes is passed to the detail view so the charge tab can
+	// resolve the expense edit URL without importing the activity_expense module.
+	ActivityExpenseRoutes fayna.ActivityExpenseRoutes
+
+	// GetInUseIDs checks which activity IDs are referenced by other tables
+	// (posted activities, revenue line items, subtype rows). When non-nil,
+	// matched rows have their delete action disabled and are excluded from
+	// bulk-delete selections via data-deletable="false".
+	GetInUseIDs func(ctx context.Context, ids []string) (map[string]bool, error)
 
 	// Job activity use case functions
 	GetJobActivityListPageData func(ctx context.Context, req *jobactivitypb.GetJobActivityListPageDataRequest) (*jobactivitypb.GetJobActivityListPageDataResponse, error)
@@ -68,6 +87,7 @@ type Module struct {
 	Create              view.View
 	Update              view.View
 	Delete              view.View
+	BulkDelete          view.View
 	Submit              view.View
 	Approve             view.View
 	Reject              view.View
@@ -83,6 +103,7 @@ func NewModule(deps *ModuleDeps) *Module {
 	listView := jobactivitylist.NewView(&jobactivitylist.ListViewDeps{
 		Routes:                     deps.Routes,
 		GetJobActivityListPageData: deps.GetJobActivityListPageData,
+		GetInUseIDs:                deps.GetInUseIDs,
 		Labels:                     deps.Labels,
 		CommonLabels:               deps.CommonLabels,
 		TableLabels:                deps.TableLabels,
@@ -96,8 +117,11 @@ func NewModule(deps *ModuleDeps) *Module {
 			DeleteAttachment: deps.DeleteAttachment,
 			NewAttachmentID:  deps.NewID,
 		},
-		Routes:               deps.Routes,
-		ReadJobActivity:      deps.ReadJobActivity,
+		Routes:                 deps.Routes,
+		ActivityLaborRoutes:    deps.ActivityLaborRoutes,
+		ActivityMaterialRoutes: deps.ActivityMaterialRoutes,
+		ActivityExpenseRoutes:  deps.ActivityExpenseRoutes,
+		ReadJobActivity:        deps.ReadJobActivity,
 		ReadActivityLabor:    deps.ReadActivityLabor,
 		ReadActivityMaterial: deps.ReadActivityMaterial,
 		ReadActivityExpense:  deps.ReadActivityExpense,
@@ -105,20 +129,37 @@ func NewModule(deps *ModuleDeps) *Module {
 		CommonLabels:         deps.CommonLabels,
 	}
 
+	actionDeps := &jobactivityaction.Deps{
+		Routes:                        deps.Routes,
+		Labels:                        deps.Labels,
+		NewID:                         deps.NewID,
+		CreateJobActivity:             deps.CreateJobActivity,
+		ReadJobActivity:               deps.ReadJobActivity,
+		UpdateJobActivity:             deps.UpdateJobActivity,
+		DeleteJobActivity:             deps.DeleteJobActivity,
+		SubmitForApproval:             deps.SubmitForApproval,
+		ApproveActivity:               deps.ApproveActivity,
+		RejectActivity:                deps.RejectActivity,
+		PostActivity:                  deps.PostActivity,
+		ReverseActivity:               deps.ReverseActivity,
+		GenerateInvoiceFromActivities: deps.GenerateInvoiceFromActivities,
+	}
+
 	return &Module{
 		routes:              deps.Routes,
 		List:                listView,
 		Detail:              jobactivitydetail.NewView(detailDeps),
 		TabAction:           jobactivitydetail.NewTabAction(detailDeps),
-		Create:              newCreateAction(deps),
-		Update:              newUpdateAction(deps),
-		Delete:              newDeleteAction(deps),
-		Submit:              newSubmitAction(deps),
-		Approve:             newApproveAction(deps),
-		Reject:              newRejectAction(deps),
-		Post:                newPostAction(deps),
-		Reverse:             newReverseAction(deps),
-		BulkGenerateInvoice: newBulkGenerateInvoiceAction(deps),
+		Create:              jobactivityaction.NewAddAction(actionDeps),
+		Update:              jobactivityaction.NewEditAction(actionDeps),
+		Delete:              jobactivityaction.NewDeleteAction(actionDeps),
+		BulkDelete:          jobactivityaction.NewBulkDeleteAction(actionDeps),
+		Submit:              jobactivityaction.NewSubmitAction(actionDeps),
+		Approve:             jobactivityaction.NewApproveAction(actionDeps),
+		Reject:              jobactivityaction.NewRejectAction(actionDeps),
+		Post:                jobactivityaction.NewPostAction(actionDeps),
+		Reverse:             jobactivityaction.NewReverseAction(actionDeps),
+		BulkGenerateInvoice: jobactivityaction.NewBulkGenerateInvoiceAction(actionDeps),
 		AttachmentUpload:    jobactivitydetail.NewAttachmentUploadAction(detailDeps),
 		AttachmentDelete:    jobactivitydetail.NewAttachmentDeleteAction(detailDeps),
 	}
@@ -154,6 +195,9 @@ func (m *Module) RegisterRoutes(r view.RouteRegistrar) {
 	r.POST(m.routes.ReverseURL, m.Reverse)
 
 	// Bulk actions
+	if m.routes.BulkDeleteURL != "" {
+		r.POST(m.routes.BulkDeleteURL, m.BulkDelete)
+	}
 	r.POST(m.routes.BulkGenerateInvoiceURL, m.BulkGenerateInvoice)
 
 	// Attachments

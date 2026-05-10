@@ -1,0 +1,146 @@
+{{/*
+Job Phase drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+
+Data: .FormAction, .IsEdit, .ID, .JobID, .Name, .PhaseOrder,
+      .Status, .StatusOptions, .TemplatePhaseID, .ResourceID, .ResourceName,
+      .PredecessorPhaseID, .PlannedStart, .PlannedEnd,
+      .ActualStart, .ActualEnd (Edit only, guarded by .IsEdit),
+      .SetupMinutes, .RunMinutesPerUnit,
+      .ResourceSearchURL, .Labels, .CommonLabels
+*/}}
+{{define "job-phase-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-phase-form">
+    {{if .IsEdit}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+    <input type="hidden" name="job_id" value="{{.JobID}}">
+
+    <div class="sheet-body">
+        {{template "form-section" (dict "Title" .Labels.Form.SectionPhase)}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "name"
+                "Label"       .Labels.Columns.Name
+                "Value"       .Name
+                "Required"    true
+                "Placeholder" .Labels.Form.NamePlaceholder
+                "TestId"      "job-phase-name"
+            )}}
+        </div>
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "phase_order"
+                "Label"  .Labels.Columns.PhaseOrder
+                "Value"  .PhaseOrder
+                "Min"    "0"
+                "TestId" "job-phase-order"
+            )}}
+            {{template "form-group" (dict
+                "Type"     "select"
+                "Name"     "status"
+                "Label"    .Labels.Columns.Status
+                "Value"    .Status
+                "Options"  .StatusOptions
+                "Required" true
+                "TestId"   "job-phase-status"
+            )}}
+        </div>
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "datetime-local"
+                "Name"   "planned_start"
+                "Label"  .Labels.Form.PlannedStart
+                "Value"  .PlannedStart
+                "TestId" "job-phase-planned-start"
+            )}}
+            {{template "form-group" (dict
+                "Type"   "datetime-local"
+                "Name"   "planned_end"
+                "Label"  .Labels.Form.PlannedEnd
+                "Value"  .PlannedEnd
+                "TestId" "job-phase-planned-end"
+            )}}
+        </div>
+        {{if .ResourceSearchURL}}
+        <div class="form-row single">
+            {{template "auto-complete" (dict
+                "ID"                "template_phase_id"
+                "Name"              "template_phase_id"
+                "Label"             "Template Phase"
+                "Value"             .TemplatePhaseID
+                "SelectedLabel"     ""
+                "SearchURL"         .ResourceSearchURL
+                "Placeholder"       .Labels.Form.TemplatePhasePlaceholder
+                "SearchPlaceholder" "Search template phases..."
+            )}}
+        </div>
+        {{end}}
+
+        {{template "form-section" (dict "Title" .Labels.Form.SectionResourceTiming)}}
+        {{if .ResourceSearchURL}}
+        <div class="form-row single">
+            {{template "auto-complete" (dict
+                "ID"                "resource_id"
+                "Name"              "resource_id"
+                "Label"             .Labels.Form.Resource
+                "Value"             .ResourceID
+                "SelectedLabel"     .ResourceName
+                "SearchURL"         .ResourceSearchURL
+                "Placeholder"       .Labels.Form.ResourcePlaceholder
+                "SearchPlaceholder" "Search resources..."
+            )}}
+        </div>
+        {{end}}
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "setup_minutes"
+                "Label"  .Labels.Form.SetupMinutes
+                "Value"  .SetupMinutes
+                "Min"    "0"
+                "TestId" "job-phase-setup-minutes"
+            )}}
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "run_minutes_per_unit"
+                "Label"  .Labels.Form.RunMinutesPerUnit
+                "Value"  .RunMinutesPerUnit
+                "Min"    "0"
+                "Step"   "0.01"
+                "TestId" "job-phase-run-minutes-per-unit"
+            )}}
+        </div>
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"   "text"
+                "Name"   "predecessor_phase_id"
+                "Label"  .Labels.Form.PredecessorPhase
+                "Value"  .PredecessorPhaseID
+                "TestId" "job-phase-predecessor-phase-id"
+            )}}
+        </div>
+
+        {{if .IsEdit}}
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "datetime-local"
+                "Name"   "actual_start"
+                "Label"  .Labels.Form.ActualStart
+                "Value"  .ActualStart
+                "TestId" "job-phase-actual-start"
+            )}}
+            {{template "form-group" (dict
+                "Type"   "datetime-local"
+                "Name"   "actual_end"
+                "Label"  .Labels.Form.ActualEnd
+                "Value"  .ActualEnd
+                "TestId" "job-phase-actual-end"
+            )}}
+        </div>
+        {{end}}
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

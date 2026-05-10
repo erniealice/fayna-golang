@@ -1,0 +1,80 @@
+{{/*
+Job Template Phase drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+
+Data: .FormAction, .IsEdit, .ID, .JobTemplateID, .Name, .PhaseOrder,
+      .EstimatedDurationMinutes, .ResourceID, .ResourceName,
+      .PredecessorTemplatePhaseID (Edit only, guarded by .IsEdit),
+      .ResourceSearchURL, .Labels, .CommonLabels
+*/}}
+{{define "job-template-phase-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-template-phase-form">
+    {{if .IsEdit}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+    <input type="hidden" name="job_template_id" value="{{.JobTemplateID}}">
+
+    <div class="sheet-body">
+        {{template "form-section" (dict "Title" .Labels.Form.SectionPhase)}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "name"
+                "Label"       .Labels.Form.Name
+                "Value"       .Name
+                "Required"    true
+                "Placeholder" .Labels.Form.NamePlaceholder
+                "TestId"      "jtp-phase-name"
+            )}}
+        </div>
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "phase_order"
+                "Label"  .Labels.Form.PhaseOrder
+                "Value"  .PhaseOrder
+                "Min"    "0"
+                "TestId" "jtp-phase-order"
+            )}}
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "estimated_duration_minutes"
+                "Label"  .Labels.Form.EstDurationMinutes
+                "Value"  .EstimatedDurationMinutes
+                "Min"    "0"
+                "TestId" "jtp-phase-est-duration"
+            )}}
+        </div>
+
+        {{template "form-section" (dict "Title" .Labels.Form.SectionResource)}}
+        {{if .ResourceSearchURL}}
+        <div class="form-row single">
+            {{template "auto-complete" (dict
+                "ID"                "resource_id"
+                "Name"              "resource_id"
+                "Label"             .Labels.Form.Resource
+                "Value"             .ResourceID
+                "SelectedLabel"     .ResourceName
+                "SearchURL"         .ResourceSearchURL
+                "Placeholder"       .Labels.Form.ResourcePlaceholder
+                "SearchPlaceholder" "Search resources..."
+            )}}
+        </div>
+        {{end}}
+
+        {{if .IsEdit}}
+        {{template "form-section" (dict "Title" .Labels.Form.SectionDependencies)}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "predecessor_template_phase_id"
+                "Label"       .Labels.Form.PredecessorPhase
+                "Value"       .PredecessorTemplatePhaseID
+                "Placeholder" .Labels.Form.PredecessorPlaceholder
+                "TestId"      "jtp-phase-predecessor"
+            )}}
+        </div>
+        {{end}}
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

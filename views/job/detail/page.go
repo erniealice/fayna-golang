@@ -24,16 +24,50 @@ import (
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 )
 
+// BudgetTask is a per-task row in the budget snapshot (hours-only for v1;
+// money is deferred until resource→PriceProduct→bill_rate chain is wired).
+//
+// TODO(Wave3): replace Hours with Rate+Subtotal once the resource→PriceProduct
+// bill_rate lookup is available via deps (referenced in job_template_task proto
+// but not yet exposed in fayna detail deps).
+type BudgetTask struct {
+	Name  string
+	Hours float64 // estimated_duration_minutes / 60
+}
+
+// BudgetPhase is a per-phase section in the budget snapshot.
+type BudgetPhase struct {
+	Name       string
+	Tasks      []BudgetTask
+	PhaseHours float64 // sum of task hours
+}
+
+// BudgetSnapshot is the v1 template-derived budget view-model.
+// HasBudget=false when job_template_id is empty/nil.
+type BudgetSnapshot struct {
+	Phases     []BudgetPhase
+	TotalHours float64
+	HasBudget  bool
+}
+
+// ActualsRow is one row in the actuals rollup table.
+type ActualsRow struct {
+	EntryType  string
+	Count      int32
+	TotalCost  string // formatted display value (centavos ÷ 100)
+	Currency   string
+}
+
 // PageData holds the data for the job detail page.
 type PageData struct {
 	types.PageData
-	ContentTemplate     string
-	Job                 map[string]any
-	Labels              fayna.JobLabels
-	ActiveTab           string
-	TabItems            []pyeza.TabItem
-	PhasesTable         *types.TableConfig
-	ActivitiesTable     *types.TableConfig
+	ContentTemplate string
+	Job             map[string]any
+	Labels          fayna.JobLabels
+	ActiveTab       string
+	TabItems        []pyeza.TabItem
+	PhasesTable     *types.TableConfig
+	ActivitiesTable *types.TableConfig
 	// 2026-04-29 milestone-billing plan §5/§6 — Activities tab additions:
 	// per-row mini list (with billable-status badge + edit CTA) and the add
 	// CTA URL. Both empty when the JobActivityRoutes deps are not wired.
@@ -41,9 +75,9 @@ type PageData struct {
 	JobActivityLabels fayna.JobActivityLabels
 	AddActivityURL    string
 	EditActivityURL   string
-	SettlementTable     *types.TableConfig
-	OutcomesTable       *types.TableConfig
-	AttachmentTable     *types.TableConfig
+	SettlementTable *types.TableConfig
+	OutcomesTable   *types.TableConfig
+	AttachmentTable *types.TableConfig
 	// PhasesList is the per-phase mini-list rendered above the denormalized
 	// task table on the Phases tab. Drives the "Mark Complete" CTA that
 	// flips JobPhase.status to COMPLETED. 2026-04-29 milestone-billing §4.
@@ -60,6 +94,14 @@ type PageData struct {
 	OriginSubscriptionShown bool
 	OriginSubscriptionURL   string
 	OriginSubscriptionCode  string
+
+	// Budget tab — v1 hours-per-phase rollup from JobTemplate.
+	Budget BudgetSnapshot
+
+	// Actuals tab — cost rollup from GetJobActivityRollup.
+	ActualsRows       []ActualsRow
+	ActualsGrandTotal string // formatted display value (centavos ÷ 100)
+	ActualsCurrency   string
 }
 
 // jobToMap converts a Job protobuf to a map[string]any for template use.
@@ -253,6 +295,22 @@ func NewView(deps *DetailViewDeps) view.View {
 	})
 }
 
+// cmpLabelOrDefault returns s if non-empty, otherwise returns fallback.
+// Used for tab labels that don't yet have a lyngua key
+// (Budget, Actuals, History — lyngua sweep is P7).
+func cmpLabelOrDefault(s, fallback string) string {
+	if s != "" {
+		return s
+	}
+	return fallback
+}
+
+// buildTabItems returns the visible tab strip for the job detail page.
+// Tab order: info | phases | activities | budget | actuals | attachments | audit-history.
+// NOTE: settlement and outcomes are intentionally excluded from the visible
+// tab strip (user request). Their loader files (settlement.go) remain
+// compiled and callable from loadTabData. They will be folded into actuals
+// in a later phase.
 func buildTabItems(l fayna.JobLabels, id string, routes fayna.JobRoutes) []pyeza.TabItem {
 	base := route.ResolveURL(routes.DetailURL, "id", id)
 	action := route.ResolveURL(routes.TabActionURL, "id", id, "tab", "")
@@ -260,10 +318,10 @@ func buildTabItems(l fayna.JobLabels, id string, routes fayna.JobRoutes) []pyeza
 		{Key: "info", Label: l.Tabs.Info, Href: base + "?tab=info", HxGet: action + "info", Icon: "icon-info"},
 		{Key: "phases", Label: l.Tabs.Phases, Href: base + "?tab=phases", HxGet: action + "phases", Icon: "icon-list"},
 		{Key: "activities", Label: l.Tabs.Activities, Href: base + "?tab=activities", HxGet: action + "activities", Icon: "icon-clock"},
-		{Key: "settlement", Label: l.Tabs.Settlement, Href: base + "?tab=settlement", HxGet: action + "settlement", Icon: "icon-wallet"},
-		{Key: "outcomes", Label: l.Tabs.Outcomes, Href: base + "?tab=outcomes", HxGet: action + "outcomes", Icon: "icon-check-circle"},
+		{Key: "budget", Label: cmpLabelOrDefault("", "Budget"), Href: base + "?tab=budget", HxGet: action + "budget", Icon: "icon-target"},
+		{Key: "actuals", Label: cmpLabelOrDefault("", "Actuals"), Href: base + "?tab=actuals", HxGet: action + "actuals", Icon: "icon-trending-up"},
 		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
-		{Key: "audit-history", Label: "History", Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
+		{Key: "audit-history", Label: cmpLabelOrDefault("", "History"), Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
 	}
 }
 
@@ -276,6 +334,14 @@ func loadTabData(ctx context.Context, deps *DetailViewDeps, pageData *PageData, 
 		loadPhasesTab(ctx, deps, pageData, id)
 	case "activities":
 		loadActivitiesTab(ctx, deps, pageData, id)
+	case "budget":
+		templateID, _ := pageData.Job["job_template_id"].(string)
+		loadBudgetTab(ctx, deps, pageData, id, templateID)
+	case "actuals":
+		loadActualsTab(ctx, deps, pageData, id)
+	// settlement and outcomes are excluded from the visible tab strip but their
+	// loaders remain here to keep the files compiling. They will be folded into
+	// the actuals tab in a later phase.
 	case "settlement":
 		loadSettlementTab(ctx, deps, pageData, id)
 	case "outcomes":
@@ -367,6 +433,8 @@ func NewTabAction(deps *DetailViewDeps) view.View {
 		if tab == "audit-history" {
 			templateName = "audit-history-tab"
 		}
+		// budget and actuals follow the standard "job-tab-{tab}" naming
+		// (job-tab-budget, job-tab-actuals) — no special case needed.
 		return view.OK(templateName, pageData)
 	})
 }

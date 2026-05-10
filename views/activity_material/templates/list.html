@@ -1,0 +1,18 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "activity-material-list"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "activity-material-list-content"}}
+<div class="page-content">
+    {{if .Table}}
+        {{template "table" .Table}}
+    {{else}}
+    <div class="empty-state">
+        <p>{{.Labels.Empty.Title}}</p>
+        <p>{{.Labels.Empty.Message}}</p>
+    </div>
+    {{end}}
+</div>
+{{end}}

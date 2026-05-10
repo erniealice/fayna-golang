@@ -30,12 +30,16 @@
         {{template "job-tab-phases" .}}
         {{else if eq .ActiveTab "activities"}}
         {{template "job-tab-activities" .}}
+        {{else if eq .ActiveTab "budget"}}
+        {{template "job-tab-budget" .}}
+        {{else if eq .ActiveTab "actuals"}}
+        {{template "job-tab-actuals" .}}
+        {{else if eq .ActiveTab "attachments"}}
+        {{template "attachment-tab" .}}
         {{else if eq .ActiveTab "settlement"}}
         {{template "job-tab-settlement" .}}
         {{else if eq .ActiveTab "outcomes"}}
         {{template "job-tab-outcomes" .}}
-        {{else if eq .ActiveTab "attachments"}}
-        {{template "attachment-tab" .}}
         {{end}}
     </div>
 </div>
@@ -254,6 +258,133 @@
             <div class="coming-soon-title">{{.Labels.Empty.OutcomesTitle}}</div>
             <p class="coming-soon-text">{{.Labels.Empty.OutcomesMessage}}</p>
         </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Budget Tab — v1 hours-per-phase rollup from JobTemplate.
+     Money (rate × hours) is deferred until resource→PriceProduct bill_rate
+     wiring lands in Wave 3. lyngua sweep is P7 — all strings are hardcoded. */}}
+{{define "job-tab-budget"}}
+<div class="tab-scroll">
+    {{if not .Budget.HasBudget}}
+    <div class="coming-soon-panel">
+        <div class="coming-soon-title">No budget available</div>
+        <p class="coming-soon-text">No template attached. Budget unavailable until a JobTemplate is linked to this matter.</p>
+    </div>
+    {{else if not .Budget.Phases}}
+    <div class="coming-soon-panel">
+        <div class="coming-soon-title">No phases defined</div>
+        <p class="coming-soon-text">The linked template has no phases or tasks. Add phases to the template to see the budget breakdown.</p>
+    </div>
+    {{else}}
+    <section class="job-budget-card" aria-label="Budget">
+        <h4 class="job-section-title">Estimated Hours by Phase</h4>
+        <table class="job-budget-table" data-testid="job-budget-table">
+            <thead>
+                <tr>
+                    <th>Phase</th>
+                    <th>Task</th>
+                    <th class="text-right">Hours</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Budget.Phases}}
+                {{$phase := .}}
+                {{if .Tasks}}
+                    {{range .Tasks}}
+                    <tr data-testid="job-budget-task-row">
+                        <td>{{$phase.Name}}</td>
+                        <td>{{.Name}}</td>
+                        <td class="text-right">{{printf "%.1f" .Hours}}</td>
+                    </tr>
+                    {{end}}
+                {{else}}
+                <tr data-testid="job-budget-phase-row">
+                    <td>{{.Name}}</td>
+                    <td><em>No tasks</em></td>
+                    <td class="text-right">{{printf "%.1f" .PhaseHours}}</td>
+                </tr>
+                {{end}}
+                <tr class="job-budget-subtotal" data-testid="job-budget-phase-subtotal">
+                    <td colspan="2"><strong>{{.Name}} subtotal</strong></td>
+                    <td class="text-right"><strong>{{printf "%.1f" .PhaseHours}} h</strong></td>
+                </tr>
+                {{end}}
+            </tbody>
+            <tfoot>
+                <tr class="job-budget-grand-total" data-testid="job-budget-grand-total">
+                    <td colspan="2"><strong>Total estimated hours</strong></td>
+                    <td class="text-right"><strong>{{printf "%.1f" .Budget.TotalHours}} h</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Actuals Tab — aggregated cost rollup from GetJobActivityRollup.
+     Renders Entry Type | Count | Total Cost table plus optional variance card.
+     lyngua sweep is P7 — all strings are hardcoded. */}}
+{{define "job-tab-actuals"}}
+<div class="tab-scroll">
+    {{if not .ActualsRows}}
+    <div class="coming-soon-panel">
+        <div class="coming-soon-title">No actuals recorded</div>
+        <p class="coming-soon-text">No activity entries have been posted for this job yet.</p>
+    </div>
+    {{else}}
+    <section class="job-actuals-card" aria-label="Actuals">
+        <h4 class="job-section-title">Cost by Entry Type</h4>
+        <table class="job-actuals-table" data-testid="job-actuals-table">
+            <thead>
+                <tr>
+                    <th>Entry Type</th>
+                    <th class="text-right">Count</th>
+                    <th class="text-right">Total Cost</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .ActualsRows}}
+                <tr data-testid="job-actuals-row" data-entry-type="{{.EntryType}}">
+                    <td>
+                        <span class="badge badge--default" data-entry-type="{{.EntryType}}">
+                            {{.EntryType}}
+                        </span>
+                    </td>
+                    <td class="text-right" data-testid="job-actuals-count">{{.Count}}</td>
+                    <td class="text-right" data-testid="job-actuals-total-cost">{{.TotalCost}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+            <tfoot>
+                <tr class="job-actuals-grand-total" data-testid="job-actuals-grand-total">
+                    <td colspan="2"><strong>Grand Total</strong></td>
+                    <td class="text-right"><strong>{{.ActualsGrandTotal}}</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+
+    {{/* Variance card — shown when budget hours exist alongside cost actuals.
+         v1 compares total hours (budget) vs grand total cost (actuals).
+         A richer money-vs-money comparison lands when Wave 3 budget uses
+         centavos (resource→PriceProduct→bill_rate chain). */}}
+    {{if .Budget.HasBudget}}
+    <section class="job-actuals-variance-card" aria-label="Budget vs Actuals" data-testid="job-actuals-variance-card">
+        <h4 class="job-section-title">Budget vs Actuals</h4>
+        <div class="job-variance-row">
+            <span class="job-variance-label">Budget (estimated hours)</span>
+            <span class="job-variance-value" data-testid="job-variance-budget-hours">{{printf "%.1f" .Budget.TotalHours}} h</span>
+        </div>
+        <div class="job-variance-row">
+            <span class="job-variance-label">Actuals (total cost)</span>
+            <span class="job-variance-value" data-testid="job-variance-actuals-cost">{{.ActualsGrandTotal}}</span>
+        </div>
+        <p class="job-variance-note">Full money-vs-money variance available after Wave 3 (resource bill rates).</p>
+    </section>
+    {{end}}
     {{end}}
 </div>
 {{end}}

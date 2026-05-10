@@ -1,47 +1,77 @@
 {{/*
 Job drawer form — loaded into #sheetContent via HTMX.
 Used by both Add and Edit actions.
-Data: .Name, .ClientID, .LocationID, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+
+Data: .Name, .ClientID, .ClientName, .ClientSearchURL,
+      .LocationID, .LocationName, .LocationSearchURL,
+      .Status, .StatusOptions, .BillingRuleType, .BillingRuleOptions,
+      .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+
+TODO(banner): add sheet-banner for form-wide notices (P7 lyngua sweep).
 */}}
 {{define "job-drawer-form"}}
 <form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-form">
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
 
     <div class="sheet-body">
-        {{/* --- Job Name --- */}}
+        {{template "form-section" (dict "Title" "Info")}}
         <div class="form-row single">
             {{template "form-group" (dict
-                "Type" "text"
-                "Name" "name"
-                "Label" .Labels.Columns.Name
-                "Value" .Name
-                "Required" true
+                "Type"        "text"
+                "Name"        "name"
+                "Label"       .Labels.Columns.Name
+                "Value"       .Name
+                "Required"    true
                 "Placeholder" .Labels.Form.NamePlaceholder
-                "Info" .Labels.Form.NameInfo
+                "Info"        .Labels.Form.NameInfo
+                "TestId"      "job-name"
+            )}}
+        </div>
+        <div class="form-row single">
+            {{template "auto-complete" (dict
+                "ID"                "client_id"
+                "Name"              "client_id"
+                "Label"             .Labels.Columns.Client
+                "Value"             .ClientID
+                "SelectedLabel"     .ClientName
+                "SearchURL"         .ClientSearchURL
+                "Placeholder"       .Labels.Form.ClientPlaceholder
+                "SearchPlaceholder" "Search clients..."
+                "Info"              .Labels.Form.ClientInfo
+            )}}
+        </div>
+        <div class="form-row single">
+            {{template "auto-complete" (dict
+                "ID"                "location_id"
+                "Name"              "location_id"
+                "Label"             .Labels.Columns.Location
+                "Value"             .LocationID
+                "SelectedLabel"     .LocationName
+                "SearchURL"         .LocationSearchURL
+                "Placeholder"       .Labels.Form.LocationPlaceholder
+                "SearchPlaceholder" "Search locations..."
+                "Info"              .Labels.Form.LocationInfo
             )}}
         </div>
 
-        {{/* --- Client ID --- */}}
-        <div class="form-row single">
+        {{template "form-section" (dict "Title" "Lifecycle")}}
+        <div class="form-row">
             {{template "form-group" (dict
-                "Type" "text"
-                "Name" "client_id"
-                "Label" .Labels.Columns.Client
-                "Value" .ClientID
-                "Placeholder" .Labels.Form.ClientPlaceholder
-                "Info" .Labels.Form.ClientInfo
+                "Type"     "select"
+                "Name"     "status"
+                "Label"    "Status"
+                "Value"    .Status
+                "Options"  .StatusOptions
+                "Required" true
+                "TestId"   "job-status"
             )}}
-        </div>
-
-        {{/* --- Location ID --- */}}
-        <div class="form-row single">
             {{template "form-group" (dict
-                "Type" "text"
-                "Name" "location_id"
-                "Label" .Labels.Columns.Location
-                "Value" .LocationID
-                "Placeholder" .Labels.Form.LocationPlaceholder
-                "Info" .Labels.Form.LocationInfo
+                "Type"    "select"
+                "Name"    "billing_rule_type"
+                "Label"   "Billing Rule"
+                "Value"   .BillingRuleType
+                "Options" .BillingRuleOptions
+                "TestId"  "job-billing-rule-type"
             )}}
         </div>
     </div>

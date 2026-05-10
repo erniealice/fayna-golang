@@ -10,16 +10,17 @@ package fayna
 
 // JobTemplateLabels holds all translatable strings for the job template module.
 type JobTemplateLabels struct {
-	Page    JobTemplatePageLabels    `json:"page"`
-	Buttons JobTemplateButtonLabels  `json:"buttons"`
-	Columns JobTemplateColumnLabels  `json:"columns"`
-	Empty   JobTemplateEmptyLabels   `json:"empty"`
-	Form    JobTemplateFormLabels    `json:"form"`
-	Actions JobTemplateActionLabels  `json:"actions"`
-	Detail  JobTemplateDetailLabels  `json:"detail"`
-	Tabs    JobTemplateTabLabels     `json:"tabs"`
-	Confirm JobTemplateConfirmLabels `json:"confirm"`
-	Errors  JobTemplateErrorLabels   `json:"errors"`
+	Page        JobTemplatePageLabels        `json:"page"`
+	Buttons     JobTemplateButtonLabels      `json:"buttons"`
+	Columns     JobTemplateColumnLabels      `json:"columns"`
+	Empty       JobTemplateEmptyLabels       `json:"empty"`
+	Form        JobTemplateFormLabels        `json:"form"`
+	Actions     JobTemplateActionLabels      `json:"actions"`
+	Detail      JobTemplateDetailLabels      `json:"detail"`
+	Tabs        JobTemplateTabLabels         `json:"tabs"`
+	Confirm     JobTemplateConfirmLabels     `json:"confirm"`
+	Errors      JobTemplateErrorLabels       `json:"errors"`
+	BulkActions JobTemplateBulkActionLabels  `json:"bulkActions"`
 }
 
 type JobTemplatePageLabels struct {
@@ -51,9 +52,13 @@ type JobTemplateEmptyLabels struct {
 }
 
 type JobTemplateActionLabels struct {
-	View   string `json:"view"`
-	Edit   string `json:"edit"`
-	Delete string `json:"delete"`
+	View    string `json:"view"`
+	Edit    string `json:"edit"`
+	Delete  string `json:"delete"`
+	// Add is the CTA label on the Phases tab.
+	Add     string `json:"add"`
+	// AddTask is the CTA label on the Tasks tab.
+	AddTask string `json:"addTask"`
 }
 
 type JobTemplateErrorLabels struct {
@@ -62,6 +67,8 @@ type JobTemplateErrorLabels struct {
 	NotFound         string `json:"notFound"`
 	IDRequired       string `json:"idRequired"`
 	NoPermission     string `json:"noPermission"`
+	InUse            string `json:"inUse"`
+	InvalidForm      string `json:"invalidForm"`
 }
 
 type JobTemplateFormLabels struct {
@@ -84,13 +91,27 @@ type JobTemplateDetailLabels struct {
 type JobTemplateTabLabels struct {
 	Info        string `json:"info"`
 	Phases      string `json:"phases"`
+	Tasks       string `json:"tasks"`
+	Standards   string `json:"standards"`
 	Attachments string `json:"attachments"`
 	AuditTrail  string `json:"auditTrail"`
+	History     string `json:"history"`
 }
 
 type JobTemplateConfirmLabels struct {
 	Delete        string `json:"delete"`
 	DeleteMessage string `json:"deleteMessage"`
+}
+
+// JobTemplateBulkActionLabels holds translatable strings for job template bulk-action controls.
+type JobTemplateBulkActionLabels struct {
+	Delete                 string `json:"delete"`
+	BulkDelete             string `json:"bulkDelete"`
+	BulkDeleteConfirmTitle string `json:"bulkDeleteConfirmTitle"`
+	BulkDeleteConfirmMsg   string `json:"bulkDeleteConfirmMsg"`
+	SelectAll              string `json:"selectAll"`
+	SelectedCount          string `json:"selectedCount"`
+	Cancel                 string `json:"cancel"`
 }
 
 // DefaultJobTemplateLabels returns JobTemplateLabels with sensible English defaults.
@@ -128,9 +149,11 @@ func DefaultJobTemplateLabels() JobTemplateLabels {
 			Active:          "Active",
 		},
 		Actions: JobTemplateActionLabels{
-			View:   "View Template",
-			Edit:   "Edit Template",
-			Delete: "Delete Template",
+			View:    "View Template",
+			Edit:    "Edit Template",
+			Delete:  "Delete Template",
+			Add:     "+ Add Phase",
+			AddTask: "+ Add Task",
 		},
 		Detail: JobTemplateDetailLabels{
 			PageTitle:    "Job Template Details",
@@ -166,22 +189,26 @@ func DefaultJobTemplateLabels() JobTemplateLabels {
 
 // JobActivityLabels holds all translatable strings for the job activity module.
 type JobActivityLabels struct {
-	Page    JobActivityPageLabels   `json:"page"`
-	Buttons JobActivityButtonLabels `json:"buttons"`
-	Columns JobActivityColumnLabels `json:"columns"`
-	Empty   JobActivityEmptyLabels  `json:"empty"`
-	Form    JobActivityFormLabels   `json:"form"`
-	Actions JobActivityActionLabels `json:"actions"`
-	Detail  JobActivityDetailLabels `json:"detail"`
-	Status  JobActivityStatusLabels `json:"status"`
-	Tabs    JobActivityTabLabels    `json:"tabs"`
-	Errors  JobActivityErrorLabels  `json:"errors"`
+	Page        JobActivityPageLabels        `json:"page"`
+	Buttons     JobActivityButtonLabels      `json:"buttons"`
+	Columns     JobActivityColumnLabels      `json:"columns"`
+	Empty       JobActivityEmptyLabels       `json:"empty"`
+	Form        JobActivityFormLabels        `json:"form"`
+	Actions     JobActivityActionLabels      `json:"actions"`
+	Detail      JobActivityDetailLabels      `json:"detail"`
+	Status      JobActivityStatusLabels      `json:"status"`
+	Tabs        JobActivityTabLabels         `json:"tabs"`
+	Errors      JobActivityErrorLabels       `json:"errors"`
+	BulkActions JobActivityBulkActionLabels  `json:"bulkActions"`
 }
 
 // JobActivityTabLabels holds tab labels for the job activity detail page.
 type JobActivityTabLabels struct {
 	Info        string `json:"info"`
+	// Charge is the charge tab label (shows subtype detail: labor/material/expense).
+	Charge      string `json:"charge"`
 	Attachments string `json:"attachments"`
+	History     string `json:"history"`
 }
 
 type JobActivityPageLabels struct {
@@ -297,9 +324,378 @@ type JobActivityStatusLabels struct {
 }
 
 type JobActivityErrorLabels struct {
+	PermissionDenied      string `json:"permissionDenied"`
+	NotFound              string `json:"notFound"`
+	IDRequired            string `json:"idRequired"`
+	InUse                 string `json:"inUse"`
+	InvalidForm           string `json:"invalidForm"`
+	NoActivitiesSelected  string `json:"noActivitiesSelected"`
+	InvoiceGenFailed      string `json:"invoiceGenFailed"`
+}
+
+// JobActivityBulkActionLabels holds translatable strings for job activity bulk-action controls.
+type JobActivityBulkActionLabels struct {
+	Delete                 string `json:"delete"`
+	BulkDelete             string `json:"bulkDelete"`
+	BulkDeleteConfirmTitle string `json:"bulkDeleteConfirmTitle"`
+	BulkDeleteConfirmMsg   string `json:"bulkDeleteConfirmMsg"`
+	GenerateInvoice        string `json:"generateInvoice"`
+	GenerateInvoiceConfirm string `json:"generateInvoiceConfirm"`
+	SelectAll              string `json:"selectAll"`
+	SelectedCount          string `json:"selectedCount"`
+	Cancel                 string `json:"cancel"`
+}
+
+// ---------------------------------------------------------------------------
+// Activity Labor labels
+// ---------------------------------------------------------------------------
+
+// ActivityLaborLabels holds all translatable strings for the activity labor module.
+// ActivityLabor is the charge detail for ENTRY_TYPE_LABOR job activities.
+// TODO(P7 lyngua sweep): add lyngua JSON files for these labels.
+type ActivityLaborLabels struct {
+	Page    ActivityLaborPageLabels   `json:"page"`
+	Buttons ActivityLaborButtonLabels `json:"buttons"`
+	Columns ActivityLaborColumnLabels `json:"columns"`
+	Empty   ActivityLaborEmptyLabels  `json:"empty"`
+	Form    ActivityLaborFormLabels   `json:"form"`
+	Detail  ActivityLaborDetailLabels `json:"detail"`
+	Errors  ActivityLaborErrorLabels  `json:"errors"`
+}
+
+type ActivityLaborPageLabels struct {
+	Heading string `json:"heading"`
+	Caption string `json:"caption"`
+}
+
+type ActivityLaborButtonLabels struct {
+	Add  string `json:"add"`
+	Edit string `json:"edit"`
+}
+
+type ActivityLaborColumnLabels struct {
+	Staff     string `json:"staff"`
+	Hours     string `json:"hours"`
+	RateType  string `json:"rateType"`
+	TimeStart string `json:"timeStart"`
+	TimeEnd   string `json:"timeEnd"`
+}
+
+type ActivityLaborEmptyLabels struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
+type ActivityLaborFormLabels struct {
+	SectionCharge   string `json:"sectionCharge"`
+	Staff           string `json:"staff"`
+	Hours           string `json:"hours"`
+	RateType        string `json:"rateType"`
+	TimeStart       string `json:"timeStart"`
+	TimeEnd         string `json:"timeEnd"`
+	RateTypeStandard  string `json:"rateTypeStandard"`
+	RateTypeOvertime  string `json:"rateTypeOvertime"`
+	RateTypePremium   string `json:"rateTypePremium"`
+	SubmitCreate    string `json:"submitCreate"`
+	SubmitUpdate    string `json:"submitUpdate"`
+}
+
+type ActivityLaborDetailLabels struct {
+	PageTitle   string `json:"pageTitle"`
+	TitlePrefix string `json:"titlePrefix"`
+	Staff       string `json:"staff"`
+	Hours       string `json:"hours"`
+	RateType    string `json:"rateType"`
+	TimeStart   string `json:"timeStart"`
+	TimeEnd     string `json:"timeEnd"`
+}
+
+type ActivityLaborErrorLabels struct {
 	PermissionDenied string `json:"permissionDenied"`
 	NotFound         string `json:"notFound"`
 	IDRequired       string `json:"idRequired"`
+}
+
+// ---------------------------------------------------------------------------
+// Activity Material labels
+// ---------------------------------------------------------------------------
+
+// ActivityMaterialLabels holds all translatable strings for the activity material module.
+// ActivityMaterial is the charge detail for ENTRY_TYPE_MATERIAL job activities.
+// TODO(P7 lyngua sweep): add lyngua JSON files for these labels.
+type ActivityMaterialLabels struct {
+	Page    ActivityMaterialPageLabels   `json:"page"`
+	Buttons ActivityMaterialButtonLabels `json:"buttons"`
+	Columns ActivityMaterialColumnLabels `json:"columns"`
+	Empty   ActivityMaterialEmptyLabels  `json:"empty"`
+	Form    ActivityMaterialFormLabels   `json:"form"`
+	Detail  ActivityMaterialDetailLabels `json:"detail"`
+	Errors  ActivityMaterialErrorLabels  `json:"errors"`
+}
+
+type ActivityMaterialPageLabels struct {
+	Heading string `json:"heading"`
+	Caption string `json:"caption"`
+}
+
+type ActivityMaterialButtonLabels struct {
+	Add  string `json:"add"`
+	Edit string `json:"edit"`
+}
+
+type ActivityMaterialColumnLabels struct {
+	Product       string `json:"product"`
+	UnitOfMeasure string `json:"unitOfMeasure"`
+	LotNumber     string `json:"lotNumber"`
+	Location      string `json:"location"`
+}
+
+type ActivityMaterialEmptyLabels struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
+type ActivityMaterialFormLabels struct {
+	SectionMaterial string `json:"sectionMaterial"`
+	Product         string `json:"product"`
+	UnitOfMeasure   string `json:"unitOfMeasure"`
+	LotNumber       string `json:"lotNumber"`
+	Location        string `json:"location"`
+	SubmitCreate    string `json:"submitCreate"`
+	SubmitUpdate    string `json:"submitUpdate"`
+}
+
+type ActivityMaterialDetailLabels struct {
+	PageTitle     string `json:"pageTitle"`
+	TitlePrefix   string `json:"titlePrefix"`
+	Product       string `json:"product"`
+	UnitOfMeasure string `json:"unitOfMeasure"`
+	LotNumber     string `json:"lotNumber"`
+	Location      string `json:"location"`
+}
+
+type ActivityMaterialErrorLabels struct {
+	PermissionDenied string `json:"permissionDenied"`
+	NotFound         string `json:"notFound"`
+	IDRequired       string `json:"idRequired"`
+}
+
+// DefaultActivityMaterialLabels returns ActivityMaterialLabels with sensible English defaults.
+func DefaultActivityMaterialLabels() ActivityMaterialLabels {
+	return ActivityMaterialLabels{
+		Page: ActivityMaterialPageLabels{
+			Heading: "Material Charges",
+			Caption: "Material usage entries per activity",
+		},
+		Buttons: ActivityMaterialButtonLabels{
+			Add:  "Add Material",
+			Edit: "Edit Material",
+		},
+		Columns: ActivityMaterialColumnLabels{
+			Product:       "Product",
+			UnitOfMeasure: "Unit",
+			LotNumber:     "Lot #",
+			Location:      "Location",
+		},
+		Empty: ActivityMaterialEmptyLabels{
+			Title:   "No material entries",
+			Message: "No material charge recorded for this activity.",
+		},
+		Form: ActivityMaterialFormLabels{
+			SectionMaterial: "Material",
+			Product:         "Product",
+			UnitOfMeasure:   "Unit of Measure",
+			LotNumber:       "Lot Number",
+			Location:        "Location",
+			SubmitCreate:    "Save",
+			SubmitUpdate:    "Update",
+		},
+		Detail: ActivityMaterialDetailLabels{
+			PageTitle:     "Material Charge",
+			TitlePrefix:   "Material: ",
+			Product:       "Product",
+			UnitOfMeasure: "Unit of Measure",
+			LotNumber:     "Lot Number",
+			Location:      "Location",
+		},
+		Errors: ActivityMaterialErrorLabels{
+			PermissionDenied: "You do not have permission to perform this action",
+			NotFound:         "Material charge record not found",
+			IDRequired:       "Activity ID is required",
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Activity Expense labels
+// ---------------------------------------------------------------------------
+
+// ActivityExpenseLabels holds all translatable strings for the activity expense module.
+// ActivityExpense is the charge detail for ENTRY_TYPE_EXPENSE job activities.
+// TODO(P7 lyngua sweep): add lyngua JSON files for these labels.
+type ActivityExpenseLabels struct {
+	Page    ActivityExpensePageLabels   `json:"page"`
+	Buttons ActivityExpenseButtonLabels `json:"buttons"`
+	Columns ActivityExpenseColumnLabels `json:"columns"`
+	Empty   ActivityExpenseEmptyLabels  `json:"empty"`
+	Form    ActivityExpenseFormLabels   `json:"form"`
+	Detail  ActivityExpenseDetailLabels `json:"detail"`
+	Errors  ActivityExpenseErrorLabels  `json:"errors"`
+}
+
+type ActivityExpensePageLabels struct {
+	Heading string `json:"heading"`
+	Caption string `json:"caption"`
+}
+
+type ActivityExpenseButtonLabels struct {
+	Add  string `json:"add"`
+	Edit string `json:"edit"`
+}
+
+type ActivityExpenseColumnLabels struct {
+	ExpenseCategory string `json:"expenseCategory"`
+	VendorRef       string `json:"vendorRef"`
+	PaymentMethod   string `json:"paymentMethod"`
+	MarkupPct       string `json:"markupPct"`
+}
+
+type ActivityExpenseEmptyLabels struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
+type ActivityExpenseFormLabels struct {
+	SectionExpense           string `json:"sectionExpense"`
+	ExpenseCategory          string `json:"expenseCategory"`
+	VendorRef                string `json:"vendorRef"`
+	ReceiptURL               string `json:"receiptUrl"`
+	PaymentMethod            string `json:"paymentMethod"`
+	PaymentMethodEmployee    string `json:"paymentMethodEmployee"`
+	PaymentMethodCompanyCard string `json:"paymentMethodCompanyCard"`
+	PaymentMethodVendorBill  string `json:"paymentMethodVendorBill"`
+	MarkupPctOverride        string `json:"markupPctOverride"`
+	SubmitCreate             string `json:"submitCreate"`
+	SubmitUpdate             string `json:"submitUpdate"`
+}
+
+type ActivityExpenseDetailLabels struct {
+	PageTitle         string `json:"pageTitle"`
+	TitlePrefix       string `json:"titlePrefix"`
+	ExpenseCategory   string `json:"expenseCategory"`
+	VendorRef         string `json:"vendorRef"`
+	ReceiptURL        string `json:"receiptUrl"`
+	PaymentMethod     string `json:"paymentMethod"`
+	MarkupPctOverride string `json:"markupPctOverride"`
+}
+
+type ActivityExpenseErrorLabels struct {
+	PermissionDenied string `json:"permissionDenied"`
+	NotFound         string `json:"notFound"`
+	IDRequired       string `json:"idRequired"`
+}
+
+// DefaultActivityExpenseLabels returns ActivityExpenseLabels with sensible English defaults.
+func DefaultActivityExpenseLabels() ActivityExpenseLabels {
+	return ActivityExpenseLabels{
+		Page: ActivityExpensePageLabels{
+			Heading: "Expense Charges",
+			Caption: "Expense cost entries per activity",
+		},
+		Buttons: ActivityExpenseButtonLabels{
+			Add:  "Add Expense",
+			Edit: "Edit Expense",
+		},
+		Columns: ActivityExpenseColumnLabels{
+			ExpenseCategory: "Category",
+			VendorRef:       "Vendor Ref",
+			PaymentMethod:   "Payment Method",
+			MarkupPct:       "Markup %",
+		},
+		Empty: ActivityExpenseEmptyLabels{
+			Title:   "No expense entries",
+			Message: "No expense charge recorded for this activity.",
+		},
+		Form: ActivityExpenseFormLabels{
+			SectionExpense:           "Expense",
+			ExpenseCategory:          "Expense Category",
+			VendorRef:                "Vendor Reference",
+			ReceiptURL:               "Receipt URL",
+			PaymentMethod:            "Payment Method",
+			PaymentMethodEmployee:    "Employee (out-of-pocket)",
+			PaymentMethodCompanyCard: "Company Card",
+			PaymentMethodVendorBill:  "Vendor Bill",
+			MarkupPctOverride:        "Markup % Override",
+			SubmitCreate:             "Save",
+			SubmitUpdate:             "Update",
+		},
+		Detail: ActivityExpenseDetailLabels{
+			PageTitle:         "Expense Charge",
+			TitlePrefix:       "Expense: ",
+			ExpenseCategory:   "Expense Category",
+			VendorRef:         "Vendor Reference",
+			ReceiptURL:        "Receipt URL",
+			PaymentMethod:     "Payment Method",
+			MarkupPctOverride: "Markup % Override",
+		},
+		Errors: ActivityExpenseErrorLabels{
+			PermissionDenied: "You do not have permission to perform this action",
+			NotFound:         "Expense charge record not found",
+			IDRequired:       "Activity ID is required",
+		},
+	}
+}
+
+// DefaultActivityLaborLabels returns ActivityLaborLabels with sensible English defaults.
+func DefaultActivityLaborLabels() ActivityLaborLabels {
+	return ActivityLaborLabels{
+		Page: ActivityLaborPageLabels{
+			Heading: "Labor Charges",
+			Caption: "Labor time entries per activity",
+		},
+		Buttons: ActivityLaborButtonLabels{
+			Add:  "Add Labor",
+			Edit: "Edit Labor",
+		},
+		Columns: ActivityLaborColumnLabels{
+			Staff:     "Staff",
+			Hours:     "Hours",
+			RateType:  "Rate Type",
+			TimeStart: "Start",
+			TimeEnd:   "End",
+		},
+		Empty: ActivityLaborEmptyLabels{
+			Title:   "No labor entries",
+			Message: "No labor charge recorded for this activity.",
+		},
+		Form: ActivityLaborFormLabels{
+			SectionCharge:   "Charge",
+			Staff:           "Staff",
+			Hours:           "Hours",
+			RateType:        "Rate Type",
+			TimeStart:       "Start Time",
+			TimeEnd:         "End Time",
+			RateTypeStandard:  "Standard",
+			RateTypeOvertime:  "Overtime",
+			RateTypePremium:   "Premium",
+			SubmitCreate:    "Save",
+			SubmitUpdate:    "Update",
+		},
+		Detail: ActivityLaborDetailLabels{
+			PageTitle:   "Labor Charge",
+			TitlePrefix: "Labor: ",
+			Staff:       "Staff",
+			Hours:       "Hours",
+			RateType:    "Rate Type",
+			TimeStart:   "Start Time",
+			TimeEnd:     "End Time",
+		},
+		Errors: ActivityLaborErrorLabels{
+			PermissionDenied: "You do not have permission to perform this action",
+			NotFound:         "Labor charge record not found",
+			IDRequired:       "Activity ID is required",
+		},
+	}
 }
 
 // DefaultJobActivityLabels returns JobActivityLabels with sensible English defaults.
@@ -405,6 +801,7 @@ func DefaultJobActivityLabels() JobActivityLabels {
 		},
 		Tabs: JobActivityTabLabels{
 			Info:        "Information",
+			Charge:      "Charge",
 			Attachments: "Attachments",
 		},
 		Errors: JobActivityErrorLabels{
@@ -421,19 +818,20 @@ func DefaultJobActivityLabels() JobActivityLabels {
 
 // JobLabels holds all translatable strings for the job module.
 type JobLabels struct {
-	Page      JobPageLabels       `json:"page"`
-	Buttons   JobButtonLabels     `json:"buttons"`
-	Columns   JobColumnLabels     `json:"columns"`
-	Empty     JobEmptyLabels      `json:"empty"`
-	Form      JobFormLabels       `json:"form"`
-	Actions   JobActionLabels     `json:"actions"`
-	Detail    JobDetailLabels     `json:"detail"`
-	Tabs      JobTabLabels        `json:"tabs"`
-	Confirm   JobConfirmLabels    `json:"confirm"`
-	Errors    JobErrorLabels      `json:"errors"`
+	Page        JobPageLabels         `json:"page"`
+	Buttons     JobButtonLabels       `json:"buttons"`
+	Columns     JobColumnLabels       `json:"columns"`
+	Empty       JobEmptyLabels        `json:"empty"`
+	Form        JobFormLabels         `json:"form"`
+	Actions     JobActionLabels       `json:"actions"`
+	Detail      JobDetailLabels       `json:"detail"`
+	Tabs        JobTabLabels          `json:"tabs"`
+	Confirm     JobConfirmLabels      `json:"confirm"`
+	Errors      JobErrorLabels        `json:"errors"`
+	BulkActions JobBulkActionLabels   `json:"bulkActions"`
 	// Dashboard labels for the Job live dashboard
 	// (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
-	Dashboard JobDashboardLabels  `json:"dashboard"`
+	Dashboard JobDashboardLabels `json:"dashboard"`
 }
 
 // JobDashboardLabels holds translatable strings for the Job live dashboard.
@@ -473,6 +871,12 @@ type JobPageLabels struct {
 	CaptionCompleted string `json:"captionCompleted"`
 	HeadingClosed    string `json:"headingClosed"`
 	CaptionClosed    string `json:"captionClosed"`
+	HeadingPlanned   string `json:"headingPlanned"`
+	CaptionPlanned   string `json:"captionPlanned"`
+	HeadingReleased  string `json:"headingReleased"`
+	CaptionReleased  string `json:"captionReleased"`
+	HeadingOnHold    string `json:"headingOnHold"`
+	CaptionOnHold    string `json:"captionOnHold"`
 }
 
 type JobButtonLabels struct {
@@ -562,6 +966,9 @@ type JobTabLabels struct {
 	Settlement  string `json:"settlement"`
 	Outcomes    string `json:"outcomes"`
 	Attachments string `json:"attachments"`
+	Budget      string `json:"budget"`
+	Actuals     string `json:"actuals"`
+	History     string `json:"history"`
 }
 
 type JobConfirmLabels struct {
@@ -570,8 +977,573 @@ type JobConfirmLabels struct {
 }
 
 type JobErrorLabels struct {
-	NotFound         string `json:"notFound"`
+	NotFound             string `json:"notFound"`
+	PermissionDenied     string `json:"permissionDenied"`
+	InUse                string `json:"inUse"`
+	IDRequired           string `json:"idRequired"`
+	InvalidForm          string `json:"invalidForm"`
+	NoIDs                string `json:"noIds"`
+	StatusRequired       string `json:"statusRequired"`
+	TargetStatusRequired string `json:"targetStatusRequired"`
+}
+
+// JobBulkActionLabels holds translatable strings for job bulk-action controls.
+type JobBulkActionLabels struct {
+	Delete                 string `json:"delete"`
+	BulkDelete             string `json:"bulkDelete"`
+	BulkDeleteConfirmTitle string `json:"bulkDeleteConfirmTitle"`
+	BulkDeleteConfirmMsg   string `json:"bulkDeleteConfirmMsg"`
+	SetStatus              string `json:"setStatus"`
+	BulkSetStatus          string `json:"bulkSetStatus"`
+	SelectAll              string `json:"selectAll"`
+	SelectedCount          string `json:"selectedCount"`
+	Cancel                 string `json:"cancel"`
+}
+
+// ---------------------------------------------------------------------------
+// JobPhase standalone module labels
+// ---------------------------------------------------------------------------
+
+// JobPhaseLabels holds all translatable strings for the job_phase module.
+type JobPhaseLabels struct {
+	Page    JobPhasePageLabels    `json:"page"`
+	Buttons JobPhaseButtonLabels  `json:"buttons"`
+	Columns JobPhaseColumnLabels  `json:"columns"`
+	Empty   JobPhaseEmptyLabels   `json:"empty"`
+	Form    JobPhaseFormLabels    `json:"form"`
+	Actions JobPhaseActionLabels  `json:"actions"`
+	Detail  JobPhaseDetailLabels  `json:"detail"`
+	Tabs    JobPhaseTabLabels     `json:"tabs"`
+	Confirm JobPhaseConfirmLabels `json:"confirm"`
+	Errors  JobPhaseErrorLabels   `json:"errors"`
+}
+
+type JobPhasePageLabels struct {
+	Heading          string `json:"heading"`
+	Caption          string `json:"caption"`
+	HeadingPending   string `json:"headingPending"`
+	HeadingActive    string `json:"headingActive"`
+	HeadingCompleted string `json:"headingCompleted"`
+}
+
+type JobPhaseButtonLabels struct {
+	AddPhase string `json:"addPhase"`
+}
+
+type JobPhaseColumnLabels struct {
+	Name         string `json:"name"`
+	Job          string `json:"job"`
+	PhaseOrder   string `json:"phaseOrder"`
+	Status       string `json:"status"`
+	PlannedStart string `json:"plannedStart"`
+	PlannedEnd   string `json:"plannedEnd"`
+}
+
+type JobPhaseEmptyLabels struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
+type JobPhaseFormLabels struct {
+	SectionPhase             string `json:"sectionPhase"`
+	SectionResourceTiming    string `json:"sectionResourceTiming"`
+	Name                     string `json:"name"`
+	NamePlaceholder          string `json:"namePlaceholder"`
+	PhaseOrder               string `json:"phaseOrder"`
+	Status                   string `json:"status"`
+	PlannedStart             string `json:"plannedStart"`
+	PlannedEnd               string `json:"plannedEnd"`
+	ActualStart              string `json:"actualStart"`
+	ActualEnd                string `json:"actualEnd"`
+	TemplatePhasePlaceholder string `json:"templatePhasePlaceholder"`
+	Resource                 string `json:"resource"`
+	ResourcePlaceholder      string `json:"resourcePlaceholder"`
+	SetupMinutes             string `json:"setupMinutes"`
+	RunMinutesPerUnit        string `json:"runMinutesPerUnit"`
+	PredecessorPhase         string `json:"predecessorPhase"`
+	PredecessorPlaceholder   string `json:"predecessorPlaceholder"`
+}
+
+type JobPhaseActionLabels struct {
+	View         string `json:"view"`
+	Edit         string `json:"edit"`
+	Delete       string `json:"delete"`
+	MarkComplete string `json:"markComplete"`
+}
+
+type JobPhaseDetailLabels struct {
+	PageTitle         string `json:"pageTitle"`
+	Name              string `json:"name"`
+	Job               string `json:"job"`
+	Status            string `json:"status"`
+	PhaseOrder        string `json:"phaseOrder"`
+	PlannedStart      string `json:"plannedStart"`
+	PlannedEnd        string `json:"plannedEnd"`
+	ActualStart       string `json:"actualStart"`
+	ActualEnd         string `json:"actualEnd"`
+	Resource          string `json:"resource"`
+	SetupMinutes      string `json:"setupMinutes"`
+	RunMinutesPerUnit string `json:"runMinutesPerUnit"`
+}
+
+type JobPhaseTabLabels struct {
+	Info        string `json:"info"`
+	Tasks       string `json:"tasks"`
+	Activities  string `json:"activities"`
+	Attachments string `json:"attachments"`
+	History     string `json:"history"`
+}
+
+type JobPhaseConfirmLabels struct {
+	Delete        string `json:"delete"`
+	DeleteMessage string `json:"deleteMessage"`
+}
+
+type JobPhaseErrorLabels struct {
 	PermissionDenied string `json:"permissionDenied"`
+	NotFound         string `json:"notFound"`
+	IDRequired       string `json:"idRequired"`
+}
+
+// DefaultJobPhaseLabels returns JobPhaseLabels with sensible English defaults.
+func DefaultJobPhaseLabels() JobPhaseLabels {
+	return JobPhaseLabels{
+		Page: JobPhasePageLabels{
+			Heading:          "Job Phases",
+			Caption:          "Manage execution phases across jobs",
+			HeadingPending:   "Pending Phases",
+			HeadingActive:    "Active Phases",
+			HeadingCompleted: "Completed Phases",
+		},
+		Buttons: JobPhaseButtonLabels{
+			AddPhase: "Add Phase",
+		},
+		Columns: JobPhaseColumnLabels{
+			Name:         "Name",
+			Job:          "Job",
+			PhaseOrder:   "#",
+			Status:       "Status",
+			PlannedStart: "Planned Start",
+			PlannedEnd:   "Planned End",
+		},
+		Empty: JobPhaseEmptyLabels{
+			Title:   "No phases found",
+			Message: "No job phases to display.",
+		},
+		Form: JobPhaseFormLabels{
+			SectionPhase:             "Phase",
+			SectionResourceTiming:    "Resource & Timing",
+			Name:                     "Phase Name",
+			NamePlaceholder:          "Enter phase name",
+			PhaseOrder:               "Order",
+			Status:                   "Status",
+			PlannedStart:             "Planned Start",
+			PlannedEnd:               "Planned End",
+			ActualStart:              "Actual Start",
+			ActualEnd:                "Actual End",
+			TemplatePhasePlaceholder: "Search template phase...",
+			Resource:                 "Resource",
+			ResourcePlaceholder:      "Search resource...",
+			SetupMinutes:             "Setup (min)",
+			RunMinutesPerUnit:        "Run (min/unit)",
+			PredecessorPhase:         "Predecessor Phase",
+			PredecessorPlaceholder:   "Select predecessor...",
+		},
+		Actions: JobPhaseActionLabels{
+			View:         "View Phase",
+			Edit:         "Edit Phase",
+			Delete:       "Delete Phase",
+			MarkComplete: "Mark Complete",
+		},
+		Detail: JobPhaseDetailLabels{
+			PageTitle:         "Phase Details",
+			Name:              "Name",
+			Job:               "Job",
+			Status:            "Status",
+			PhaseOrder:        "Order",
+			PlannedStart:      "Planned Start",
+			PlannedEnd:        "Planned End",
+			ActualStart:       "Actual Start",
+			ActualEnd:         "Actual End",
+			Resource:          "Resource",
+			SetupMinutes:      "Setup (min)",
+			RunMinutesPerUnit: "Run (min/unit)",
+		},
+		Tabs: JobPhaseTabLabels{
+			Info:        "Information",
+			Tasks:       "Tasks",
+			Activities:  "Activities",
+			Attachments: "Attachments",
+			History:     "History",
+		},
+		Confirm: JobPhaseConfirmLabels{
+			Delete:        "Delete Phase",
+			DeleteMessage: "Are you sure you want to delete \"%s\"? This action cannot be undone.",
+		},
+		Errors: JobPhaseErrorLabels{
+			PermissionDenied: "You do not have permission to perform this action",
+			NotFound:         "Phase not found",
+			IDRequired:       "Phase ID is required",
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// JobTemplatePhase drawer-only module labels
+// ---------------------------------------------------------------------------
+
+// JobTemplatePhaseLabels holds all translatable strings for the job_template_phase
+// drawer-only view module. This module has no list page, no sidebar entry, and no
+// standalone detail page — operators reach it only via the JobTemplate detail Phases tab.
+type JobTemplatePhaseLabels struct {
+	Columns JobTemplatePhaseColumnLabels  `json:"columns"`
+	Form    JobTemplatePhaseFormLabels    `json:"form"`
+	Actions JobTemplatePhaseActionLabels  `json:"actions"`
+	Errors  JobTemplatePhaseErrorLabels   `json:"errors"`
+}
+
+type JobTemplatePhaseColumnLabels struct {
+	Name         string `json:"name"`
+	PhaseOrder   string `json:"phaseOrder"`
+	EstDuration  string `json:"estDuration"`
+}
+
+type JobTemplatePhaseFormLabels struct {
+	SectionPhase        string `json:"sectionPhase"`
+	SectionResource     string `json:"sectionResource"`
+	SectionDependencies string `json:"sectionDependencies"`
+	Name                string `json:"name"`
+	NamePlaceholder     string `json:"namePlaceholder"`
+	PhaseOrder          string `json:"phaseOrder"`
+	EstDurationMinutes  string `json:"estDurationMinutes"`
+	Resource            string `json:"resource"`
+	ResourcePlaceholder string `json:"resourcePlaceholder"`
+	PredecessorPhase    string `json:"predecessorPhase"`
+	PredecessorPlaceholder string `json:"predecessorPlaceholder"`
+}
+
+type JobTemplatePhaseActionLabels struct {
+	Add    string `json:"add"`
+	Edit   string `json:"edit"`
+	Delete string `json:"delete"`
+}
+
+type JobTemplatePhaseErrorLabels struct {
+	PermissionDenied string `json:"permissionDenied"`
+	NotFound         string `json:"notFound"`
+	IDRequired       string `json:"idRequired"`
+}
+
+// DefaultJobTemplatePhaseLabels returns JobTemplatePhaseLabels with sensible English defaults.
+func DefaultJobTemplatePhaseLabels() JobTemplatePhaseLabels {
+	return JobTemplatePhaseLabels{
+		Columns: JobTemplatePhaseColumnLabels{
+			Name:        "Name",
+			PhaseOrder:  "#",
+			EstDuration: "Est. Duration (min)",
+		},
+		Form: JobTemplatePhaseFormLabels{
+			SectionPhase:           "Phase",
+			SectionResource:        "Resource",
+			SectionDependencies:    "Dependencies",
+			Name:                   "Phase Name",
+			NamePlaceholder:        "Enter phase name",
+			PhaseOrder:             "Order",
+			EstDurationMinutes:     "Estimated Duration (min)",
+			Resource:               "Resource",
+			ResourcePlaceholder:    "Search resource...",
+			PredecessorPhase:       "Predecessor Phase",
+			PredecessorPlaceholder: "Select predecessor...",
+		},
+		Actions: JobTemplatePhaseActionLabels{
+			Add:    "+ Add Phase",
+			Edit:   "Edit Phase",
+			Delete: "Delete Phase",
+		},
+		Errors: JobTemplatePhaseErrorLabels{
+			PermissionDenied: "You do not have permission to perform this action",
+			NotFound:         "Template phase not found",
+			IDRequired:       "Template phase ID is required",
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// JobTemplateTask drawer-only module labels
+// ---------------------------------------------------------------------------
+
+// JobTemplateTaskLabels holds all translatable strings for the job_template_task
+// drawer-only view module. This module has no list page, no sidebar entry, and no
+// standalone detail page — operators reach it only via the JobTemplate detail Tasks tab.
+type JobTemplateTaskLabels struct {
+	Columns JobTemplateTaskColumnLabels  `json:"columns"`
+	Form    JobTemplateTaskFormLabels    `json:"form"`
+	Actions JobTemplateTaskActionLabels  `json:"actions"`
+	Errors  JobTemplateTaskErrorLabels   `json:"errors"`
+}
+
+type JobTemplateTaskColumnLabels struct {
+	Name        string `json:"name"`
+	StepOrder   string `json:"stepOrder"`
+	EstDuration string `json:"estDuration"`
+	Phase       string `json:"phase"`
+}
+
+type JobTemplateTaskFormLabels struct {
+	SectionTask         string `json:"sectionTask"`
+	SectionResource     string `json:"sectionResource"`
+	Name                string `json:"name"`
+	NamePlaceholder     string `json:"namePlaceholder"`
+	StepOrder           string `json:"stepOrder"`
+	EstDurationMinutes  string `json:"estDurationMinutes"`
+	Resource            string `json:"resource"`
+	ResourcePlaceholder string `json:"resourcePlaceholder"`
+}
+
+type JobTemplateTaskActionLabels struct {
+	Add    string `json:"add"`
+	Edit   string `json:"edit"`
+	Delete string `json:"delete"`
+}
+
+type JobTemplateTaskErrorLabels struct {
+	PermissionDenied string `json:"permissionDenied"`
+	NotFound         string `json:"notFound"`
+	IDRequired       string `json:"idRequired"`
+}
+
+// DefaultJobTemplateTaskLabels returns JobTemplateTaskLabels with sensible English defaults.
+func DefaultJobTemplateTaskLabels() JobTemplateTaskLabels {
+	return JobTemplateTaskLabels{
+		Columns: JobTemplateTaskColumnLabels{
+			Name:        "Name",
+			StepOrder:   "#",
+			EstDuration: "Est. Duration (min)",
+			Phase:       "Phase",
+		},
+		Form: JobTemplateTaskFormLabels{
+			SectionTask:         "Task",
+			SectionResource:     "Resource",
+			Name:                "Task Name",
+			NamePlaceholder:     "Enter task name",
+			StepOrder:           "Order",
+			EstDurationMinutes:  "Estimated Duration (min)",
+			Resource:            "Resource",
+			ResourcePlaceholder: "Search resource...",
+		},
+		Actions: JobTemplateTaskActionLabels{
+			Add:    "+ Add Task",
+			Edit:   "Edit Task",
+			Delete: "Delete Task",
+		},
+		Errors: JobTemplateTaskErrorLabels{
+			PermissionDenied: "You do not have permission to perform this action",
+			NotFound:         "Template task not found",
+			IDRequired:       "Template task ID is required",
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// JobTask standalone module labels
+// ---------------------------------------------------------------------------
+
+// JobTaskLabels holds all translatable strings for the job_task module.
+type JobTaskLabels struct {
+	Page    JobTaskPageLabels    `json:"page"`
+	Buttons JobTaskButtonLabels  `json:"buttons"`
+	Columns JobTaskColumnLabels  `json:"columns"`
+	Empty   JobTaskEmptyLabels   `json:"empty"`
+	Form    JobTaskFormLabels    `json:"form"`
+	Actions JobTaskActionLabels  `json:"actions"`
+	Detail  JobTaskDetailLabels  `json:"detail"`
+	Tabs    JobTaskTabLabels     `json:"tabs"`
+	Confirm JobTaskConfirmLabels `json:"confirm"`
+	Errors  JobTaskErrorLabels   `json:"errors"`
+}
+
+type JobTaskPageLabels struct {
+	Heading           string `json:"heading"`
+	Caption           string `json:"caption"`
+	HeadingPending    string `json:"headingPending"`
+	HeadingInProgress string `json:"headingInProgress"`
+	HeadingCompleted  string `json:"headingCompleted"`
+}
+
+type JobTaskButtonLabels struct {
+	AddTask string `json:"addTask"`
+}
+
+type JobTaskColumnLabels struct {
+	Name              string `json:"name"`
+	Phase             string `json:"phase"`
+	StepOrder         string `json:"stepOrder"`
+	Status            string `json:"status"`
+	AssignedTo        string `json:"assignedTo"`
+	PercentComplete   string `json:"percentComplete"`
+	PlannedQuantity   string `json:"plannedQuantity"`
+	CompletedQuantity string `json:"completedQuantity"`
+}
+
+type JobTaskEmptyLabels struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
+type JobTaskFormLabels struct {
+	SectionTask               string `json:"sectionTask"`
+	SectionAssignmentResource string `json:"sectionAssignmentResource"`
+	SectionSchedule           string `json:"sectionSchedule"`
+	SectionActuals            string `json:"sectionActuals"`
+	Name                      string `json:"name"`
+	NamePlaceholder           string `json:"namePlaceholder"`
+	StepOrder                 string `json:"stepOrder"`
+	Status                    string `json:"status"`
+	IsAdHoc                   string `json:"isAdHoc"`
+	AssignedTo                string `json:"assignedTo"`
+	AssignedToPlaceholder     string `json:"assignedToPlaceholder"`
+	ResourceID                string `json:"resourceId"`
+	ResourcePlaceholder       string `json:"resourcePlaceholder"`
+	TemplateTaskID            string `json:"templateTaskId"`
+	TemplateTaskPlaceholder   string `json:"templateTaskPlaceholder"`
+	PlannedQuantity           string `json:"plannedQuantity"`
+	CompletedQuantity         string `json:"completedQuantity"`
+	PercentComplete           string `json:"percentComplete"`
+	AllowParallel             string `json:"allowParallel"`
+	ActualStart               string `json:"actualStart"`
+	ActualEnd                 string `json:"actualEnd"`
+}
+
+type JobTaskActionLabels struct {
+	View   string `json:"view"`
+	Edit   string `json:"edit"`
+	Delete string `json:"delete"`
+}
+
+type JobTaskDetailLabels struct {
+	PageTitle         string `json:"pageTitle"`
+	Name              string `json:"name"`
+	Phase             string `json:"phase"`
+	StepOrder         string `json:"stepOrder"`
+	Status            string `json:"status"`
+	IsAdHoc           string `json:"isAdHoc"`
+	AssignedTo        string `json:"assignedTo"`
+	Resource          string `json:"resource"`
+	TemplateTask      string `json:"templateTask"`
+	PlannedQuantity   string `json:"plannedQuantity"`
+	CompletedQuantity string `json:"completedQuantity"`
+	PercentComplete   string `json:"percentComplete"`
+	AllowParallel     string `json:"allowParallel"`
+	ActualStart       string `json:"actualStart"`
+	ActualEnd         string `json:"actualEnd"`
+}
+
+type JobTaskTabLabels struct {
+	Info        string `json:"info"`
+	Activities  string `json:"activities"`
+	Attachments string `json:"attachments"`
+	History     string `json:"history"`
+}
+
+type JobTaskConfirmLabels struct {
+	Delete        string `json:"delete"`
+	DeleteMessage string `json:"deleteMessage"`
+}
+
+type JobTaskErrorLabels struct {
+	PermissionDenied string `json:"permissionDenied"`
+	NotFound         string `json:"notFound"`
+	IDRequired       string `json:"idRequired"`
+}
+
+// DefaultJobTaskLabels returns JobTaskLabels with sensible English defaults.
+func DefaultJobTaskLabels() JobTaskLabels {
+	return JobTaskLabels{
+		Page: JobTaskPageLabels{
+			Heading:           "Job Tasks",
+			Caption:           "Manage execution tasks across job phases",
+			HeadingPending:    "Pending Tasks",
+			HeadingInProgress: "In-Progress Tasks",
+			HeadingCompleted:  "Completed Tasks",
+		},
+		Buttons: JobTaskButtonLabels{
+			AddTask: "Add Task",
+		},
+		Columns: JobTaskColumnLabels{
+			Name:              "Name",
+			Phase:             "Phase",
+			StepOrder:         "#",
+			Status:            "Status",
+			AssignedTo:        "Assigned To",
+			PercentComplete:   "% Done",
+			PlannedQuantity:   "Planned Qty",
+			CompletedQuantity: "Completed Qty",
+		},
+		Empty: JobTaskEmptyLabels{
+			Title:   "No tasks found",
+			Message: "No job tasks to display.",
+		},
+		Form: JobTaskFormLabels{
+			SectionTask:               "Task",
+			SectionAssignmentResource: "Assignment & Resource",
+			SectionSchedule:           "Schedule",
+			SectionActuals:            "Actuals",
+			Name:                      "Task Name",
+			NamePlaceholder:           "Enter task name",
+			StepOrder:                 "Order",
+			Status:                    "Status",
+			IsAdHoc:                   "Ad Hoc",
+			AssignedTo:                "Assigned To",
+			AssignedToPlaceholder:     "Search staff...",
+			ResourceID:                "Resource",
+			ResourcePlaceholder:       "Search resource...",
+			TemplateTaskID:            "Template Task",
+			TemplateTaskPlaceholder:   "Search template task...",
+			PlannedQuantity:           "Planned Qty",
+			CompletedQuantity:         "Completed Qty",
+			PercentComplete:           "% Complete",
+			AllowParallel:             "Allow Parallel",
+			ActualStart:               "Actual Start",
+			ActualEnd:                 "Actual End",
+		},
+		Actions: JobTaskActionLabels{
+			View:   "View Task",
+			Edit:   "Edit Task",
+			Delete: "Delete Task",
+		},
+		Detail: JobTaskDetailLabels{
+			PageTitle:         "Task Details",
+			Name:              "Name",
+			Phase:             "Phase",
+			StepOrder:         "Order",
+			Status:            "Status",
+			IsAdHoc:           "Ad Hoc",
+			AssignedTo:        "Assigned To",
+			Resource:          "Resource",
+			TemplateTask:      "Template Task",
+			PlannedQuantity:   "Planned Qty",
+			CompletedQuantity: "Completed Qty",
+			PercentComplete:   "% Complete",
+			AllowParallel:     "Allow Parallel",
+			ActualStart:       "Actual Start",
+			ActualEnd:         "Actual End",
+		},
+		Tabs: JobTaskTabLabels{
+			Info:        "Information",
+			Activities:  "Activities",
+			Attachments: "Attachments",
+			History:     "History",
+		},
+		Confirm: JobTaskConfirmLabels{
+			Delete:        "Delete Task",
+			DeleteMessage: "Are you sure you want to delete \"%s\"? This action cannot be undone.",
+		},
+		Errors: JobTaskErrorLabels{
+			PermissionDenied: "You do not have permission to perform this action",
+			NotFound:         "Task not found",
+			IDRequired:       "Task ID is required",
+		},
+	}
 }
 
 // ---------------------------------------------------------------------------

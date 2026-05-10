@@ -116,25 +116,16 @@ func buildActivitiesList(
 	return rows
 }
 
-// activityEntryTypeLabel resolves the translated entry-type display string
-// with a fallback to the proto-shorthand if the lyngua key is missing.
+// activityEntryTypeLabel resolves the translated entry-type display string.
+// Returns the lyngua label; if empty, the lyngua coverage gap surfaces at startup.
 func activityEntryTypeLabel(entryType string, l fayna.JobActivityLabels) string {
 	switch entryType {
 	case "labor":
-		if l.Form.EntryTypeLabor != "" {
-			return l.Form.EntryTypeLabor
-		}
-		return "Labor"
+		return l.Form.EntryTypeLabor
 	case "material":
-		if l.Form.EntryTypeMaterial != "" {
-			return l.Form.EntryTypeMaterial
-		}
-		return "Material"
+		return l.Form.EntryTypeMaterial
 	case "expense":
-		if l.Form.EntryTypeExpense != "" {
-			return l.Form.EntryTypeExpense
-		}
-		return "Expense"
+		return l.Form.EntryTypeExpense
 	default:
 		return entryType
 	}
@@ -159,29 +150,19 @@ func activityBillableStatusString(s jobactivitypb.BillableStatus) string {
 }
 
 // activityBillableStatusLabel resolves the translated badge text for the
-// billable_status, falling back to title-case shorthand when the lyngua key
-// is missing.
+// billable_status. Returns the lyngua label; if empty, the coverage gap surfaces.
 func activityBillableStatusLabel(status string, l fayna.JobActivityLabels) string {
 	switch status {
 	case "included":
-		if l.Form.BillableStatusIncluded != "" {
-			return l.Form.BillableStatusIncluded
-		}
-		return "Included"
+		return l.Form.BillableStatusIncluded
 	case "billable":
-		if l.Form.BillableStatusBillable != "" {
-			return l.Form.BillableStatusBillable
-		}
-		return "Billable"
+		return l.Form.BillableStatusBillable
 	case "non_billable":
-		if l.Form.BillableStatusNonBillable != "" {
-			return l.Form.BillableStatusNonBillable
-		}
-		return "Non-billable"
+		return l.Form.BillableStatusNonBillable
 	case "write_off":
-		return "Write-off"
+		return l.Form.BillableStatusWriteOff
 	default:
-		return "Unspecified"
+		return status
 	}
 }
 

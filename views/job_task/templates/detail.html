@@ -1,0 +1,107 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-task-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "job-task-detail-content"}}
+<div class="page-content job-task-detail-layout">
+    {{/* --- Tabs --- */}}
+    <div class="job-task-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "job-task-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="job-task-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "jt-tab-info" .}}
+        {{else if eq .ActiveTab "activities"}}
+        {{template "jt-tab-activities" .}}
+        {{else if eq .ActiveTab "attachments"}}
+        {{template "attachment-tab" .}}
+        {{else if eq .ActiveTab "history"}}
+        {{template "audit-history-tab" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "jt-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <div class="job-task-info-grid">
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.Name}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-name">{{index .Task "name"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.Phase}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-phase">{{index .Task "phase_name"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.StepOrder}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-step-order">{{index .Task "step_order"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.Status}}</span>
+            <span>
+                <span class="badge badge--{{index .Task "status_variant"}}"
+                      data-testid="job-task-detail-status"
+                      data-task-status="{{index .Task "status"}}">
+                    {{index .Task "status"}}
+                </span>
+            </span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.IsAdHoc}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-is-ad-hoc">{{index .Task "is_ad_hoc"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.AssignedTo}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-assigned-to">{{index .Task "assigned_to"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.Resource}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-resource">{{index .Task "resource_id"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.PlannedQuantity}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-planned-qty">{{index .Task "planned_quantity"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.CompletedQuantity}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-completed-qty">{{index .Task "completed_quantity"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.PercentComplete}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-percent-complete">{{index .Task "percent_complete"}}%</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.AllowParallel}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-allow-parallel">{{index .Task "allow_parallel"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.ActualStart}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-actual-start">{{index .Task "actual_start_string"}}</span>
+        </div>
+        <div class="job-task-info-item">
+            <span class="job-task-info-label">{{.Labels.Detail.ActualEnd}}</span>
+            <span class="job-task-info-value" data-testid="job-task-detail-actual-end">{{index .Task "actual_end_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{/* Activities Tab */}}
+{{define "jt-tab-activities"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Activities}}">
+    {{if .ActivitiesTable}}
+        {{template "table-card" .ActivitiesTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Tabs.Activities}}</div>
+            <p class="coming-soon-text">No activity entries found for this task.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}

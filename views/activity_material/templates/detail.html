@@ -1,0 +1,60 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "activity-material-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "activity-material-detail-content"}}
+<div class="page-content act-detail-layout">
+
+    {{/* --- Info section (single tab, v1: no tab strip needed) --- */}}
+    <div class="act-info-section">
+        <div class="act-info-grid">
+
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.Product}}</span>
+                <span class="act-info-value" data-testid="activity-material-product">
+                    {{if .ProductName}}{{.ProductName}}{{else}}{{.ProductID}}{{end}}
+                </span>
+            </div>
+
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.UnitOfMeasure}}</span>
+                <span class="act-info-value" data-testid="activity-material-unit-of-measure">{{.UnitOfMeasure}}</span>
+            </div>
+
+            {{if .LotNumber}}
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.LotNumber}}</span>
+                <span class="act-info-value mono" data-testid="activity-material-lot-number">{{.LotNumber}}</span>
+            </div>
+            {{end}}
+
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.Location}}</span>
+                <span class="act-info-value" data-testid="activity-material-location">
+                    {{if .LocationName}}{{.LocationName}}{{else}}{{.LocationID}}{{end}}
+                </span>
+            </div>
+
+        </div>
+
+        {{/* Edit CTA — deep-links to the activity material edit drawer */}}
+        {{if .EditURL}}
+        <div class="act-actions">
+            <a hx-get="{{.EditURL}}"
+               hx-target="#sheetContent"
+               hx-swap="innerHTML"
+               hx-on::after-request="lf.Sheet.open()"
+               class="btn btn-secondary"
+               title="{{.Labels.Buttons.Edit}}"
+               data-testid="activity-material-edit-btn">
+                {{.Labels.Buttons.Edit}}
+            </a>
+        </div>
+        {{end}}
+
+    </div>
+
+</div>
+{{end}}

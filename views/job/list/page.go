@@ -21,6 +21,7 @@ import (
 type ListViewDeps struct {
 	Routes       fayna.JobRoutes
 	ListJobs     func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	GetInUseIDs  func(ctx context.Context, ids []string) (map[string]bool, error)
 	Labels       fayna.JobLabels
 	CommonLabels pyeza.CommonLabels
 	TableLabels  types.TableLabels
@@ -49,9 +50,19 @@ func NewView(deps *ListViewDeps) view.View {
 			return view.Error(fmt.Errorf("failed to load jobs: %w", err))
 		}
 
+		// Collect IDs and check which are in use (referenced by dependent tables).
+		var inUseIDs map[string]bool
+		if deps.GetInUseIDs != nil {
+			var itemIDs []string
+			for _, j := range resp.GetData() {
+				itemIDs = append(itemIDs, j.GetId())
+			}
+			inUseIDs, _ = deps.GetInUseIDs(ctx, itemIDs)
+		}
+
 		l := deps.Labels
 		columns := jobColumns(l)
-		rows := buildTableRows(resp.GetData(), status, l, deps.Routes, perms)
+		rows := buildTableRows(resp.GetData(), status, l, deps.Routes, inUseIDs, perms)
 		types.ApplyColumnStyles(columns, rows)
 
 		tableConfig := &types.TableConfig{
@@ -77,6 +88,24 @@ func NewView(deps *ListViewDeps) view.View {
 				Icon:            "icon-plus",
 				Disabled:        !perms.Can("job", "create"),
 				DisabledTooltip: l.Errors.PermissionDenied,
+			},
+			BulkActions: &types.BulkActionsConfig{
+				Enabled:        true,
+				SelectAllLabel: l.BulkActions.SelectAll,
+				SelectedLabel:  l.BulkActions.SelectedCount,
+				CancelLabel:    l.BulkActions.Cancel,
+				Actions: []types.BulkAction{
+					{
+						Key:              "delete",
+						Label:            l.BulkActions.Delete,
+						Icon:             "icon-trash-2",
+						Variant:          "danger",
+						Endpoint:         deps.Routes.BulkDeleteURL,
+						ConfirmTitle:     l.BulkActions.BulkDeleteConfirmTitle,
+						ConfirmMessage:   l.BulkActions.BulkDeleteConfirmMsg,
+						RequiresDataAttr: "deletable",
+					},
+				},
 			},
 		}
 		types.ApplyTableSettings(tableConfig)
@@ -120,7 +149,7 @@ func jobColumns(l fayna.JobLabels) []types.TableColumn {
 	}
 }
 
-func buildTableRows(jobs []*jobpb.Job, status string, l fayna.JobLabels, routes fayna.JobRoutes, perms *types.UserPermissions) []types.TableRow {
+func buildTableRows(jobs []*jobpb.Job, status string, l fayna.JobLabels, routes fayna.JobRoutes, inUseIDs map[string]bool, perms *types.UserPermissions) []types.TableRow {
 	rows := []types.TableRow{}
 	for _, j := range jobs {
 		jobStatus := jobStatusString(j.GetStatus())
@@ -149,6 +178,13 @@ func buildTableRows(jobs []*jobpb.Job, status string, l fayna.JobLabels, routes 
 		created := j.GetDateCreatedString()
 		detailURL := route.ResolveURL(routes.DetailURL, "id", id)
 
+		inUse := inUseIDs[id]
+		deleteDisabled := inUse || !perms.Can("job", "delete")
+		deleteTooltip := l.Errors.PermissionDenied
+		if inUse {
+			deleteTooltip = l.Errors.InUse
+		}
+
 		rows = append(rows, types.TableRow{
 			ID:   id,
 			Href: detailURL,
@@ -159,19 +195,27 @@ func buildTableRows(jobs []*jobpb.Job, status string, l fayna.JobLabels, routes 
 				types.DateTimeCell(created, types.DateReadable),
 			},
 			DataAttrs: map[string]string{
-				"name":    name,
-				"client":  clientName,
-				"status":  jobStatus,
-				"created": created,
+				"name":      name,
+				"client":    clientName,
+				"status":    jobStatus,
+				"created":   created,
+				"deletable": boolAttr(!inUse),
 			},
 			Actions: []types.TableAction{
 				{Type: "view", Label: l.Actions.View, Action: "view", Href: detailURL},
 				{Type: "edit", Label: l.Actions.Edit, Action: "edit", URL: route.ResolveURL(routes.EditURL, "id", id), DrawerTitle: l.Actions.Edit, Disabled: !perms.Can("job", "update"), DisabledTooltip: l.Errors.PermissionDenied},
-				{Type: "delete", Label: l.Actions.Delete, Action: "delete", URL: routes.DeleteURL, ItemName: name, Disabled: !perms.Can("job", "delete"), DisabledTooltip: l.Errors.PermissionDenied},
+				{Type: "delete", Label: l.Actions.Delete, Action: "delete", URL: routes.DeleteURL, ItemName: name, Disabled: deleteDisabled, DisabledTooltip: deleteTooltip},
 			},
 		})
 	}
 	return rows
+}
+
+func boolAttr(v bool) string {
+	if v {
+		return "true"
+	}
+	return "false"
 }
 
 func jobStatusString(s enums.JobStatus) string {
@@ -225,9 +269,9 @@ func statusPageTitle(l fayna.JobLabels, status string) string {
 	case "draft":
 		return l.Page.HeadingDraft
 	case "planned":
-		return "Planned"
+		return l.Page.HeadingPlanned
 	case "released":
-		return "Released"
+		return l.Page.HeadingReleased
 	case "active":
 		return l.Page.HeadingActive
 	case "completed":
@@ -244,9 +288,9 @@ func statusPageCaption(l fayna.JobLabels, status string) string {
 	case "draft":
 		return l.Page.CaptionDraft
 	case "planned":
-		return "Jobs scheduled for future execution"
+		return l.Page.CaptionPlanned
 	case "released":
-		return "Jobs released and ready to execute"
+		return l.Page.CaptionReleased
 	case "active":
 		return l.Page.CaptionActive
 	case "completed":

@@ -14,9 +14,17 @@ import (
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 )
 
+// phaseDetailURL returns the deep link to the job_phase detail page for a given phase ID.
+// Uses the fayna.JobPhaseDetailURL constant directly (the job_phase module owns this route).
+func phaseDetailURL(id string) string {
+	return route.ResolveURL(fayna.JobPhaseDetailURL, "id", id)
+}
+
 // PhaseRow is the per-phase view-model rendered on the Phases tab. Used by
 // the `job-phases-card` template to expose the Mark Complete CTA + status
 // badge alongside each phase. 2026-04-29 milestone-billing plan §4.
+//
+// DetailURL deep-links to /app/job-phase/{id} (owned by the job_phase module).
 type PhaseRow struct {
 	ID            string
 	Name          string
@@ -26,6 +34,7 @@ type PhaseRow struct {
 	StatusLabel   string // translated badge text
 	IsCompleted   bool   // disables the Mark Complete CTA
 	MarkURL       string // POST URL with id=… &status=PHASE_STATUS_COMPLETED
+	DetailURL     string // deep link to /app/job-phase/{id} (job_phase module)
 }
 
 // loadPhasesTab populates the PageData with phases and tasks table data.
@@ -91,6 +100,7 @@ func buildPhasesList(
 			StatusVariant: phaseStatusVariant(status),
 			StatusLabel:   phaseStatusLabel(status, l),
 			IsCompleted:   p.GetStatus() == jobphasepb.PhaseStatus_PHASE_STATUS_COMPLETED,
+			DetailURL:     phaseDetailURL(p.GetId()),
 		}
 		if routes.PhaseSetStatusURL != "" {
 			row.MarkURL = fmt.Sprintf("%s?id=%s&status=PHASE_STATUS_COMPLETED",
@@ -102,23 +112,15 @@ func buildPhasesList(
 }
 
 // phaseStatusLabel returns the translated badge text for a phase status.
+// Returns the lyngua label; if empty, the coverage gap surfaces at startup.
 func phaseStatusLabel(status string, l fayna.JobLabels) string {
 	switch status {
 	case "pending":
-		if l.Detail.PhaseStatusPending != "" {
-			return l.Detail.PhaseStatusPending
-		}
-		return "Pending"
+		return l.Detail.PhaseStatusPending
 	case "active":
-		if l.Detail.PhaseStatusActive != "" {
-			return l.Detail.PhaseStatusActive
-		}
-		return "Active"
+		return l.Detail.PhaseStatusActive
 	case "completed":
-		if l.Detail.PhaseStatusCompleted != "" {
-			return l.Detail.PhaseStatusCompleted
-		}
-		return "Completed"
+		return l.Detail.PhaseStatusCompleted
 	default:
 		return status
 	}

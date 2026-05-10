@@ -37,6 +37,51 @@ type PageData struct {
 	StatusVariant  string
 	Amount         types.TableCell
 	Currency       string
+
+	// ChargeLabor holds the labor charge detail for the charge tab (entry_type=LABOR).
+	// Nil when entry_type is not LABOR or the charge tab is not active.
+	ChargeLabor *ActivityLaborView
+
+	// ChargeMaterial holds the material charge detail for the charge tab (entry_type=MATERIAL).
+	// Nil when entry_type is not MATERIAL or the charge tab is not active.
+	ChargeMaterial *ActivityMaterialView
+
+	// ChargeExpense holds the expense charge detail for the charge tab (entry_type=EXPENSE).
+	// Nil when entry_type is not EXPENSE or the charge tab is not active.
+	ChargeExpense *ActivityExpenseView
+}
+
+// ActivityLaborView is the charge tab display shape for labor entries.
+// Pre-formatted display values + the edit URL for the CTA button.
+type ActivityLaborView struct {
+	StaffID   string
+	Hours     string
+	RateType  string
+	TimeStart string
+	TimeEnd   string
+	EditURL   string
+}
+
+// ActivityMaterialView is the charge tab display shape for material entries.
+// Pre-formatted display values + the edit URL for the CTA button.
+type ActivityMaterialView struct {
+	ProductID     string
+	ProductName   string
+	UnitOfMeasure string
+	LotNumber     string
+	LocationID    string
+	EditURL       string
+}
+
+// ActivityExpenseView is the charge tab display shape for expense entries.
+// Pre-formatted display values + the edit URL for the CTA button.
+type ActivityExpenseView struct {
+	ExpenseCategoryID string
+	VendorRef         string
+	ReceiptURL        string
+	PaymentMethod     string
+	MarkupPctOverride string
+	EditURL           string
 }
 
 // activityToMap converts a JobActivity protobuf to a map[string]any for template use.
@@ -132,6 +177,7 @@ func NewView(deps *DetailViewDeps) view.View {
 		}
 
 		loadAttachmentsTab(ctx, deps, pageData, id, activeTab)
+		loadChargeTab(ctx, deps, pageData, id, record.GetEntryType(), activeTab)
 
 		return view.OK("job-activity-detail", pageData)
 	})
@@ -140,8 +186,14 @@ func NewView(deps *DetailViewDeps) view.View {
 func buildTabItems(l fayna.JobActivityLabels, id string, routes fayna.JobActivityRoutes) []pyeza.TabItem {
 	base := route.ResolveURL(routes.DetailURL, "id", id)
 	action := route.ResolveURL(routes.TabActionURL, "id", id, "tab", "")
+	// Charge tab label: hardcoded English fallback — TODO(P7 lyngua sweep) add to JobActivityTabLabels.
+	chargeLabel := l.Tabs.Charge
+	if chargeLabel == "" {
+		chargeLabel = "Charge"
+	}
 	return []pyeza.TabItem{
 		{Key: "info", Label: l.Tabs.Info, Href: base + "?tab=info", HxGet: action + "info", Icon: "icon-info"},
+		{Key: "charge", Label: chargeLabel, Href: base + "?tab=charge", HxGet: action + "charge", Icon: "icon-dollar-sign"},
 		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
 	}
 }
@@ -211,6 +263,7 @@ func NewTabAction(deps *DetailViewDeps) view.View {
 		}
 
 		loadAttachmentsTab(ctx, deps, pageData, id, tab)
+		loadChargeTab(ctx, deps, pageData, id, record.GetEntryType(), tab)
 
 		templateName := "job-activity-tab-" + tab
 		if tab == "attachments" {

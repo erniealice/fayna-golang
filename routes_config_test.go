@@ -75,6 +75,16 @@ func faynaRouteContractCases() []routeContractCase {
 			routes:   DefaultFulfillmentRoutes(),
 			routeMap: DefaultFulfillmentRoutes().RouteMap(),
 		},
+		{
+			name:     "JobTemplatePhaseRoutes",
+			routes:   DefaultJobTemplatePhaseRoutes(),
+			routeMap: DefaultJobTemplatePhaseRoutes().RouteMap(),
+		},
+		{
+			name:     "JobTemplateTaskRoutes",
+			routes:   DefaultJobTemplateTaskRoutes(),
+			routeMap: DefaultJobTemplateTaskRoutes().RouteMap(),
+		},
 	}
 }
 

@@ -1,0 +1,125 @@
+{{/*
+Activity labor drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions for ENTRY_TYPE_LABOR job activities.
+
+Canonical anatomy per drawer-form-template-anatomy.md:
+  <form hx-post> → hidden activity_id → sheet-body → form-section "Charge"
+  → staff auto-complete → hours number → rate type select → time range → footer
+
+Data: .ActivityID, .StaffID, .StaffName, .Hours, .RateType, .RateTypeOptions,
+      .TimeStart, .TimeEnd, .StaffSearchURL, .FormAction, .IsEdit,
+      .CommonLabels, .Labels
+
+Staff picker: action mode when .StaffSearchURL is non-empty;
+              flat filter mode (operator types staff_id directly) when empty.
+              See auto-complete component docs in drawer-form-template-anatomy.md.
+
+Time fields: datetime-local inputs. The handler parses "2006-01-02T15:04"
+             and converts to Unix int64 on submit.
+
+TODO(P7 lyngua sweep): section title "Charge" is an intentional English
+fallback — wire through lyngua when activity_labor.json labels are added.
+*/}}
+{{define "activity-labor-drawer-form"}}
+<form hx-post="{{.FormAction}}"
+      hx-swap="none"
+      hx-on::after-request="lf.Sheet.handleResponse(event)"
+      data-testid="activity-labor-form">
+
+    {{/* activity_id is the PK of ActivityLabor AND the FK to JobActivity (1:1).
+         Context-locked: always emitted as a hidden input. */}}
+    <input type="hidden" name="activity_id" value="{{.ActivityID}}" data-testid="activity-labor-activity-id">
+
+    <div class="sheet-body">
+
+        {{template "form-section" (dict "Title" .Labels.Form.SectionCharge)}}
+
+        {{/* --- Staff picker --- */}}
+        {{/* Action mode when StaffSearchURL is set; flat-filter (manual entry) otherwise.
+             TODO(P5 wave 3): wire staff search endpoint to enable action mode. */}}
+        <div class="form-row single">
+        {{if .StaffSearchURL}}
+            {{template "auto-complete" (dict
+                "ID"                "activity-labor-staff-picker"
+                "Name"              "staff_id"
+                "Label"             .Labels.Form.Staff
+                "Placeholder"       "Select staff member"
+                "SearchPlaceholder" "Search by name..."
+                "Value"             .StaffID
+                "SelectedLabel"     .StaffName
+                "Required"          true
+                "NoResults"         "No staff found"
+                "MinChars"          0
+                "SearchURL"         .StaffSearchURL
+            )}}
+        {{else}}
+            {{/* Flat filter fallback: operator types the staff_id directly.
+                 Remove once StaffSearchURL is wired via the fayna block. */}}
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "staff_id"
+                "Label"       .Labels.Form.Staff
+                "Value"       .StaffID
+                "Required"    true
+                "Placeholder" "Enter staff ID"
+                "Hint"        "Staff search not available — enter staff ID directly"
+                "TestId"      "activity-labor-staff-id"
+            )}}
+        {{end}}
+        </div>
+
+        {{/* --- Hours --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"     "number"
+                "Name"     "hours"
+                "Label"    .Labels.Form.Hours
+                "Value"    .Hours
+                "Required" true
+                "Step"     "0.25"
+                "Min"      "0"
+                "TestId"   "activity-labor-hours"
+            )}}
+        </div>
+
+        {{/* --- Rate Type --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"    "select"
+                "Name"    "rate_type"
+                "Label"   .Labels.Form.RateType
+                "Value"   .RateType
+                "Options" .RateTypeOptions
+                "TestId"  "activity-labor-rate-type"
+            )}}
+        </div>
+
+        {{/* --- Time Range (Start / End) --- */}}
+        {{/* Proto stores int64 Unix timestamps; _string companions are human-readable.
+             The form uses datetime-local inputs; the handler converts on submit. */}}
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "datetime-local"
+                "Name"   "time_start"
+                "Label"  .Labels.Form.TimeStart
+                "Value"  .TimeStart
+                "TestId" "activity-labor-time-start"
+            )}}
+            {{template "form-group" (dict
+                "Type"   "datetime-local"
+                "Name"   "time_end"
+                "Label"  .Labels.Form.TimeEnd
+                "Value"  .TimeEnd
+                "TestId" "activity-labor-time-end"
+            )}}
+        </div>
+
+    </div>
+
+    {{template "sheet-form-footer" (dict
+        "CommonLabels" .CommonLabels
+        "ShowCancel"   true
+        "IsEdit"       .IsEdit
+    )}}
+</form>
+{{end}}

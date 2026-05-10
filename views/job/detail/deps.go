@@ -15,6 +15,9 @@ import (
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobsettlementpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_settlement"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	jobtemplatetaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 )
 
@@ -51,6 +54,21 @@ type DetailViewDeps struct {
 	// pattern (e.g. "/app/subscriptions/detail/{id}") supplied by the
 	// consuming app via fayna.WithSubscriptionDetailURL. Both nil/empty =
 	// the breadcrumb is omitted.
-	ReadSubscription        func(ctx context.Context, req *subscriptionpb.ReadSubscriptionRequest) (*subscriptionpb.ReadSubscriptionResponse, error)
+	ReadSubscription      func(ctx context.Context, req *subscriptionpb.ReadSubscriptionRequest) (*subscriptionpb.ReadSubscriptionResponse, error)
 	SubscriptionDetailURL string
+
+	// Budget tab — reads the JobTemplate-derived phase/task hour plan.
+	// All three deps are optional; nil = budget tab renders empty state.
+	// Wave 3 will replace these with a JobInputPlan reader.
+	ReadJobTemplate func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)
+	// ListJobTemplatePhasesByTemplate lists phases by template_id using the
+	// ListByJobTemplate RPC on the job_template_phase service.
+	ListJobTemplatePhasesByTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	// ListJobTemplateTasksByPhase lists tasks by phase_id using the
+	// ListByPhase RPC on the job_template_task service.
+	ListJobTemplateTasksByPhase func(ctx context.Context, req *jobtemplatetaskpb.ListJobTemplateTasksByPhaseRequest) (*jobtemplatetaskpb.ListJobTemplateTasksByPhaseResponse, error)
+
+	// Actuals tab — reads the JobActivity cost rollup via GetJobActivityRollup.
+	// Optional; nil = actuals tab renders empty state.
+	GetJobActivityRollup func(ctx context.Context, req *jobactivitypb.GetJobActivityRollupRequest) (*jobactivitypb.GetJobActivityRollupResponse, error)
 }

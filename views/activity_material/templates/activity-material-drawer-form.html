@@ -1,0 +1,130 @@
+{{/*
+Activity material drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions for ENTRY_TYPE_MATERIAL job activities.
+
+Canonical anatomy per drawer-form-template-anatomy.md:
+  <form hx-post> → hidden activity_id → sheet-body → form-section "Material"
+  → product auto-complete → unit of measure text → lot number text
+  → location auto-complete → footer
+
+Data: .ActivityID, .ProductID, .ProductName, .UnitOfMeasure, .LotNumber,
+      .LocationID, .LocationName, .ProductSearchURL, .LocationSearchURL,
+      .FormAction, .IsEdit, .CommonLabels, .Labels
+
+Product picker: action mode when .ProductSearchURL is non-empty;
+                flat filter mode (operator types product_id directly) when empty.
+Location picker: action mode when .LocationSearchURL is non-empty;
+                 flat filter mode (operator types location_id directly) when empty.
+
+TODO(P7 lyngua sweep): section title "Material" is an intentional English
+fallback — wire through lyngua when activity_material.json labels are added.
+*/}}
+{{define "activity-material-drawer-form"}}
+<form hx-post="{{.FormAction}}"
+      hx-swap="none"
+      hx-on::after-request="lf.Sheet.handleResponse(event)"
+      data-testid="activity-material-form">
+
+    {{/* activity_id is the PK of ActivityMaterial AND the FK to JobActivity (1:1).
+         Context-locked: always emitted as a hidden input. */}}
+    <input type="hidden" name="activity_id" value="{{.ActivityID}}" data-testid="activity-material-activity-id">
+
+    <div class="sheet-body">
+
+        {{template "form-section" (dict "Title" .Labels.Form.SectionMaterial)}}
+
+        {{/* --- Product picker --- */}}
+        <div class="form-row single">
+        {{if .ProductSearchURL}}
+            {{template "auto-complete" (dict
+                "ID"                "activity-material-product-picker"
+                "Name"              "product_id"
+                "Label"             .Labels.Form.Product
+                "Placeholder"       "Select product"
+                "SearchPlaceholder" "Search by name..."
+                "Value"             .ProductID
+                "SelectedLabel"     .ProductName
+                "Required"          true
+                "NoResults"         "No products found"
+                "MinChars"          0
+                "SearchURL"         .ProductSearchURL
+            )}}
+        {{else}}
+            {{/* Flat filter fallback: operator types the product_id directly.
+                 Remove once ProductSearchURL is wired via the fayna block. */}}
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "product_id"
+                "Label"       .Labels.Form.Product
+                "Value"       .ProductID
+                "Required"    true
+                "Placeholder" "Enter product ID"
+                "Hint"        "Product search not available — enter product ID directly"
+                "TestId"      "activity-material-product-id"
+            )}}
+        {{end}}
+        </div>
+
+        {{/* --- Unit of Measure --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "unit_of_measure"
+                "Label"       .Labels.Form.UnitOfMeasure
+                "Value"       .UnitOfMeasure
+                "Placeholder" "e.g. pcs, kg, L"
+                "TestId"      "activity-material-unit-of-measure"
+            )}}
+        </div>
+
+        {{/* --- Lot Number (optional — serialized/batch inventory tracking) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "lot_number"
+                "Label"       .Labels.Form.LotNumber
+                "Value"       .LotNumber
+                "Placeholder" "Enter lot or batch number"
+                "Hint"        "Optional — used for serialized or batch-tracked inventory"
+                "TestId"      "activity-material-lot-number"
+            )}}
+        </div>
+
+        {{/* --- Location picker --- */}}
+        <div class="form-row single">
+        {{if .LocationSearchURL}}
+            {{template "auto-complete" (dict
+                "ID"                "activity-material-location-picker"
+                "Name"              "location_id"
+                "Label"             .Labels.Form.Location
+                "Placeholder"       "Select location"
+                "SearchPlaceholder" "Search by name..."
+                "Value"             .LocationID
+                "SelectedLabel"     .LocationName
+                "NoResults"         "No locations found"
+                "MinChars"          0
+                "SearchURL"         .LocationSearchURL
+            )}}
+        {{else}}
+            {{/* Flat filter fallback: operator types the location_id directly. */}}
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "location_id"
+                "Label"       .Labels.Form.Location
+                "Value"       .LocationID
+                "Placeholder" "Enter location ID"
+                "Hint"        "Location search not available — enter location ID directly"
+                "TestId"      "activity-material-location-id"
+            )}}
+        {{end}}
+        </div>
+
+    </div>
+
+    {{template "sheet-form-footer" (dict
+        "CommonLabels" .CommonLabels
+        "ShowCancel"   true
+        "IsEdit"       .IsEdit
+    )}}
+</form>
+{{end}}

@@ -1,0 +1,121 @@
+{{/*
+Activity expense drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions for ENTRY_TYPE_EXPENSE job activities.
+
+Canonical anatomy per drawer-form-template-anatomy.md:
+  <form hx-post> → hidden activity_id → sheet-body → form-section "Expense"
+  → expense category auto-complete → vendor ref text → receipt url → payment
+  method select → markup % number → footer
+
+Data: .ActivityID, .ExpenseCategoryID, .ExpenseCategoryName, .VendorRef,
+      .ReceiptURL, .PaymentMethod, .PaymentMethodOptions, .MarkupPctOverride,
+      .ExpenseCategorySearchURL, .FormAction, .IsEdit, .CommonLabels, .Labels
+
+Expense category picker: action mode when .ExpenseCategorySearchURL is non-empty;
+                         flat filter mode (operator types category_id directly) when empty.
+
+TODO(P7 lyngua sweep): section title "Expense" is an intentional English
+fallback — wire through lyngua when activity_expense.json labels are added.
+*/}}
+{{define "activity-expense-drawer-form"}}
+<form hx-post="{{.FormAction}}"
+      hx-swap="none"
+      hx-on::after-request="lf.Sheet.handleResponse(event)"
+      data-testid="activity-expense-form">
+
+    {{/* activity_id is the PK of ActivityExpense AND the FK to JobActivity (1:1).
+         Context-locked: always emitted as a hidden input. */}}
+    <input type="hidden" name="activity_id" value="{{.ActivityID}}" data-testid="activity-expense-activity-id">
+
+    <div class="sheet-body">
+
+        {{template "form-section" (dict "Title" .Labels.Form.SectionExpense)}}
+
+        {{/* --- Expense Category picker --- */}}
+        <div class="form-row single">
+        {{if .ExpenseCategorySearchURL}}
+            {{template "auto-complete" (dict
+                "ID"                "activity-expense-category-picker"
+                "Name"              "expense_category_id"
+                "Label"             .Labels.Form.ExpenseCategory
+                "Placeholder"       "Select expense category"
+                "SearchPlaceholder" "Search categories..."
+                "Value"             .ExpenseCategoryID
+                "SelectedLabel"     .ExpenseCategoryName
+                "NoResults"         "No categories found"
+                "MinChars"          0
+                "SearchURL"         .ExpenseCategorySearchURL
+            )}}
+        {{else}}
+            {{/* Flat filter fallback: operator types the category_id directly. */}}
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "expense_category_id"
+                "Label"       .Labels.Form.ExpenseCategory
+                "Value"       .ExpenseCategoryID
+                "Placeholder" "Enter expense category ID"
+                "Hint"        "Category search not available — enter category ID directly"
+                "TestId"      "activity-expense-category-id"
+            )}}
+        {{end}}
+        </div>
+
+        {{/* --- Vendor Reference --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "vendor_ref"
+                "Label"       .Labels.Form.VendorRef
+                "Value"       .VendorRef
+                "Placeholder" "e.g. INV-2026-00123"
+                "TestId"      "activity-expense-vendor-ref"
+            )}}
+        </div>
+
+        {{/* --- Receipt URL --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "url"
+                "Name"        "receipt_url"
+                "Label"       .Labels.Form.ReceiptURL
+                "Value"       .ReceiptURL
+                "Placeholder" "https://..."
+                "TestId"      "activity-expense-receipt-url"
+            )}}
+        </div>
+
+        {{/* --- Payment Method --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"    "select"
+                "Name"    "payment_method"
+                "Label"   .Labels.Form.PaymentMethod
+                "Value"   .PaymentMethod
+                "Options" .PaymentMethodOptions
+                "TestId"  "activity-expense-payment-method"
+            )}}
+        </div>
+
+        {{/* --- Markup % Override (optional) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"  "number"
+                "Name"  "markup_pct_override"
+                "Label" .Labels.Form.MarkupPctOverride
+                "Value" .MarkupPctOverride
+                "Step"  "0.01"
+                "Min"   "0"
+                "Hint"  "Leave 0 to use the default markup from the expense category"
+                "TestId" "activity-expense-markup-pct"
+            )}}
+        </div>
+
+    </div>
+
+    {{template "sheet-form-footer" (dict
+        "CommonLabels" .CommonLabels
+        "ShowCancel"   true
+        "IsEdit"       .IsEdit
+    )}}
+</form>
+{{end}}

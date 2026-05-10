@@ -1,0 +1,165 @@
+{{/*
+Job Task drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+
+Data: .FormAction, .IsEdit, .ID, .JobPhaseID, .Name, .StepOrder,
+      .Status, .StatusOptions, .IsAdHoc,
+      .AssignedTo, .AssignedToName (Assignment & Resource section),
+      .ResourceID, .ResourceName, .TemplateTaskID, .TemplateTaskName,
+      .PlannedQuantity, .CompletedQuantity, .PercentComplete, .AllowParallel (Schedule section),
+      .ActualStart, .ActualEnd (Actuals section, Edit only, guarded by .IsEdit),
+      .StaffSearchURL, .ResourceSearchURL, .TemplateTaskSearchURL,
+      .Labels, .CommonLabels
+*/}}
+{{define "job-task-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-task-form">
+    {{if .IsEdit}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+    <input type="hidden" name="job_phase_id" value="{{.JobPhaseID}}">
+
+    <div class="sheet-body">
+        {{template "form-section" (dict "Title" .Labels.Form.SectionTask)}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "text"
+                "Name"        "name"
+                "Label"       .Labels.Columns.Name
+                "Value"       .Name
+                "Required"    true
+                "Placeholder" .Labels.Form.NamePlaceholder
+                "TestId"      "job-task-name"
+            )}}
+        </div>
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "step_order"
+                "Label"  .Labels.Columns.StepOrder
+                "Value"  .StepOrder
+                "Min"    "0"
+                "TestId" "job-task-step-order"
+            )}}
+            {{template "form-group" (dict
+                "Type"     "select"
+                "Name"     "status"
+                "Label"    .Labels.Columns.Status
+                "Value"    .Status
+                "Options"  .StatusOptions
+                "Required" true
+                "TestId"   "job-task-status"
+            )}}
+        </div>
+        <div class="form-row single">
+            <div class="form-group form-group-toggle">
+                <label class="form-label" for="is_ad_hoc">{{.Labels.Form.IsAdHoc}}</label>
+                {{template "toggle" (dict "Name" "is_ad_hoc" "Checked" .IsAdHoc "Value" "true" "ID" "is_ad_hoc")}}
+            </div>
+        </div>
+
+        {{template "form-section" (dict "Title" .Labels.Form.SectionAssignmentResource)}}
+        {{if .StaffSearchURL}}
+        <div class="form-row single">
+            {{template "auto-complete" (dict
+                "ID"                "assigned_to"
+                "Name"              "assigned_to"
+                "Label"             .Labels.Form.AssignedTo
+                "Value"             .AssignedTo
+                "SelectedLabel"     .AssignedToName
+                "SearchURL"         .StaffSearchURL
+                "Placeholder"       .Labels.Form.AssignedToPlaceholder
+                "SearchPlaceholder" "Search staff..."
+            )}}
+        </div>
+        {{end}}
+        {{if .ResourceSearchURL}}
+        <div class="form-row single">
+            {{template "auto-complete" (dict
+                "ID"                "resource_id"
+                "Name"              "resource_id"
+                "Label"             .Labels.Form.ResourceID
+                "Value"             .ResourceID
+                "SelectedLabel"     .ResourceName
+                "SearchURL"         .ResourceSearchURL
+                "Placeholder"       .Labels.Form.ResourcePlaceholder
+                "SearchPlaceholder" "Search resources..."
+            )}}
+        </div>
+        {{end}}
+        {{if .TemplateTaskSearchURL}}
+        <div class="form-row single">
+            {{template "auto-complete" (dict
+                "ID"                "template_task_id"
+                "Name"              "template_task_id"
+                "Label"             .Labels.Form.TemplateTaskID
+                "Value"             .TemplateTaskID
+                "SelectedLabel"     .TemplateTaskName
+                "SearchURL"         .TemplateTaskSearchURL
+                "Placeholder"       .Labels.Form.TemplateTaskPlaceholder
+                "SearchPlaceholder" "Search template tasks..."
+            )}}
+        </div>
+        {{end}}
+
+        {{template "form-section" (dict "Title" .Labels.Form.SectionSchedule)}}
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "planned_quantity"
+                "Label"  .Labels.Form.PlannedQuantity
+                "Value"  .PlannedQuantity
+                "Min"    "0"
+                "Step"   "0.01"
+                "TestId" "job-task-planned-qty"
+            )}}
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "completed_quantity"
+                "Label"  .Labels.Form.CompletedQuantity
+                "Value"  .CompletedQuantity
+                "Min"    "0"
+                "Step"   "0.01"
+                "TestId" "job-task-completed-qty"
+            )}}
+        </div>
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "percent_complete"
+                "Label"  .Labels.Form.PercentComplete
+                "Value"  .PercentComplete
+                "Min"    "0"
+                "Max"    "100"
+                "Step"   "1"
+                "TestId" "job-task-percent-complete"
+            )}}
+        </div>
+        <div class="form-row single">
+            <div class="form-group form-group-toggle">
+                <label class="form-label" for="allow_parallel">{{.Labels.Form.AllowParallel}}</label>
+                {{template "toggle" (dict "Name" "allow_parallel" "Checked" .AllowParallel "Value" "true" "ID" "allow_parallel")}}
+            </div>
+        </div>
+
+        {{if .IsEdit}}
+        {{template "form-section" (dict "Title" .Labels.Form.SectionActuals)}}
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type"   "datetime-local"
+                "Name"   "actual_start"
+                "Label"  .Labels.Form.ActualStart
+                "Value"  .ActualStart
+                "TestId" "job-task-actual-start"
+            )}}
+            {{template "form-group" (dict
+                "Type"   "datetime-local"
+                "Name"   "actual_end"
+                "Label"  .Labels.Form.ActualEnd
+                "Value"  .ActualEnd
+                "TestId" "job-task-actual-end"
+            )}}
+        </div>
+        {{end}}
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

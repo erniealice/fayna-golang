@@ -11,6 +11,9 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
       .BillableStatus, .BillRate, .BillAmount, .Hours, .Product,
       .UnitOfMeasure, .ExpenseCategory, .ID, .FormAction, .IsEdit,
       .CommonLabels, .Labels
+
+TODO(P7 lyngua sweep): section titles "Activity", "Cost", "Billing", "Currency"
+are intentional English fallbacks — wire through lyngua when labels are added.
 */}}
 {{define "job-activity-drawer-form"}}
 <form hx-post="{{.FormAction}}"
@@ -24,16 +27,21 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
 
     <div class="sheet-body">
 
-        {{/* --- Entry Type --- */}}
+        {{template "form-section" (dict "Title" "Activity")}}
+
+        {{/* --- Entry Type ---
+             2026-04-30 enum-select-canonicalize Wave 4 — option list is
+             the source of truth; do not move it back into a Go
+             option-builder. Drift test:
+             views/job_activity/templates/templates_test.go
+             (TestEntryTypeOptionsMatchProto) diffs these against
+             jobactivitypb.EntryType_name. Skip UNSPECIFIED.
+             TODO(enum-select Wave 4): rework drift test to scan
+             Data.EntryTypeOptions slice instead of raw HTML <option> tags
+             so this block can be converted to form-group select. */}}
         <div class="form-row single">
             <div class="form-group">
                 <label class="form-label" for="job-activity-entry-type">{{.Labels.Form.EntryType}}</label>
-                {{/* 2026-04-30 enum-select-canonicalize Wave 4 — option list is
-                     the source of truth; do not move it back into a Go
-                     option-builder. Drift test:
-                     views/job_activity/templates/templates_test.go
-                     (TestEntryTypeOptionsMatchProto) diffs these against
-                     jobactivitypb.EntryType_name. Skip UNSPECIFIED. */}}
                 <select name="entry_type"
                         id="job-activity-entry-type"
                         class="form-select"
@@ -53,7 +61,10 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
              is the source of truth; do not move it back into a Go option-builder.
              Drift test: views/job_activity/templates/templates_test.go
              (TestBillableStatusOptionsMatchProto) diffs these against
-             jobactivitypb.BillableStatus_name. Skip UNSPECIFIED. */}}
+             jobactivitypb.BillableStatus_name. Skip UNSPECIFIED.
+             TODO(enum-select Wave 2): rework drift test to scan
+             Data.BillableStatusOptions slice instead of raw HTML <option> tags
+             so this block can be converted to form-group select. */}}
         <div class="form-row single">
             <div class="form-group">
                 <label class="form-label" for="job-activity-billable-status">{{.Labels.Form.BillableStatus}}</label>
@@ -72,72 +83,71 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
 
         {{/* --- Description --- */}}
         <div class="form-row single">
-            <div class="form-group">
-                <label class="form-label" for="job-activity-description">{{.Labels.Form.Description}}</label>
-                <textarea name="description"
-                          id="job-activity-description"
-                          class="form-textarea"
-                          rows="3"
-                          maxlength="500"
-                          data-testid="job-activity-description">{{.Description}}</textarea>
-            </div>
+            {{template "form-group" (dict
+                "Type"      "textarea"
+                "Name"      "description"
+                "Label"     .Labels.Form.Description
+                "Value"     .Description
+                "Rows"      3
+                "MaxLength" 500
+                "TestId"    "job-activity-description"
+            )}}
         </div>
+
+        {{template "form-section" (dict "Title" "Cost")}}
 
         {{/* --- Quantity & Unit Cost --- */}}
         <div class="form-row">
-            <div class="form-group">
-                <label class="form-label" for="job-activity-quantity">{{.Labels.Form.Quantity}}</label>
-                <input type="number"
-                       name="quantity"
-                       id="job-activity-quantity"
-                       class="form-input"
-                       step="0.01"
-                       min="0"
-                       value="{{.Quantity}}"
-                       required
-                       data-testid="job-activity-quantity">
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="job-activity-unit-cost">{{.Labels.Form.UnitCost}}</label>
-                <input type="number"
-                       name="unit_cost"
-                       id="job-activity-unit-cost"
-                       class="form-input"
-                       step="0.01"
-                       min="0"
-                       value="{{.UnitCost}}"
-                       required
-                       data-testid="job-activity-unit-cost">
-            </div>
+            {{template "form-group" (dict
+                "Type"     "number"
+                "Name"     "quantity"
+                "Label"    .Labels.Form.Quantity
+                "Value"    .Quantity
+                "Required" true
+                "Step"     "0.01"
+                "Min"      "0"
+                "TestId"   "job-activity-quantity"
+            )}}
+            {{template "form-group" (dict
+                "Type"     "number"
+                "Name"     "unit_cost"
+                "Label"    .Labels.Form.UnitCost
+                "Value"    .UnitCost
+                "Required" true
+                "Step"     "0.01"
+                "Min"      "0"
+                "TestId"   "job-activity-unit-cost"
+            )}}
         </div>
+
+        {{template "form-section" (dict "Title" "Billing")}}
 
         {{/* --- Bill Rate & Bill Amount (only relevant when billable_status = BILLABLE)
              Both stored as proto centavo fields (`bill_rate`, `bill_amount`); UI
-             takes major-units and the handler ×100s on submit. */}}
+             takes major-units and the handler ×100s on submit.
+             The inline script tail below hides these rows when billable_status ≠ BILLABLE. */}}
         <div class="form-row">
-            <div class="form-group">
-                <label class="form-label" for="job-activity-bill-rate">{{.Labels.Form.BillRate}}</label>
-                <input type="number"
-                       name="bill_rate"
-                       id="job-activity-bill-rate"
-                       class="form-input"
-                       step="0.01"
-                       min="0"
-                       value="{{.BillRate}}"
-                       data-testid="job-activity-bill-rate">
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="job-activity-bill-amount">{{.Labels.Form.BillAmount}}</label>
-                <input type="number"
-                       name="bill_amount"
-                       id="job-activity-bill-amount"
-                       class="form-input"
-                       step="0.01"
-                       min="0"
-                       value="{{.BillAmount}}"
-                       data-testid="job-activity-bill-amount">
-            </div>
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "bill_rate"
+                "Label"  .Labels.Form.BillRate
+                "Value"  .BillRate
+                "Step"   "0.01"
+                "Min"    "0"
+                "TestId" "job-activity-bill-rate"
+            )}}
+            {{template "form-group" (dict
+                "Type"   "number"
+                "Name"   "bill_amount"
+                "Label"  .Labels.Form.BillAmount
+                "Value"  .BillAmount
+                "Step"   "0.01"
+                "Min"    "0"
+                "TestId" "job-activity-bill-amount"
+            )}}
         </div>
+
+        {{template "form-section" (dict "Title" "Currency")}}
 
         {{/* --- Currency --- */}}
         <div class="form-row single">
@@ -157,7 +167,9 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
 
     </div>
 
-    {{/* Custom footer so the submit button carries a stable data-testid. */}}
+    {{/* Custom footer: phase5 specs reference data-testid="job-activity-submit"
+         and data-testid="job-activity-cancel" explicitly (11-milestone-mixed-tm-overage.spec.ts).
+         Use canonical class names but keep custom testids. */}}
     <div class="sheet-footer">
         <button type="button"
                 class="btn btn-secondary"
@@ -172,4 +184,32 @@ Data: .JobID, .EntryType, .Description, .Quantity, .UnitCost, .Currency,
         </button>
     </div>
 </form>
+<script>
+(function() {
+    var form = document.currentScript.previousElementSibling;
+    while (form && form.tagName !== 'FORM') { form = form.previousElementSibling; }
+    if (!form) { return; }
+
+    var billable = form.querySelector('[name="billable_status"]');
+    var billRateRow = form.querySelector('[name="bill_rate"]');
+    if (billRateRow) { billRateRow = billRateRow.closest('.form-row, .form-group'); }
+    var billAmountRow = form.querySelector('[name="bill_amount"]');
+    if (billAmountRow) { billAmountRow = billAmountRow.closest('.form-row, .form-group'); }
+
+    function applyBillableGuards() {
+        var isBillable = billable && billable.value === 'BILLABLE_STATUS_BILLABLE';
+        if (billRateRow) { billRateRow.style.display = isBillable ? '' : 'none'; }
+        if (billAmountRow) { billAmountRow.style.display = isBillable ? '' : 'none'; }
+        if (!isBillable) {
+            var r = form.querySelector('[name="bill_rate"]');
+            if (r) { r.value = ''; }
+            var a = form.querySelector('[name="bill_amount"]');
+            if (a) { a.value = ''; }
+        }
+    }
+
+    if (billable) { billable.addEventListener('change', applyBillableGuards); }
+    applyBillableGuards();
+}());
+</script>
 {{end}}

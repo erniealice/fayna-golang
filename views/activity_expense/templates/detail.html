@@ -1,0 +1,65 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "activity-expense-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "activity-expense-detail-content"}}
+<div class="page-content act-detail-layout">
+
+    {{/* --- Info section (single tab, v1: no tab strip needed) --- */}}
+    <div class="act-info-section">
+        <div class="act-info-grid">
+
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.ExpenseCategory}}</span>
+                <span class="act-info-value" data-testid="activity-expense-category">{{.ExpenseCategoryID}}</span>
+            </div>
+
+            {{if .VendorRef}}
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.VendorRef}}</span>
+                <span class="act-info-value" data-testid="activity-expense-vendor-ref">{{.VendorRef}}</span>
+            </div>
+            {{end}}
+
+            {{if .ReceiptURL}}
+            <div class="act-info-item act-info-item--wide">
+                <span class="act-info-label">{{.Labels.Detail.ReceiptURL}}</span>
+                <span class="act-info-value" data-testid="activity-expense-receipt-url">{{.ReceiptURL}}</span>
+            </div>
+            {{end}}
+
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.PaymentMethod}}</span>
+                <span class="act-info-value" data-testid="activity-expense-payment-method">{{.PaymentMethod}}</span>
+            </div>
+
+            {{if .MarkupPctOverride}}
+            <div class="act-info-item">
+                <span class="act-info-label">{{.Labels.Detail.MarkupPctOverride}}</span>
+                <span class="act-info-value mono" data-testid="activity-expense-markup-pct">{{.MarkupPctOverride}}%</span>
+            </div>
+            {{end}}
+
+        </div>
+
+        {{/* Edit CTA — deep-links to the activity expense edit drawer */}}
+        {{if .EditURL}}
+        <div class="act-actions">
+            <a hx-get="{{.EditURL}}"
+               hx-target="#sheetContent"
+               hx-swap="innerHTML"
+               hx-on::after-request="lf.Sheet.open()"
+               class="btn btn-secondary"
+               title="{{.Labels.Buttons.Edit}}"
+               data-testid="activity-expense-edit-btn">
+                {{.Labels.Buttons.Edit}}
+            </a>
+        </div>
+        {{end}}
+
+    </div>
+
+</div>
+{{end}}

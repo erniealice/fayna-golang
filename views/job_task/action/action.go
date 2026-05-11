@@ -6,8 +6,8 @@ package action
 import (
 	"context"
 
-	fayna "github.com/erniealice/fayna-golang"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
+	fayna "github.com/erniealice/fayna-golang"
 )
 
 // Deps holds dependencies shared across all job_task action handlers.

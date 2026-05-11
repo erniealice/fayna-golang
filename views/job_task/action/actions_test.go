@@ -42,8 +42,8 @@ func TestTaskStatusToEnum(t *testing.T) {
 		{input: "TASK_STATUS_REWORK", want: jobtaskpb.TaskStatus_TASK_STATUS_REWORK},
 		{input: "", want: jobtaskpb.TaskStatus_TASK_STATUS_UNSPECIFIED},
 		{input: "unknown", want: jobtaskpb.TaskStatus_TASK_STATUS_UNSPECIFIED},
-		{input: "PENDING", want: jobtaskpb.TaskStatus_TASK_STATUS_UNSPECIFIED},    // case-sensitive
-		{input: "Completed", want: jobtaskpb.TaskStatus_TASK_STATUS_UNSPECIFIED},  // case-sensitive
+		{input: "PENDING", want: jobtaskpb.TaskStatus_TASK_STATUS_UNSPECIFIED},   // case-sensitive
+		{input: "Completed", want: jobtaskpb.TaskStatus_TASK_STATUS_UNSPECIFIED}, // case-sensitive
 	}
 
 	for _, tt := range tests {
@@ -91,8 +91,8 @@ func TestTaskStatusToEnum_Adversarial(t *testing.T) {
 		"'; DROP TABLE job_task; --",
 		"\x00",
 		strings.Repeat("x", 100000),
-		" pending",       // leading space
-		"pending ",       // trailing space
+		" pending", // leading space
+		"pending ", // trailing space
 		"Pending",
 		"IN_PROGRESS",
 		"COMPLETED",

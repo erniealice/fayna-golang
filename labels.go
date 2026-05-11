@@ -10,17 +10,17 @@ package fayna
 
 // JobTemplateLabels holds all translatable strings for the job template module.
 type JobTemplateLabels struct {
-	Page        JobTemplatePageLabels        `json:"page"`
-	Buttons     JobTemplateButtonLabels      `json:"buttons"`
-	Columns     JobTemplateColumnLabels      `json:"columns"`
-	Empty       JobTemplateEmptyLabels       `json:"empty"`
-	Form        JobTemplateFormLabels        `json:"form"`
-	Actions     JobTemplateActionLabels      `json:"actions"`
-	Detail      JobTemplateDetailLabels      `json:"detail"`
-	Tabs        JobTemplateTabLabels         `json:"tabs"`
-	Confirm     JobTemplateConfirmLabels     `json:"confirm"`
-	Errors      JobTemplateErrorLabels       `json:"errors"`
-	BulkActions JobTemplateBulkActionLabels  `json:"bulkActions"`
+	Page        JobTemplatePageLabels       `json:"page"`
+	Buttons     JobTemplateButtonLabels     `json:"buttons"`
+	Columns     JobTemplateColumnLabels     `json:"columns"`
+	Empty       JobTemplateEmptyLabels      `json:"empty"`
+	Form        JobTemplateFormLabels       `json:"form"`
+	Actions     JobTemplateActionLabels     `json:"actions"`
+	Detail      JobTemplateDetailLabels     `json:"detail"`
+	Tabs        JobTemplateTabLabels        `json:"tabs"`
+	Confirm     JobTemplateConfirmLabels    `json:"confirm"`
+	Errors      JobTemplateErrorLabels      `json:"errors"`
+	BulkActions JobTemplateBulkActionLabels `json:"bulkActions"`
 }
 
 type JobTemplatePageLabels struct {
@@ -52,11 +52,11 @@ type JobTemplateEmptyLabels struct {
 }
 
 type JobTemplateActionLabels struct {
-	View    string `json:"view"`
-	Edit    string `json:"edit"`
-	Delete  string `json:"delete"`
+	View   string `json:"view"`
+	Edit   string `json:"edit"`
+	Delete string `json:"delete"`
 	// Add is the CTA label on the Phases tab.
-	Add     string `json:"add"`
+	Add string `json:"add"`
 	// AddTask is the CTA label on the Tasks tab.
 	AddTask string `json:"addTask"`
 }
@@ -189,22 +189,22 @@ func DefaultJobTemplateLabels() JobTemplateLabels {
 
 // JobActivityLabels holds all translatable strings for the job activity module.
 type JobActivityLabels struct {
-	Page        JobActivityPageLabels        `json:"page"`
-	Buttons     JobActivityButtonLabels      `json:"buttons"`
-	Columns     JobActivityColumnLabels      `json:"columns"`
-	Empty       JobActivityEmptyLabels       `json:"empty"`
-	Form        JobActivityFormLabels        `json:"form"`
-	Actions     JobActivityActionLabels      `json:"actions"`
-	Detail      JobActivityDetailLabels      `json:"detail"`
-	Status      JobActivityStatusLabels      `json:"status"`
-	Tabs        JobActivityTabLabels         `json:"tabs"`
-	Errors      JobActivityErrorLabels       `json:"errors"`
-	BulkActions JobActivityBulkActionLabels  `json:"bulkActions"`
+	Page        JobActivityPageLabels       `json:"page"`
+	Buttons     JobActivityButtonLabels     `json:"buttons"`
+	Columns     JobActivityColumnLabels     `json:"columns"`
+	Empty       JobActivityEmptyLabels      `json:"empty"`
+	Form        JobActivityFormLabels       `json:"form"`
+	Actions     JobActivityActionLabels     `json:"actions"`
+	Detail      JobActivityDetailLabels     `json:"detail"`
+	Status      JobActivityStatusLabels     `json:"status"`
+	Tabs        JobActivityTabLabels        `json:"tabs"`
+	Errors      JobActivityErrorLabels      `json:"errors"`
+	BulkActions JobActivityBulkActionLabels `json:"bulkActions"`
 }
 
 // JobActivityTabLabels holds tab labels for the job activity detail page.
 type JobActivityTabLabels struct {
-	Info        string `json:"info"`
+	Info string `json:"info"`
 	// Charge is the charge tab label (shows subtype detail: labor/material/expense).
 	Charge      string `json:"charge"`
 	Attachments string `json:"attachments"`
@@ -236,18 +236,18 @@ type JobActivityEmptyLabels struct {
 }
 
 type JobActivityFormLabels struct {
-	Job            string `json:"job"`
-	Task           string `json:"task"`
-	EntryType      string `json:"entryType"`
-	Description    string `json:"description"`
-	BillableStatus string `json:"billableStatus"`
-	Hours          string `json:"hours"`
-	HourlyRate     string `json:"hourlyRate"`
-	Product        string `json:"product"`
-	Quantity       string `json:"quantity"`
-	UnitCost       string `json:"unitCost"`
-	Amount         string `json:"amount"`
-	Category       string `json:"category"`
+	Job                string `json:"job"`
+	Task               string `json:"task"`
+	EntryType          string `json:"entryType"`
+	Description        string `json:"description"`
+	BillableStatus     string `json:"billableStatus"`
+	Hours              string `json:"hours"`
+	HourlyRate         string `json:"hourlyRate"`
+	Product            string `json:"product"`
+	Quantity           string `json:"quantity"`
+	UnitCost           string `json:"unitCost"`
+	Amount             string `json:"amount"`
+	Category           string `json:"category"`
 	EntryTypeInfo      string `json:"entryTypeInfo"`
 	BillableStatusInfo string `json:"billableStatusInfo"`
 	QuantityInfo       string `json:"quantityInfo"`
@@ -324,13 +324,13 @@ type JobActivityStatusLabels struct {
 }
 
 type JobActivityErrorLabels struct {
-	PermissionDenied      string `json:"permissionDenied"`
-	NotFound              string `json:"notFound"`
-	IDRequired            string `json:"idRequired"`
-	InUse                 string `json:"inUse"`
-	InvalidForm           string `json:"invalidForm"`
-	NoActivitiesSelected  string `json:"noActivitiesSelected"`
-	InvoiceGenFailed      string `json:"invoiceGenFailed"`
+	PermissionDenied     string `json:"permissionDenied"`
+	NotFound             string `json:"notFound"`
+	IDRequired           string `json:"idRequired"`
+	InUse                string `json:"inUse"`
+	InvalidForm          string `json:"invalidForm"`
+	NoActivitiesSelected string `json:"noActivitiesSelected"`
+	InvoiceGenFailed     string `json:"invoiceGenFailed"`
 }
 
 // JobActivityBulkActionLabels holds translatable strings for job activity bulk-action controls.
@@ -387,17 +387,17 @@ type ActivityLaborEmptyLabels struct {
 }
 
 type ActivityLaborFormLabels struct {
-	SectionCharge   string `json:"sectionCharge"`
-	Staff           string `json:"staff"`
-	Hours           string `json:"hours"`
-	RateType        string `json:"rateType"`
-	TimeStart       string `json:"timeStart"`
-	TimeEnd         string `json:"timeEnd"`
-	RateTypeStandard  string `json:"rateTypeStandard"`
-	RateTypeOvertime  string `json:"rateTypeOvertime"`
-	RateTypePremium   string `json:"rateTypePremium"`
-	SubmitCreate    string `json:"submitCreate"`
-	SubmitUpdate    string `json:"submitUpdate"`
+	SectionCharge    string `json:"sectionCharge"`
+	Staff            string `json:"staff"`
+	Hours            string `json:"hours"`
+	RateType         string `json:"rateType"`
+	TimeStart        string `json:"timeStart"`
+	TimeEnd          string `json:"timeEnd"`
+	RateTypeStandard string `json:"rateTypeStandard"`
+	RateTypeOvertime string `json:"rateTypeOvertime"`
+	RateTypePremium  string `json:"rateTypePremium"`
+	SubmitCreate     string `json:"submitCreate"`
+	SubmitUpdate     string `json:"submitUpdate"`
 }
 
 type ActivityLaborDetailLabels struct {
@@ -669,17 +669,17 @@ func DefaultActivityLaborLabels() ActivityLaborLabels {
 			Message: "No labor charge recorded for this activity.",
 		},
 		Form: ActivityLaborFormLabels{
-			SectionCharge:   "Charge",
-			Staff:           "Staff",
-			Hours:           "Hours",
-			RateType:        "Rate Type",
-			TimeStart:       "Start Time",
-			TimeEnd:         "End Time",
-			RateTypeStandard:  "Standard",
-			RateTypeOvertime:  "Overtime",
-			RateTypePremium:   "Premium",
-			SubmitCreate:    "Save",
-			SubmitUpdate:    "Update",
+			SectionCharge:    "Charge",
+			Staff:            "Staff",
+			Hours:            "Hours",
+			RateType:         "Rate Type",
+			TimeStart:        "Start Time",
+			TimeEnd:          "End Time",
+			RateTypeStandard: "Standard",
+			RateTypeOvertime: "Overtime",
+			RateTypePremium:  "Premium",
+			SubmitCreate:     "Save",
+			SubmitUpdate:     "Update",
 		},
 		Detail: ActivityLaborDetailLabels{
 			PageTitle:   "Labor Charge",
@@ -818,17 +818,17 @@ func DefaultJobActivityLabels() JobActivityLabels {
 
 // JobLabels holds all translatable strings for the job module.
 type JobLabels struct {
-	Page        JobPageLabels         `json:"page"`
-	Buttons     JobButtonLabels       `json:"buttons"`
-	Columns     JobColumnLabels       `json:"columns"`
-	Empty       JobEmptyLabels        `json:"empty"`
-	Form        JobFormLabels         `json:"form"`
-	Actions     JobActionLabels       `json:"actions"`
-	Detail      JobDetailLabels       `json:"detail"`
-	Tabs        JobTabLabels          `json:"tabs"`
-	Confirm     JobConfirmLabels      `json:"confirm"`
-	Errors      JobErrorLabels        `json:"errors"`
-	BulkActions JobBulkActionLabels   `json:"bulkActions"`
+	Page        JobPageLabels       `json:"page"`
+	Buttons     JobButtonLabels     `json:"buttons"`
+	Columns     JobColumnLabels     `json:"columns"`
+	Empty       JobEmptyLabels      `json:"empty"`
+	Form        JobFormLabels       `json:"form"`
+	Actions     JobActionLabels     `json:"actions"`
+	Detail      JobDetailLabels     `json:"detail"`
+	Tabs        JobTabLabels        `json:"tabs"`
+	Confirm     JobConfirmLabels    `json:"confirm"`
+	Errors      JobErrorLabels      `json:"errors"`
+	BulkActions JobBulkActionLabels `json:"bulkActions"`
 	// Dashboard labels for the Job live dashboard
 	// (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
 	Dashboard JobDashboardLabels `json:"dashboard"`
@@ -840,10 +840,10 @@ type JobDashboardLabels struct {
 	Title    string `json:"title"`
 	Subtitle string `json:"subtitle"`
 	// Stats
-	StatActive       string `json:"statActive"`
-	StatDoneMonth    string `json:"statDoneMonth"`
-	StatOverdue      string `json:"statOverdue"`
-	StatHoursWeek    string `json:"statHoursWeek"`
+	StatActive    string `json:"statActive"`
+	StatDoneMonth string `json:"statDoneMonth"`
+	StatOverdue   string `json:"statOverdue"`
+	StatHoursWeek string `json:"statHoursWeek"`
 	// Widgets
 	HoursPerWeek      string `json:"hoursPerWeek"`
 	UpcomingDeadlines string `json:"upcomingDeadlines"`
@@ -851,13 +851,13 @@ type JobDashboardLabels struct {
 	NoDeadlines       string `json:"noDeadlines"`
 	NoActivity        string `json:"noActivity"`
 	// Quick actions
-	QuickNewJob       string `json:"quickNewJob"`
-	QuickNewTemplate  string `json:"quickNewTemplate"`
-	QuickLogHours     string `json:"quickLogHours"`
-	QuickJobCalendar  string `json:"quickJobCalendar"`
+	QuickNewJob      string `json:"quickNewJob"`
+	QuickNewTemplate string `json:"quickNewTemplate"`
+	QuickLogHours    string `json:"quickLogHours"`
+	QuickJobCalendar string `json:"quickJobCalendar"`
 	// Common
-	ViewAll    string `json:"viewAll"`
-	AxisHours  string `json:"axisHours"`
+	ViewAll   string `json:"viewAll"`
+	AxisHours string `json:"axisHours"`
 }
 
 type JobPageLabels struct {
@@ -952,11 +952,11 @@ type JobDetailLabels struct {
 	// Job detail Phases tab. PhasesSectionTitle heads the per-phase mini-table;
 	// PhaseMarkComplete is the row CTA; PhaseStatusPending / PhaseStatusActive /
 	// PhaseStatusCompleted render the status badge.
-	PhasesSectionTitle    string `json:"phasesSectionTitle"`
-	PhaseMarkComplete     string `json:"phaseMarkComplete"`
-	PhaseStatusPending    string `json:"phaseStatusPending"`
-	PhaseStatusActive     string `json:"phaseStatusActive"`
-	PhaseStatusCompleted  string `json:"phaseStatusCompleted"`
+	PhasesSectionTitle   string `json:"phasesSectionTitle"`
+	PhaseMarkComplete    string `json:"phaseMarkComplete"`
+	PhaseStatusPending   string `json:"phaseStatusPending"`
+	PhaseStatusActive    string `json:"phaseStatusActive"`
+	PhaseStatusCompleted string `json:"phaseStatusCompleted"`
 }
 
 type JobTabLabels struct {
@@ -1196,29 +1196,29 @@ func DefaultJobPhaseLabels() JobPhaseLabels {
 // drawer-only view module. This module has no list page, no sidebar entry, and no
 // standalone detail page — operators reach it only via the JobTemplate detail Phases tab.
 type JobTemplatePhaseLabels struct {
-	Columns JobTemplatePhaseColumnLabels  `json:"columns"`
-	Form    JobTemplatePhaseFormLabels    `json:"form"`
-	Actions JobTemplatePhaseActionLabels  `json:"actions"`
-	Errors  JobTemplatePhaseErrorLabels   `json:"errors"`
+	Columns JobTemplatePhaseColumnLabels `json:"columns"`
+	Form    JobTemplatePhaseFormLabels   `json:"form"`
+	Actions JobTemplatePhaseActionLabels `json:"actions"`
+	Errors  JobTemplatePhaseErrorLabels  `json:"errors"`
 }
 
 type JobTemplatePhaseColumnLabels struct {
-	Name         string `json:"name"`
-	PhaseOrder   string `json:"phaseOrder"`
-	EstDuration  string `json:"estDuration"`
+	Name        string `json:"name"`
+	PhaseOrder  string `json:"phaseOrder"`
+	EstDuration string `json:"estDuration"`
 }
 
 type JobTemplatePhaseFormLabels struct {
-	SectionPhase        string `json:"sectionPhase"`
-	SectionResource     string `json:"sectionResource"`
-	SectionDependencies string `json:"sectionDependencies"`
-	Name                string `json:"name"`
-	NamePlaceholder     string `json:"namePlaceholder"`
-	PhaseOrder          string `json:"phaseOrder"`
-	EstDurationMinutes  string `json:"estDurationMinutes"`
-	Resource            string `json:"resource"`
-	ResourcePlaceholder string `json:"resourcePlaceholder"`
-	PredecessorPhase    string `json:"predecessorPhase"`
+	SectionPhase           string `json:"sectionPhase"`
+	SectionResource        string `json:"sectionResource"`
+	SectionDependencies    string `json:"sectionDependencies"`
+	Name                   string `json:"name"`
+	NamePlaceholder        string `json:"namePlaceholder"`
+	PhaseOrder             string `json:"phaseOrder"`
+	EstDurationMinutes     string `json:"estDurationMinutes"`
+	Resource               string `json:"resource"`
+	ResourcePlaceholder    string `json:"resourcePlaceholder"`
+	PredecessorPhase       string `json:"predecessorPhase"`
 	PredecessorPlaceholder string `json:"predecessorPlaceholder"`
 }
 
@@ -1276,10 +1276,10 @@ func DefaultJobTemplatePhaseLabels() JobTemplatePhaseLabels {
 // drawer-only view module. This module has no list page, no sidebar entry, and no
 // standalone detail page — operators reach it only via the JobTemplate detail Tasks tab.
 type JobTemplateTaskLabels struct {
-	Columns JobTemplateTaskColumnLabels  `json:"columns"`
-	Form    JobTemplateTaskFormLabels    `json:"form"`
-	Actions JobTemplateTaskActionLabels  `json:"actions"`
-	Errors  JobTemplateTaskErrorLabels   `json:"errors"`
+	Columns JobTemplateTaskColumnLabels `json:"columns"`
+	Form    JobTemplateTaskFormLabels   `json:"form"`
+	Actions JobTemplateTaskActionLabels `json:"actions"`
+	Errors  JobTemplateTaskErrorLabels  `json:"errors"`
 }
 
 type JobTemplateTaskColumnLabels struct {
@@ -2044,8 +2044,8 @@ type FulfillmentDashboardLabels struct {
 	QuickProcessReturn  string `json:"quickProcessReturn"`
 	QuickMarkDelivered  string `json:"quickMarkDelivered"`
 	// Common
-	ViewAll       string `json:"viewAll"`
-	AxisCount     string `json:"axisCount"`
+	ViewAll            string `json:"viewAll"`
+	AxisCount          string `json:"axisCount"`
 	AvgFulfillmentDays string `json:"avgFulfillmentDays"`
 }
 

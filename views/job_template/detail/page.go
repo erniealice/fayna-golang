@@ -22,11 +22,11 @@ import (
 // PageData holds the data for the job template detail page.
 type PageData struct {
 	types.PageData
-	ContentTemplate     string
-	JobTemplate         map[string]any
-	Labels              fayna.JobTemplateLabels
-	ActiveTab           string
-	TabItems            []pyeza.TabItem
+	ContentTemplate string
+	JobTemplate     map[string]any
+	Labels          fayna.JobTemplateLabels
+	ActiveTab       string
+	TabItems        []pyeza.TabItem
 	PhasesTable     *types.TableConfig
 	TasksTable      *types.TableConfig
 	StandardsTable  *types.TableConfig
@@ -238,6 +238,7 @@ func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData
 		ShowColumns: false,
 		ShowDensity: false,
 		ShowEntries: false,
+		RefreshURL:  route.ResolveURL(deps.Routes.TabActionURL, "id", id, "tab", "phases"),
 	}
 	types.ApplyColumnStyles(pageData.PhasesTable.Columns, pageData.PhasesTable.Rows)
 }

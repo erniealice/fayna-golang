@@ -6,8 +6,8 @@ package action
 import (
 	"context"
 
-	fayna "github.com/erniealice/fayna-golang"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	fayna "github.com/erniealice/fayna-golang"
 )
 
 // Deps holds dependencies shared across all job_template_phase action handlers.

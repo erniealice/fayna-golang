@@ -16,8 +16,8 @@ import (
 
 	fayna "github.com/erniealice/fayna-golang"
 
-	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
 )
 
 // JobRiskRow mirrors espyna.dashboard.JobRisk (top-completion-risk widget).

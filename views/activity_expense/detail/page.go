@@ -31,15 +31,15 @@ type DetailViewDeps struct {
 // PageData holds the data for the activity expense detail page.
 type PageData struct {
 	types.PageData
-	ContentTemplate     string
-	ActivityID          string
-	ExpenseCategoryID   string
-	VendorRef           string
-	ReceiptURL          string
-	PaymentMethod       string
-	MarkupPctOverride   string
-	EditURL             string
-	Labels              fayna.ActivityExpenseLabels
+	ContentTemplate   string
+	ActivityID        string
+	ExpenseCategoryID string
+	VendorRef         string
+	ReceiptURL        string
+	PaymentMethod     string
+	MarkupPctOverride string
+	EditURL           string
+	Labels            fayna.ActivityExpenseLabels
 }
 
 // NewView creates the activity expense detail view.

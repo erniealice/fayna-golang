@@ -21,11 +21,11 @@ type DetailViewDeps struct {
 	attachment.AttachmentOps
 	auditlog.AuditOps
 
-	Routes                  fayna.JobTemplateRoutes
+	Routes fayna.JobTemplateRoutes
 	// PhaseRoutes and TaskRoutes supply Edit/Delete URLs for per-row CTAs
 	// and the Add CTA on the Phases / Tasks tabs.
-	PhaseRoutes             fayna.JobTemplatePhaseRoutes
-	TaskRoutes              fayna.JobTemplateTaskRoutes
+	PhaseRoutes fayna.JobTemplatePhaseRoutes
+	TaskRoutes  fayna.JobTemplateTaskRoutes
 
 	ReadJobTemplate         func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)
 	ListPhasesByJobTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)

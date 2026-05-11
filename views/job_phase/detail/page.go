@@ -70,22 +70,22 @@ func phaseToMap(p *jobphasepb.JobPhase) map[string]any {
 	}
 
 	return map[string]any{
-		"id":                    p.GetId(),
-		"name":                  p.GetName(),
-		"job_id":                p.GetJobId(),
-		"job_name":              jobName,
-		"phase_order":           fmt.Sprintf("%d", p.GetPhaseOrder()),
-		"status":                status,
-		"status_variant":        statusVariant,
-		"resource_id":           resourceID,
-		"setup_minutes":         fmt.Sprintf("%d", setupMinutes),
-		"run_minutes_per_unit":  fmt.Sprintf("%.2f", runMinutesPerUnit),
-		"planned_start_string":  p.GetPlannedStartString(),
-		"planned_end_string":    p.GetPlannedEndString(),
-		"actual_start_string":   p.GetActualStartString(),
-		"actual_end_string":     p.GetActualEndString(),
-		"date_created_string":   p.GetDateCreatedString(),
-		"date_modified_string":  p.GetDateModifiedString(),
+		"id":                   p.GetId(),
+		"name":                 p.GetName(),
+		"job_id":               p.GetJobId(),
+		"job_name":             jobName,
+		"phase_order":          fmt.Sprintf("%d", p.GetPhaseOrder()),
+		"status":               status,
+		"status_variant":       statusVariant,
+		"resource_id":          resourceID,
+		"setup_minutes":        fmt.Sprintf("%d", setupMinutes),
+		"run_minutes_per_unit": fmt.Sprintf("%.2f", runMinutesPerUnit),
+		"planned_start_string": p.GetPlannedStartString(),
+		"planned_end_string":   p.GetPlannedEndString(),
+		"actual_start_string":  p.GetActualStartString(),
+		"actual_end_string":    p.GetActualEndString(),
+		"date_created_string":  p.GetDateCreatedString(),
+		"date_modified_string": p.GetDateModifiedString(),
 	}
 }
 

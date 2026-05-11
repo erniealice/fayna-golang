@@ -9,6 +9,7 @@ func attachmentConfig(deps *DetailViewDeps) *attachment.Config {
 	return &attachment.Config{
 		EntityType:       "task_outcome",
 		BucketName:       "attachments",
+		RefreshURL:       deps.Routes.TabActionURL,
 		UploadURL:        deps.Routes.AttachmentUploadURL,
 		DeleteURL:        deps.Routes.AttachmentDeleteURL,
 		Labels:           attachment.DefaultLabels(),

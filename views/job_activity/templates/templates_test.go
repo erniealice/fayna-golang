@@ -15,9 +15,9 @@
 // The drawer form template is now the source of truth — the option values
 // are hardcoded as <option value="..."> tags in the HTML. The drift test
 // below:
-//   1. Reads the template HTML via os.ReadFile.
-//   2. Extracts the <option value="..."> values for the named <select>.
-//   3. Asserts the set equals the proto enum's _name map (minus UNSPECIFIED).
+//  1. Reads the template HTML via os.ReadFile.
+//  2. Extracts the <option value="..."> values for the named <select>.
+//  3. Asserts the set equals the proto enum's _name map (minus UNSPECIFIED).
 //
 // When someone adds a proto enum value (e.g. BILLABLE_STATUS_WRITE_OFF was
 // missing from the template before this commit), the matching test fails

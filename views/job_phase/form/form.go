@@ -31,9 +31,9 @@ type Data struct {
 	StatusOptions []map[string]any
 
 	// Optional FKs
-	TemplatePhaseID   string
-	ResourceID        string
-	ResourceName      string
+	TemplatePhaseID    string
+	ResourceID         string
+	ResourceName       string
 	PredecessorPhaseID string
 
 	// Timing

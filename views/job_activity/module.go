@@ -122,11 +122,11 @@ func NewModule(deps *ModuleDeps) *Module {
 		ActivityMaterialRoutes: deps.ActivityMaterialRoutes,
 		ActivityExpenseRoutes:  deps.ActivityExpenseRoutes,
 		ReadJobActivity:        deps.ReadJobActivity,
-		ReadActivityLabor:    deps.ReadActivityLabor,
-		ReadActivityMaterial: deps.ReadActivityMaterial,
-		ReadActivityExpense:  deps.ReadActivityExpense,
-		Labels:               deps.Labels,
-		CommonLabels:         deps.CommonLabels,
+		ReadActivityLabor:      deps.ReadActivityLabor,
+		ReadActivityMaterial:   deps.ReadActivityMaterial,
+		ReadActivityExpense:    deps.ReadActivityExpense,
+		Labels:                 deps.Labels,
+		CommonLabels:           deps.CommonLabels,
 	}
 
 	actionDeps := &jobactivityaction.Deps{

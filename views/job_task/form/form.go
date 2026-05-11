@@ -32,12 +32,12 @@ type Data struct {
 	StatusOptions []map[string]any
 
 	// Assignment & Resource FKs
-	AssignedTo         string
-	AssignedToName     string
-	ResourceID         string
-	ResourceName       string
-	TemplateTaskID     string
-	TemplateTaskName   string
+	AssignedTo       string
+	AssignedToName   string
+	ResourceID       string
+	ResourceName     string
+	TemplateTaskID   string
+	TemplateTaskName string
 
 	// Schedule
 	PlannedQuantity   float64

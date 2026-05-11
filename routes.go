@@ -81,10 +81,10 @@ const (
 	// JobTemplatePhase drawer-only module routes.
 	// No list page, no detail page, no sidebar entry.
 	// Reached via JobTemplate detail Phases tab Add/Edit/Delete CTAs.
-	JobTemplatePhaseAddURL              = "/action/job-template-phase/add"
-	JobTemplatePhaseEditURL             = "/action/job-template-phase/edit/{id}"
-	JobTemplatePhaseDeleteURL           = "/action/job-template-phase/delete"
-	JobTemplatePhaseBulkDeleteURL       = "/action/job-template-phase/bulk-delete"
+	JobTemplatePhaseAddURL        = "/action/job-template-phase/add"
+	JobTemplatePhaseEditURL       = "/action/job-template-phase/edit/{id}"
+	JobTemplatePhaseDeleteURL     = "/action/job-template-phase/delete"
+	JobTemplatePhaseBulkDeleteURL = "/action/job-template-phase/bulk-delete"
 	// JobTemplatePhaseResourceSearchURL reuses the job_phase resource search endpoint
 	// (same underlying resource entity — no separate handler needed).
 	JobTemplatePhaseResourceSearchURL = JobPhaseResourceSearchURL
@@ -92,10 +92,10 @@ const (
 	// JobTemplateTask drawer-only module routes.
 	// No list page, no detail page, no sidebar entry.
 	// Reached via JobTemplate detail Tasks tab Add/Edit/Delete CTAs.
-	JobTemplateTaskAddURL            = "/action/job-template-task/add"
-	JobTemplateTaskEditURL           = "/action/job-template-task/edit/{id}"
-	JobTemplateTaskDeleteURL         = "/action/job-template-task/delete"
-	JobTemplateTaskBulkDeleteURL     = "/action/job-template-task/bulk-delete"
+	JobTemplateTaskAddURL        = "/action/job-template-task/add"
+	JobTemplateTaskEditURL       = "/action/job-template-task/edit/{id}"
+	JobTemplateTaskDeleteURL     = "/action/job-template-task/delete"
+	JobTemplateTaskBulkDeleteURL = "/action/job-template-task/bulk-delete"
 	// JobTemplateTaskResourceSearchURL reuses the job_phase resource search endpoint.
 	JobTemplateTaskResourceSearchURL = JobPhaseResourceSearchURL
 

@@ -21,20 +21,20 @@ import (
 //
 // 2026-04-29 milestone-billing plan §5/§6.
 type ActivityRow struct {
-	ID                   string
-	EntryType            string
-	EntryTypeLabel       string
-	BillableStatus       string // shorthand: included | billable | non_billable | write_off | unspecified
-	BillableStatusLabel  string
+	ID                    string
+	EntryType             string
+	EntryTypeLabel        string
+	BillableStatus        string // shorthand: included | billable | non_billable | write_off | unspecified
+	BillableStatusLabel   string
 	BillableStatusVariant string // badge variant
-	Description          string
-	Quantity             string
-	UnitCost             string
-	TotalCost            string
-	BillRate             string
-	BillAmount           string
-	Currency             string
-	EditURL              string
+	Description           string
+	Quantity              string
+	UnitCost              string
+	TotalCost             string
+	BillRate              string
+	BillAmount            string
+	Currency              string
+	EditURL               string
 }
 
 // loadActivitiesTab populates the PageData with the activities table data.
@@ -59,6 +59,7 @@ func loadActivitiesTab(ctx context.Context, deps *DetailViewDeps, pageData *Page
 
 	l := deps.Labels
 	pageData.ActivitiesTable = buildActivitiesTable(activities, l, deps.TableLabels)
+	pageData.ActivitiesTable.RefreshURL = route.ResolveURL(deps.Routes.TabActionURL, "id", jobID, "tab", "activities")
 
 	// 2026-04-29 milestone-billing plan §5/§6 — operator-facing add/edit CTAs
 	// are wired via JobActivityRoutes. Empty deps = CTA suppressed (back-compat

@@ -48,8 +48,8 @@ type ModuleDeps struct {
 	JobActivityLabels fayna.JobActivityLabels
 
 	// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
-	JobTemplateRoutes        fayna.JobTemplateRoutes
-	GetJobDashboardPageData  func(ctx context.Context, req *jobdashboard.Request) (*jobdashboard.Response, error)
+	JobTemplateRoutes       fayna.JobTemplateRoutes
+	GetJobDashboardPageData func(ctx context.Context, req *jobdashboard.Request) (*jobdashboard.Response, error)
 
 	// Job CRUD
 	CreateJob func(ctx context.Context, req *jobpb.CreateJobRequest) (*jobpb.CreateJobResponse, error)
@@ -132,13 +132,13 @@ func NewModule(deps *ModuleDeps) *Module {
 			DeleteAttachment: deps.DeleteAttachment,
 			NewAttachmentID:  deps.NewID,
 		},
-		Routes:             deps.Routes,
-		Labels:             deps.Labels,
-		CommonLabels:       deps.CommonLabels,
-		TableLabels:        deps.TableLabels,
+		Routes:       deps.Routes,
+		Labels:       deps.Labels,
+		CommonLabels: deps.CommonLabels,
+		TableLabels:  deps.TableLabels,
 		// 2026-04-29 milestone-billing plan §5/§6.
-		JobActivityRoutes: deps.JobActivityRoutes,
-		JobActivityLabels: deps.JobActivityLabels,
+		JobActivityRoutes:  deps.JobActivityRoutes,
+		JobActivityLabels:  deps.JobActivityLabels,
 		ReadJob:            deps.ReadJob,
 		ListJobPhases:      deps.ListJobPhases,
 		ListJobTasks:       deps.ListJobTasks,
@@ -198,7 +198,7 @@ func NewModule(deps *ModuleDeps) *Module {
 		BulkSetStatus:    jobaction.NewBulkSetStatusAction(actionDeps),
 		AttachmentUpload: jobdetail.NewAttachmentUploadAction(detailDeps),
 		AttachmentDelete: jobdetail.NewAttachmentDeleteAction(detailDeps),
-		AssignTask: jobdetail.NewAssignTaskAction(detailDeps),
+		AssignTask:       jobdetail.NewAssignTaskAction(detailDeps),
 		// Phase 3 — Pyeza dashboard block + per-app live dashboards plan.
 		Dashboard: jobdashboard.NewView(dashboardDeps),
 	}

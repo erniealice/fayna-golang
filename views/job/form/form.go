@@ -12,17 +12,17 @@ import (
 // No mapper: the Labels field is fayna.JobLabels verbatim — templates read
 // .Labels.Columns.Name, .Labels.Form.NamePlaceholder, etc. directly.
 type Data struct {
-	FormAction   string
-	IsEdit       bool
-	ID           string
-	Name         string
-	ClientID     string
-	LocationID   string
+	FormAction string
+	IsEdit     bool
+	ID         string
+	Name       string
+	ClientID   string
+	LocationID string
 
 	// Lifecycle
-	Status            string
-	StatusOptions     []types.SelectOption
-	BillingRuleType   string
+	Status             string
+	StatusOptions      []types.SelectOption
+	BillingRuleType    string
 	BillingRuleOptions []types.SelectOption
 
 	// Auto-complete display labels pre-filled on Edit.

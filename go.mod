@@ -9,6 +9,7 @@ require (
 	github.com/erniealice/esqyma v0.0.0
 	github.com/erniealice/hybra-golang v0.0.0
 	github.com/erniealice/lyngua v0.0.0-00010101000000-000000000000
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -17,6 +18,7 @@ require (
 	github.com/google/cel-go v0.23.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/yuin/goldmark v1.7.17 // indirect
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
 	golang.org/x/net v0.48.0 // indirect
@@ -25,7 +27,6 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20251002232023-7c0ddcbb5797 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251002232023-7c0ddcbb5797 // indirect
 	google.golang.org/grpc v1.75.1 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 )
 
 replace github.com/erniealice/esqyma => ../esqyma

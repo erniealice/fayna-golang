@@ -107,8 +107,8 @@ func (r JobRoutes) RouteMap() map[string]string {
 		"job.attachment.upload": r.AttachmentUploadURL,
 		"job.attachment.delete": r.AttachmentDeleteURL,
 
-		"job.task.assign":       r.TaskAssignURL,
-		"job.phase.set_status":  r.PhaseSetStatusURL,
+		"job.task.assign":      r.TaskAssignURL,
+		"job.phase.set_status": r.PhaseSetStatusURL,
 
 		"job.search.client":   r.ClientSearchURL,
 		"job.search.location": r.LocationSearchURL,
@@ -176,18 +176,18 @@ func DefaultJobPhaseRoutes() JobPhaseRoutes {
 // job phase routes.
 func (r JobPhaseRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"job_phase.list":               r.ListURL,
-		"job_phase.detail":             r.DetailURL,
-		"job_phase.add":                r.AddURL,
-		"job_phase.edit":               r.EditURL,
-		"job_phase.delete":             r.DeleteURL,
-		"job_phase.bulk_delete":        r.BulkDeleteURL,
-		"job_phase.set_status":         r.SetStatusURL,
-		"job_phase.bulk_set_status":    r.BulkSetStatusURL,
-		"job_phase.tab_action":         r.TabActionURL,
-		"job_phase.search.resource":    r.ResourceSearchURL,
-		"job_phase.attachment.upload":  r.AttachmentUploadURL,
-		"job_phase.attachment.delete":  r.AttachmentDeleteURL,
+		"job_phase.list":              r.ListURL,
+		"job_phase.detail":            r.DetailURL,
+		"job_phase.add":               r.AddURL,
+		"job_phase.edit":              r.EditURL,
+		"job_phase.delete":            r.DeleteURL,
+		"job_phase.bulk_delete":       r.BulkDeleteURL,
+		"job_phase.set_status":        r.SetStatusURL,
+		"job_phase.bulk_set_status":   r.BulkSetStatusURL,
+		"job_phase.tab_action":        r.TabActionURL,
+		"job_phase.search.resource":   r.ResourceSearchURL,
+		"job_phase.attachment.upload": r.AttachmentUploadURL,
+		"job_phase.attachment.delete": r.AttachmentDeleteURL,
 	}
 }
 
@@ -259,17 +259,17 @@ func (r JobTemplateRoutes) RouteMap() map[string]string {
 // JobActivityRoutes holds all route paths for the job activity (timesheet)
 // views and actions.
 type JobActivityRoutes struct {
-	ListURL    string `json:"list_url"`
-	DetailURL  string `json:"detail_url"`
-	AddURL     string `json:"add_url"`
-	EditURL    string `json:"edit_url"`
+	ListURL       string `json:"list_url"`
+	DetailURL     string `json:"detail_url"`
+	AddURL        string `json:"add_url"`
+	EditURL       string `json:"edit_url"`
 	DeleteURL     string `json:"delete_url"`
 	BulkDeleteURL string `json:"bulk_delete_url"`
 	SubmitURL     string `json:"submit_url"`
-	ApproveURL string `json:"approve_url"`
-	RejectURL  string `json:"reject_url"`
-	PostURL    string `json:"post_url"`
-	ReverseURL string `json:"reverse_url"`
+	ApproveURL    string `json:"approve_url"`
+	RejectURL     string `json:"reject_url"`
+	PostURL       string `json:"post_url"`
+	ReverseURL    string `json:"reverse_url"`
 
 	BulkGenerateInvoiceURL string `json:"bulk_generate_invoice_url"`
 
@@ -284,17 +284,17 @@ type JobActivityRoutes struct {
 // package-level route constants defined in routes.go.
 func DefaultJobActivityRoutes() JobActivityRoutes {
 	return JobActivityRoutes{
-		ListURL:    JobActivityListURL,
-		DetailURL:  JobActivityDetailURL,
-		AddURL:     JobActivityAddURL,
-		EditURL:    JobActivityEditURL,
+		ListURL:       JobActivityListURL,
+		DetailURL:     JobActivityDetailURL,
+		AddURL:        JobActivityAddURL,
+		EditURL:       JobActivityEditURL,
 		DeleteURL:     JobActivityDeleteURL,
 		BulkDeleteURL: JobActivityBulkDeleteURL,
 		SubmitURL:     JobActivitySubmitURL,
-		ApproveURL: JobActivityApproveURL,
-		RejectURL:  JobActivityRejectURL,
-		PostURL:    JobActivityPostURL,
-		ReverseURL: JobActivityReverseURL,
+		ApproveURL:    JobActivityApproveURL,
+		RejectURL:     JobActivityRejectURL,
+		PostURL:       JobActivityPostURL,
+		ReverseURL:    JobActivityReverseURL,
 
 		BulkGenerateInvoiceURL: JobActivityBulkGenerateInvoiceURL,
 
@@ -310,20 +310,20 @@ func DefaultJobActivityRoutes() JobActivityRoutes {
 func (r JobActivityRoutes) RouteMap() map[string]string {
 	return map[string]string{
 		"job_activity.list":                  r.ListURL,
-		"job_activity.detail":               r.DetailURL,
-		"job_activity.add":                  r.AddURL,
-		"job_activity.edit":                 r.EditURL,
-		"job_activity.delete":               r.DeleteURL,
-		"job_activity.bulk_delete":          r.BulkDeleteURL,
-		"job_activity.submit":               r.SubmitURL,
-		"job_activity.approve":              r.ApproveURL,
-		"job_activity.reject":               r.RejectURL,
-		"job_activity.post":                 r.PostURL,
-		"job_activity.reverse":              r.ReverseURL,
+		"job_activity.detail":                r.DetailURL,
+		"job_activity.add":                   r.AddURL,
+		"job_activity.edit":                  r.EditURL,
+		"job_activity.delete":                r.DeleteURL,
+		"job_activity.bulk_delete":           r.BulkDeleteURL,
+		"job_activity.submit":                r.SubmitURL,
+		"job_activity.approve":               r.ApproveURL,
+		"job_activity.reject":                r.RejectURL,
+		"job_activity.post":                  r.PostURL,
+		"job_activity.reverse":               r.ReverseURL,
 		"job_activity.bulk_generate_invoice": r.BulkGenerateInvoiceURL,
-		"job_activity.tab_action":           r.TabActionURL,
-		"job_activity.attachment.upload":    r.AttachmentUploadURL,
-		"job_activity.attachment.delete":    r.AttachmentDeleteURL,
+		"job_activity.tab_action":            r.TabActionURL,
+		"job_activity.attachment.upload":     r.AttachmentUploadURL,
+		"job_activity.attachment.delete":     r.AttachmentDeleteURL,
 	}
 }
 
@@ -372,15 +372,15 @@ func DefaultOutcomeCriteriaRoutes() OutcomeCriteriaRoutes {
 // outcome criteria routes.
 func (r OutcomeCriteriaRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"outcome_criteria.list":               r.ListURL,
-		"outcome_criteria.detail":             r.DetailURL,
-		"outcome_criteria.add":                r.AddURL,
-		"outcome_criteria.edit":               r.EditURL,
-		"outcome_criteria.delete":             r.DeleteURL,
-		"outcome_criteria.bulk_delete":        r.BulkDeleteURL,
-		"outcome_criteria.tab_action":         r.TabActionURL,
-		"outcome_criteria.attachment.upload":  r.AttachmentUploadURL,
-		"outcome_criteria.attachment.delete":  r.AttachmentDeleteURL,
+		"outcome_criteria.list":              r.ListURL,
+		"outcome_criteria.detail":            r.DetailURL,
+		"outcome_criteria.add":               r.AddURL,
+		"outcome_criteria.edit":              r.EditURL,
+		"outcome_criteria.delete":            r.DeleteURL,
+		"outcome_criteria.bulk_delete":       r.BulkDeleteURL,
+		"outcome_criteria.tab_action":        r.TabActionURL,
+		"outcome_criteria.attachment.upload": r.AttachmentUploadURL,
+		"outcome_criteria.attachment.delete": r.AttachmentDeleteURL,
 	}
 }
 
@@ -427,14 +427,14 @@ func DefaultTaskOutcomeRoutes() TaskOutcomeRoutes {
 // task outcome routes.
 func (r TaskOutcomeRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"task_outcome.list":               r.ListURL,
-		"task_outcome.detail":             r.DetailURL,
-		"task_outcome.add":                r.AddURL,
-		"task_outcome.edit":               r.EditURL,
-		"task_outcome.delete":             r.DeleteURL,
-		"task_outcome.tab_action":         r.TabActionURL,
-		"task_outcome.attachment.upload":  r.AttachmentUploadURL,
-		"task_outcome.attachment.delete":  r.AttachmentDeleteURL,
+		"task_outcome.list":              r.ListURL,
+		"task_outcome.detail":            r.DetailURL,
+		"task_outcome.add":               r.AddURL,
+		"task_outcome.edit":              r.EditURL,
+		"task_outcome.delete":            r.DeleteURL,
+		"task_outcome.tab_action":        r.TabActionURL,
+		"task_outcome.attachment.upload": r.AttachmentUploadURL,
+		"task_outcome.attachment.delete": r.AttachmentDeleteURL,
 	}
 }
 
@@ -483,10 +483,10 @@ func (r OutcomeSummaryRoutes) RouteMap() map[string]string {
 type JobTemplatePhaseRoutes struct {
 	// No ActiveNav/ActiveSubNav — not in sidebar.
 
-	AddURL           string `json:"add_url"`
-	EditURL          string `json:"edit_url"`
-	DeleteURL        string `json:"delete_url"`
-	BulkDeleteURL    string `json:"bulk_delete_url"`
+	AddURL        string `json:"add_url"`
+	EditURL       string `json:"edit_url"`
+	DeleteURL     string `json:"delete_url"`
+	BulkDeleteURL string `json:"bulk_delete_url"`
 
 	// ResourceSearchURL — action-mode auto-complete for the resource FK picker.
 	// Reuses the job_phase resource search endpoint (same resource entity).
@@ -510,11 +510,11 @@ func DefaultJobTemplatePhaseRoutes() JobTemplatePhaseRoutes {
 // job template phase routes.
 func (r JobTemplatePhaseRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"job_template_phase.add":              r.AddURL,
-		"job_template_phase.edit":             r.EditURL,
-		"job_template_phase.delete":           r.DeleteURL,
-		"job_template_phase.bulk_delete":      r.BulkDeleteURL,
-		"job_template_phase.search.resource":  r.ResourceSearchURL,
+		"job_template_phase.add":             r.AddURL,
+		"job_template_phase.edit":            r.EditURL,
+		"job_template_phase.delete":          r.DeleteURL,
+		"job_template_phase.bulk_delete":     r.BulkDeleteURL,
+		"job_template_phase.search.resource": r.ResourceSearchURL,
 	}
 }
 
@@ -597,12 +597,12 @@ func DefaultActivityLaborRoutes() ActivityLaborRoutes {
 // activity labor routes.
 func (r ActivityLaborRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"activity_labor.list":          r.ListURL,
-		"activity_labor.detail":        r.DetailURL,
-		"activity_labor.add":           r.AddURL,
-		"activity_labor.edit":          r.EditURL,
-		"activity_labor.delete":        r.DeleteURL,
-		"activity_labor.search.staff":  r.StaffSearchURL,
+		"activity_labor.list":         r.ListURL,
+		"activity_labor.detail":       r.DetailURL,
+		"activity_labor.add":          r.AddURL,
+		"activity_labor.edit":         r.EditURL,
+		"activity_labor.delete":       r.DeleteURL,
+		"activity_labor.search.staff": r.StaffSearchURL,
 	}
 }
 
@@ -649,13 +649,13 @@ func DefaultActivityMaterialRoutes() ActivityMaterialRoutes {
 // activity material routes.
 func (r ActivityMaterialRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"activity_material.list":             r.ListURL,
-		"activity_material.detail":           r.DetailURL,
-		"activity_material.add":              r.AddURL,
-		"activity_material.edit":             r.EditURL,
-		"activity_material.delete":           r.DeleteURL,
-		"activity_material.search.product":   r.ProductSearchURL,
-		"activity_material.search.location":  r.LocationSearchURL,
+		"activity_material.list":            r.ListURL,
+		"activity_material.detail":          r.DetailURL,
+		"activity_material.add":             r.AddURL,
+		"activity_material.edit":            r.EditURL,
+		"activity_material.delete":          r.DeleteURL,
+		"activity_material.search.product":  r.ProductSearchURL,
+		"activity_material.search.location": r.LocationSearchURL,
 	}
 }
 
@@ -771,20 +771,20 @@ func DefaultJobTaskRoutes() JobTaskRoutes {
 // job task routes.
 func (r JobTaskRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"job_task.list":               r.ListURL,
-		"job_task.detail":             r.DetailURL,
-		"job_task.add":                r.AddURL,
-		"job_task.edit":               r.EditURL,
-		"job_task.delete":             r.DeleteURL,
-		"job_task.bulk_delete":        r.BulkDeleteURL,
-		"job_task.set_status":         r.SetStatusURL,
-		"job_task.bulk_set_status":    r.BulkSetStatusURL,
-		"job_task.tab_action":         r.TabActionURL,
-		"job_task.search.staff":       r.StaffSearchURL,
-		"job_task.search.resource":    r.ResourceSearchURL,
-		"job_task.search.template":    r.TemplateTaskSearchURL,
-		"job_task.attachment.upload":  r.AttachmentUploadURL,
-		"job_task.attachment.delete":  r.AttachmentDeleteURL,
+		"job_task.list":              r.ListURL,
+		"job_task.detail":            r.DetailURL,
+		"job_task.add":               r.AddURL,
+		"job_task.edit":              r.EditURL,
+		"job_task.delete":            r.DeleteURL,
+		"job_task.bulk_delete":       r.BulkDeleteURL,
+		"job_task.set_status":        r.SetStatusURL,
+		"job_task.bulk_set_status":   r.BulkSetStatusURL,
+		"job_task.tab_action":        r.TabActionURL,
+		"job_task.search.staff":      r.StaffSearchURL,
+		"job_task.search.resource":   r.ResourceSearchURL,
+		"job_task.search.template":   r.TemplateTaskSearchURL,
+		"job_task.attachment.upload": r.AttachmentUploadURL,
+		"job_task.attachment.delete": r.AttachmentDeleteURL,
 	}
 }
 
@@ -829,16 +829,16 @@ func DefaultFulfillmentRoutes() FulfillmentRoutes {
 // RouteMap returns all fulfillment routes as a map for template URL resolution.
 func (r FulfillmentRoutes) RouteMap() map[string]string {
 	return map[string]string{
-		"fulfillment.dashboard":           r.DashboardURL,
-		"fulfillment.list":                r.ListURL,
-		"fulfillment.detail":              r.DetailURL,
-		"fulfillment.add":                 r.AddURL,
-		"fulfillment.edit":                r.EditURL,
-		"fulfillment.delete":              r.DeleteURL,
-		"fulfillment.transition":          r.TransitionURL,
-		"fulfillment.return":              r.ReturnURL,
-		"fulfillment.tab_action":          r.TabActionURL,
-		"fulfillment.attachment.upload":   r.AttachmentUploadURL,
-		"fulfillment.attachment.delete":   r.AttachmentDeleteURL,
+		"fulfillment.dashboard":         r.DashboardURL,
+		"fulfillment.list":              r.ListURL,
+		"fulfillment.detail":            r.DetailURL,
+		"fulfillment.add":               r.AddURL,
+		"fulfillment.edit":              r.EditURL,
+		"fulfillment.delete":            r.DeleteURL,
+		"fulfillment.transition":        r.TransitionURL,
+		"fulfillment.return":            r.ReturnURL,
+		"fulfillment.tab_action":        r.TabActionURL,
+		"fulfillment.attachment.upload": r.AttachmentUploadURL,
+		"fulfillment.attachment.delete": r.AttachmentDeleteURL,
 	}
 }

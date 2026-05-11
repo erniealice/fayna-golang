@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/erniealice/espyna-golang/reference"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
@@ -40,7 +41,6 @@ import (
 	outcomecriteriaMod "github.com/erniealice/fayna-golang/views/outcome_criteria"
 	outcomesummaryMod "github.com/erniealice/fayna-golang/views/outcome_summary"
 	taskoutcomeMod "github.com/erniealice/fayna-golang/views/task_outcome"
-	"github.com/erniealice/espyna-golang/reference"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 	pyeza "github.com/erniealice/pyeza-golang"
 )
@@ -53,21 +53,21 @@ import (
 type BlockOption func(*blockConfig)
 
 type blockConfig struct {
-	enableAll            bool
-	job                  bool
-	jobTemplate          bool
-	jobActivity          bool
-	jobPhase             bool
-	jobTask              bool
-	activityLabor        bool
-	activityMaterial     bool
-	activityExpense      bool
-	outcomeCriteria      bool
-	taskOutcome          bool
-	outcomeSummary       bool
-	fulfillment          bool
-	jobTemplatePhase     bool
-	jobTemplateTask      bool
+	enableAll        bool
+	job              bool
+	jobTemplate      bool
+	jobActivity      bool
+	jobPhase         bool
+	jobTask          bool
+	activityLabor    bool
+	activityMaterial bool
+	activityExpense  bool
+	outcomeCriteria  bool
+	taskOutcome      bool
+	outcomeSummary   bool
+	fulfillment      bool
+	jobTemplatePhase bool
+	jobTemplateTask  bool
 	// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 — cross-package
 	// URL pattern (e.g. "/app/subscriptions/detail/{id}") supplied by the
 	// consuming app via WithSubscriptionDetailURL. Empty = breadcrumb hidden.
@@ -139,20 +139,20 @@ func WithSubscriptionDetailURL(url string) BlockOption {
 	return func(c *blockConfig) { c.subscriptionDetailURL = url }
 }
 
-func (c *blockConfig) wantJob() bool                  { return c.enableAll || c.job }
-func (c *blockConfig) wantJobTemplate() bool          { return c.enableAll || c.jobTemplate }
-func (c *blockConfig) wantJobActivity() bool          { return c.enableAll || c.jobActivity }
-func (c *blockConfig) wantJobPhase() bool             { return c.enableAll || c.jobPhase }
-func (c *blockConfig) wantJobTask() bool              { return c.enableAll || c.jobTask }
-func (c *blockConfig) wantActivityLabor() bool        { return c.enableAll || c.activityLabor }
-func (c *blockConfig) wantActivityMaterial() bool     { return c.enableAll || c.activityMaterial }
-func (c *blockConfig) wantActivityExpense() bool      { return c.enableAll || c.activityExpense }
-func (c *blockConfig) wantOutcomeCriteria() bool      { return c.enableAll || c.outcomeCriteria }
-func (c *blockConfig) wantTaskOutcome() bool          { return c.enableAll || c.taskOutcome }
-func (c *blockConfig) wantOutcomeSummary() bool       { return c.enableAll || c.outcomeSummary }
-func (c *blockConfig) wantFulfillment() bool          { return c.enableAll || c.fulfillment }
-func (c *blockConfig) wantJobTemplatePhase() bool     { return c.enableAll || c.jobTemplatePhase }
-func (c *blockConfig) wantJobTemplateTask() bool      { return c.enableAll || c.jobTemplateTask }
+func (c *blockConfig) wantJob() bool              { return c.enableAll || c.job }
+func (c *blockConfig) wantJobTemplate() bool      { return c.enableAll || c.jobTemplate }
+func (c *blockConfig) wantJobActivity() bool      { return c.enableAll || c.jobActivity }
+func (c *blockConfig) wantJobPhase() bool         { return c.enableAll || c.jobPhase }
+func (c *blockConfig) wantJobTask() bool          { return c.enableAll || c.jobTask }
+func (c *blockConfig) wantActivityLabor() bool    { return c.enableAll || c.activityLabor }
+func (c *blockConfig) wantActivityMaterial() bool { return c.enableAll || c.activityMaterial }
+func (c *blockConfig) wantActivityExpense() bool  { return c.enableAll || c.activityExpense }
+func (c *blockConfig) wantOutcomeCriteria() bool  { return c.enableAll || c.outcomeCriteria }
+func (c *blockConfig) wantTaskOutcome() bool      { return c.enableAll || c.taskOutcome }
+func (c *blockConfig) wantOutcomeSummary() bool   { return c.enableAll || c.outcomeSummary }
+func (c *blockConfig) wantFulfillment() bool      { return c.enableAll || c.fulfillment }
+func (c *blockConfig) wantJobTemplatePhase() bool { return c.enableAll || c.jobTemplatePhase }
+func (c *blockConfig) wantJobTemplateTask() bool  { return c.enableAll || c.jobTemplateTask }
 
 // ---------------------------------------------------------------------------
 // routeRegistrarFull — optional HandleFunc extension for raw HTTP handlers.
@@ -749,15 +749,15 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// use cases — these are nil until activity subtype use cases are added.
 		if cfg.wantJobActivity() {
 			jaDeps := &jobactivitymod.ModuleDeps{
-				Routes:              jaRoutes,
-				Labels:              jaLabels,
-				CommonLabels:        ctx.Common,
-				TableLabels:         ctx.Table,
-				UploadFile:          uploadFile,
-				ListAttachments:     listAttachments,
-				CreateAttachment:    createAttachment,
-				DeleteAttachment:    deleteAttachment,
-				NewID:               newAttachmentID,
+				Routes:           jaRoutes,
+				Labels:           jaLabels,
+				CommonLabels:     ctx.Common,
+				TableLabels:      ctx.Table,
+				UploadFile:       uploadFile,
+				ListAttachments:  listAttachments,
+				CreateAttachment: createAttachment,
+				DeleteAttachment: deleteAttachment,
+				NewID:            newAttachmentID,
 				// Pass activity charge routes so the charge tab can resolve edit URLs.
 				ActivityLaborRoutes:    alRoutes,
 				ActivityMaterialRoutes: amRoutes,
@@ -995,11 +995,11 @@ func defaultFulfillmentLabels() fayna.FulfillmentLabels {
 		},
 		Columns: fayna.FulfillmentColumnLabels{
 			DeliveryMode: "Method",
-			Status:            "Status",
-			SupplierName:      "Supplier",
-			ScheduledAt:       "Scheduled",
-			ItemCount:         "Items",
-			Notes:             "Notes",
+			Status:       "Status",
+			SupplierName: "Supplier",
+			ScheduledAt:  "Scheduled",
+			ItemCount:    "Items",
+			Notes:        "Notes",
 		},
 		Tabs: fayna.FulfillmentTabLabels{
 			Info:        "Information",

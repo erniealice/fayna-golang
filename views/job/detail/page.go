@@ -52,10 +52,10 @@ type BudgetSnapshot struct {
 
 // ActualsRow is one row in the actuals rollup table.
 type ActualsRow struct {
-	EntryType  string
-	Count      int32
-	TotalCost  string // formatted display value (centavos ÷ 100)
-	Currency   string
+	EntryType string
+	Count     int32
+	TotalCost string // formatted display value (centavos ÷ 100)
+	Currency  string
 }
 
 // PageData holds the data for the job detail page.
@@ -75,9 +75,9 @@ type PageData struct {
 	JobActivityLabels fayna.JobActivityLabels
 	AddActivityURL    string
 	EditActivityURL   string
-	SettlementTable *types.TableConfig
-	OutcomesTable   *types.TableConfig
-	AttachmentTable *types.TableConfig
+	SettlementTable   *types.TableConfig
+	OutcomesTable     *types.TableConfig
+	AttachmentTable   *types.TableConfig
 	// PhasesList is the per-phase mini-list rendered above the denormalized
 	// task table on the Phases tab. Drives the "Mark Complete" CTA that
 	// flips JobPhase.status to COMPLETED. 2026-04-29 milestone-billing §4.

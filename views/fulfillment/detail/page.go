@@ -43,7 +43,7 @@ func fulfillmentToMap(f *fulfillmentpb.Fulfillment) map[string]any {
 		"workspace_id":       f.GetWorkspaceId(),
 		"revenue_id":         f.GetRevenueId(),
 		"supplier_id":        f.GetSupplierId(),
-		"delivery_mode": f.GetDeliveryMode(),
+		"delivery_mode":      f.GetDeliveryMode(),
 		"status":             f.GetStatus(),
 		"status_variant":     fulfillmentStatusVariant(f.GetStatus()),
 		"provider_status":    f.GetProviderStatus(),

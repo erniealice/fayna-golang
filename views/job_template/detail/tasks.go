@@ -118,6 +118,7 @@ func loadTasksTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData,
 		ShowColumns: false,
 		ShowDensity: false,
 		ShowEntries: false,
+		RefreshURL:  route.ResolveURL(deps.Routes.TabActionURL, "id", templateID, "tab", "tasks"),
 	}
 	types.ApplyColumnStyles(pageData.TasksTable.Columns, pageData.TasksTable.Rows)
 }

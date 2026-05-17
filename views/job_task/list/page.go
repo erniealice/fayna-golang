@@ -40,6 +40,10 @@ type PageData struct {
 func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
+		// 2026-05-14 permission-gates P2a: job_task catalog row added in Phase 1b.
+		if !perms.Can("job_task", "list") {
+			return view.Forbidden("job_task:list")
+		}
 
 		status := viewCtx.Request.PathValue("status")
 		if status == "" {

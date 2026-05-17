@@ -173,6 +173,13 @@ func loadTabData(ctx context.Context, deps *DetailViewDeps, pd *PageData, id str
 // NewView creates the outcome criteria detail view.
 func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("outcome_criteria", "read") {
+			return view.Forbidden("outcome_criteria:read")
+		}
+		_ = perms
+
 		id := viewCtx.Request.PathValue("id")
 
 		resp, err := deps.ReadOutcomeCriteria(ctx, &criteriapb.ReadOutcomeCriteriaRequest{

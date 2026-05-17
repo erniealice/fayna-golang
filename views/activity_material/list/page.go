@@ -41,6 +41,13 @@ type PageData struct {
 // Not wired in the sidebar — accessed directly at /app/activity-material/list.
 func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a + P2b.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("activity_material", "list") {
+			return view.Forbidden("activity_material:list")
+		}
+		_ = perms
+
 		l := deps.Labels
 		headerTitle := l.Page.Heading
 

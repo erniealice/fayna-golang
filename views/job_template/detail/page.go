@@ -68,6 +68,13 @@ func jobTemplateToMap(t *jobtemplatepb.JobTemplate) map[string]any {
 // NewView creates the job template detail view.
 func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job_template", "read") {
+			return view.Forbidden("job_template:read")
+		}
+		_ = perms
+
 		id := viewCtx.Request.PathValue("id")
 
 		resp, err := deps.ReadJobTemplate(ctx, &jobtemplatepb.ReadJobTemplateRequest{

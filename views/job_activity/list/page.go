@@ -36,6 +36,10 @@ type PageData struct {
 func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
+		// 2026-05-14 permission-gates P2a.
+		if !perms.Can("job_activity", "list") {
+			return view.Forbidden("job_activity:list")
+		}
 
 		// Optional status filter from query param (e.g. ?status=draft).
 		statusFilter := viewCtx.Request.URL.Query().Get("status")

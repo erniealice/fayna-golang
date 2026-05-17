@@ -50,6 +50,13 @@ var fulfillmentSearchFields = []string{"reference_number", "delivery_mode"}
 // NewView creates the fulfillment list view.
 func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("fulfillment", "list") {
+			return view.Forbidden("fulfillment:list")
+		}
+		_ = perms
+
 		status := viewCtx.Request.PathValue("status")
 		if status == "" {
 			status = "PENDING"

@@ -80,6 +80,13 @@ func fulfillmentStatusVariant(status string) string {
 // NewView creates the fulfillment detail view.
 func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("fulfillment", "read") {
+			return view.Forbidden("fulfillment:read")
+		}
+		_ = perms
+
 		id := viewCtx.Request.PathValue("id")
 
 		resp, err := deps.GetFulfillmentItemPageData(ctx, &fulfillmentpb.GetFulfillmentItemPageDataRequest{

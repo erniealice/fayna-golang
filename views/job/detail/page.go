@@ -225,6 +225,13 @@ func approvalStatusVariant(s enums.ApprovalStatus) string {
 // NewView creates the job detail view.
 func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job", "read") {
+			return view.Forbidden("job:read")
+		}
+		_ = perms
+
 		id := viewCtx.Request.PathValue("id")
 
 		resp, err := deps.ReadJob(ctx, &jobpb.ReadJobRequest{

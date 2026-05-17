@@ -16,6 +16,16 @@ import (
 // GenerateInvoiceFromActivities, then redirects to the new revenue detail page.
 func NewBulkGenerateInvoiceAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P1: codex caught this handler ungated.
+		// The mutation produces invoices, so the most specific gate is
+		// invoice:create. Also require job_activity:post since the use case
+		// posts the activities to flip them from DRAFT → POSTED before
+		// invoicing.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("invoice", "create") || !perms.Can("job_activity", "post") {
+			return fayna.HTMXError("You do not have permission to generate invoices from activities")
+		}
+
 		r := viewCtx.Request
 		if err := r.ParseMultipartForm(32 << 20); err != nil {
 			// Fall back to regular form parse (non-multipart submissions)
@@ -49,3 +59,4 @@ func NewBulkGenerateInvoiceAction(deps *Deps) view.View {
 		}
 	})
 }
+

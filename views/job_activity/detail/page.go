@@ -119,6 +119,13 @@ func activityToMap(a *jobactivitypb.JobActivity) map[string]any {
 // NewView creates the job activity detail view.
 func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job_activity", "read") {
+			return view.Forbidden("job_activity:read")
+		}
+		_ = perms
+
 		id := viewCtx.Request.PathValue("id")
 
 		resp, err := deps.ReadJobActivity(ctx, &jobactivitypb.ReadJobActivityRequest{

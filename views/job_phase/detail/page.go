@@ -104,6 +104,13 @@ func buildTabItems(l fayna.JobPhaseLabels, id string, routes fayna.JobPhaseRoute
 // NewView creates the job_phase detail view.
 func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job_phase", "read") {
+			return view.Forbidden("job_phase:read")
+		}
+		_ = perms
+
 		id := viewCtx.Request.PathValue("id")
 		if id == "" {
 			id = viewCtx.Request.URL.Query().Get("id")

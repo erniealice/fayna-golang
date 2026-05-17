@@ -17,8 +17,12 @@ import (
 // AllowedEvents are determined by the use case — fayna just forwards the request.
 func NewTransitionAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P3: re-gate to `fulfillment:transition`
+		// (catalog verb for the workflow action) instead of `:update` (generic
+		// CRUD verb). The catalog wins per plan §"C2 fulfillment:transition
+		// direction" — transition is a distinct workflow verb.
 		perms := view.GetUserPermissions(ctx)
-		if !perms.Can("fulfillment", "update") {
+		if !perms.Can("fulfillment", "transition") {
 			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 

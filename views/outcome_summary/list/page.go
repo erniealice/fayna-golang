@@ -34,6 +34,15 @@ type PageData struct {
 // NewView creates the outcome summary list view.
 func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a + P2b: page previously had no
+		// perms lookup. Reject direct-URL access without
+		// job_outcome_summary:list (catalog entity name for this report).
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job_outcome_summary", "list") {
+			return view.Forbidden("job_outcome_summary:list")
+		}
+		_ = perms
+
 		resp, err := deps.ListJobOutcomeSummarys(ctx, &jobsumpb.ListJobOutcomeSummarysRequest{})
 		if err != nil {
 			log.Printf("Failed to list outcome summaries: %v", err)

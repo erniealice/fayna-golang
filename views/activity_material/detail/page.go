@@ -46,6 +46,13 @@ type PageData struct {
 // NewView creates the activity material detail view.
 func NewView(deps *DetailViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a.
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("activity_material", "read") {
+			return view.Forbidden("activity_material:read")
+		}
+		_ = perms
+
 		activityID := viewCtx.Request.PathValue("id")
 		if activityID == "" {
 			return view.Error(fmt.Errorf("activity_id path value is required"))

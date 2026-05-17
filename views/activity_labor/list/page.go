@@ -42,6 +42,15 @@ type PageData struct {
 // Not wired in the sidebar — accessed directly at /app/activity-labor/list.
 func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		// 2026-05-14 permission-gates P2a + P2b: add GetUserPermissions
+		// (page previously had none) and reject direct-URL access without
+		// activity_labor:list (catalog row added in Phase 1).
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("activity_labor", "list") {
+			return view.Forbidden("activity_labor:list")
+		}
+		_ = perms
+
 		l := deps.Labels
 		headerTitle := l.Page.Heading
 

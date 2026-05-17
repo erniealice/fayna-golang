@@ -41,6 +41,10 @@ var jobTemplateSearchFields = []string{"name", "description"}
 func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
+		// 2026-05-14 permission-gates P2a.
+		if !perms.Can("job_template", "list") {
+			return view.Forbidden("job_template:list")
+		}
 
 		status := viewCtx.Request.PathValue("status")
 		if status == "" {

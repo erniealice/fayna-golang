@@ -516,9 +516,14 @@ func wireFulfillmentDeps(deps *fulfillmentmod.ModuleDeps, uc *ucAggregate) {
 // Dashboard wiring helpers (reflection-based; avoids espyna internal import)
 // ---------------------------------------------------------------------------
 
-// callDashboardExecute invokes a *GetXxxDashboardPageDataUseCase.Execute via
-// reflection. The use-case pointer is obtained via ptrField. The request struct
-// is created reflectively with WorkspaceID and Now set by field name.
+// callDashboardExecute invokes a *GetXxxDashboardUseCase.Execute via
+// reflection. The use-case pointer is obtained via ptrField. The request
+// struct is constructed reflectively for the proto-shaped service-layer
+// Request types (WorkspaceId + NowMillis); this differs from the entity-
+// layer Go-only Request types (WorkspaceID + Now) the previous helper
+// targeted. Wave C 2026-05-21: Q-SDM-DASHBOARD-DOWNSTREAM rewires Job +
+// Fulfillment dashboards through Service.Dashboard.{Job,Fulfillment}.
+//
 // Returns the dereferenced response struct value and an error.
 func callDashboardExecute(ucPtr reflect.Value, ctx context.Context, workspaceID string, now time.Time) (reflect.Value, error) {
 	if !ucPtr.IsValid() {
@@ -533,10 +538,21 @@ func callDashboardExecute(ucPtr reflect.Value, ctx context.Context, workspaceID 
 	}
 	reqType := m.Type().In(1).Elem()
 	reqPtr := reflect.New(reqType)
+	// Proto-generated field names (Wave C service-layer surfaces).
+	// WorkspaceId is the canonical proto Go field; lowercase `id` not `ID`.
+	if f := reqPtr.Elem().FieldByName("WorkspaceId"); f.IsValid() && f.CanSet() {
+		f.SetString(workspaceID)
+	}
+	// NowMillis is int64 unix-milli on the service-layer protos.
+	if f := reqPtr.Elem().FieldByName("NowMillis"); f.IsValid() && f.CanSet() && f.Kind() == reflect.Int64 {
+		f.SetInt(now.UnixMilli())
+	}
+	// Entity-layer fallback (defensive — should be unused after Wave C, but
+	// kept so non-converted dashboards still operate if any remain).
 	if f := reqPtr.Elem().FieldByName("WorkspaceID"); f.IsValid() && f.CanSet() {
 		f.SetString(workspaceID)
 	}
-	if f := reqPtr.Elem().FieldByName("Now"); f.IsValid() && f.CanSet() {
+	if f := reqPtr.Elem().FieldByName("Now"); f.IsValid() && f.CanSet() && f.Type() == reflect.TypeOf(time.Time{}) {
 		f.Set(reflect.ValueOf(now))
 	}
 	results := m.Call([]reflect.Value{reflect.ValueOf(ctx), reqPtr})
@@ -553,19 +569,61 @@ func callDashboardExecute(ucPtr reflect.Value, ctx context.Context, workspaceID 
 	return resp, nil
 }
 
+// navigateServiceDashboard returns the requested ServiceUseCases.Dashboard.<X>
+// pointer from the opaque aggregate, or an invalid reflect.Value if any link
+// in the path is nil. Used by Wave C wireJobDashboard / wireFulfillmentDashboard
+// to reach `uc.Service.Dashboard.<dashName>` without importing espyna.
+func navigateServiceDashboard(ucv reflect.Value, dashName string) reflect.Value {
+	svc := ptrField(ucv, "Service")
+	if !svc.IsValid() {
+		return reflect.Value{}
+	}
+	dash := svc.FieldByName("Dashboard")
+	if !dash.IsValid() || dash.Kind() != reflect.Ptr || dash.IsNil() {
+		return reflect.Value{}
+	}
+	dashStruct := dash.Elem()
+	sub := dashStruct.FieldByName(dashName)
+	if !sub.IsValid() || sub.Kind() != reflect.Ptr || sub.IsNil() {
+		return reflect.Value{}
+	}
+	return sub.Elem()
+}
+
 // ---------------------------------------------------------------------------
 // Job dashboard wiring
 // ---------------------------------------------------------------------------
 
 // wireJobDashboard sets deps.GetJobDashboardPageData from
-// Operation.Dashboard (GetJobDashboardPageDataUseCase).
-func wireJobDashboard(deps *jobmod.ModuleDeps, uc *ucAggregate) {
-	op := ptrField(uc.v, "Operation")
-	if !op.IsValid() {
+// Service.Dashboard.Job.GetJobDashboard.Execute (service-driven dashboard).
+//
+// Wave C P1.C.9 (LANDED 2026-05-21): same-commit rewire per Q-SDM-DASHBOARD-
+// DOWNSTREAM from `Operation.Dashboard` (entity-layer, RETIRED) to
+// `Service.Dashboard.Job.GetJobDashboard`. The proto Response uses
+// `*JobRiskRow` (pointer slices) and `DateEndMillis int64` while the
+// view-layer Response struct uses value-type `JobRiskRow` with
+// `DateEnd time.Time`; translation happens here.
+//
+// codex-review-phase1-round2b P0 fix (2026-05-21): when the view-layer
+// request lacks an explicit workspace ID (the view at
+// `views/job/dashboard/page.go` passes WorkspaceID: ""), the wrapper falls
+// back to `getWorkspaceID(ctx)`. This matches the canonical pattern in
+// `apps/service-admin/internal/composition/adapters.go` where every
+// dashboard wrapper resolves workspace_id from context via
+// `consumer.GetWorkspaceIDFromContext`. The fayna/block package stays
+// espyna-import-free in this file (per the header comment) — the caller
+// in block.go supplies the resolver.
+func wireJobDashboard(
+	deps *jobmod.ModuleDeps,
+	uc *ucAggregate,
+	getWorkspaceID func(context.Context) string,
+) {
+	jobDash := navigateServiceDashboard(uc.v, "Job")
+	if !jobDash.IsValid() {
 		return
 	}
-	dashField := op.FieldByName("Dashboard")
-	if !dashField.IsValid() || dashField.IsNil() {
+	dashField := jobDash.FieldByName("GetJobDashboard")
+	if !dashField.IsValid() || dashField.Kind() != reflect.Ptr || dashField.IsNil() {
 		return
 	}
 
@@ -576,6 +634,12 @@ func wireJobDashboard(deps *jobmod.ModuleDeps, uc *ucAggregate) {
 			workspaceID = req.WorkspaceID
 			now = req.Now
 		}
+		// Fall back to the context workspace when the view-layer Request did
+		// not supply one. Postgres dashboard queries treat empty workspace as
+		// "no filter" and would otherwise render cross-workspace aggregates.
+		if workspaceID == "" && getWorkspaceID != nil {
+			workspaceID = getWorkspaceID(ctx)
+		}
 		if now.IsZero() {
 			now = time.Now()
 		}
@@ -585,28 +649,67 @@ func wireJobDashboard(deps *jobmod.ModuleDeps, uc *ucAggregate) {
 		}
 
 		var result jobdashboard.Response
+		// Proto Stats is *JobStats (pointer-to-struct).
 		if s := resp.FieldByName("Stats"); s.IsValid() {
-			result.ActiveJobs = s.FieldByName("ActiveJobs").Int()
-			result.DoneThisMonth = s.FieldByName("DoneThisMonth").Int()
-			result.OverdueJobs = s.FieldByName("OverdueJobs").Int()
-			result.HoursThisWeek = s.FieldByName("HoursThisWeek").Float()
+			if s.Kind() == reflect.Ptr {
+				if !s.IsNil() {
+					s = s.Elem()
+				}
+			}
+			if s.IsValid() && s.Kind() == reflect.Struct {
+				if f := s.FieldByName("ActiveJobs"); f.IsValid() {
+					result.ActiveJobs = f.Int()
+				}
+				if f := s.FieldByName("DoneThisMonth"); f.IsValid() {
+					result.DoneThisMonth = f.Int()
+				}
+				if f := s.FieldByName("OverdueJobs"); f.IsValid() {
+					result.OverdueJobs = f.Int()
+				}
+				if f := s.FieldByName("HoursThisWeek"); f.IsValid() {
+					result.HoursThisWeek = f.Float()
+				}
+			}
 		}
 		result.TrendLabels, _ = resp.FieldByName("TrendLabels").Interface().([]string)
 		result.TrendValues, _ = resp.FieldByName("TrendValues").Interface().([]float64)
 		result.UpcomingDeadlines, _ = resp.FieldByName("UpcomingDeadlines").Interface().([]*jobpb.Job)
 		result.RecentActivity, _ = resp.FieldByName("RecentActivity").Interface().([]*jobactivitypb.JobActivity)
 
-		// Map RiskTopRows: []JobRisk → []JobRiskRow
-		if riskF := resp.FieldByName("RiskTopRows"); riskF.IsValid() && !riskF.IsNil() {
+		// Map RiskTopRows: []*JobRiskRow (proto, pointer-element) → []JobRiskRow
+		// (view-layer value-element). Proto carries DateEndMillis int64; view
+		// wants DateEnd time.Time.
+		if riskF := resp.FieldByName("RiskTopRows"); riskF.IsValid() && riskF.Kind() == reflect.Slice {
 			for i := 0; i < riskF.Len(); i++ {
-				s := riskF.Index(i)
-				result.RiskTopRows = append(result.RiskTopRows, jobdashboard.JobRiskRow{
-					JobID:         s.FieldByName("JobID").String(),
-					Code:          s.FieldByName("Code").String(),
-					Name:          s.FieldByName("Name").String(),
-					CompletionPct: s.FieldByName("CompletionPct").Float(),
-					DateEnd:       s.FieldByName("DateEnd").Interface().(time.Time),
-				})
+				row := riskF.Index(i)
+				if row.Kind() == reflect.Ptr {
+					if row.IsNil() {
+						continue
+					}
+					row = row.Elem()
+				}
+				if row.Kind() != reflect.Struct {
+					continue
+				}
+				rr := jobdashboard.JobRiskRow{}
+				if f := row.FieldByName("JobId"); f.IsValid() {
+					rr.JobID = f.String()
+				}
+				if f := row.FieldByName("Code"); f.IsValid() {
+					rr.Code = f.String()
+				}
+				if f := row.FieldByName("Name"); f.IsValid() {
+					rr.Name = f.String()
+				}
+				if f := row.FieldByName("CompletionPct"); f.IsValid() {
+					rr.CompletionPct = f.Float()
+				}
+				if f := row.FieldByName("DateEndMillis"); f.IsValid() && f.Kind() == reflect.Int64 {
+					if ms := f.Int(); ms != 0 {
+						rr.DateEnd = time.UnixMilli(ms).UTC()
+					}
+				}
+				result.RiskTopRows = append(result.RiskTopRows, rr)
 			}
 		}
 		return &result, nil
@@ -618,14 +721,30 @@ func wireJobDashboard(deps *jobmod.ModuleDeps, uc *ucAggregate) {
 // ---------------------------------------------------------------------------
 
 // wireFulfillmentDashboard sets deps.GetFulfillmentDashboardPageData from
-// Fulfillment.Dashboard (GetFulfillmentDashboardPageDataUseCase).
-func wireFulfillmentDashboard(deps *fulfillmentmod.ModuleDeps, uc *ucAggregate) {
-	ff := ptrField(uc.v, "Fulfillment")
-	if !ff.IsValid() {
+// Service.Dashboard.Fulfillment.GetFulfillmentDashboard.Execute (service-
+// driven dashboard).
+//
+// Wave C P1.C.12 (LANDED 2026-05-21): same-commit rewire per Q-SDM-DASHBOARD-
+// DOWNSTREAM from `Fulfillment.Dashboard` (entity-layer, RETIRED) to
+// `Service.Dashboard.Fulfillment.GetFulfillmentDashboard`. The proto Response
+// Stats is `*FulfillmentStats` (pointer-to-struct) — translation handled here.
+//
+// codex-review-phase1-round2b P0 fix (2026-05-21): same workspace-ID fallback
+// as wireJobDashboard — when the view-layer Request omits WorkspaceID the
+// wrapper resolves it from context via `getWorkspaceID(ctx)`. Without this
+// fallback the postgres queries treat empty workspace as "no filter" and
+// render cross-workspace aggregates.
+func wireFulfillmentDashboard(
+	deps *fulfillmentmod.ModuleDeps,
+	uc *ucAggregate,
+	getWorkspaceID func(context.Context) string,
+) {
+	ffDash := navigateServiceDashboard(uc.v, "Fulfillment")
+	if !ffDash.IsValid() {
 		return
 	}
-	dashField := ff.FieldByName("Dashboard")
-	if !dashField.IsValid() || dashField.IsNil() {
+	dashField := ffDash.FieldByName("GetFulfillmentDashboard")
+	if !dashField.IsValid() || dashField.Kind() != reflect.Ptr || dashField.IsNil() {
 		return
 	}
 
@@ -636,6 +755,9 @@ func wireFulfillmentDashboard(deps *fulfillmentmod.ModuleDeps, uc *ucAggregate) 
 			workspaceID = req.WorkspaceID
 			now = req.Now
 		}
+		if workspaceID == "" && getWorkspaceID != nil {
+			workspaceID = getWorkspaceID(ctx)
+		}
 		if now.IsZero() {
 			now = time.Now()
 		}
@@ -645,12 +767,30 @@ func wireFulfillmentDashboard(deps *fulfillmentmod.ModuleDeps, uc *ucAggregate) 
 		}
 
 		var result fulfillmentdashboard.Response
+		// Proto Stats is *FulfillmentStats (pointer-to-struct).
 		if s := resp.FieldByName("Stats"); s.IsValid() {
-			result.Pending = s.FieldByName("Pending").Int()
-			result.InTransit = s.FieldByName("InTransit").Int()
-			result.DeliveredToday = s.FieldByName("DeliveredToday").Int()
-			result.Exceptions = s.FieldByName("Exceptions").Int()
-			result.AvgFulfillDays = s.FieldByName("AvgFulfillDays").Float()
+			if s.Kind() == reflect.Ptr {
+				if !s.IsNil() {
+					s = s.Elem()
+				}
+			}
+			if s.IsValid() && s.Kind() == reflect.Struct {
+				if f := s.FieldByName("Pending"); f.IsValid() {
+					result.Pending = f.Int()
+				}
+				if f := s.FieldByName("InTransit"); f.IsValid() {
+					result.InTransit = f.Int()
+				}
+				if f := s.FieldByName("DeliveredToday"); f.IsValid() {
+					result.DeliveredToday = f.Int()
+				}
+				if f := s.FieldByName("Exceptions"); f.IsValid() {
+					result.Exceptions = f.Int()
+				}
+				if f := s.FieldByName("AvgFulfillDays"); f.IsValid() {
+					result.AvgFulfillDays = f.Float()
+				}
+			}
 		}
 		result.StatusMixLabels, _ = resp.FieldByName("StatusMixLabels").Interface().([]string)
 		result.StatusMixValues, _ = resp.FieldByName("StatusMixValues").Interface().([]float64)

@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"strings"
 
+	consumer "github.com/erniealice/espyna-golang/consumer"
 	"github.com/erniealice/espyna-golang/reference"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
@@ -683,7 +684,13 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			}
 			if uc != nil {
 				wireJobDeps(jobDeps, uc)
-				wireJobDashboard(jobDeps, uc)
+				// codex-review-phase1-round2b P0 fix (2026-05-21): pass the
+				// canonical workspace-ID resolver so the dashboard wrapper
+				// can scope queries when the view-layer Request omits a
+				// workspace_id. Matches the
+				// `consumer.GetWorkspaceIDFromContext` pattern used by every
+				// other dashboard closure across the monorepo.
+				wireJobDashboard(jobDeps, uc, consumer.GetWorkspaceIDFromContext)
 			}
 			jobmod.NewModule(jobDeps).RegisterRoutes(ctx.Routes)
 			// Register the client and location search endpoints for the job drawer.
@@ -959,7 +966,10 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			}
 			if uc != nil {
 				wireFulfillmentDeps(ffDeps, uc)
-				wireFulfillmentDashboard(ffDeps, uc)
+				// codex-review-phase1-round2b P0 fix (2026-05-21): pass the
+				// canonical workspace-ID resolver — see wireJobDashboard
+				// callsite above for rationale.
+				wireFulfillmentDashboard(ffDeps, uc, consumer.GetWorkspaceIDFromContext)
 			}
 			fulfillmentmod.NewModule(ffDeps).RegisterRoutes(ctx.Routes)
 		}

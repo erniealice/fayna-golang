@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	fayna "github.com/erniealice/fayna-golang"
 
@@ -127,7 +128,7 @@ func buildTableRows(summaries []*jobsumpb.JobOutcomeSummary, l fayna.OutcomeSumm
 				{Value: s.GetIssuedBy()},
 			},
 			Actions: []types.TableAction{
-				{Type: "view", Label: "View Summary", Href: fmt.Sprintf("/app/outcomes/summary/job/%s", s.GetJobId())},
+				{Type: "view", Label: "View Summary", Href: strings.NewReplacer("{id}", s.GetJobId()).Replace(routes.JobSummaryURL)},
 			},
 		}
 		rows = append(rows, row)

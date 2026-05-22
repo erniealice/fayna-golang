@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	fayna "github.com/erniealice/fayna-golang"
 
@@ -49,7 +50,13 @@ func NewBulkGenerateInvoiceAction(deps *Deps) view.View {
 			return fayna.HTMXError(fmt.Sprintf("Failed to generate invoice: %v", err))
 		}
 
-		redirectURL := fmt.Sprintf("/app/revenue/detail/%s?tab=items", revenueID)
+		revenueDetailBase := deps.RevenueDetailURLTemplate
+		if revenueDetailBase == "" {
+			revenueDetailBase = "/app/revenue/detail/"
+		} else {
+			revenueDetailBase = strings.Split(revenueDetailBase, "{id}")[0]
+		}
+		redirectURL := revenueDetailBase + revenueID + "?tab=items"
 		return view.ViewResult{
 			StatusCode: http.StatusOK,
 			Headers: map[string]string{

@@ -30,6 +30,11 @@ type Deps struct {
 	// GenerateInvoiceFromActivities creates a revenue record from a set of
 	// activity IDs. Returns the new revenue ID on success.
 	GenerateInvoiceFromActivities func(ctx context.Context, activityIDs []string, clientID, locationID, currency, name string) (string, error)
+
+	// RevenueDetailURLTemplate is the URL template for a revenue detail page
+	// (e.g. "/app/revenue/detail/{id}"). Used to build the HX-Redirect after
+	// bulk invoice generation. Defaults to "/app/revenue/detail/" when empty.
+	RevenueDetailURLTemplate string
 }
 
 // parseFormFloat parses a float64 from a form value, returning 0 on error.

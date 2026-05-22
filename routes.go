@@ -4,11 +4,11 @@ package fayna
 // Consumer apps can use these or define their own.
 const (
 	// Job dashboard route (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
-	JobDashboardURL = "/app/jobs/dashboard"
+	JobDashboardURL = "/jobs/dashboard"
 
 	// Job (operational activity) routes
-	JobListURL             = "/app/jobs/list/{status}"
-	JobDetailURL           = "/app/jobs/detail/{id}"
+	JobListURL             = "/jobs/list/{status}"
+	JobDetailURL           = "/jobs/detail/{id}"
 	JobAddURL              = "/action/job/add"
 	JobEditURL             = "/action/job/edit/{id}"
 	JobDeleteURL           = "/action/job/delete"
@@ -29,8 +29,8 @@ const (
 	// JobPhase standalone module routes.
 	// The list page is a power-user/debugging surface — no sidebar entry.
 	// The detail page is the canonical single-phase view with tab strip.
-	JobPhaseListURL             = "/app/job-phases/list/{status}"
-	JobPhaseDetailURL           = "/app/job-phase/{id}"
+	JobPhaseListURL             = "/job-phases/list/{status}"
+	JobPhaseDetailURL           = "/job-phase/{id}"
 	JobPhaseAddURL              = "/action/job-phase/add"
 	JobPhaseEditURL             = "/action/job-phase/edit/{id}"
 	JobPhaseDeleteURL           = "/action/job-phase/delete"
@@ -44,8 +44,8 @@ const (
 	// JobTask standalone module routes.
 	// The list page is a power-user/debugging surface — no sidebar entry.
 	// The detail page is reached via JobPhase detail's Tasks tab deep links.
-	JobTaskListURL               = "/app/job-tasks/list/{status}"
-	JobTaskDetailURL             = "/app/job-task/{id}"
+	JobTaskListURL               = "/job-tasks/list/{status}"
+	JobTaskDetailURL             = "/job-task/{id}"
 	JobTaskAddURL                = "/action/job-task/add"
 	JobTaskEditURL               = "/action/job-task/edit/{id}"
 	JobTaskDeleteURL             = "/action/job-task/delete"
@@ -66,8 +66,8 @@ const (
 	JobLocationSearchURL = "/action/job/search/locations"
 
 	// Job Template routes
-	JobTemplateListURL             = "/app/job-templates/list/{status}"
-	JobTemplateDetailURL           = "/app/job-templates/detail/{id}"
+	JobTemplateListURL             = "/job-templates/list/{status}"
+	JobTemplateDetailURL           = "/job-templates/detail/{id}"
 	JobTemplateAddURL              = "/action/job-template/add"
 	JobTemplateEditURL             = "/action/job-template/edit/{id}"
 	JobTemplateDeleteURL           = "/action/job-template/delete"
@@ -100,8 +100,8 @@ const (
 	JobTemplateTaskResourceSearchURL = JobPhaseResourceSearchURL
 
 	// Job Activity (timesheet / cross-job activity log) routes
-	JobActivityListURL                = "/app/activities"
-	JobActivityDetailURL              = "/app/activities/detail/{id}"
+	JobActivityListURL                = "/activities"
+	JobActivityDetailURL              = "/activities/detail/{id}"
 	JobActivityAddURL                 = "/action/activity/add"
 	JobActivityEditURL                = "/action/activity/edit/{id}"
 	JobActivityDeleteURL              = "/action/activity/delete"
@@ -117,8 +117,8 @@ const (
 	JobActivityAttachmentDeleteURL    = "/action/activity/detail/{id}/attachments/delete"
 
 	// Outcome Criteria routes (criteria library)
-	OutcomeCriteriaListURL             = "/app/criteria/list/{status}"
-	OutcomeCriteriaDetailURL           = "/app/criteria/detail/{id}"
+	OutcomeCriteriaListURL             = "/criteria/list/{status}"
+	OutcomeCriteriaDetailURL           = "/criteria/detail/{id}"
 	OutcomeCriteriaAddURL              = "/action/criterion/add"
 	OutcomeCriteriaEditURL             = "/action/criterion/edit/{id}"
 	OutcomeCriteriaDeleteURL           = "/action/criterion/delete"
@@ -128,8 +128,8 @@ const (
 	OutcomeCriteriaAttachmentDeleteURL = "/action/criterion/detail/{id}/attachments/delete"
 
 	// Task Outcome routes (outcome recording on job tasks)
-	TaskOutcomeListURL             = "/app/outcomes/list/{status}"
-	TaskOutcomeDetailURL           = "/app/outcomes/detail/{id}"
+	TaskOutcomeListURL             = "/outcomes/list/{status}"
+	TaskOutcomeDetailURL           = "/outcomes/detail/{id}"
 	TaskOutcomeAddURL              = "/action/outcome/add"
 	TaskOutcomeEditURL             = "/action/outcome/edit/{id}"
 	TaskOutcomeDeleteURL           = "/action/outcome/delete"
@@ -138,17 +138,17 @@ const (
 	TaskOutcomeAttachmentDeleteURL = "/action/outcome/detail/{id}/attachments/delete"
 
 	// Outcome Summary routes (report cards)
-	OutcomeSummaryListURL  = "/app/outcomes/summaries"
-	OutcomeSummaryJobURL   = "/app/jobs/detail/{id}/summary"
-	OutcomeSummaryPhaseURL = "/app/jobs/detail/{id}/phase/{phase_id}/summary"
+	OutcomeSummaryListURL  = "/outcomes/summaries"
+	OutcomeSummaryJobURL   = "/jobs/detail/{id}/summary"
+	OutcomeSummaryPhaseURL = "/jobs/detail/{id}/phase/{phase_id}/summary"
 )
 
 // Activity Labor routes (charge detail for ENTRY_TYPE_LABOR job activities).
 // ActivityLaborListURL is registered but NOT in the sidebar — power-user / debug only.
 // The primary surface is the JobActivity detail page's charge tab.
 const (
-	ActivityLaborListURL        = "/app/activity-labor/list"
-	ActivityLaborDetailURL      = "/app/activity-labor/{id}"
+	ActivityLaborListURL        = "/activity-labor/list"
+	ActivityLaborDetailURL      = "/activity-labor/{id}"
 	ActivityLaborAddURL         = "/action/activity-labor/add"
 	ActivityLaborEditURL        = "/action/activity-labor/edit/{id}"
 	ActivityLaborDeleteURL      = "/action/activity-labor/delete"
@@ -159,8 +159,8 @@ const (
 // ActivityMaterialListURL is registered but NOT in the sidebar — power-user / debug only.
 // The primary surface is the JobActivity detail page's charge tab.
 const (
-	ActivityMaterialListURL           = "/app/activity-material/list"
-	ActivityMaterialDetailURL         = "/app/activity-material/{id}"
+	ActivityMaterialListURL           = "/activity-material/list"
+	ActivityMaterialDetailURL         = "/activity-material/{id}"
 	ActivityMaterialAddURL            = "/action/activity-material/add"
 	ActivityMaterialEditURL           = "/action/activity-material/edit/{id}"
 	ActivityMaterialDeleteURL         = "/action/activity-material/delete"
@@ -172,8 +172,8 @@ const (
 // ActivityExpenseListURL is registered but NOT in the sidebar — power-user / debug only.
 // The primary surface is the JobActivity detail page's charge tab.
 const (
-	ActivityExpenseListURL                  = "/app/activity-expense/list"
-	ActivityExpenseDetailURL                = "/app/activity-expense/{id}"
+	ActivityExpenseListURL                  = "/activity-expense/list"
+	ActivityExpenseDetailURL                = "/activity-expense/{id}"
 	ActivityExpenseAddURL                   = "/action/activity-expense/add"
 	ActivityExpenseEditURL                  = "/action/activity-expense/edit/{id}"
 	ActivityExpenseDeleteURL                = "/action/activity-expense/delete"
@@ -183,10 +183,10 @@ const (
 // Fulfillment routes
 const (
 	// Fulfillment dashboard route (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
-	FulfillmentDashboardURL = "/app/fulfillment/dashboard"
+	FulfillmentDashboardURL = "/fulfillment/dashboard"
 
-	FulfillmentListURL             = "/app/fulfillment/list/{status}"
-	FulfillmentDetailURL           = "/app/fulfillment/detail/{id}"
+	FulfillmentListURL             = "/fulfillment/list/{status}"
+	FulfillmentDetailURL           = "/fulfillment/detail/{id}"
 	FulfillmentAddURL              = "/action/fulfillment/add"
 	FulfillmentEditURL             = "/action/fulfillment/edit/{id}"
 	FulfillmentDeleteURL           = "/action/fulfillment/delete"

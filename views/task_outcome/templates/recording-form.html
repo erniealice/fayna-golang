@@ -7,6 +7,7 @@ Data: .TaskID, .CriteriaID, .CriteriaName, .CriteriaType, .CriteriaOptions,
 */}}
 {{define "task-outcome-recording-form"}}
 <form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="task-outcome-form">
+    {{actionForm .FormAction .WorkspaceID}}
 
     {{/* --- Hidden identifiers --- */}}
     <input type="hidden" name="task_id" value="{{.TaskID}}">

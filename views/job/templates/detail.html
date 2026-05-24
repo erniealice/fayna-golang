@@ -117,15 +117,16 @@
                         </td>
                         <td>
                             {{if .MarkURL}}
-                            <button type="button"
-                                    class="btn btn--sm btn--secondary"
-                                    data-testid="job-phase-mark-complete"
-                                    data-phase-id="{{.ID}}"
-                                    hx-post="{{.MarkURL}}"
-                                    hx-swap="none"
-                                    {{if .IsCompleted}}disabled aria-disabled="true"{{end}}>
-                                {{$.Labels.Detail.PhaseMarkComplete}}
-                            </button>
+                            <form hx-post="{{.MarkURL}}" hx-swap="none" style="display:inline">
+                              {{actionForm .MarkURL $.WorkspaceID}}
+                              <button type="submit"
+                                      class="btn btn--sm btn--secondary"
+                                      data-testid="job-phase-mark-complete"
+                                      data-phase-id="{{.ID}}"
+                                      {{if .IsCompleted}}disabled aria-disabled="true"{{end}}>
+                                  {{$.Labels.Detail.PhaseMarkComplete}}
+                              </button>
+                            </form>
                             {{end}}
                         </td>
                     </tr>

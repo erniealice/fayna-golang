@@ -11,6 +11,7 @@ import (
 type Data struct {
 	// FormAction is the POST URL for the drawer form.
 	FormAction string
+	WorkspaceID string // injected by C1: populated by ViewAdapter.injectWorkspaceID for action_workspace_guard
 
 	// IsEdit distinguishes Add (false) vs Edit (true) in the template.
 	IsEdit bool

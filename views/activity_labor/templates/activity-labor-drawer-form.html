@@ -25,6 +25,7 @@ fallback — wire through lyngua when activity_labor.json labels are added.
       hx-swap="none"
       hx-on::after-request="lf.Sheet.handleResponse(event)"
       data-testid="activity-labor-form">
+    {{actionForm .FormAction .WorkspaceID}}
 
     {{/* activity_id is the PK of ActivityLabor AND the FK to JobActivity (1:1).
          Context-locked: always emitted as a hidden input. */}}

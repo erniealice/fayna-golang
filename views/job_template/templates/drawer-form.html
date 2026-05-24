@@ -5,6 +5,7 @@ Data: .Name, .Description, .Active, .ID, .FormAction, .IsEdit, .CommonLabels, .L
 */}}
 {{define "job-template-drawer-form"}}
 <form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-template-form">
+    {{actionForm .FormAction .WorkspaceID}}
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
 
     <div class="sheet-body">

@@ -20,6 +20,7 @@ are intentional English fallbacks — wire through lyngua when labels are added.
       hx-swap="none"
       hx-on::after-request="lf.Sheet.handleResponse(event)"
       data-testid="job-activity-form">
+    {{actionForm .FormAction .WorkspaceID}}
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
     {{/* job_id is sourced from the launching Job detail page via the ?job_id
          query param on GET; we round-trip it as a hidden input on POST. */}}

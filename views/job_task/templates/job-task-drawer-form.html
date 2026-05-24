@@ -13,6 +13,7 @@ Data: .FormAction, .IsEdit, .ID, .JobPhaseID, .Name, .StepOrder,
 */}}
 {{define "job-task-drawer-form"}}
 <form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-task-form">
+    {{actionForm .FormAction .WorkspaceID}}
     {{if .IsEdit}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
     <input type="hidden" name="job_phase_id" value="{{.JobPhaseID}}">
 

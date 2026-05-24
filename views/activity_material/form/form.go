@@ -13,6 +13,7 @@ import fayna "github.com/erniealice/fayna-golang"
 // On Add it is sourced from the parent JobActivity's ?activity_id query param.
 type Data struct {
 	FormAction string
+	WorkspaceID string // injected by C1: populated by ViewAdapter.injectWorkspaceID for action_workspace_guard
 	IsEdit     bool
 
 	// ActivityID is both the PK of ActivityMaterial and the FK to JobActivity.

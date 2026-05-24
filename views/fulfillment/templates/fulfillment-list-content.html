@@ -36,11 +36,12 @@ Data: .Rows ([]types.TableRow), .Pagination (*types.PaginationConfig)
                 data-drawer-title="{{.DrawerTitle}}"
                 {{if .Disabled}}disabled title="{{.DisabledTooltip}}"{{else}}title="{{.Label}}"{{end}}>{{.Label}}</button>
             {{else if eq .Type "delete"}}
-            <button class="action-btn action-btn-danger"
-                data-testid="fulfillment-delete-btn"
-                hx-delete="{{.URL}}"
-                hx-confirm="{{.Label}} {{.ItemName}}?"
-                {{if .Disabled}}disabled title="{{.DisabledTooltip}}"{{else}}title="{{.Label}}"{{end}}>{{.Label}}</button>
+            <form hx-post="{{.URL}}" hx-confirm="{{.Label}} {{.ItemName}}?" style="display:inline">
+              {{actionForm .URL $.WorkspaceID}}
+              <button type="submit" class="action-btn action-btn-danger"
+                  data-testid="fulfillment-delete-btn"
+                  {{if .Disabled}}disabled title="{{.DisabledTooltip}}"{{else}}title="{{.Label}}"{{end}}>{{.Label}}</button>
+            </form>
             {{end}}
             {{end}}
         </div>

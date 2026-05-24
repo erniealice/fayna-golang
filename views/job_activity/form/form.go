@@ -14,6 +14,7 @@ import fayna "github.com/erniealice/fayna-golang"
 // to convert to centavos before the use case call.
 type Data struct {
 	FormAction     string
+	WorkspaceID     string // injected by C1: populated by ViewAdapter.injectWorkspaceID for action_workspace_guard
 	IsEdit         bool
 	ID             string
 	JobID          string

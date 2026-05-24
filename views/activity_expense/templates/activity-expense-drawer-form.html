@@ -22,6 +22,7 @@ fallback — wire through lyngua when activity_expense.json labels are added.
       hx-swap="none"
       hx-on::after-request="lf.Sheet.handleResponse(event)"
       data-testid="activity-expense-form">
+    {{actionForm .FormAction .WorkspaceID}}
 
     {{/* activity_id is the PK of ActivityExpense AND the FK to JobActivity (1:1).
          Context-locked: always emitted as a hidden input. */}}

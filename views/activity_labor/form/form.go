@@ -19,6 +19,7 @@ import fayna "github.com/erniealice/fayna-golang"
 // to Unix int64 on submit.
 type Data struct {
 	FormAction string
+	WorkspaceID string // injected by C1: populated by ViewAdapter.injectWorkspaceID for action_workspace_guard
 	IsEdit     bool
 
 	// ActivityID is both the PK of ActivityLabor and the FK to JobActivity.

@@ -78,7 +78,7 @@
            hx-get="{{.PhasesAddURL}}"
            hx-target="#sheetContent"
            hx-swap="innerHTML"
-           onclick="lf.Sheet.open()"
+           data-lf-action="sheet-open"
            data-testid="add-phase-cta">
             {{.Labels.Actions.Add}}
         </a>
@@ -105,7 +105,7 @@
            hx-get="{{.TasksAddURL}}"
            hx-target="#sheetContent"
            hx-swap="innerHTML"
-           onclick="lf.Sheet.open()"
+           data-lf-action="sheet-open"
            data-testid="add-task-cta">
             {{.Labels.Actions.AddTask}}
         </a>

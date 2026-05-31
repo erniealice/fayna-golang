@@ -174,7 +174,7 @@ are intentional English fallbacks — wire through lyngua when labels are added.
     <div class="sheet-footer">
         <button type="button"
                 class="btn btn-secondary"
-                onclick="lf.Sheet.close()"
+                data-lf-action="sheet-close"
                 data-testid="job-activity-cancel">
             {{.CommonLabels.Buttons.Cancel}}
         </button>
@@ -185,7 +185,7 @@ are intentional English fallbacks — wire through lyngua when labels are added.
         </button>
     </div>
 </form>
-<script>
+<script nonce="{{.Nonce}}">
 (function() {
     var form = document.currentScript.previousElementSibling;
     while (form && form.tagName !== 'FORM') { form = form.previousElementSibling; }

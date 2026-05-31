@@ -13,9 +13,10 @@ import fayna "github.com/erniealice/fayna-golang"
 // in major units in this struct (display / form layer). Handlers ×100 on submit
 // to convert to centavos before the use case call.
 type Data struct {
-	FormAction     string
-	WorkspaceID     string // injected by C1: populated by ViewAdapter.injectWorkspaceID for action_workspace_guard
-	IsEdit         bool
+	FormAction  string
+	WorkspaceID string // injected by C1: populated by ViewAdapter.injectWorkspaceID for action_workspace_guard
+	Nonce       string // injected by C1: populated by ViewAdapter.injectPageData via reflection (CSP nonce)
+	IsEdit      bool
 	ID             string
 	JobID          string
 	EntryType      string

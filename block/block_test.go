@@ -1,8 +1,10 @@
 package block
 
 import (
+	"context"
 	"testing"
 
+	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	pyeza "github.com/erniealice/pyeza-golang"
 )
 
@@ -308,68 +310,81 @@ func TestBlockConfig_DuplicateOptions(t *testing.T) {
 	}
 }
 
-func TestAssertUseCases_NilInput(t *testing.T) {
+// ---------------------------------------------------------------------------
+// RequireFor — typed-contract completeness gate (Phase 2, Q-WIRE-1).
+// Replaces the prior reflection-based assertUseCases tests: drift is now a
+// startup error listing every needed-but-nil REQUIRED field, not a silent nil.
+// ---------------------------------------------------------------------------
+
+func TestRequireFor_NilReceiver(t *testing.T) {
 	t.Parallel()
 
-	uc := assertUseCases(nil)
-	if uc != nil {
-		t.Fatal("assertUseCases(nil) should return nil")
+	var uc *UseCases
+	err := uc.RequireFor(&blockConfig{enableAll: true})
+	if err == nil {
+		t.Fatal("RequireFor on a nil *UseCases should return an error")
 	}
 }
 
-func TestAssertUseCases_NonStructInput(t *testing.T) {
+func TestRequireFor_EmptyUseCases_EnableAll_Errors(t *testing.T) {
 	t.Parallel()
 
-	// A string value is not a pointer-to-struct.
-	uc := assertUseCases("not a struct")
-	if uc != nil {
-		t.Fatal("assertUseCases(string) should return nil")
+	// A zero-value UseCases has every REQUIRED closure nil → enableAll must err.
+	uc := &UseCases{}
+	err := uc.RequireFor(&blockConfig{enableAll: true})
+	if err == nil {
+		t.Fatal("RequireFor(empty, enableAll) should return a missing-fields error")
 	}
 }
 
-func TestAssertUseCases_IntInput(t *testing.T) {
+func TestRequireFor_NoModulesEnabled_OK(t *testing.T) {
 	t.Parallel()
 
-	uc := assertUseCases(42)
-	if uc != nil {
-		t.Fatal("assertUseCases(int) should return nil")
+	// No module enabled → nothing required → no error even on empty UseCases.
+	uc := &UseCases{}
+	if err := uc.RequireFor(&blockConfig{}); err != nil {
+		t.Fatalf("RequireFor(empty, no modules) should be nil, got %v", err)
 	}
 }
 
-func TestAssertUseCases_NilPointer(t *testing.T) {
+func TestRequireFor_JobModule_PartialWiring_Errors(t *testing.T) {
 	t.Parallel()
 
-	var p *struct{ Name string }
-	uc := assertUseCases(p)
-	if uc != nil {
-		t.Fatal("assertUseCases(nil pointer) should return nil")
+	// Job enabled but only some required closures wired → error.
+	uc := &UseCases{}
+	uc.Operation.Job.CreateJob = func(context.Context, *jobpb.CreateJobRequest) (*jobpb.CreateJobResponse, error) {
+		return nil, nil
+	}
+	err := uc.RequireFor(&blockConfig{job: true})
+	if err == nil {
+		t.Fatal("RequireFor(partial job wiring) should return an error for the missing closures")
 	}
 }
 
-func TestAssertUseCases_ValidStruct(t *testing.T) {
+func TestRequireFor_JobModule_FullWiring_OK(t *testing.T) {
 	t.Parallel()
 
-	s := struct{ Name string }{Name: "test"}
-	uc := assertUseCases(&s)
-	if uc == nil {
-		t.Fatal("assertUseCases(valid struct pointer) should return non-nil")
+	// All five required Job closures wired → no error.
+	uc := &UseCases{}
+	uc.Operation.Job.CreateJob = func(context.Context, *jobpb.CreateJobRequest) (*jobpb.CreateJobResponse, error) { return nil, nil }
+	uc.Operation.Job.ReadJob = func(context.Context, *jobpb.ReadJobRequest) (*jobpb.ReadJobResponse, error) { return nil, nil }
+	uc.Operation.Job.UpdateJob = func(context.Context, *jobpb.UpdateJobRequest) (*jobpb.UpdateJobResponse, error) { return nil, nil }
+	uc.Operation.Job.DeleteJob = func(context.Context, *jobpb.DeleteJobRequest) (*jobpb.DeleteJobResponse, error) { return nil, nil }
+	uc.Operation.Job.ListJobs = func(context.Context, *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error) { return nil, nil }
+
+	if err := uc.RequireFor(&blockConfig{job: true}); err != nil {
+		t.Fatalf("RequireFor(fully wired job) should be nil, got %v", err)
 	}
 }
 
-func TestAssertUseCases_SliceInput(t *testing.T) {
+func TestRequireFor_OptionalActivityModules_NotRequired(t *testing.T) {
 	t.Parallel()
 
-	uc := assertUseCases([]string{"a", "b"})
-	if uc != nil {
-		t.Fatal("assertUseCases(slice) should return nil")
-	}
-}
-
-func TestAssertUseCases_MapInput(t *testing.T) {
-	t.Parallel()
-
-	uc := assertUseCases(map[string]int{"a": 1})
-	if uc != nil {
-		t.Fatal("assertUseCases(map) should return nil")
+	// ActivityLabor/Material/Expense are intentionally NOT in RequireFor — even
+	// with their drawer modules enabled, nil closures must not cause an error.
+	uc := &UseCases{}
+	cfg := &blockConfig{activityLabor: true, activityMaterial: true, activityExpense: true}
+	if err := uc.RequireFor(cfg); err != nil {
+		t.Fatalf("RequireFor(optional activity modules, nil closures) should be nil, got %v", err)
 	}
 }

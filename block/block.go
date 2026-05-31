@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"strings"
 
-	consumer "github.com/erniealice/espyna-golang/consumer"
 	"github.com/erniealice/espyna-golang/reference"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
@@ -73,6 +72,12 @@ type blockConfig struct {
 	// URL pattern (e.g. "/app/subscriptions/detail/{id}") supplied by the
 	// consuming app via WithSubscriptionDetailURL. Empty = breadcrumb hidden.
 	subscriptionDetailURL string
+
+	// useCases is the typed wiring contract supplied by service-admin's
+	// composition layer via WithUseCases(). nil → Block() returns a startup
+	// error (RequireFor). Phase 2 (Q-WIRE-1): replaces the prior reflection
+	// over the opaque ctx.UseCases aggregate.
+	useCases *UseCases
 }
 
 // WithJob registers the Job module (list, detail, CRUD, attachment ops).
@@ -138,6 +143,16 @@ func WithJobTemplateTask() BlockOption {
 // 2026-04-29 auto-spawn-jobs-from-subscription Phase D.
 func WithSubscriptionDetailURL(url string) BlockOption {
 	return func(c *blockConfig) { c.subscriptionDetailURL = url }
+}
+
+// WithUseCases supplies the typed wiring contract (see usecases.go). Required:
+// Block() returns a startup error (via RequireFor) if it is absent or any
+// needed-but-nil closure is detected for an enabled module. Construction lives
+// in service-admin's composition layer (adapters.go buildFaynaUseCases), the
+// only place that knows both espyna's consumer vocabulary and fayna's view
+// vocabulary.
+func WithUseCases(uc *UseCases) BlockOption {
+	return func(c *blockConfig) { c.useCases = uc }
 }
 
 func (c *blockConfig) wantJob() bool              { return c.enableAll || c.job }
@@ -479,10 +494,19 @@ func newActivityExpenseExpenseCategorySearchHandler(db listSimpler) http.Handler
 // outcomes, fulfillment). Call with no options to register ALL modules. Call with
 // specific With*() options to register a subset.
 func Block(opts ...BlockOption) pyeza.AppOption {
-	cfg := &blockConfig{enableAll: len(opts) == 0}
+	cfg := &blockConfig{}
 	for _, opt := range opts {
 		opt(cfg)
 	}
+	// "Enable all modules" is derived — true when no module-toggling option was
+	// passed. Non-module options (WithUseCases, WithSubscriptionDetailURL) must
+	// NOT flip this off, else `Block(WithUseCases(...))` would silently register
+	// zero modules. Mirrors cyta + the canonical entydad enableAll computation.
+	moduleSelected := cfg.job || cfg.jobTemplate || cfg.jobActivity || cfg.jobPhase ||
+		cfg.jobTask || cfg.activityLabor || cfg.activityMaterial || cfg.activityExpense ||
+		cfg.outcomeCriteria || cfg.taskOutcome || cfg.outcomeSummary || cfg.fulfillment ||
+		cfg.jobTemplatePhase || cfg.jobTemplateTask
+	cfg.enableAll = !moduleSelected
 
 	return func(ctx *pyeza.AppContext) error {
 		// --- Type-assert translations ---
@@ -590,13 +614,20 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		jttLabels := fayna.DefaultJobTemplateTaskLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job_template_task.json", "job_template_task", &jttLabels)
 
-		// --- Reflect into use cases aggregate (espyna-free wiring) ---
-		uc := assertUseCases(ctx.UseCases)
+		// --- Typed use-case wiring contract (espyna-free; supplied by service-admin) ---
+		uc := cfg.useCases
+		// Deterministic completeness gate: a missing REQUIRED closure for an
+		// enabled module is a startup error, NOT a silent runtime nil. Replaces
+		// the prior reflection-drift-prone path (Phase 2, Q-WIRE-1).
+		if err := uc.RequireFor(cfg); err != nil {
+			return err
+		}
 
 		// --- Build job drawer search handlers (client + location pickers) ---
 		// These are registered as HandleFunc routes alongside the job module routes.
-		// Client search uses entity use cases via reflection (SQL ILIKE when available,
-		// ListClients fallback). Location search uses ctx.DB (ListSimple on "location").
+		// Client search uses the typed Entity.Client closures (SQL ILIKE when
+		// available, ListClients fallback). Location search uses ctx.DB
+		// (ListSimple on "location").
 		var jobClientSearchFn, jobLocationSearchFn http.HandlerFunc
 		// activityLaborStaffSearchFn is the staff picker for the activity labor drawer.
 		var activityLaborStaffSearchFn http.HandlerFunc
@@ -606,30 +637,11 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		var activityMaterialLocationSearchFn http.HandlerFunc
 		// activityExpenseExpenseCategorySearchFn is the expense category picker for the activity expense drawer.
 		var activityExpenseExpenseCategorySearchFn http.HandlerFunc
-		if uc != nil {
-			// Extract SearchClientsByName and ListClients from UseCases.Entity.Client
-			// via the same reflection pattern used by wireJobDeps.
-			entity := ptrField(uc.v, "Entity")
-			if entity.IsValid() {
-				clientUC := ptrField(entity, "Client")
-				if clientUC.IsValid() {
-					searchByNameRaw := execFn(clientUC, "SearchClientsByName")
-					listClientsRaw := execFn(clientUC, "ListClients")
-					searchByName, _ := searchByNameRaw.(func(context.Context, *clientpb.SearchClientsByNameRequest) (*clientpb.SearchClientsByNameResponse, error))
-					listClients, _ := listClientsRaw.(func(context.Context, *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error))
-					jobClientSearchFn = newJobClientSearchHandler(searchByName, listClients)
-				}
-
-				// Extract ListStaffs from UseCases.Entity.Staff for the activity labor staff picker.
-				// TODO(P5 wave 3): add SearchStaffByName to espyna for SQL ILIKE (mirrors client pattern).
-				staffUC := ptrField(entity, "Staff")
-				if staffUC.IsValid() {
-					listStaffsRaw := execFn(staffUC, "ListStaffs")
-					listStaffs, _ := listStaffsRaw.(func(context.Context, *staffpb.ListStaffsRequest) (*staffpb.ListStaffsResponse, error))
-					activityLaborStaffSearchFn = newActivityLaborStaffSearchHandler(listStaffs)
-				}
-			}
-		}
+		// Client search picker — typed Entity.Client closures (nil → handler nil → flat-filter fallback).
+		jobClientSearchFn = newJobClientSearchHandler(uc.Entity.Client.SearchClientsByName, uc.Entity.Client.ListClients)
+		// Staff search picker — typed Entity.Staff closure.
+		// TODO(P5 wave 3): add SearchStaffByName to espyna for SQL ILIKE (mirrors client pattern).
+		activityLaborStaffSearchFn = newActivityLaborStaffSearchHandler(uc.Entity.Staff.ListStaffs)
 		if db, ok := ctx.DB.(listSimpler); ok {
 			jobLocationSearchFn = newJobLocationSearchHandler(db)
 			activityMaterialProductSearchFn = newActivityMaterialProductSearchHandler(db)
@@ -682,16 +694,12 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			if refChecker != nil {
 				jobDeps.GetInUseIDs = refChecker.GetJobInUseIDs
 			}
-			if uc != nil {
-				wireJobDeps(jobDeps, uc)
-				// codex-review-phase1-round2b P0 fix (2026-05-21): pass the
-				// canonical workspace-ID resolver so the dashboard wrapper
-				// can scope queries when the view-layer Request omits a
-				// workspace_id. Matches the
-				// `consumer.GetWorkspaceIDFromContext` pattern used by every
-				// other dashboard closure across the monorepo.
-				wireJobDashboard(jobDeps, uc, consumer.GetWorkspaceIDFromContext)
-			}
+			wireJobDeps(jobDeps, uc)
+			// Phase 2 (Q-WIRE-1): the dashboard func slot returns the fayna
+			// VIEW type directly; the proto→view translation + workspace-ID
+			// fallback now live in service-admin's adapters.go (Round 2). Here
+			// we just copy the typed closure (nil until Round 2 → empty-state).
+			wireJobDashboard(jobDeps, uc)
 			jobmod.NewModule(jobDeps).RegisterRoutes(ctx.Routes)
 			// Register the client and location search endpoints for the job drawer.
 			handleFunc(ctx.Routes, "GET", jobRoutes.ClientSearchURL, jobClientSearchFn)
@@ -717,9 +725,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			if refChecker != nil {
 				jtDeps.GetInUseIDs = refChecker.GetJobTemplateInUseIDs
 			}
-			if uc != nil {
-				wireJobTemplateDeps(jtDeps, uc)
-			}
+			wireJobTemplateDeps(jtDeps, uc)
 			jobtemplatemod.NewModule(jtDeps).RegisterRoutes(ctx.Routes)
 		}
 
@@ -731,9 +737,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				Labels:       jtpLabels,
 				CommonLabels: ctx.Common,
 			}
-			if uc != nil {
-				wireJobTemplatePhaseDeps(jtpDeps, uc)
-			}
+			wireJobTemplatePhaseDeps(jtpDeps, uc)
 			jobtemplatePhasemod.NewModule(jtpDeps).RegisterRoutes(ctx.Routes)
 		}
 
@@ -745,9 +749,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				Labels:       jttLabels,
 				CommonLabels: ctx.Common,
 			}
-			if uc != nil {
-				wireJobTemplateTaskDeps(jttDeps, uc)
-			}
+			wireJobTemplateTaskDeps(jttDeps, uc)
 			jobtemplateTaskmod.NewModule(jttDeps).RegisterRoutes(ctx.Routes)
 		}
 
@@ -773,9 +775,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			if refChecker != nil {
 				jaDeps.GetInUseIDs = refChecker.GetJobActivityInUseIDs
 			}
-			if uc != nil {
-				wireJobActivityDeps(jaDeps, uc)
-			}
+			wireJobActivityDeps(jaDeps, uc)
 			jobactivitymod.NewModule(jaDeps).RegisterRoutes(ctx.Routes)
 		}
 
@@ -799,9 +799,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			if refChecker != nil {
 				jpDeps.GetInUseIDs = refChecker.GetJobPhaseInUseIDs
 			}
-			if uc != nil {
-				wireJobPhaseDeps(jpDeps, uc)
-			}
+			wireJobPhaseDeps(jpDeps, uc)
 			jobphasemod.NewModule(jpDeps).RegisterRoutes(ctx.Routes)
 		}
 
@@ -825,9 +823,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			if refChecker != nil {
 				jkDeps.GetInUseIDs = refChecker.GetJobTaskInUseIDs
 			}
-			if uc != nil {
-				wireJobTaskDeps(jkDeps, uc)
-			}
+			wireJobTaskDeps(jkDeps, uc)
 			// Staff search — reuse the same activityLaborStaffSearchFn (same data source).
 			// Resource and template-task search endpoints fall back to flat filter mode
 			// when the handler is nil (URLs cleared below).
@@ -855,9 +851,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				// via wireActivityLaborDeps() in wiring.go once the use case is added.
 				// Until then all CRUD handlers return clear gap error messages.
 			}
-			if uc != nil {
-				wireActivityLaborDeps(alDeps, uc)
-			}
+			wireActivityLaborDeps(alDeps, uc)
 			activitylabormod.NewModule(alDeps).RegisterRoutes(ctx.Routes)
 			// Register the staff search endpoint (nil-safe — skipped when handler is nil).
 			handleFunc(ctx.Routes, "GET", alRoutes.StaffSearchURL, activityLaborStaffSearchFn)
@@ -873,9 +867,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				CommonLabels: ctx.Common,
 				TableLabels:  ctx.Table,
 			}
-			if uc != nil {
-				wireActivityMaterialDeps(amDeps, uc)
-			}
+			wireActivityMaterialDeps(amDeps, uc)
 			activitymaterialmod.NewModule(amDeps).RegisterRoutes(ctx.Routes)
 			// Register search endpoints (nil-safe — skipped when handlers are nil).
 			handleFunc(ctx.Routes, "GET", amRoutes.ProductSearchURL, activityMaterialProductSearchFn)
@@ -892,9 +884,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				CommonLabels: ctx.Common,
 				TableLabels:  ctx.Table,
 			}
-			if uc != nil {
-				wireActivityExpenseDeps(aeDeps, uc)
-			}
+			wireActivityExpenseDeps(aeDeps, uc)
 			activityexpensemod.NewModule(aeDeps).RegisterRoutes(ctx.Routes)
 			// Register search endpoint (nil-safe — skipped when handler is nil).
 			handleFunc(ctx.Routes, "GET", aeRoutes.ExpenseCategorySearchURL, activityExpenseExpenseCategorySearchFn)
@@ -913,9 +903,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				DeleteAttachment: deleteAttachment,
 				NewID:            newAttachmentID,
 			}
-			if uc != nil {
-				wireOutcomeCriteriaDeps(ocDeps, uc)
-			}
+			wireOutcomeCriteriaDeps(ocDeps, uc)
 			outcomecriteriaMod.NewModule(ocDeps).RegisterRoutes(ctx.Routes)
 		}
 
@@ -932,9 +920,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				DeleteAttachment: deleteAttachment,
 				NewID:            newAttachmentID,
 			}
-			if uc != nil {
-				wireTaskOutcomeDeps(toDeps, uc)
-			}
+			wireTaskOutcomeDeps(toDeps, uc)
 			taskoutcomeMod.NewModule(toDeps).RegisterRoutes(ctx.Routes)
 		}
 
@@ -945,9 +931,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				Labels:       osLabels,
 				CommonLabels: ctx.Common,
 			}
-			if uc != nil {
-				wireOutcomeSummaryDeps(osDeps, uc)
-			}
+			wireOutcomeSummaryDeps(osDeps, uc)
 			outcomesummaryMod.NewModule(osDeps).RegisterRoutes(ctx.Routes)
 		}
 
@@ -964,13 +948,11 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				DeleteAttachment: deleteAttachment,
 				NewID:            newAttachmentID,
 			}
-			if uc != nil {
-				wireFulfillmentDeps(ffDeps, uc)
-				// codex-review-phase1-round2b P0 fix (2026-05-21): pass the
-				// canonical workspace-ID resolver — see wireJobDashboard
-				// callsite above for rationale.
-				wireFulfillmentDashboard(ffDeps, uc, consumer.GetWorkspaceIDFromContext)
-			}
+			wireFulfillmentDeps(ffDeps, uc)
+			// Phase 2 (Q-WIRE-1): typed dashboard func slot — see wireJobDashboard
+			// callsite above for rationale. proto→view translation moves to
+			// service-admin's adapters.go (Round 2); nil until then.
+			wireFulfillmentDashboard(ffDeps, uc)
 			fulfillmentmod.NewModule(ffDeps).RegisterRoutes(ctx.Routes)
 		}
 

@@ -10,7 +10,7 @@ Data: .Name, .ClientID, .ClientName, .ClientSearchURL,
 TODO(banner): add sheet-banner for form-wide notices (P7 lyngua sweep).
 */}}
 {{define "job-drawer-form"}}
-<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-form">
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="job-form">
     {{actionForm .FormAction .WorkspaceID}}
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
 

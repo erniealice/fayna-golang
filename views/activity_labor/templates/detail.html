@@ -48,7 +48,7 @@
             <a hx-get="{{.EditURL}}"
                hx-target="#sheetContent"
                hx-swap="innerHTML"
-               hx-on::after-request="lf.Sheet.open()"
+               data-hx-on="sheet-open"
                class="btn btn-secondary"
                title="{{.Labels.Buttons.Edit}}"
                data-testid="activity-labor-edit-btn">

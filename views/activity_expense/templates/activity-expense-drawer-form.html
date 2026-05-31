@@ -20,7 +20,7 @@ fallback — wire through lyngua when activity_expense.json labels are added.
 {{define "activity-expense-drawer-form"}}
 <form hx-post="{{.FormAction}}"
       hx-swap="none"
-      hx-on::after-request="lf.Sheet.handleResponse(event)"
+      data-hx-on="sheet-response"
       data-testid="activity-expense-form">
     {{actionForm .FormAction .WorkspaceID}}
 

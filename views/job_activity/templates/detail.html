@@ -252,7 +252,7 @@
             <a hx-get="{{.ChargeLabor.EditURL}}"
                hx-target="#sheetContent"
                hx-swap="innerHTML"
-               hx-on::after-request="lf.Sheet.open()"
+               data-hx-on="sheet-open"
                class="btn btn-secondary btn-sm"
                title="Edit labor charge"
                data-testid="charge-labor-edit-btn">
@@ -314,7 +314,7 @@
             <a hx-get="{{.ChargeMaterial.EditURL}}"
                hx-target="#sheetContent"
                hx-swap="innerHTML"
-               hx-on::after-request="lf.Sheet.open()"
+               data-hx-on="sheet-open"
                class="btn btn-secondary btn-sm"
                title="Edit material charge"
                data-testid="charge-material-edit-btn">
@@ -378,7 +378,7 @@
             <a hx-get="{{.ChargeExpense.EditURL}}"
                hx-target="#sheetContent"
                hx-swap="innerHTML"
-               hx-on::after-request="lf.Sheet.open()"
+               data-hx-on="sheet-open"
                class="btn btn-secondary btn-sm"
                title="Edit expense charge"
                data-testid="charge-expense-edit-btn">

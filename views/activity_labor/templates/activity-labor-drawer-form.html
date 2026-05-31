@@ -23,7 +23,7 @@ fallback — wire through lyngua when activity_labor.json labels are added.
 {{define "activity-labor-drawer-form"}}
 <form hx-post="{{.FormAction}}"
       hx-swap="none"
-      hx-on::after-request="lf.Sheet.handleResponse(event)"
+      data-hx-on="sheet-response"
       data-testid="activity-labor-form">
     {{actionForm .FormAction .WorkspaceID}}
 

@@ -18,7 +18,7 @@ are intentional English fallbacks — wire through lyngua when labels are added.
 {{define "job-activity-drawer-form"}}
 <form hx-post="{{.FormAction}}"
       hx-swap="none"
-      hx-on::after-request="lf.Sheet.handleResponse(event)"
+      data-hx-on="sheet-response"
       data-testid="job-activity-form">
     {{actionForm .FormAction .WorkspaceID}}
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}

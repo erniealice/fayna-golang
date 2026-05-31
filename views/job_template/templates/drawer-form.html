@@ -4,7 +4,7 @@ Used by both Add and Edit actions.
 Data: .Name, .Description, .Active, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
 */}}
 {{define "job-template-drawer-form"}}
-<form hx-post="{{.FormAction}}" hx-swap="none" hx-on::after-request="lf.Sheet.handleResponse(event)" data-testid="job-template-form">
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="job-template-form">
     {{actionForm .FormAction .WorkspaceID}}
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
 

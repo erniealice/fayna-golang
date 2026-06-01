@@ -120,7 +120,7 @@
                             <form hx-post="{{.MarkURL}}" hx-swap="none" style="display:inline">
                               {{actionForm .MarkURL $.WorkspaceID}}
                               <button type="submit"
-                                      class="btn btn--sm btn--secondary"
+                                      class="btn btn-sm btn-secondary"
                                       data-testid="job-phase-mark-complete"
                                       data-phase-id="{{.ID}}"
                                       {{if .IsCompleted}}disabled aria-disabled="true"{{end}}>
@@ -156,7 +156,7 @@
     {{if .AddActivityURL}}
     <div class="job-activities-toolbar">
         <button type="button"
-                class="btn btn--primary"
+                class="btn btn-primary"
                 data-testid="job-activity-add-cta"
                 hx-get="{{.AddActivityURL}}"
                 hx-target="#sheetContent"
@@ -207,7 +207,7 @@
                     <td>
                         {{if .EditURL}}
                         <button type="button"
-                                class="btn btn--sm btn--secondary"
+                                class="btn btn-sm btn-secondary"
                                 data-testid="job-activity-edit-cta"
                                 data-activity-id="{{.ID}}"
                                 hx-get="{{.EditURL}}"

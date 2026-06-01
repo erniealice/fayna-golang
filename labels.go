@@ -200,6 +200,34 @@ type JobActivityLabels struct {
 	Tabs        JobActivityTabLabels        `json:"tabs"`
 	Errors      JobActivityErrorLabels      `json:"errors"`
 	BulkActions JobActivityBulkActionLabels `json:"bulkActions"`
+	// Charge holds labels for the charge tab (job-activity-tab-charge):
+	// labor/material/expense subtype field labels, edit CTAs, and empty states.
+	// 2026-06-01 Wave 4.3 label sweep.
+	Charge JobActivityChargeLabels `json:"charge"`
+}
+
+// JobActivityChargeLabels holds translatable strings for the charge tab
+// (job_activity/templates/detail.html job-activity-tab-charge).
+// 2026-06-01 Wave 4.3 label sweep.
+type JobActivityChargeLabels struct {
+	// Labor subtype
+	EditLabor      string `json:"editLabor"`
+	EditLaborTitle string `json:"editLaborTitle"`
+	EmptyLabor     string `json:"emptyLabor"`
+	// Material subtype
+	EditMaterial      string `json:"editMaterial"`
+	EditMaterialTitle string `json:"editMaterialTitle"`
+	EmptyMaterial     string `json:"emptyMaterial"`
+	// Expense subtype
+	EditExpense      string `json:"editExpense"`
+	EditExpenseTitle string `json:"editExpenseTitle"`
+	EmptyExpense     string `json:"emptyExpense"`
+	VendorRef        string `json:"vendorRef"`
+	ReceiptURL       string `json:"receiptUrl"`
+	PaymentMethod    string `json:"paymentMethod"`
+	MarkupPct        string `json:"markupPct"`
+	// Fallback for equipment/subcontract/unspecified entry types.
+	Unavailable string `json:"unavailable"`
 }
 
 // JobActivityTabLabels holds tab labels for the job activity detail page.
@@ -809,6 +837,23 @@ func DefaultJobActivityLabels() JobActivityLabels {
 			NotFound:         "Activity not found",
 			IDRequired:       "Activity ID is required",
 		},
+		// 2026-06-01 Wave 4.3 label sweep — charge tab subtype detail.
+		Charge: JobActivityChargeLabels{
+			EditLabor:         "Edit Labor Charge",
+			EditLaborTitle:    "Edit labor charge",
+			EmptyLabor:        "No labor charge recorded.",
+			EditMaterial:      "Edit Material Charge",
+			EditMaterialTitle: "Edit material charge",
+			EmptyMaterial:     "No material charge recorded.",
+			EditExpense:       "Edit Expense Charge",
+			EditExpenseTitle:  "Edit expense charge",
+			EmptyExpense:      "No expense charge recorded.",
+			VendorRef:         "Vendor Ref",
+			ReceiptURL:        "Receipt URL",
+			PaymentMethod:     "Payment Method",
+			MarkupPct:         "Markup %",
+			Unavailable:       "Charge detail not available for this entry type.",
+		},
 	}
 }
 
@@ -902,6 +947,16 @@ type JobEmptyLabels struct {
 	SettlementMessage string `json:"settlementMessage"`
 	OutcomesTitle     string `json:"outcomesTitle"`
 	OutcomesMessage   string `json:"outcomesMessage"`
+
+	// 2026-06-01 Wave 4.3 label sweep — budget & actuals tab empty states
+	// (job/templates/detail.html job-tab-budget / job-tab-actuals).
+	BudgetTitle           string `json:"budgetTitle"`
+	BudgetMessage         string `json:"budgetMessage"`
+	BudgetNoPhasesTitle   string `json:"budgetNoPhasesTitle"`
+	BudgetNoPhasesMessage string `json:"budgetNoPhasesMessage"`
+	BudgetNoTasks         string `json:"budgetNoTasks"`
+	ActualsTitle          string `json:"actualsTitle"`
+	ActualsMessage        string `json:"actualsMessage"`
 }
 
 type JobFormLabels struct {
@@ -957,6 +1012,22 @@ type JobDetailLabels struct {
 	PhaseStatusPending   string `json:"phaseStatusPending"`
 	PhaseStatusActive    string `json:"phaseStatusActive"`
 	PhaseStatusCompleted string `json:"phaseStatusCompleted"`
+
+	// 2026-06-01 Wave 4.3 label sweep — Budget tab (job-tab-budget).
+	BudgetSectionTitle   string `json:"budgetSectionTitle"`
+	BudgetTask           string `json:"budgetTask"`
+	BudgetHours          string `json:"budgetHours"`
+	BudgetSubtotalSuffix string `json:"budgetSubtotalSuffix"`
+	BudgetTotalHours     string `json:"budgetTotalHours"`
+
+	// 2026-06-01 Wave 4.3 label sweep — Actuals tab (job-tab-actuals).
+	ActualsSectionTitle  string `json:"actualsSectionTitle"`
+	ActualsCount         string `json:"actualsCount"`
+	ActualsGrandTotal    string `json:"actualsGrandTotal"`
+	VarianceSectionTitle string `json:"varianceSectionTitle"`
+	VarianceBudgetHours  string `json:"varianceBudgetHours"`
+	VarianceActualsCost  string `json:"varianceActualsCost"`
+	VarianceNote         string `json:"varianceNote"`
 }
 
 type JobTabLabels struct {
@@ -2150,6 +2221,14 @@ func DefaultJobLabels() JobLabels {
 			SettlementMessage: "No cost allocations have been settled for this job yet.",
 			OutcomesTitle:     "No outcomes",
 			OutcomesMessage:   "No outcome evaluations have been recorded for this job yet.",
+			// 2026-06-01 Wave 4.3 label sweep — budget & actuals tab empty states.
+			BudgetTitle:           "No budget available",
+			BudgetMessage:         "No template attached. Budget unavailable until a JobTemplate is linked to this matter.",
+			BudgetNoPhasesTitle:   "No phases defined",
+			BudgetNoPhasesMessage: "The linked template has no phases or tasks. Add phases to the template to see the budget breakdown.",
+			BudgetNoTasks:         "No tasks",
+			ActualsTitle:          "No actuals recorded",
+			ActualsMessage:        "No activity entries have been posted for this job yet.",
 		},
 		Form: JobFormLabels{
 			NamePlaceholder:     "Enter job name",
@@ -2195,6 +2274,20 @@ func DefaultJobLabels() JobLabels {
 			PhaseStatusPending:   "Pending",
 			PhaseStatusActive:    "Active",
 			PhaseStatusCompleted: "Completed",
+			// 2026-06-01 Wave 4.3 label sweep — Budget tab.
+			BudgetSectionTitle:   "Estimated Hours by Phase",
+			BudgetTask:           "Task",
+			BudgetHours:          "Hours",
+			BudgetSubtotalSuffix: "subtotal",
+			BudgetTotalHours:     "Total estimated hours",
+			// 2026-06-01 Wave 4.3 label sweep — Actuals tab.
+			ActualsSectionTitle:  "Cost by Entry Type",
+			ActualsCount:         "Count",
+			ActualsGrandTotal:    "Grand Total",
+			VarianceSectionTitle: "Budget vs Actuals",
+			VarianceBudgetHours:  "Budget (estimated hours)",
+			VarianceActualsCost:  "Actuals (total cost)",
+			VarianceNote:         "Full money-vs-money variance available after Wave 3 (resource bill rates).",
 		},
 		Tabs: JobTabLabels{
 			Info:        "Information",

@@ -270,23 +270,23 @@
 <div class="tab-scroll">
     {{if not .Budget.HasBudget}}
     <div class="coming-soon-panel">
-        <div class="coming-soon-title">No budget available</div>
-        <p class="coming-soon-text">No template attached. Budget unavailable until a JobTemplate is linked to this matter.</p>
+        <div class="coming-soon-title">{{.Labels.Empty.BudgetTitle}}</div>
+        <p class="coming-soon-text">{{.Labels.Empty.BudgetMessage}}</p>
     </div>
     {{else if not .Budget.Phases}}
     <div class="coming-soon-panel">
-        <div class="coming-soon-title">No phases defined</div>
-        <p class="coming-soon-text">The linked template has no phases or tasks. Add phases to the template to see the budget breakdown.</p>
+        <div class="coming-soon-title">{{.Labels.Empty.BudgetNoPhasesTitle}}</div>
+        <p class="coming-soon-text">{{.Labels.Empty.BudgetNoPhasesMessage}}</p>
     </div>
     {{else}}
-    <section class="job-budget-card" aria-label="Budget">
-        <h4 class="job-section-title">Estimated Hours by Phase</h4>
+    <section class="job-budget-card" aria-label="{{.Labels.Tabs.Budget}}">
+        <h4 class="job-section-title">{{.Labels.Detail.BudgetSectionTitle}}</h4>
         <table class="job-budget-table" data-testid="job-budget-table">
             <thead>
                 <tr>
-                    <th>Phase</th>
-                    <th>Task</th>
-                    <th class="text-right">Hours</th>
+                    <th>{{.Labels.Detail.PhaseName}}</th>
+                    <th>{{.Labels.Detail.BudgetTask}}</th>
+                    <th class="text-right">{{.Labels.Detail.BudgetHours}}</th>
                 </tr>
             </thead>
             <tbody>
@@ -303,19 +303,19 @@
                 {{else}}
                 <tr data-testid="job-budget-phase-row">
                     <td>{{.Name}}</td>
-                    <td><em>No tasks</em></td>
+                    <td><em>{{$.Labels.Empty.BudgetNoTasks}}</em></td>
                     <td class="text-right">{{printf "%.1f" .PhaseHours}}</td>
                 </tr>
                 {{end}}
                 <tr class="job-budget-subtotal" data-testid="job-budget-phase-subtotal">
-                    <td colspan="2"><strong>{{.Name}} subtotal</strong></td>
+                    <td colspan="2"><strong>{{.Name}} {{$.Labels.Detail.BudgetSubtotalSuffix}}</strong></td>
                     <td class="text-right"><strong>{{printf "%.1f" .PhaseHours}} h</strong></td>
                 </tr>
                 {{end}}
             </tbody>
             <tfoot>
                 <tr class="job-budget-grand-total" data-testid="job-budget-grand-total">
-                    <td colspan="2"><strong>Total estimated hours</strong></td>
+                    <td colspan="2"><strong>{{.Labels.Detail.BudgetTotalHours}}</strong></td>
                     <td class="text-right"><strong>{{printf "%.1f" .Budget.TotalHours}} h</strong></td>
                 </tr>
             </tfoot>
@@ -332,18 +332,18 @@
 <div class="tab-scroll">
     {{if not .ActualsRows}}
     <div class="coming-soon-panel">
-        <div class="coming-soon-title">No actuals recorded</div>
-        <p class="coming-soon-text">No activity entries have been posted for this job yet.</p>
+        <div class="coming-soon-title">{{.Labels.Empty.ActualsTitle}}</div>
+        <p class="coming-soon-text">{{.Labels.Empty.ActualsMessage}}</p>
     </div>
     {{else}}
-    <section class="job-actuals-card" aria-label="Actuals">
-        <h4 class="job-section-title">Cost by Entry Type</h4>
+    <section class="job-actuals-card" aria-label="{{.Labels.Tabs.Actuals}}">
+        <h4 class="job-section-title">{{.Labels.Detail.ActualsSectionTitle}}</h4>
         <table class="job-actuals-table" data-testid="job-actuals-table">
             <thead>
                 <tr>
-                    <th>Entry Type</th>
-                    <th class="text-right">Count</th>
-                    <th class="text-right">Total Cost</th>
+                    <th>{{.Labels.Detail.EntryType}}</th>
+                    <th class="text-right">{{.Labels.Detail.ActualsCount}}</th>
+                    <th class="text-right">{{.Labels.Detail.TotalCost}}</th>
                 </tr>
             </thead>
             <tbody>
@@ -361,7 +361,7 @@
             </tbody>
             <tfoot>
                 <tr class="job-actuals-grand-total" data-testid="job-actuals-grand-total">
-                    <td colspan="2"><strong>Grand Total</strong></td>
+                    <td colspan="2"><strong>{{.Labels.Detail.ActualsGrandTotal}}</strong></td>
                     <td class="text-right"><strong>{{.ActualsGrandTotal}}</strong></td>
                 </tr>
             </tfoot>
@@ -373,17 +373,17 @@
          A richer money-vs-money comparison lands when Wave 3 budget uses
          centavos (resource→PriceProduct→bill_rate chain). */}}
     {{if .Budget.HasBudget}}
-    <section class="job-actuals-variance-card" aria-label="Budget vs Actuals" data-testid="job-actuals-variance-card">
-        <h4 class="job-section-title">Budget vs Actuals</h4>
+    <section class="job-actuals-variance-card" aria-label="{{.Labels.Detail.VarianceSectionTitle}}" data-testid="job-actuals-variance-card">
+        <h4 class="job-section-title">{{.Labels.Detail.VarianceSectionTitle}}</h4>
         <div class="job-variance-row">
-            <span class="job-variance-label">Budget (estimated hours)</span>
+            <span class="job-variance-label">{{.Labels.Detail.VarianceBudgetHours}}</span>
             <span class="job-variance-value" data-testid="job-variance-budget-hours">{{printf "%.1f" .Budget.TotalHours}} h</span>
         </div>
         <div class="job-variance-row">
-            <span class="job-variance-label">Actuals (total cost)</span>
+            <span class="job-variance-label">{{.Labels.Detail.VarianceActualsCost}}</span>
             <span class="job-variance-value" data-testid="job-variance-actuals-cost">{{.ActualsGrandTotal}}</span>
         </div>
-        <p class="job-variance-note">Full money-vs-money variance available after Wave 3 (resource bill rates).</p>
+        <p class="job-variance-note">{{.Labels.Detail.VarianceNote}}</p>
     </section>
     {{end}}
     {{end}}

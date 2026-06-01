@@ -5,6 +5,10 @@ import (
 	"testing"
 
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
+	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	pyeza "github.com/erniealice/pyeza-golang"
 )
 
@@ -386,5 +390,123 @@ func TestRequireFor_OptionalActivityModules_NotRequired(t *testing.T) {
 	cfg := &blockConfig{activityLabor: true, activityMaterial: true, activityExpense: true}
 	if err := uc.RequireFor(cfg); err != nil {
 		t.Fatalf("RequireFor(optional activity modules, nil closures) should be nil, got %v", err)
+	}
+}
+
+// wireJobTemplateRequired sets every closure RequireFor checks for the
+// JobTemplate module: the five JobTemplate CRUD/page closures plus the three
+// detail-tab cross-entity list closures (MEDIUM-2).
+func wireJobTemplateRequired(uc *UseCases) {
+	jt := &uc.Operation.JobTemplate
+	jt.CreateJobTemplate = func(context.Context, *jobtemplatepb.CreateJobTemplateRequest) (*jobtemplatepb.CreateJobTemplateResponse, error) {
+		return nil, nil
+	}
+	jt.ReadJobTemplate = func(context.Context, *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error) {
+		return nil, nil
+	}
+	jt.UpdateJobTemplate = func(context.Context, *jobtemplatepb.UpdateJobTemplateRequest) (*jobtemplatepb.UpdateJobTemplateResponse, error) {
+		return nil, nil
+	}
+	jt.DeleteJobTemplate = func(context.Context, *jobtemplatepb.DeleteJobTemplateRequest) (*jobtemplatepb.DeleteJobTemplateResponse, error) {
+		return nil, nil
+	}
+	jt.GetJobTemplateListPageData = func(context.Context, *jobtemplatepb.GetJobTemplateListPageDataRequest) (*jobtemplatepb.GetJobTemplateListPageDataResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplatePhase.ListByJobTemplate = func(context.Context, *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplateTask.ListByPhase = func(context.Context, *jobtemplateTaskpb.ListJobTemplateTasksByPhaseRequest) (*jobtemplateTaskpb.ListJobTemplateTasksByPhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.TemplateTaskCriteria.ListByTemplateTask = func(context.Context, *templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskResponse, error) {
+		return nil, nil
+	}
+}
+
+func TestRequireFor_JobTemplateModule_FullWiring_OK(t *testing.T) {
+	t.Parallel()
+
+	// JobTemplate enabled with CRUD + page data AND the three detail-tab list
+	// closures wired → no error.
+	uc := &UseCases{}
+	wireJobTemplateRequired(uc)
+
+	if err := uc.RequireFor(&blockConfig{jobTemplate: true}); err != nil {
+		t.Fatalf("RequireFor(fully wired JobTemplate) should be nil, got %v", err)
+	}
+}
+
+// TestRequireFor_JobTemplateModule_MissingDetailTabClosures_Errors is the
+// MEDIUM-2 regression: JobTemplate enabled with only its own CRUD + page data
+// (the prior RequireFor scope), but the detail Tasks/Standards tabs' cross-entity
+// list closures left nil. Before the fix this passed RequireFor and the tabs
+// silently rendered empty; now boot must fail-fast for each missing closure.
+func TestRequireFor_JobTemplateModule_MissingDetailTabClosures_Errors(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		unset func(*UseCases)
+	}{
+		{"ListByJobTemplate", func(uc *UseCases) { uc.Operation.JobTemplatePhase.ListByJobTemplate = nil }},
+		{"ListByPhase", func(uc *UseCases) { uc.Operation.JobTemplateTask.ListByPhase = nil }},
+		{"ListByTemplateTask", func(uc *UseCases) { uc.Operation.TemplateTaskCriteria.ListByTemplateTask = nil }},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			uc := &UseCases{}
+			wireJobTemplateRequired(uc)
+			tc.unset(uc) // drop exactly one detail-tab closure
+
+			err := uc.RequireFor(&blockConfig{jobTemplate: true})
+			if err == nil {
+				t.Fatalf("RequireFor(JobTemplate, missing %s) should return an error, got nil", tc.name)
+			}
+		})
+	}
+}
+
+// TestRequireFor_JobTemplateDetailClosures_NotRequired_WhenJobTemplateDisabled
+// guards the converse: enabling only the drawer-only JobTemplatePhase /
+// JobTemplateTask modules (NOT the JobTemplate module) must not require the
+// detail-tab list closures, which belong to the JobTemplate detail view.
+func TestRequireFor_JobTemplateDetailClosures_NotRequired_WhenJobTemplateDisabled(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCases{}
+	// Only the JobTemplatePhase/Task drawer-CRUD closures; no list closures.
+	uc.Operation.JobTemplatePhase.CreateJobTemplatePhase = func(context.Context, *jobtemplatephasepb.CreateJobTemplatePhaseRequest) (*jobtemplatephasepb.CreateJobTemplatePhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplatePhase.ReadJobTemplatePhase = func(context.Context, *jobtemplatephasepb.ReadJobTemplatePhaseRequest) (*jobtemplatephasepb.ReadJobTemplatePhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplatePhase.UpdateJobTemplatePhase = func(context.Context, *jobtemplatephasepb.UpdateJobTemplatePhaseRequest) (*jobtemplatephasepb.UpdateJobTemplatePhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplatePhase.DeleteJobTemplatePhase = func(context.Context, *jobtemplatephasepb.DeleteJobTemplatePhaseRequest) (*jobtemplatephasepb.DeleteJobTemplatePhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplateTask.CreateJobTemplateTask = func(context.Context, *jobtemplateTaskpb.CreateJobTemplateTaskRequest) (*jobtemplateTaskpb.CreateJobTemplateTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplateTask.ReadJobTemplateTask = func(context.Context, *jobtemplateTaskpb.ReadJobTemplateTaskRequest) (*jobtemplateTaskpb.ReadJobTemplateTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplateTask.UpdateJobTemplateTask = func(context.Context, *jobtemplateTaskpb.UpdateJobTemplateTaskRequest) (*jobtemplateTaskpb.UpdateJobTemplateTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplateTask.DeleteJobTemplateTask = func(context.Context, *jobtemplateTaskpb.DeleteJobTemplateTaskRequest) (*jobtemplateTaskpb.DeleteJobTemplateTaskResponse, error) {
+		return nil, nil
+	}
+
+	cfg := &blockConfig{jobTemplatePhase: true, jobTemplateTask: true}
+	if err := uc.RequireFor(cfg); err != nil {
+		t.Fatalf("RequireFor(drawer-only JobTemplatePhase/Task, no list closures) should be nil, got %v", err)
 	}
 }

@@ -331,6 +331,19 @@ func (u *UseCases) RequireFor(cfg *blockConfig) error {
 		check(jt.UpdateJobTemplate != nil, "UseCases.Operation.JobTemplate.UpdateJobTemplate")
 		check(jt.DeleteJobTemplate != nil, "UseCases.Operation.JobTemplate.DeleteJobTemplate")
 		check(jt.GetJobTemplateListPageData != nil, "UseCases.Operation.JobTemplate.GetJobTemplateListPageData")
+
+		// The JobTemplate detail Tasks + Standards tabs (views/job_template/detail/
+		// tasks.go + standards.go, wired via wireJobTemplateDeps) walk
+		// phases → tasks → criteria. These three cross-entity list closures are
+		// REQUIRED whenever JobTemplate is enabled — without them the detail tabs
+		// silently render empty (degraded, not a panic). They are provided by
+		// service-admin's buildFaynaUseCases (adapters.go: JobTemplatePhase.
+		// ListByJobTemplate, JobTemplateTask.ListByPhase, TemplateTaskCriteria.
+		// ListByTemplateTask), so asserting them here is boot-safe and surfaces
+		// any future wiring gap at startup instead of as an empty tab.
+		check(u.Operation.JobTemplatePhase.ListByJobTemplate != nil, "UseCases.Operation.JobTemplatePhase.ListByJobTemplate")
+		check(u.Operation.JobTemplateTask.ListByPhase != nil, "UseCases.Operation.JobTemplateTask.ListByPhase")
+		check(u.Operation.TemplateTaskCriteria.ListByTemplateTask != nil, "UseCases.Operation.TemplateTaskCriteria.ListByTemplateTask")
 	}
 
 	if cfg.wantJobActivity() {

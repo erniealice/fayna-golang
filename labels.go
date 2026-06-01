@@ -166,8 +166,11 @@ func DefaultJobTemplateLabels() JobTemplateLabels {
 		Tabs: JobTemplateTabLabels{
 			Info:        "Information",
 			Phases:      "Phases",
+			Tasks:       "Tasks",
+			Standards:   "Standards",
 			Attachments: "Attachments",
 			AuditTrail:  "Audit Trail",
+			History:     "History",
 		},
 		Confirm: JobTemplateConfirmLabels{
 			Delete:        "Delete Template",
@@ -1706,6 +1709,7 @@ type OutcomeCriteriaTabLabels struct {
 	Templates   string `json:"templates"`
 	Versions    string `json:"versions"`
 	Attachments string `json:"attachments"`
+	History     string `json:"history"`
 }
 
 type OutcomeCriteriaConfirmLabels struct {
@@ -1788,6 +1792,7 @@ func DefaultOutcomeCriteriaLabels() OutcomeCriteriaLabels {
 			Templates:   "Templates",
 			Versions:    "Versions",
 			Attachments: "Attachments",
+			History:     "History",
 		},
 		Confirm: OutcomeCriteriaConfirmLabels{
 			Delete:        "Delete Criterion",
@@ -2296,6 +2301,9 @@ func DefaultJobLabels() JobLabels {
 			Settlement:  "Settlement",
 			Outcomes:    "Outcomes",
 			Attachments: "Attachments",
+			Budget:      "Budget",
+			Actuals:     "Actuals",
+			History:     "History",
 		},
 		Confirm: JobConfirmLabels{
 			Delete:        "Delete Job",

@@ -141,10 +141,10 @@ func buildTabItems(l fayna.JobTemplateLabels, id string, routes fayna.JobTemplat
 	return []pyeza.TabItem{
 		{Key: "info", Label: cmpLabelOrDefault(l.Tabs.Info, "Info"), Href: base + "?tab=info", HxGet: action + "info", Icon: "icon-info"},
 		{Key: "phases", Label: cmpLabelOrDefault(l.Tabs.Phases, "Phases"), Href: base + "?tab=phases", HxGet: action + "phases", Icon: "icon-list"},
-		{Key: "tasks", Label: "Tasks", Href: base + "?tab=tasks", HxGet: action + "tasks", Icon: "icon-check-square"},
-		{Key: "standards", Label: "Standards", Href: base + "?tab=standards", HxGet: action + "standards", Icon: "icon-target"},
+		{Key: "tasks", Label: cmpLabelOrDefault(l.Tabs.Tasks, "Tasks"), Href: base + "?tab=tasks", HxGet: action + "tasks", Icon: "icon-check-square"},
+		{Key: "standards", Label: cmpLabelOrDefault(l.Tabs.Standards, "Standards"), Href: base + "?tab=standards", HxGet: action + "standards", Icon: "icon-target"},
 		{Key: "attachments", Label: cmpLabelOrDefault(l.Tabs.Attachments, "Attachments"), Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
-		{Key: "audit-history", Label: "History", Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
+		{Key: "audit-history", Label: cmpLabelOrDefault(l.Tabs.History, "History"), Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
 	}
 }
 

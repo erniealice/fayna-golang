@@ -302,16 +302,6 @@ func NewView(deps *DetailViewDeps) view.View {
 	})
 }
 
-// cmpLabelOrDefault returns s if non-empty, otherwise returns fallback.
-// Used for tab labels that don't yet have a lyngua key
-// (Budget, Actuals, History — lyngua sweep is P7).
-func cmpLabelOrDefault(s, fallback string) string {
-	if s != "" {
-		return s
-	}
-	return fallback
-}
-
 // buildTabItems returns the visible tab strip for the job detail page.
 // Tab order: info | phases | activities | budget | actuals | attachments | audit-history.
 // NOTE: settlement and outcomes are intentionally excluded from the visible
@@ -325,10 +315,10 @@ func buildTabItems(l fayna.JobLabels, id string, routes fayna.JobRoutes) []pyeza
 		{Key: "info", Label: l.Tabs.Info, Href: base + "?tab=info", HxGet: action + "info", Icon: "icon-info"},
 		{Key: "phases", Label: l.Tabs.Phases, Href: base + "?tab=phases", HxGet: action + "phases", Icon: "icon-list"},
 		{Key: "activities", Label: l.Tabs.Activities, Href: base + "?tab=activities", HxGet: action + "activities", Icon: "icon-clock"},
-		{Key: "budget", Label: cmpLabelOrDefault("", "Budget"), Href: base + "?tab=budget", HxGet: action + "budget", Icon: "icon-target"},
-		{Key: "actuals", Label: cmpLabelOrDefault("", "Actuals"), Href: base + "?tab=actuals", HxGet: action + "actuals", Icon: "icon-trending-up"},
+		{Key: "budget", Label: l.Tabs.Budget, Href: base + "?tab=budget", HxGet: action + "budget", Icon: "icon-target"},
+		{Key: "actuals", Label: l.Tabs.Actuals, Href: base + "?tab=actuals", HxGet: action + "actuals", Icon: "icon-trending-up"},
 		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
-		{Key: "audit-history", Label: cmpLabelOrDefault("", "History"), Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
+		{Key: "audit-history", Label: l.Tabs.History, Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
 	}
 }
 

@@ -239,7 +239,7 @@ func buildTabItems(l fayna.OutcomeCriteriaLabels, id string, routes fayna.Outcom
 		{Key: "templates", Label: l.Tabs.Templates, Href: base + "?tab=templates", HxGet: action + "templates", Icon: "icon-file"},
 		{Key: "versions", Label: l.Tabs.Versions, Href: base + "?tab=versions", HxGet: action + "versions", Icon: "icon-clock"},
 		{Key: "attachments", Label: l.Tabs.Attachments, Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
-		{Key: "audit-history", Label: "History", Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
+		{Key: "audit-history", Label: l.Tabs.History, Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
 	}
 }
 

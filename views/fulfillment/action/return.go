@@ -6,8 +6,6 @@ import (
 	"math"
 	"strconv"
 
-	fayna "github.com/erniealice/fayna-golang"
-
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
 
@@ -20,22 +18,22 @@ func NewReturnAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("fulfillment", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.PathValue("id")
 		if id == "" {
-			return fayna.HTMXError("Fulfillment ID is required")
+			return view.HTMXError("Fulfillment ID is required")
 		}
 
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 
 		r := viewCtx.Request
 		reason := r.FormValue("reason")
 		if reason == "" {
-			return fayna.HTMXError("Reason is required")
+			return view.HTMXError("Reason is required")
 		}
 
 		returnData := &fulfillmentpb.FulfillmentReturn{
@@ -61,7 +59,7 @@ func NewReturnAction(deps *Deps) view.View {
 		_, err := deps.CreateFulfillmentReturn(ctx, returnData)
 		if err != nil {
 			log.Printf("Failed to create return for fulfillment %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		// Redirect back to detail page returns tab.

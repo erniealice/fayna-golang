@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	fayna "github.com/erniealice/fayna-golang"
 	fulfillmentform "github.com/erniealice/fayna-golang/views/fulfillment/form"
 
 	"github.com/erniealice/pyeza-golang/route"
@@ -21,7 +20,7 @@ func NewAddAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("fulfillment", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -34,7 +33,7 @@ func NewAddAction(deps *Deps) view.View {
 
 		// POST — create fulfillment
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 
 		r := viewCtx.Request
@@ -45,7 +44,7 @@ func NewAddAction(deps *Deps) view.View {
 		if raw := r.FormValue("scheduled_at"); raw != "" {
 			parsed, err := time.Parse("2006-01-02T15:04", raw)
 			if err != nil {
-				return fayna.HTMXError("Invalid form data")
+				return view.HTMXError("Invalid form data")
 			}
 			scheduledAtProto = timestamppb.New(parsed.UTC())
 		}
@@ -62,7 +61,7 @@ func NewAddAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to create fulfillment: %v", err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		newID := ""
@@ -79,6 +78,6 @@ func NewAddAction(deps *Deps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("fulfillments-table")
+		return view.HTMXSuccess("fulfillments-table")
 	})
 }

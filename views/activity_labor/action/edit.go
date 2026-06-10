@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 
-	fayna "github.com/erniealice/fayna-golang"
 	activitylaborform "github.com/erniealice/fayna-golang/views/activity_labor/form"
 
 	"github.com/erniealice/pyeza-golang/view"
@@ -20,12 +19,12 @@ func NewEditAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("activity_labor", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		activityID := viewCtx.Request.PathValue("id")
 		if activityID == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -43,11 +42,11 @@ func NewEditAction(deps *Deps) view.View {
 			})
 			if err != nil {
 				log.Printf("Failed to read activity labor %s: %v", activityID, err)
-				return fayna.HTMXError(fmt.Sprintf("Failed to load labor record: %v", err))
+				return view.HTMXError(fmt.Sprintf("Failed to load labor record: %v", err))
 			}
 			data := resp.GetData()
 			if len(data) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 
 			formData := buildFormData(data[0], deps.Routes, deps.Labels)
@@ -58,12 +57,12 @@ func NewEditAction(deps *Deps) view.View {
 
 		// POST — process the update.
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 
 		if deps.UpdateActivityLabor == nil {
 			// TODO: wire UpdateActivityLabor from espyna OperationUseCases.ActivityLabor
-			return fayna.HTMXError("UpdateActivityLabor use case not wired — add ActivityLabor to espyna OperationUseCases")
+			return view.HTMXError("UpdateActivityLabor use case not wired — add ActivityLabor to espyna OperationUseCases")
 		}
 
 		r := viewCtx.Request
@@ -86,9 +85,9 @@ func NewEditAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to update activity labor %s: %v", activityID, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("activity-labor-charge-section")
+		return view.HTMXSuccess("activity-labor-charge-section")
 	})
 }

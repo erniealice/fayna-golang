@@ -5,7 +5,6 @@ import (
 	"log"
 
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
-	fayna "github.com/erniealice/fayna-golang"
 
 	"github.com/erniealice/pyeza-golang/view"
 )
@@ -15,7 +14,7 @@ func NewDeleteAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_template_task", "delete") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.URL.Query().Get("id")
@@ -24,11 +23,11 @@ func NewDeleteAction(deps *Deps) view.View {
 			id = viewCtx.Request.FormValue("id")
 		}
 		if id == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 
 		if deps.DeleteJobTemplateTask == nil {
-			return fayna.HTMXError("Delete not available")
+			return view.HTMXError("Delete not available")
 		}
 
 		_, err := deps.DeleteJobTemplateTask(ctx, &jobtemplateTaskpb.DeleteJobTemplateTaskRequest{
@@ -36,10 +35,10 @@ func NewDeleteAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to delete job template task %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("jt-tasks-table")
+		return view.HTMXSuccess("jt-tasks-table")
 	})
 }
 
@@ -48,19 +47,19 @@ func NewBulkDeleteAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_template_task", "delete") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		ids := viewCtx.Request.Form["id"]
 		if len(ids) == 0 {
-			return fayna.HTMXError("No IDs provided")
+			return view.HTMXError("No IDs provided")
 		}
 
 		if deps.DeleteJobTemplateTask == nil {
-			return fayna.HTMXError("Delete not available")
+			return view.HTMXError("Delete not available")
 		}
 
 		for _, id := range ids {
@@ -72,6 +71,6 @@ func NewBulkDeleteAction(deps *Deps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("jt-tasks-table")
+		return view.HTMXSuccess("jt-tasks-table")
 	})
 }

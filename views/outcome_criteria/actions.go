@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 
-	fayna "github.com/erniealice/fayna-golang"
 	outcomecriteriaform "github.com/erniealice/fayna-golang/views/outcome_criteria/form"
 
 	"github.com/erniealice/pyeza-golang/route"
@@ -20,7 +19,7 @@ func newAddAction(deps *ModuleDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("outcome_criteria", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -35,7 +34,7 @@ func newAddAction(deps *ModuleDeps) view.View {
 
 		// POST — create outcome criteria
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError(deps.Labels.Errors.InvalidFormData)
+			return view.HTMXError(deps.Labels.Errors.InvalidFormData)
 		}
 
 		r := viewCtx.Request
@@ -52,10 +51,10 @@ func newAddAction(deps *ModuleDeps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to create outcome criteria: %v", err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("criteria-table")
+		return view.HTMXSuccess("criteria-table")
 	})
 }
 
@@ -64,7 +63,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("outcome_criteria", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.PathValue("id")
@@ -74,7 +73,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 
 		if viewCtx.Request.Method == http.MethodGet {
 			if id == "" {
-				return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+				return view.HTMXError(deps.Labels.Errors.IDRequired)
 			}
 
 			readResp, err := deps.ReadOutcomeCriteria(ctx, &criteriapb.ReadOutcomeCriteriaRequest{
@@ -82,11 +81,11 @@ func newEditAction(deps *ModuleDeps) view.View {
 			})
 			if err != nil {
 				log.Printf("Failed to read outcome criteria %s: %v", id, err)
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			readData := readResp.GetData()
 			if len(readData) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			record := readData[0]
 
@@ -109,7 +108,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 
 		// POST — update outcome criteria
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError(deps.Labels.Errors.InvalidFormData)
+			return view.HTMXError(deps.Labels.Errors.InvalidFormData)
 		}
 
 		r := viewCtx.Request
@@ -117,7 +116,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 			id = r.FormValue("id")
 		}
 		if id == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 
 		weight, _ := strconv.ParseFloat(r.FormValue("weight"), 64)
@@ -133,7 +132,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to update outcome criteria %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		return view.ViewResult{
@@ -151,7 +150,7 @@ func newDeleteAction(deps *ModuleDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("outcome_criteria", "delete") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.URL.Query().Get("id")
@@ -160,7 +159,7 @@ func newDeleteAction(deps *ModuleDeps) view.View {
 			id = viewCtx.Request.FormValue("id")
 		}
 		if id == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 
 		_, err := deps.DeleteOutcomeCriteria(ctx, &criteriapb.DeleteOutcomeCriteriaRequest{
@@ -168,10 +167,10 @@ func newDeleteAction(deps *ModuleDeps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to delete outcome criteria %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("criteria-table")
+		return view.HTMXSuccess("criteria-table")
 	})
 }
 
@@ -180,14 +179,14 @@ func newBulkDeleteAction(deps *ModuleDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("outcome_criteria", "delete") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		_ = viewCtx.Request.ParseMultipartForm(32 << 20)
 
 		ids := viewCtx.Request.Form["id"]
 		if len(ids) == 0 {
-			return fayna.HTMXError("No IDs provided")
+			return view.HTMXError("No IDs provided")
 		}
 
 		for _, id := range ids {
@@ -199,7 +198,7 @@ func newBulkDeleteAction(deps *ModuleDeps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("criteria-table")
+		return view.HTMXSuccess("criteria-table")
 	})
 }
 

@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
-	fayna "github.com/erniealice/fayna-golang"
 	jobtaskform "github.com/erniealice/fayna-golang/views/job_task/form"
 
 	"github.com/erniealice/pyeza-golang/route"
@@ -22,7 +21,7 @@ func NewAddAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_task", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -43,7 +42,7 @@ func NewAddAction(deps *Deps) view.View {
 
 		// POST — create task
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		r := viewCtx.Request
 
@@ -83,7 +82,7 @@ func NewAddAction(deps *Deps) view.View {
 		resp, err := deps.CreateJobTask(ctx, &jobtaskpb.CreateJobTaskRequest{Data: task})
 		if err != nil {
 			log.Printf("Failed to create job task: %v", err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		newID := ""
@@ -100,6 +99,6 @@ func NewAddAction(deps *Deps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("job-tasks-table")
+		return view.HTMXSuccess("job-tasks-table")
 	})
 }

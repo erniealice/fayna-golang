@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 
-	fayna "github.com/erniealice/fayna-golang"
 	jobtemplateform "github.com/erniealice/fayna-golang/views/job_template/form"
 
 	"github.com/erniealice/pyeza-golang/route"
@@ -19,7 +18,7 @@ func NewAddAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_template", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -32,7 +31,7 @@ func NewAddAction(deps *Deps) view.View {
 
 		// POST — create job template
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError(deps.Labels.Errors.InvalidFormData)
+			return view.HTMXError(deps.Labels.Errors.InvalidFormData)
 		}
 
 		r := viewCtx.Request
@@ -45,7 +44,7 @@ func NewAddAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to create job template: %v", err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		newID := ""
@@ -62,7 +61,7 @@ func NewAddAction(deps *Deps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("job-templates-table")
+		return view.HTMXSuccess("job-templates-table")
 	})
 }
 

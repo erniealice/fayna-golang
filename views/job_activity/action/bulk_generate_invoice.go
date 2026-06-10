@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	fayna "github.com/erniealice/fayna-golang"
-
 	"github.com/erniealice/pyeza-golang/view"
 )
 
@@ -24,30 +22,30 @@ func NewBulkGenerateInvoiceAction(deps *Deps) view.View {
 		// invoicing.
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("invoice", "create") || !perms.Can("job_activity", "post") {
-			return fayna.HTMXError("You do not have permission to generate invoices from activities")
+			return view.HTMXError("You do not have permission to generate invoices from activities")
 		}
 
 		r := viewCtx.Request
 		if err := r.ParseMultipartForm(32 << 20); err != nil {
 			// Fall back to regular form parse (non-multipart submissions)
 			if err2 := r.ParseForm(); err2 != nil {
-				return fayna.HTMXError("Invalid form data")
+				return view.HTMXError("Invalid form data")
 			}
 		}
 
 		ids := r.Form["id"]
 		if len(ids) == 0 {
-			return fayna.HTMXError("No activities selected")
+			return view.HTMXError("No activities selected")
 		}
 
 		if deps.GenerateInvoiceFromActivities == nil {
-			return fayna.HTMXError("Invoice generation not available")
+			return view.HTMXError("Invoice generation not available")
 		}
 
 		revenueID, err := deps.GenerateInvoiceFromActivities(ctx, ids, "", "", "PHP", "")
 		if err != nil {
 			log.Printf("Failed to generate invoice from activities: %v", err)
-			return fayna.HTMXError(fmt.Sprintf("Failed to generate invoice: %v", err))
+			return view.HTMXError(fmt.Sprintf("Failed to generate invoice: %v", err))
 		}
 
 		revenueDetailBase := deps.RevenueDetailURLTemplate
@@ -66,4 +64,3 @@ func NewBulkGenerateInvoiceAction(deps *Deps) view.View {
 		}
 	})
 }
-

@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
-	fayna "github.com/erniealice/fayna-golang"
 	jobtemplatephaseform "github.com/erniealice/fayna-golang/views/job_template_phase/form"
 
 	"github.com/erniealice/pyeza-golang/view"
@@ -20,7 +19,7 @@ func NewAddAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_template_phase", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -36,7 +35,7 @@ func NewAddAction(deps *Deps) view.View {
 
 		// POST — create template phase
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		r := viewCtx.Request
 
@@ -60,15 +59,15 @@ func NewAddAction(deps *Deps) view.View {
 		}
 
 		if deps.CreateJobTemplatePhase == nil {
-			return fayna.HTMXError("Create not available")
+			return view.HTMXError("Create not available")
 		}
 
 		_, err := deps.CreateJobTemplatePhase(ctx, &jobtemplatephasepb.CreateJobTemplatePhaseRequest{Data: phase})
 		if err != nil {
 			log.Printf("Failed to create job template phase: %v", err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("job-template-phases-table")
+		return view.HTMXSuccess("job-template-phases-table")
 	})
 }

@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
-	fayna "github.com/erniealice/fayna-golang"
 	jobtemplateTaskform "github.com/erniealice/fayna-golang/views/job_template_task/form"
 
 	"github.com/erniealice/pyeza-golang/view"
@@ -18,25 +17,25 @@ func NewEditAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_template_task", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.PathValue("id")
 
 		if viewCtx.Request.Method == http.MethodGet {
 			if deps.ReadJobTemplateTask == nil {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			resp, err := deps.ReadJobTemplateTask(ctx, &jobtemplateTaskpb.ReadJobTemplateTaskRequest{
 				Data: &jobtemplateTaskpb.JobTemplateTask{Id: id},
 			})
 			if err != nil {
 				log.Printf("Failed to read job template task %s: %v", id, err)
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			data := resp.GetData()
 			if len(data) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			t := data[0]
 
@@ -65,7 +64,7 @@ func NewEditAction(deps *Deps) view.View {
 
 		// POST — update template task
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		r := viewCtx.Request
 
@@ -87,15 +86,15 @@ func NewEditAction(deps *Deps) view.View {
 		}
 
 		if deps.UpdateJobTemplateTask == nil {
-			return fayna.HTMXError("Update not available")
+			return view.HTMXError("Update not available")
 		}
 
 		_, err := deps.UpdateJobTemplateTask(ctx, &jobtemplateTaskpb.UpdateJobTemplateTaskRequest{Data: task})
 		if err != nil {
 			log.Printf("Failed to update job template task %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("jt-tasks-table")
+		return view.HTMXSuccess("jt-tasks-table")
 	})
 }

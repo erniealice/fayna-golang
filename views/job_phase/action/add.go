@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
-	fayna "github.com/erniealice/fayna-golang"
 	jobphaseform "github.com/erniealice/fayna-golang/views/job_phase/form"
 
 	"github.com/erniealice/pyeza-golang/route"
@@ -21,7 +20,7 @@ func NewAddAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_phase", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -40,7 +39,7 @@ func NewAddAction(deps *Deps) view.View {
 
 		// POST — create phase
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		r := viewCtx.Request
 
@@ -74,7 +73,7 @@ func NewAddAction(deps *Deps) view.View {
 		resp, err := deps.CreateJobPhase(ctx, &jobphasepb.CreateJobPhaseRequest{Data: phase})
 		if err != nil {
 			log.Printf("Failed to create job phase: %v", err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		newID := ""
@@ -91,6 +90,6 @@ func NewAddAction(deps *Deps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("job-phases-table")
+		return view.HTMXSuccess("job-phases-table")
 	})
 }

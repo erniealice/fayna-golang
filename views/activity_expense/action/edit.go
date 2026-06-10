@@ -6,8 +6,6 @@ import (
 	"log"
 	"net/http"
 
-	fayna "github.com/erniealice/fayna-golang"
-
 	"github.com/erniealice/pyeza-golang/view"
 
 	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
@@ -19,12 +17,12 @@ func NewEditAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("activity_expense", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		activityID := viewCtx.Request.PathValue("id")
 		if activityID == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -42,11 +40,11 @@ func NewEditAction(deps *Deps) view.View {
 			})
 			if err != nil {
 				log.Printf("Failed to read activity expense %s: %v", activityID, err)
-				return fayna.HTMXError(fmt.Sprintf("Failed to load expense record: %v", err))
+				return view.HTMXError(fmt.Sprintf("Failed to load expense record: %v", err))
 			}
 			data := resp.GetData()
 			if len(data) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 
 			formData := buildFormData(data[0], deps.Routes, deps.Labels)
@@ -57,12 +55,12 @@ func NewEditAction(deps *Deps) view.View {
 
 		// POST — process the update.
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 
 		if deps.UpdateActivityExpense == nil {
 			// TODO: wire UpdateActivityExpense from espyna OperationUseCases.ActivityExpense
-			return fayna.HTMXError("UpdateActivityExpense use case not wired — add ActivityExpense to espyna OperationUseCases")
+			return view.HTMXError("UpdateActivityExpense use case not wired — add ActivityExpense to espyna OperationUseCases")
 		}
 
 		r := viewCtx.Request
@@ -85,9 +83,9 @@ func NewEditAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to update activity expense %s: %v", activityID, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("activity-expense-charge-section")
+		return view.HTMXSuccess("activity-expense-charge-section")
 	})
 }

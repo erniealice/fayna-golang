@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
-	fayna "github.com/erniealice/fayna-golang"
 	jobtemplateTaskform "github.com/erniealice/fayna-golang/views/job_template_task/form"
 
 	"github.com/erniealice/pyeza-golang/view"
@@ -20,7 +19,7 @@ func NewAddAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_template_task", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -36,7 +35,7 @@ func NewAddAction(deps *Deps) view.View {
 
 		// POST — create template task
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		r := viewCtx.Request
 
@@ -57,15 +56,15 @@ func NewAddAction(deps *Deps) view.View {
 		}
 
 		if deps.CreateJobTemplateTask == nil {
-			return fayna.HTMXError("Create not available")
+			return view.HTMXError("Create not available")
 		}
 
 		_, err := deps.CreateJobTemplateTask(ctx, &jobtemplateTaskpb.CreateJobTemplateTaskRequest{Data: task})
 		if err != nil {
 			log.Printf("Failed to create job template task: %v", err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("jt-tasks-table")
+		return view.HTMXSuccess("jt-tasks-table")
 	})
 }

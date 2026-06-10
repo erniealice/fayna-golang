@@ -5,8 +5,6 @@ import (
 	"log"
 	"net/http"
 
-	fayna "github.com/erniealice/fayna-golang"
-
 	"github.com/erniealice/pyeza-golang/view"
 
 	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
@@ -20,7 +18,7 @@ func NewAddAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("activity_expense", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -32,19 +30,19 @@ func NewAddAction(deps *Deps) view.View {
 		}
 
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 
 		r := viewCtx.Request
 		activityID := r.FormValue("activity_id")
 		if activityID == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 
 		if deps.CreateActivityExpense == nil {
 			// TODO: wire CreateActivityExpense from espyna OperationUseCases.ActivityExpense
 			// when the use case is added. For now return a clear gap error.
-			return fayna.HTMXError("CreateActivityExpense use case not wired — add ActivityExpense to espyna OperationUseCases")
+			return view.HTMXError("CreateActivityExpense use case not wired — add ActivityExpense to espyna OperationUseCases")
 		}
 
 		markupPct := parseFormFloat(r.FormValue("markup_pct_override"))
@@ -66,9 +64,9 @@ func NewAddAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to create activity expense for activity %s: %v", activityID, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("activity-expense-charge-section")
+		return view.HTMXSuccess("activity-expense-charge-section")
 	})
 }

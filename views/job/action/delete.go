@@ -4,8 +4,6 @@ import (
 	"context"
 	"log"
 
-	fayna "github.com/erniealice/fayna-golang"
-
 	"github.com/erniealice/pyeza-golang/view"
 
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
@@ -16,7 +14,7 @@ func NewDeleteAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job", "delete") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.URL.Query().Get("id")
@@ -25,7 +23,7 @@ func NewDeleteAction(deps *Deps) view.View {
 			id = viewCtx.Request.FormValue("id")
 		}
 		if id == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 
 		_, err := deps.DeleteJob(ctx, &jobpb.DeleteJobRequest{
@@ -33,10 +31,10 @@ func NewDeleteAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to delete job %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("jobs-table")
+		return view.HTMXSuccess("jobs-table")
 	})
 }
 
@@ -45,14 +43,14 @@ func NewBulkDeleteAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job", "delete") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		_ = viewCtx.Request.ParseMultipartForm(32 << 20)
 
 		ids := viewCtx.Request.Form["id"]
 		if len(ids) == 0 {
-			return fayna.HTMXError(deps.Labels.Errors.NoIDs)
+			return view.HTMXError(deps.Labels.Errors.NoIDs)
 		}
 
 		for _, id := range ids {
@@ -64,6 +62,6 @@ func NewBulkDeleteAction(deps *Deps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("jobs-table")
+		return view.HTMXSuccess("jobs-table")
 	})
 }

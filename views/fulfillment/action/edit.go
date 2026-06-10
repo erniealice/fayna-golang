@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	fayna "github.com/erniealice/fayna-golang"
 	fulfillmentform "github.com/erniealice/fayna-golang/views/fulfillment/form"
 
 	"github.com/erniealice/pyeza-golang/route"
@@ -21,7 +20,7 @@ func NewEditAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("fulfillment", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.PathValue("id")
@@ -34,11 +33,11 @@ func NewEditAction(deps *Deps) view.View {
 			})
 			if err != nil {
 				log.Printf("Failed to read fulfillment %s: %v", id, err)
-				return fayna.HTMXError(deps.Labels.Errors.LoadFailed)
+				return view.HTMXError(deps.Labels.Errors.LoadFailed)
 			}
 			f := readResp.GetFulfillment()
 			if f == nil {
-				return fayna.HTMXError(deps.Labels.Errors.LoadFailed)
+				return view.HTMXError(deps.Labels.Errors.LoadFailed)
 			}
 
 			supplierID := ""
@@ -67,7 +66,7 @@ func NewEditAction(deps *Deps) view.View {
 
 		// POST — update fulfillment fields (not status — that's transition)
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 
 		r := viewCtx.Request
@@ -78,7 +77,7 @@ func NewEditAction(deps *Deps) view.View {
 		if raw := r.FormValue("scheduled_at"); raw != "" {
 			parsed, err := time.Parse("2006-01-02T15:04", raw)
 			if err != nil {
-				return fayna.HTMXError("Invalid form data")
+				return view.HTMXError("Invalid form data")
 			}
 			scheduledAtProto = timestamppb.New(parsed.UTC())
 		}
@@ -94,7 +93,7 @@ func NewEditAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to update fulfillment %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		return view.ViewResult{

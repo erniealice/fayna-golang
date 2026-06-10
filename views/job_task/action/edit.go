@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
-	fayna "github.com/erniealice/fayna-golang"
 	jobtaskform "github.com/erniealice/fayna-golang/views/job_task/form"
 
 	"github.com/erniealice/pyeza-golang/view"
@@ -18,25 +17,25 @@ func NewEditAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_task", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.PathValue("id")
 
 		if viewCtx.Request.Method == http.MethodGet {
 			if deps.ReadJobTask == nil {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			resp, err := deps.ReadJobTask(ctx, &jobtaskpb.ReadJobTaskRequest{
 				Data: &jobtaskpb.JobTask{Id: id},
 			})
 			if err != nil {
 				log.Printf("Failed to read job task %s: %v", id, err)
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			data := resp.GetData()
 			if len(data) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			t := data[0]
 			statusStr := taskStatusString(t.GetStatus())
@@ -112,7 +111,7 @@ func NewEditAction(deps *Deps) view.View {
 
 		// POST — update task
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		r := viewCtx.Request
 
@@ -159,9 +158,9 @@ func NewEditAction(deps *Deps) view.View {
 		_, err := deps.UpdateJobTask(ctx, &jobtaskpb.UpdateJobTaskRequest{Data: task})
 		if err != nil {
 			log.Printf("Failed to update job task %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("job-tasks-table")
+		return view.HTMXSuccess("job-tasks-table")
 	})
 }

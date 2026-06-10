@@ -5,7 +5,6 @@ import (
 	"math"
 	"net/http"
 
-	fayna "github.com/erniealice/fayna-golang"
 	jobactivityform "github.com/erniealice/fayna-golang/views/job_activity/form"
 
 	"github.com/erniealice/pyeza-golang/view"
@@ -20,7 +19,7 @@ func NewAddAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_activity", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -33,7 +32,7 @@ func NewAddAction(deps *Deps) view.View {
 		}
 
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 
 		r := viewCtx.Request
@@ -85,9 +84,9 @@ func NewAddAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to create job activity: %v", err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("activities-table")
+		return view.HTMXSuccess("activities-table")
 	})
 }

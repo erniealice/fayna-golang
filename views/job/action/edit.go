@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 
-	fayna "github.com/erniealice/fayna-golang"
 	jobform "github.com/erniealice/fayna-golang/views/job/form"
 
 	"github.com/erniealice/pyeza-golang/route"
@@ -19,7 +18,7 @@ func NewEditAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.PathValue("id")
@@ -30,11 +29,11 @@ func NewEditAction(deps *Deps) view.View {
 			})
 			if err != nil {
 				log.Printf("Failed to read job %s: %v", id, err)
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			readData := readResp.GetData()
 			if len(readData) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			record := readData[0]
 
@@ -61,7 +60,7 @@ func NewEditAction(deps *Deps) view.View {
 
 		// POST — update job
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError(deps.Labels.Errors.InvalidForm)
+			return view.HTMXError(deps.Labels.Errors.InvalidForm)
 		}
 
 		r := viewCtx.Request
@@ -78,7 +77,7 @@ func NewEditAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to update job %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		return view.ViewResult{

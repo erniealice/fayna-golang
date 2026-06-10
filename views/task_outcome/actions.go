@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 
-	fayna "github.com/erniealice/fayna-golang"
 	taskoutcomeform "github.com/erniealice/fayna-golang/views/task_outcome/form"
 
 	"github.com/erniealice/pyeza-golang/route"
@@ -20,7 +19,7 @@ func newAddAction(deps *ModuleDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("task_outcome", "create") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if viewCtx.Request.Method == http.MethodGet {
@@ -38,7 +37,7 @@ func newAddAction(deps *ModuleDeps) view.View {
 
 		// POST — create task outcome
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError(deps.Labels.Errors.InvalidFormData)
+			return view.HTMXError(deps.Labels.Errors.InvalidFormData)
 		}
 
 		r := viewCtx.Request
@@ -70,10 +69,10 @@ func newAddAction(deps *ModuleDeps) view.View {
 		_, err := deps.CreateTaskOutcome(ctx, req)
 		if err != nil {
 			log.Printf("Failed to create task outcome: %v", err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("outcomes-table")
+		return view.HTMXSuccess("outcomes-table")
 	})
 }
 
@@ -82,7 +81,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("task_outcome", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.PathValue("id")
@@ -92,7 +91,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 
 		if viewCtx.Request.Method == http.MethodGet {
 			if id == "" {
-				return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+				return view.HTMXError(deps.Labels.Errors.IDRequired)
 			}
 
 			readResp, err := deps.ReadTaskOutcome(ctx, &outcomepb.ReadTaskOutcomeRequest{
@@ -100,11 +99,11 @@ func newEditAction(deps *ModuleDeps) view.View {
 			})
 			if err != nil {
 				log.Printf("Failed to read task outcome %s: %v", id, err)
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			readData := readResp.GetData()
 			if len(readData) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			record := readData[0]
 
@@ -132,7 +131,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 
 		// POST — update task outcome
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError(deps.Labels.Errors.InvalidFormData)
+			return view.HTMXError(deps.Labels.Errors.InvalidFormData)
 		}
 
 		r := viewCtx.Request
@@ -140,7 +139,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 			id = r.FormValue("id")
 		}
 		if id == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 
 		numericValue, _ := strconv.ParseFloat(r.FormValue("numeric_value"), 64)
@@ -170,7 +169,7 @@ func newEditAction(deps *ModuleDeps) view.View {
 		_, err := deps.UpdateTaskOutcome(ctx, req)
 		if err != nil {
 			log.Printf("Failed to update task outcome %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		return view.ViewResult{
@@ -188,7 +187,7 @@ func newDeleteAction(deps *ModuleDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("task_outcome", "delete") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.URL.Query().Get("id")
@@ -197,7 +196,7 @@ func newDeleteAction(deps *ModuleDeps) view.View {
 			id = viewCtx.Request.FormValue("id")
 		}
 		if id == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 
 		_, err := deps.DeleteTaskOutcome(ctx, &outcomepb.DeleteTaskOutcomeRequest{
@@ -205,9 +204,9 @@ func newDeleteAction(deps *ModuleDeps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to delete task outcome %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("outcomes-table")
+		return view.HTMXSuccess("outcomes-table")
 	})
 }

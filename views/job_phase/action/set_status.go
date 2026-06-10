@@ -14,7 +14,6 @@ import (
 	"net/http"
 
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
-	fayna "github.com/erniealice/fayna-golang"
 
 	"github.com/erniealice/pyeza-golang/view"
 )
@@ -34,7 +33,7 @@ func NewSetStatusAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_phase", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.URL.Query().Get("id")
@@ -49,15 +48,15 @@ func NewSetStatusAction(deps *Deps) view.View {
 			}
 		}
 		if id == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 		if targetStatus == "" {
-			return fayna.HTMXError("Status is required")
+			return view.HTMXError("Status is required")
 		}
 
 		statusEnum := phaseStatusToEnum(targetStatus)
 		if statusEnum == jobphasepb.PhaseStatus_PHASE_STATUS_UNSPECIFIED {
-			return fayna.HTMXError("Invalid phase status")
+			return view.HTMXError("Invalid phase status")
 		}
 
 		// Read existing phase first — UpdateJobPhase requires Name in the
@@ -70,18 +69,18 @@ func NewSetStatusAction(deps *Deps) view.View {
 			})
 			if err != nil {
 				log.Printf("Failed to read job phase %s: %v", id, err)
-				return fayna.HTMXError(err.Error())
+				return view.HTMXError(err.Error())
 			}
 			data := readResp.GetData()
 			if len(data) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			jobID = data[0].GetJobId()
 			phaseName = data[0].GetName()
 		}
 
 		if deps.UpdateJobPhase == nil {
-			return fayna.HTMXError("Phase update not available")
+			return view.HTMXError("Phase update not available")
 		}
 
 		_, err := deps.UpdateJobPhase(ctx, &jobphasepb.UpdateJobPhaseRequest{
@@ -94,7 +93,7 @@ func NewSetStatusAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to update phase %s status to %s: %v", id, targetStatus, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		// Redirect to the phase detail page so the status badge refreshes.
@@ -121,20 +120,20 @@ func NewBulkSetStatusAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_phase", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		ids := viewCtx.Request.Form["id"]
 		targetStatus := viewCtx.Request.FormValue("target_status")
 
 		if len(ids) == 0 {
-			return fayna.HTMXError("No IDs provided")
+			return view.HTMXError("No IDs provided")
 		}
 		if targetStatus == "" {
-			return fayna.HTMXError("Target status is required")
+			return view.HTMXError("Target status is required")
 		}
 
 		statusEnum := phaseStatusToEnum(targetStatus)
@@ -173,6 +172,6 @@ func NewBulkSetStatusAction(deps *Deps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("job-phases-table")
+		return view.HTMXSuccess("job-phases-table")
 	})
 }

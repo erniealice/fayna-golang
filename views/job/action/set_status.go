@@ -4,8 +4,6 @@ import (
 	"context"
 	"log"
 
-	fayna "github.com/erniealice/fayna-golang"
-
 	"github.com/erniealice/pyeza-golang/view"
 
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
@@ -16,7 +14,7 @@ func NewSetStatusAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.URL.Query().Get("id")
@@ -28,10 +26,10 @@ func NewSetStatusAction(deps *Deps) view.View {
 			targetStatus = viewCtx.Request.FormValue("status")
 		}
 		if id == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 		if targetStatus == "" {
-			return fayna.HTMXError(deps.Labels.Errors.StatusRequired)
+			return view.HTMXError(deps.Labels.Errors.StatusRequired)
 		}
 
 		statusEnum := jobStatusToEnum(targetStatus)
@@ -41,10 +39,10 @@ func NewSetStatusAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to update job status %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("jobs-table")
+		return view.HTMXSuccess("jobs-table")
 	})
 }
 
@@ -53,7 +51,7 @@ func NewBulkSetStatusAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		_ = viewCtx.Request.ParseMultipartForm(32 << 20)
@@ -62,10 +60,10 @@ func NewBulkSetStatusAction(deps *Deps) view.View {
 		targetStatus := viewCtx.Request.FormValue("target_status")
 
 		if len(ids) == 0 {
-			return fayna.HTMXError("No IDs provided")
+			return view.HTMXError("No IDs provided")
 		}
 		if targetStatus == "" {
-			return fayna.HTMXError("Target status is required")
+			return view.HTMXError("Target status is required")
 		}
 
 		statusEnum := jobStatusToEnum(targetStatus)
@@ -78,6 +76,6 @@ func NewBulkSetStatusAction(deps *Deps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("jobs-table")
+		return view.HTMXSuccess("jobs-table")
 	})
 }

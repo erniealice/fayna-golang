@@ -4,8 +4,6 @@ import (
 	"context"
 	"log"
 
-	fayna "github.com/erniealice/fayna-golang"
-
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
 
@@ -23,22 +21,22 @@ func NewTransitionAction(deps *Deps) view.View {
 		// direction" — transition is a distinct workflow verb.
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("fulfillment", "transition") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.PathValue("id")
 		if id == "" {
-			return fayna.HTMXError("Fulfillment ID is required")
+			return view.HTMXError("Fulfillment ID is required")
 		}
 
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 
 		r := viewCtx.Request
 		event := r.FormValue("event")
 		if event == "" {
-			return fayna.HTMXError("Event is required")
+			return view.HTMXError("Event is required")
 		}
 
 		_, err := deps.TransitionStatus(ctx, &fulfillmentpb.TransitionStatusRequest{
@@ -50,7 +48,7 @@ func NewTransitionAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to transition fulfillment %s via event %s: %v", id, event, err)
-			return fayna.HTMXError(deps.Labels.Errors.TransitionFailed)
+			return view.HTMXError(deps.Labels.Errors.TransitionFailed)
 		}
 
 		// Redirect back to detail page to reflect the new status.

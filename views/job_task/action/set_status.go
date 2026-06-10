@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
-	fayna "github.com/erniealice/fayna-golang"
 
 	"github.com/erniealice/pyeza-golang/view"
 )
@@ -23,7 +22,7 @@ func NewSetStatusAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_task", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.URL.Query().Get("id")
@@ -38,15 +37,15 @@ func NewSetStatusAction(deps *Deps) view.View {
 			}
 		}
 		if id == "" {
-			return fayna.HTMXError(deps.Labels.Errors.IDRequired)
+			return view.HTMXError(deps.Labels.Errors.IDRequired)
 		}
 		if targetStatus == "" {
-			return fayna.HTMXError("Status is required")
+			return view.HTMXError("Status is required")
 		}
 
 		statusEnum := taskStatusToEnum(targetStatus)
 		if statusEnum == jobtaskpb.TaskStatus_TASK_STATUS_UNSPECIFIED {
-			return fayna.HTMXError("Invalid task status")
+			return view.HTMXError("Invalid task status")
 		}
 
 		// Read existing task first — UpdateJobTask requires Name and JobPhaseId in
@@ -59,18 +58,18 @@ func NewSetStatusAction(deps *Deps) view.View {
 			})
 			if err != nil {
 				log.Printf("Failed to read job task %s: %v", id, err)
-				return fayna.HTMXError(err.Error())
+				return view.HTMXError(err.Error())
 			}
 			data := readResp.GetData()
 			if len(data) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			jobPhaseID = data[0].GetJobPhaseId()
 			taskName = data[0].GetName()
 		}
 
 		if deps.UpdateJobTask == nil {
-			return fayna.HTMXError("Task update not available")
+			return view.HTMXError("Task update not available")
 		}
 
 		_, err := deps.UpdateJobTask(ctx, &jobtaskpb.UpdateJobTaskRequest{
@@ -83,7 +82,7 @@ func NewSetStatusAction(deps *Deps) view.View {
 		})
 		if err != nil {
 			log.Printf("Failed to update task %s status to %s: %v", id, targetStatus, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
 		// Redirect to the task detail page so the status badge refreshes.
@@ -109,20 +108,20 @@ func NewBulkSetStatusAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_task", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		ids := viewCtx.Request.Form["id"]
 		targetStatus := viewCtx.Request.FormValue("target_status")
 
 		if len(ids) == 0 {
-			return fayna.HTMXError("No IDs provided")
+			return view.HTMXError("No IDs provided")
 		}
 		if targetStatus == "" {
-			return fayna.HTMXError("Target status is required")
+			return view.HTMXError("Target status is required")
 		}
 
 		statusEnum := taskStatusToEnum(targetStatus)
@@ -161,6 +160,6 @@ func NewBulkSetStatusAction(deps *Deps) view.View {
 			}
 		}
 
-		return fayna.HTMXSuccess("job-tasks-table")
+		return view.HTMXSuccess("job-tasks-table")
 	})
 }

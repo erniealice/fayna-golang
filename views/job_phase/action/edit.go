@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
-	fayna "github.com/erniealice/fayna-golang"
 	jobphaseform "github.com/erniealice/fayna-golang/views/job_phase/form"
 
 	"github.com/erniealice/pyeza-golang/view"
@@ -18,25 +17,25 @@ func NewEditAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		if !perms.Can("job_phase", "update") {
-			return fayna.HTMXError(deps.Labels.Errors.PermissionDenied)
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
 		id := viewCtx.Request.PathValue("id")
 
 		if viewCtx.Request.Method == http.MethodGet {
 			if deps.ReadJobPhase == nil {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			resp, err := deps.ReadJobPhase(ctx, &jobphasepb.ReadJobPhaseRequest{
 				Data: &jobphasepb.JobPhase{Id: id},
 			})
 			if err != nil {
 				log.Printf("Failed to read job phase %s: %v", id, err)
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			data := resp.GetData()
 			if len(data) == 0 {
-				return fayna.HTMXError(deps.Labels.Errors.NotFound)
+				return view.HTMXError(deps.Labels.Errors.NotFound)
 			}
 			p := data[0]
 			statusStr := phaseStatusString(p.GetStatus()) // lowercase shorthand
@@ -95,7 +94,7 @@ func NewEditAction(deps *Deps) view.View {
 
 		// POST — update phase
 		if err := viewCtx.Request.ParseForm(); err != nil {
-			return fayna.HTMXError("Invalid form data")
+			return view.HTMXError("Invalid form data")
 		}
 		r := viewCtx.Request
 
@@ -136,9 +135,9 @@ func NewEditAction(deps *Deps) view.View {
 		_, err := deps.UpdateJobPhase(ctx, &jobphasepb.UpdateJobPhaseRequest{Data: phase})
 		if err != nil {
 			log.Printf("Failed to update job phase %s: %v", id, err)
-			return fayna.HTMXError(err.Error())
+			return view.HTMXError(err.Error())
 		}
 
-		return fayna.HTMXSuccess("job-phases-table")
+		return view.HTMXSuccess("job-phases-table")
 	})
 }

@@ -6,48 +6,14 @@
 // From Filipino faena (Spanish origin) — labor, work, the decisive performance.
 package fayna
 
-import (
-	"io/fs"
-	"os"
-	"path/filepath"
-)
+import "embed"
 
-// CopyStaticAssets copies fayna's JavaScript assets to the target directory.
-// Consumer apps call this at startup: fayna.CopyStaticAssets(jsDir)
-func CopyStaticAssets(targetDir string) error {
-	faynaDest := filepath.Join(targetDir, "fayna")
-	if err := os.MkdirAll(faynaDest, 0755); err != nil {
-		return err
-	}
-	// JS assets will be added as view modules are built
-	return nil
-}
-
-// CopyStyles copies fayna's CSS assets to the target directory.
-// Consumer apps call this at startup: fayna.CopyStyles(cssDir)
-func CopyStyles(targetDir string) error {
-	faynaDest := filepath.Join(targetDir, "fayna")
-	if err := os.MkdirAll(faynaDest, 0755); err != nil {
-		return err
-	}
-	// CSS assets will be added as view modules are built
-	return nil
-}
-
-// copyFS copies all files from a source fs.FS to a target directory.
-func copyFS(src fs.FS, targetDir string) error {
-	return fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		data, err := fs.ReadFile(src, path)
-		if err != nil {
-			return err
-		}
-		dest := filepath.Join(targetDir, path)
-		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-			return err
-		}
-		return os.WriteFile(dest, data, 0644)
-	})
-}
+// AssetsFS embeds this package's static CSS/JS so the app can copy them at boot via
+// pyeza.CopyNamespacedAssets — replaces the old CopyStyles/CopyStaticAssets + runtime.Caller hack.
+//
+// The assets/{css,js} dirs are currently placeholder-only (real assets land as view
+// modules are built); the all: prefix keeps the .gitkeep markers embeddable so the
+// build stays green while CopyNamespacedAssets copies nothing — same no-op as before.
+//
+//go:embed all:assets
+var AssetsFS embed.FS

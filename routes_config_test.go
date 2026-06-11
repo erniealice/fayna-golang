@@ -1,10 +1,13 @@
-package fayna
+package fayna_test
 
 import (
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+
+	fulfillmentdomain "github.com/erniealice/fayna-golang/domain/fulfillment"
+	operation "github.com/erniealice/fayna-golang/domain/operation"
 )
 
 type routeContractCase struct {
@@ -42,48 +45,48 @@ func faynaRouteContractCases() []routeContractCase {
 	return []routeContractCase{
 		{
 			name:     "JobRoutes",
-			routes:   DefaultJobRoutes(),
-			routeMap: DefaultJobRoutes().RouteMap(),
+			routes:   operation.DefaultJobRoutes(),
+			routeMap: operation.DefaultJobRoutes().RouteMap(),
 		},
 		{
 			name:     "JobTemplateRoutes",
-			routes:   DefaultJobTemplateRoutes(),
-			routeMap: DefaultJobTemplateRoutes().RouteMap(),
+			routes:   operation.DefaultJobTemplateRoutes(),
+			routeMap: operation.DefaultJobTemplateRoutes().RouteMap(),
 		},
 		{
 			name:     "JobActivityRoutes",
-			routes:   DefaultJobActivityRoutes(),
-			routeMap: DefaultJobActivityRoutes().RouteMap(),
+			routes:   operation.DefaultJobActivityRoutes(),
+			routeMap: operation.DefaultJobActivityRoutes().RouteMap(),
 		},
 		{
 			name:     "OutcomeCriteriaRoutes",
-			routes:   DefaultOutcomeCriteriaRoutes(),
-			routeMap: DefaultOutcomeCriteriaRoutes().RouteMap(),
+			routes:   operation.DefaultOutcomeCriteriaRoutes(),
+			routeMap: operation.DefaultOutcomeCriteriaRoutes().RouteMap(),
 		},
 		{
 			name:     "TaskOutcomeRoutes",
-			routes:   DefaultTaskOutcomeRoutes(),
-			routeMap: DefaultTaskOutcomeRoutes().RouteMap(),
+			routes:   operation.DefaultTaskOutcomeRoutes(),
+			routeMap: operation.DefaultTaskOutcomeRoutes().RouteMap(),
 		},
 		{
 			name:     "OutcomeSummaryRoutes",
-			routes:   DefaultOutcomeSummaryRoutes(),
-			routeMap: DefaultOutcomeSummaryRoutes().RouteMap(),
+			routes:   operation.DefaultOutcomeSummaryRoutes(),
+			routeMap: operation.DefaultOutcomeSummaryRoutes().RouteMap(),
 		},
 		{
 			name:     "FulfillmentRoutes",
-			routes:   DefaultFulfillmentRoutes(),
-			routeMap: DefaultFulfillmentRoutes().RouteMap(),
+			routes:   fulfillmentdomain.DefaultFulfillmentRoutes(),
+			routeMap: fulfillmentdomain.DefaultFulfillmentRoutes().RouteMap(),
 		},
 		{
 			name:     "JobTemplatePhaseRoutes",
-			routes:   DefaultJobTemplatePhaseRoutes(),
-			routeMap: DefaultJobTemplatePhaseRoutes().RouteMap(),
+			routes:   operation.DefaultJobTemplatePhaseRoutes(),
+			routeMap: operation.DefaultJobTemplatePhaseRoutes().RouteMap(),
 		},
 		{
 			name:     "JobTemplateTaskRoutes",
-			routes:   DefaultJobTemplateTaskRoutes(),
-			routeMap: DefaultJobTemplateTaskRoutes().RouteMap(),
+			routes:   operation.DefaultJobTemplateTaskRoutes(),
+			routeMap: operation.DefaultJobTemplateTaskRoutes().RouteMap(),
 		},
 	}
 }

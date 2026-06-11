@@ -26,21 +26,22 @@ import (
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
-	fayna "github.com/erniealice/fayna-golang"
-	activityexpensemod "github.com/erniealice/fayna-golang/views/activity_expense"
-	activitylabormod "github.com/erniealice/fayna-golang/views/activity_labor"
-	activitymaterialmod "github.com/erniealice/fayna-golang/views/activity_material"
-	fulfillmentmod "github.com/erniealice/fayna-golang/views/fulfillment"
-	jobmod "github.com/erniealice/fayna-golang/views/job"
-	jobactivitymod "github.com/erniealice/fayna-golang/views/job_activity"
-	jobphasemod "github.com/erniealice/fayna-golang/views/job_phase"
-	jobtaskmod "github.com/erniealice/fayna-golang/views/job_task"
-	jobtemplatemod "github.com/erniealice/fayna-golang/views/job_template"
-	jobtemplatePhasemod "github.com/erniealice/fayna-golang/views/job_template_phase"
-	jobtemplateTaskmod "github.com/erniealice/fayna-golang/views/job_template_task"
-	outcomecriteriaMod "github.com/erniealice/fayna-golang/views/outcome_criteria"
-	outcomesummaryMod "github.com/erniealice/fayna-golang/views/outcome_summary"
-	taskoutcomeMod "github.com/erniealice/fayna-golang/views/task_outcome"
+	fulfillmentdomain "github.com/erniealice/fayna-golang/domain/fulfillment"
+	activityexpensemod "github.com/erniealice/fayna-golang/domain/operation/views/activity_expense"
+	activitylabormod "github.com/erniealice/fayna-golang/domain/operation/views/activity_labor"
+	activitymaterialmod "github.com/erniealice/fayna-golang/domain/operation/views/activity_material"
+	fulfillmentmod "github.com/erniealice/fayna-golang/domain/fulfillment/views/fulfillment"
+	jobmod "github.com/erniealice/fayna-golang/domain/operation/views/job"
+	jobactivitymod "github.com/erniealice/fayna-golang/domain/operation/views/job_activity"
+	jobphasemod "github.com/erniealice/fayna-golang/domain/operation/views/job_phase"
+	jobtaskmod "github.com/erniealice/fayna-golang/domain/operation/views/job_task"
+	jobtemplatemod "github.com/erniealice/fayna-golang/domain/operation/views/job_template"
+	jobtemplatePhasemod "github.com/erniealice/fayna-golang/domain/operation/views/job_template_phase"
+	jobtemplateTaskmod "github.com/erniealice/fayna-golang/domain/operation/views/job_template_task"
+	outcomecriteriaMod "github.com/erniealice/fayna-golang/domain/operation/views/outcome_criteria"
+	outcomesummaryMod "github.com/erniealice/fayna-golang/domain/operation/views/outcome_summary"
+	taskoutcomeMod "github.com/erniealice/fayna-golang/domain/operation/views/task_outcome"
+	operation "github.com/erniealice/fayna-golang/domain/operation"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 	pyeza "github.com/erniealice/pyeza-golang"
 )
@@ -529,89 +530,89 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		newAttachmentID, _ := ctx.NewAttachmentID.(func() string)
 
 		// --- Load routes (defaults + optional lyngua overrides) ---
-		jobRoutes := fayna.DefaultJobRoutes()
+		jobRoutes := operation.DefaultJobRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "job", &jobRoutes)
 
-		jtRoutes := fayna.DefaultJobTemplateRoutes()
+		jtRoutes := operation.DefaultJobTemplateRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "job_template", &jtRoutes)
 
-		jaRoutes := fayna.DefaultJobActivityRoutes()
+		jaRoutes := operation.DefaultJobActivityRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "job_activity", &jaRoutes)
 
-		jpRoutes := fayna.DefaultJobPhaseRoutes()
+		jpRoutes := operation.DefaultJobPhaseRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "job_phase", &jpRoutes)
 
-		jkRoutes := fayna.DefaultJobTaskRoutes()
+		jkRoutes := operation.DefaultJobTaskRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "job_task", &jkRoutes)
 
-		alRoutes := fayna.DefaultActivityLaborRoutes()
+		alRoutes := operation.DefaultActivityLaborRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "activity_labor", &alRoutes)
 
-		amRoutes := fayna.DefaultActivityMaterialRoutes()
+		amRoutes := operation.DefaultActivityMaterialRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "activity_material", &amRoutes)
 
-		aeRoutes := fayna.DefaultActivityExpenseRoutes()
+		aeRoutes := operation.DefaultActivityExpenseRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "activity_expense", &aeRoutes)
 
-		ocRoutes := fayna.DefaultOutcomeCriteriaRoutes()
+		ocRoutes := operation.DefaultOutcomeCriteriaRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "outcome_criteria", &ocRoutes)
 
-		toRoutes := fayna.DefaultTaskOutcomeRoutes()
+		toRoutes := operation.DefaultTaskOutcomeRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "task_outcome", &toRoutes)
 
-		osRoutes := fayna.DefaultOutcomeSummaryRoutes()
+		osRoutes := operation.DefaultOutcomeSummaryRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "outcome_summary", &osRoutes)
 
-		ffRoutes := fayna.DefaultFulfillmentRoutes()
+		ffRoutes := fulfillmentdomain.DefaultFulfillmentRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "fulfillment", &ffRoutes)
 
-		jtpRoutes := fayna.DefaultJobTemplatePhaseRoutes()
+		jtpRoutes := operation.DefaultJobTemplatePhaseRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "job_template_phase", &jtpRoutes)
 
-		jttRoutes := fayna.DefaultJobTemplateTaskRoutes()
+		jttRoutes := operation.DefaultJobTemplateTaskRoutes()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "route.json", "job_template_task", &jttRoutes)
 
 		// --- Load labels (defaults + optional lyngua overrides) ---
-		jobLabels := fayna.DefaultJobLabels()
+		jobLabels := operation.DefaultJobLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job.json", "job", &jobLabels)
 
-		jtLabels := fayna.DefaultJobTemplateLabels()
+		jtLabels := operation.DefaultJobTemplateLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job_template.json", "job_template", &jtLabels)
 
-		jaLabels := fayna.DefaultJobActivityLabels()
+		jaLabels := operation.DefaultJobActivityLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job_activity.json", "job_activity", &jaLabels)
 
-		jpLabels := fayna.DefaultJobPhaseLabels()
+		jpLabels := operation.DefaultJobPhaseLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job_phase.json", "job_phase", &jpLabels)
 
-		jkLabels := fayna.DefaultJobTaskLabels()
+		jkLabels := operation.DefaultJobTaskLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job_task.json", "job_task", &jkLabels)
 
-		alLabels := fayna.DefaultActivityLaborLabels()
+		alLabels := operation.DefaultActivityLaborLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "activity_labor.json", "activity_labor", &alLabels)
 
-		amLabels := fayna.DefaultActivityMaterialLabels()
+		amLabels := operation.DefaultActivityMaterialLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "activity_material.json", "activity_material", &amLabels)
 
-		aeLabels := fayna.DefaultActivityExpenseLabels()
+		aeLabels := operation.DefaultActivityExpenseLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "activity_expense.json", "activity_expense", &aeLabels)
 
-		ocLabels := fayna.DefaultOutcomeCriteriaLabels()
+		ocLabels := operation.DefaultOutcomeCriteriaLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "outcome_criteria.json", "outcome_criteria", &ocLabels)
 
-		toLabels := fayna.DefaultTaskOutcomeLabels()
+		toLabels := operation.DefaultTaskOutcomeLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "task_outcome.json", "task_outcome", &toLabels)
 
-		osLabels := fayna.DefaultOutcomeSummaryLabels()
+		osLabels := operation.DefaultOutcomeSummaryLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "outcome_summary.json", "outcome_summary", &osLabels)
 
 		ffLabels := defaultFulfillmentLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "fulfillment.json", "fulfillment", &ffLabels)
 
-		jtpLabels := fayna.DefaultJobTemplatePhaseLabels()
+		jtpLabels := operation.DefaultJobTemplatePhaseLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job_template_phase.json", "job_template_phase", &jtpLabels)
 
-		jttLabels := fayna.DefaultJobTemplateTaskLabels()
+		jttLabels := operation.DefaultJobTemplateTaskLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job_template_task.json", "job_template_task", &jttLabels)
 
 		// --- Typed use-case wiring contract (espyna-free; supplied by service-admin) ---
@@ -963,12 +964,12 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 
 // defaultFulfillmentLabels returns FulfillmentLabels with sensible English defaults.
 // Mirrors the service-admin composition helper so the block is self-contained.
-func defaultFulfillmentLabels() fayna.FulfillmentLabels {
-	return fayna.FulfillmentLabels{
+func defaultFulfillmentLabels() fulfillmentdomain.FulfillmentLabels {
+	return fulfillmentdomain.FulfillmentLabels{
 		PageTitle: "Fulfillment",
 		AppLabel:  "Fulfillment",
 		Title:     "Fulfillments",
-		Status: fayna.FulfillmentStatusLabels{
+		Status: fulfillmentdomain.FulfillmentStatusLabels{
 			Pending:            "Pending",
 			Ready:              "Ready",
 			InTransit:          "In Transit",
@@ -977,7 +978,7 @@ func defaultFulfillmentLabels() fayna.FulfillmentLabels {
 			Failed:             "Failed",
 			Cancelled:          "Cancelled",
 		},
-		Type: fayna.DeliveryModeLabels{
+		Type: fulfillmentdomain.DeliveryModeLabels{
 			Instant:      "Instant",
 			Scheduled:    "Scheduled",
 			Shipped:      "Shipped",
@@ -985,7 +986,7 @@ func defaultFulfillmentLabels() fayna.FulfillmentLabels {
 			Project:      "Project",
 			Subscription: "Subscription",
 		},
-		Columns: fayna.FulfillmentColumnLabels{
+		Columns: fulfillmentdomain.FulfillmentColumnLabels{
 			DeliveryMode: "Method",
 			Status:       "Status",
 			SupplierName: "Supplier",
@@ -993,14 +994,14 @@ func defaultFulfillmentLabels() fayna.FulfillmentLabels {
 			ItemCount:    "Items",
 			Notes:        "Notes",
 		},
-		Tabs: fayna.FulfillmentTabLabels{
+		Tabs: fulfillmentdomain.FulfillmentTabLabels{
 			Info:        "Information",
 			Items:       "Items",
 			History:     "History",
 			Returns:     "Returns",
 			Attachments: "Attachments",
 		},
-		Actions: fayna.FulfillmentActionLabels{
+		Actions: fulfillmentdomain.FulfillmentActionLabels{
 			MarkReady:      "Mark Ready",
 			Dispatch:       "Dispatch",
 			Deliver:        "Deliver",
@@ -1009,18 +1010,18 @@ func defaultFulfillmentLabels() fayna.FulfillmentLabels {
 			Cancel:         "Cancel",
 			Retry:          "Retry",
 		},
-		Buttons: fayna.FulfillmentButtonLabels{
+		Buttons: fulfillmentdomain.FulfillmentButtonLabels{
 			AddFulfillment: "Add Fulfillment",
 			Edit:           "Edit",
 			Delete:         "Delete",
 			Transition:     "Update Status",
 			Return:         "Create Return",
 		},
-		Empty: fayna.FulfillmentEmptyLabels{
+		Empty: fulfillmentdomain.FulfillmentEmptyLabels{
 			Title:   "No fulfillments found",
 			Message: "No fulfillments to display.",
 		},
-		Errors: fayna.FulfillmentErrorLabels{
+		Errors: fulfillmentdomain.FulfillmentErrorLabels{
 			PermissionDenied: "You do not have permission to perform this action",
 			LoadFailed:       "Failed to load fulfillment data",
 			TransitionFailed: "Failed to update fulfillment status",

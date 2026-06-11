@@ -1,0 +1,28 @@
+package detail
+
+import (
+	"context"
+
+	operation "github.com/erniealice/fayna-golang/domain/operation"
+
+	"github.com/erniealice/hybra-golang/views/attachment"
+	"github.com/erniealice/hybra-golang/views/auditlog"
+	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/pyeza-golang/types"
+
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
+)
+
+// DetailViewDeps holds view dependencies for the outcome criteria detail views.
+type DetailViewDeps struct {
+	attachment.AttachmentOps
+	auditlog.AuditOps
+
+	Routes       operation.OutcomeCriteriaRoutes
+	Labels       operation.OutcomeCriteriaLabels
+	CommonLabels pyeza.CommonLabels
+	TableLabels  types.TableLabels
+
+	// Outcome criteria read
+	ReadOutcomeCriteria func(ctx context.Context, req *criteriapb.ReadOutcomeCriteriaRequest) (*criteriapb.ReadOutcomeCriteriaResponse, error)
+}

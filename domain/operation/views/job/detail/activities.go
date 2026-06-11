@@ -1,0 +1,278 @@
+package detail
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	operation "github.com/erniealice/fayna-golang/domain/operation"
+
+	"github.com/erniealice/pyeza-golang/route"
+	"github.com/erniealice/pyeza-golang/types"
+
+	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
+)
+
+// ActivityRow is the per-activity view-model rendered on the Activities tab.
+// Drives the data-testid="job-activity-row" mini-list (above the legacy
+// table-card) so phase5 specs 09 (INCLUDED) and 11 (BILLABLE T&M overage)
+// can target individual rows by activity-id and assert the billable_status
+// badge value.
+//
+// 2026-04-29 milestone-billing plan §5/§6.
+type ActivityRow struct {
+	ID                    string
+	EntryType             string
+	EntryTypeLabel        string
+	BillableStatus        string // shorthand: included | billable | non_billable | write_off | unspecified
+	BillableStatusLabel   string
+	BillableStatusVariant string // badge variant
+	Description           string
+	Quantity              string
+	UnitCost              string
+	TotalCost             string
+	BillRate              string
+	BillAmount            string
+	Currency              string
+	EditURL               string
+}
+
+// loadActivitiesTab populates the PageData with the activities table data.
+func loadActivitiesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData, jobID string) {
+	if deps.ListJobActivities == nil {
+		return
+	}
+
+	resp, err := deps.ListJobActivities(ctx, &jobactivitypb.ListJobActivitiesRequest{})
+	if err != nil {
+		log.Printf("Failed to list job activities for job %s: %v", jobID, err)
+		return
+	}
+
+	// Filter activities by job ID
+	var activities []*jobactivitypb.JobActivity
+	for _, a := range resp.GetData() {
+		if a.GetJobId() == jobID {
+			activities = append(activities, a)
+		}
+	}
+
+	l := deps.Labels
+	pageData.ActivitiesTable = buildActivitiesTable(activities, l, deps.TableLabels)
+	pageData.ActivitiesTable.RefreshURL = route.ResolveURL(deps.Routes.TabActionURL, "id", jobID, "tab", "activities")
+
+	// 2026-04-29 milestone-billing plan §5/§6 — operator-facing add/edit CTAs
+	// are wired via JobActivityRoutes. Empty deps = CTA suppressed (back-compat
+	// for callers that haven't wired the cross-module deps yet).
+	pageData.JobActivityLabels = deps.JobActivityLabels
+	if deps.JobActivityRoutes.AddURL != "" {
+		pageData.AddActivityURL = fmt.Sprintf("%s?job_id=%s", deps.JobActivityRoutes.AddURL, jobID)
+	}
+	if deps.JobActivityRoutes.EditURL != "" {
+		pageData.EditActivityURL = deps.JobActivityRoutes.EditURL
+	}
+	pageData.ActivitiesList = buildActivitiesList(activities, deps.JobActivityRoutes, deps.JobActivityLabels)
+}
+
+// buildActivitiesList builds the per-activity view-model used by the
+// data-testid-tagged mini-list above the legacy table-card. Each row exposes
+// a stable activity_id and badge selectors so phase5 specs 09/11 can assert
+// against billable_status.
+func buildActivitiesList(
+	activities []*jobactivitypb.JobActivity,
+	routes operation.JobActivityRoutes,
+	l operation.JobActivityLabels,
+) []ActivityRow {
+	rows := make([]ActivityRow, 0, len(activities))
+	for _, a := range activities {
+		entryType := activityEntryTypeString(a.GetEntryType())
+		billable := activityBillableStatusString(a.GetBillableStatus())
+
+		desc := a.GetDescription()
+
+		row := ActivityRow{
+			ID:                    a.GetId(),
+			EntryType:             entryType,
+			EntryTypeLabel:        activityEntryTypeLabel(entryType, l),
+			BillableStatus:        billable,
+			BillableStatusLabel:   activityBillableStatusLabel(billable, l),
+			BillableStatusVariant: activityBillableStatusVariant(billable),
+			Description:           desc,
+			Quantity:              fmt.Sprintf("%.2f", a.GetQuantity()),
+			UnitCost:              fmt.Sprintf("%.2f", float64(a.GetUnitCost())/100),
+			TotalCost:             fmt.Sprintf("%.2f", float64(a.GetTotalCost())/100),
+			Currency:              a.GetCurrency(),
+		}
+		if a.BillRate != nil {
+			row.BillRate = fmt.Sprintf("%.2f", float64(*a.BillRate)/100)
+		}
+		if a.BillAmount != nil {
+			row.BillAmount = fmt.Sprintf("%.2f", float64(*a.BillAmount)/100)
+		}
+		if routes.EditURL != "" {
+			row.EditURL = route.ResolveURL(routes.EditURL, "id", row.ID)
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// activityEntryTypeLabel resolves the translated entry-type display string.
+// Returns the lyngua label; if empty, the lyngua coverage gap surfaces at startup.
+func activityEntryTypeLabel(entryType string, l operation.JobActivityLabels) string {
+	switch entryType {
+	case "labor":
+		return l.Form.EntryTypeLabor
+	case "material":
+		return l.Form.EntryTypeMaterial
+	case "expense":
+		return l.Form.EntryTypeExpense
+	default:
+		return entryType
+	}
+}
+
+// activityBillableStatusString converts a BillableStatus enum to a stable
+// shorthand used by data-testid selectors: included | billable | non_billable
+// | write_off | unspecified.
+func activityBillableStatusString(s jobactivitypb.BillableStatus) string {
+	switch s {
+	case jobactivitypb.BillableStatus_BILLABLE_STATUS_BILLABLE:
+		return "billable"
+	case jobactivitypb.BillableStatus_BILLABLE_STATUS_NON_BILLABLE:
+		return "non_billable"
+	case jobactivitypb.BillableStatus_BILLABLE_STATUS_INCLUDED:
+		return "included"
+	case jobactivitypb.BillableStatus_BILLABLE_STATUS_WRITE_OFF:
+		return "write_off"
+	default:
+		return "unspecified"
+	}
+}
+
+// activityBillableStatusLabel resolves the translated badge text for the
+// billable_status. Returns the lyngua label; if empty, the coverage gap surfaces.
+func activityBillableStatusLabel(status string, l operation.JobActivityLabels) string {
+	switch status {
+	case "included":
+		return l.Form.BillableStatusIncluded
+	case "billable":
+		return l.Form.BillableStatusBillable
+	case "non_billable":
+		return l.Form.BillableStatusNonBillable
+	case "write_off":
+		return l.Form.BillableStatusWriteOff
+	default:
+		return status
+	}
+}
+
+// activityBillableStatusVariant returns the badge variant for a billable
+// status shorthand.
+func activityBillableStatusVariant(status string) string {
+	switch status {
+	case "included":
+		return "info"
+	case "billable":
+		return "success"
+	case "non_billable":
+		return "default"
+	case "write_off":
+		return "warning"
+	default:
+		return "default"
+	}
+}
+
+// buildActivitiesTable builds the activities table config.
+func buildActivitiesTable(
+	activities []*jobactivitypb.JobActivity,
+	l operation.JobLabels,
+	tableLabels types.TableLabels,
+) *types.TableConfig {
+	columns := []types.TableColumn{
+		{Key: "entry_type", Label: l.Detail.EntryType, WidthClass: "col-xl"},
+		{Key: "entry_date", Label: l.Detail.EntryDate, WidthClass: "col-3xl"},
+		{Key: "description", Label: l.Detail.Description, NoSort: true},
+		{Key: "quantity", Label: l.Detail.Quantity, NoSort: true, WidthClass: "col-md"},
+		{Key: "unit_cost", Label: l.Detail.UnitCost, NoSort: true, WidthClass: "col-2xl"},
+		{Key: "total_cost", Label: l.Detail.TotalCost, NoSort: true, WidthClass: "col-2xl"},
+	}
+
+	rows := []types.TableRow{}
+	for _, a := range activities {
+		id := a.GetId()
+		entryType := activityEntryTypeString(a.GetEntryType())
+		entryDate := a.GetEntryDateString()
+		description := a.GetDescription()
+		quantity := fmt.Sprintf("%.2f", a.GetQuantity())
+		currency := a.GetCurrency()
+
+		rows = append(rows, types.TableRow{
+			ID: id,
+			Cells: []types.TableCell{
+				{Type: "badge", Value: entryType, Variant: activityEntryTypeVariant(entryType)},
+				types.DateTimeCell(entryDate, types.DateReadable),
+				{Type: "text", Value: description},
+				{Type: "text", Value: quantity},
+				types.MoneyCell(float64(a.GetUnitCost()), currency, true),
+				types.MoneyCell(float64(a.GetTotalCost()), currency, true),
+			},
+			DataAttrs: map[string]string{
+				"entry_type": entryType,
+				"entry_date": entryDate,
+			},
+		})
+	}
+
+	types.ApplyColumnStyles(columns, rows)
+
+	return &types.TableConfig{
+		ID:         "activities-table",
+		Columns:    columns,
+		Rows:       rows,
+		ShowSearch: true,
+		ShowSort:   true,
+		Labels:     tableLabels,
+		EmptyState: types.TableEmptyState{
+			Title:   "No activities",
+			Message: "No activity entries have been recorded for this job yet.",
+		},
+	}
+}
+
+// activityEntryTypeString converts an EntryType enum to a display string.
+func activityEntryTypeString(t jobactivitypb.EntryType) string {
+	switch t {
+	case jobactivitypb.EntryType_ENTRY_TYPE_LABOR:
+		return "labor"
+	case jobactivitypb.EntryType_ENTRY_TYPE_MATERIAL:
+		return "material"
+	case jobactivitypb.EntryType_ENTRY_TYPE_EXPENSE:
+		return "expense"
+	case jobactivitypb.EntryType_ENTRY_TYPE_EQUIPMENT:
+		return "Equipment"
+	case jobactivitypb.EntryType_ENTRY_TYPE_SUBCONTRACT:
+		return "Subcontract"
+	default:
+		return "labor"
+	}
+}
+
+// activityEntryTypeVariant returns the badge variant for an entry type string.
+func activityEntryTypeVariant(entryType string) string {
+	switch entryType {
+	case "labor":
+		return "info"
+	case "material":
+		return "warning"
+	case "expense":
+		return "danger"
+	case "Equipment":
+		return "secondary"
+	case "Subcontract":
+		return "secondary"
+	default:
+		return "default"
+	}
+}

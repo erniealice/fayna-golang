@@ -1,0 +1,26 @@
+package detail
+
+import (
+	"context"
+
+	operation "github.com/erniealice/fayna-golang/domain/operation"
+
+	"github.com/erniealice/hybra-golang/views/attachment"
+	"github.com/erniealice/hybra-golang/views/auditlog"
+	pyeza "github.com/erniealice/pyeza-golang"
+
+	outcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
+)
+
+// DetailViewDeps holds view dependencies for the task outcome detail views.
+type DetailViewDeps struct {
+	attachment.AttachmentOps
+	auditlog.AuditOps
+
+	Routes       operation.TaskOutcomeRoutes
+	Labels       operation.TaskOutcomeLabels
+	CommonLabels pyeza.CommonLabels
+
+	// Task outcome read
+	ReadTaskOutcome func(ctx context.Context, req *outcomepb.ReadTaskOutcomeRequest) (*outcomepb.ReadTaskOutcomeResponse, error)
+}

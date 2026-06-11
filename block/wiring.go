@@ -16,21 +16,21 @@ package block
 // REQUIRED closures — drift there is a startup error, not a silent nil.
 
 import (
-	fulfillmentmod "github.com/erniealice/fayna-golang/views/fulfillment"
-	jobmod "github.com/erniealice/fayna-golang/views/job"
-	jobactivitymod "github.com/erniealice/fayna-golang/views/job_activity"
-	jobphasemod "github.com/erniealice/fayna-golang/views/job_phase"
-	jobtaskmod "github.com/erniealice/fayna-golang/views/job_task"
-	jobtemplatemod "github.com/erniealice/fayna-golang/views/job_template"
-	jobtemplatePhasemod "github.com/erniealice/fayna-golang/views/job_template_phase"
-	jobtemplateTaskmod "github.com/erniealice/fayna-golang/views/job_template_task"
-	outcomecriteriaMod "github.com/erniealice/fayna-golang/views/outcome_criteria"
-	outcomesummaryMod "github.com/erniealice/fayna-golang/views/outcome_summary"
-	taskoutcomeMod "github.com/erniealice/fayna-golang/views/task_outcome"
+	fulfillmentmod "github.com/erniealice/fayna-golang/domain/fulfillment/views/fulfillment"
+	jobmod "github.com/erniealice/fayna-golang/domain/operation/views/job"
+	jobactivitymod "github.com/erniealice/fayna-golang/domain/operation/views/job_activity"
+	jobphasemod "github.com/erniealice/fayna-golang/domain/operation/views/job_phase"
+	jobtaskmod "github.com/erniealice/fayna-golang/domain/operation/views/job_task"
+	jobtemplatemod "github.com/erniealice/fayna-golang/domain/operation/views/job_template"
+	jobtemplatePhasemod "github.com/erniealice/fayna-golang/domain/operation/views/job_template_phase"
+	jobtemplateTaskmod "github.com/erniealice/fayna-golang/domain/operation/views/job_template_task"
+	outcomecriteriaMod "github.com/erniealice/fayna-golang/domain/operation/views/outcome_criteria"
+	outcomesummaryMod "github.com/erniealice/fayna-golang/domain/operation/views/outcome_summary"
+	taskoutcomeMod "github.com/erniealice/fayna-golang/domain/operation/views/task_outcome"
 
-	activityexpensemod "github.com/erniealice/fayna-golang/views/activity_expense"
-	activitylabormod "github.com/erniealice/fayna-golang/views/activity_labor"
-	activitymaterialmod "github.com/erniealice/fayna-golang/views/activity_material"
+	activityexpensemod "github.com/erniealice/fayna-golang/domain/operation/views/activity_expense"
+	activitylabormod "github.com/erniealice/fayna-golang/domain/operation/views/activity_labor"
+	activitymaterialmod "github.com/erniealice/fayna-golang/domain/operation/views/activity_material"
 )
 
 // ---------------------------------------------------------------------------

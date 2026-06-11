@@ -2,6 +2,7 @@ package block
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
@@ -508,5 +509,107 @@ func TestRequireFor_JobTemplateDetailClosures_NotRequired_WhenJobTemplateDisable
 	cfg := &blockConfig{jobTemplatePhase: true, jobTemplateTask: true}
 	if err := uc.RequireFor(cfg); err != nil {
 		t.Fatalf("RequireFor(drawer-only JobTemplatePhase/Task, no list closures) should be nil, got %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// MustValidate — FAIL-CLOSED wiring guard (architecture-roast burn #1).
+//
+// RequireFor returns an error; MustValidate adds the posture: in dev/test
+// (testing.Testing() is true here) a missing REQUIRED closure PANICS — loud,
+// stack-traced, uncatchable-by-accident — so a nil-closure wiring gap can never
+// be silently dropped into an empty-state render. OPTIONAL nils never trip it.
+// ---------------------------------------------------------------------------
+
+// wireJobRequired sets every closure RequireFor checks for the Job module.
+func wireJobRequired(uc *UseCases) {
+	j := &uc.Operation.Job
+	j.CreateJob = func(context.Context, *jobpb.CreateJobRequest) (*jobpb.CreateJobResponse, error) { return nil, nil }
+	j.ReadJob = func(context.Context, *jobpb.ReadJobRequest) (*jobpb.ReadJobResponse, error) { return nil, nil }
+	j.UpdateJob = func(context.Context, *jobpb.UpdateJobRequest) (*jobpb.UpdateJobResponse, error) { return nil, nil }
+	j.DeleteJob = func(context.Context, *jobpb.DeleteJobRequest) (*jobpb.DeleteJobResponse, error) { return nil, nil }
+	j.ListJobs = func(context.Context, *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error) { return nil, nil }
+}
+
+// TestMustValidate_NilRequiredClosure_Panics is the core burn-#1 proof: with
+// the Job module enabled but one REQUIRED closure (ListJobs) left nil,
+// MustValidate must PANIC under test — not return an empty render, not silently
+// degrade. This is the loud failure the bare-return path lacked.
+func TestMustValidate_NilRequiredClosure_Panics(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCases{}
+	wireJobRequired(uc)
+	uc.Operation.Job.ListJobs = nil // drop exactly one REQUIRED closure
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("MustValidate(Job enabled, ListJobs nil) should PANIC in dev/test, but did not")
+		}
+		msg, _ := r.(string)
+		if !strings.Contains(msg, "ListJobs") {
+			t.Fatalf("panic message should name the missing field; got %q", msg)
+		}
+	}()
+
+	// Should not reach the next line — MustValidate panics first.
+	_ = uc.MustValidate(&blockConfig{job: true})
+	t.Fatal("MustValidate returned instead of panicking on a nil REQUIRED closure")
+}
+
+// TestMustValidate_EmptyUseCases_EnableAll_Panics: a fully empty UseCases with
+// every module enabled (the "permanently nil dashboard" trap) must panic loudly
+// in dev/test rather than register a wall of empty views.
+func TestMustValidate_EmptyUseCases_EnableAll_Panics(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCases{}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("MustValidate(empty UseCases, enableAll) should PANIC in dev/test")
+		}
+	}()
+	_ = uc.MustValidate(&blockConfig{enableAll: true})
+	t.Fatal("MustValidate returned instead of panicking on an empty enableAll wiring")
+}
+
+// TestMustValidate_NilOptionalClosure_OK proves the required-vs-optional
+// discrimination survives the fail-closed wrapper: the OPTIONAL Activity*
+// modules (not in RequireFor) with nil closures must pass MustValidate with NO
+// panic and NO error — disabled/optional features stay legitimately nil.
+func TestMustValidate_NilOptionalClosure_OK(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCases{}
+	// Optional drawer modules enabled, their closures left nil. Also leave the
+	// optional Entity pickers / Subscription breadcrumb / Service dashboards nil.
+	cfg := &blockConfig{activityLabor: true, activityMaterial: true, activityExpense: true}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("MustValidate(optional nil closures) must NOT panic; panicked with %v", r)
+		}
+	}()
+	if err := uc.MustValidate(cfg); err != nil {
+		t.Fatalf("MustValidate(optional nil closures) should be nil, got %v", err)
+	}
+}
+
+// TestMustValidate_FullyWired_OK: a completely wired REQUIRED set passes with no
+// panic and no error (happy path — guard is silent when wiring is complete).
+func TestMustValidate_FullyWired_OK(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCases{}
+	wireJobRequired(uc)
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("MustValidate(fully wired Job) must NOT panic; panicked with %v", r)
+		}
+	}()
+	if err := uc.MustValidate(&blockConfig{job: true}); err != nil {
+		t.Fatalf("MustValidate(fully wired Job) should be nil, got %v", err)
 	}
 }

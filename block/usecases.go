@@ -25,6 +25,9 @@ package block
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
+	"testing"
 
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
@@ -431,4 +434,69 @@ func (u *UseCases) RequireFor(cfg *blockConfig) error {
 		return fmt.Errorf("fayna.Block: incomplete UseCases — missing %v", missing)
 	}
 	return nil
+}
+
+// MustValidate is the FAIL-CLOSED enforcement wrapper around RequireFor. It is
+// the seam-level guard that makes a missing REQUIRED closure impossible to
+// ignore — mirroring the AUTHZ_ENFORCE boot-guard in service-admin's
+// container.go (a missing security precondition is a boot REFUSAL, never a
+// silent degrade).
+//
+// Why a wrapper and not just `return RequireFor(...)`: a bare returned error is
+// fail-OPEN by convention. A caller can drop it (`_ =`, an ignored value, a
+// future app that doesn't check) and the block silently registers an empty
+// feature — the exact nil-closure trap the architecture roast (burn #1) named.
+// MustValidate removes that escape hatch:
+//
+//   - In dev/test (running under `go test`, OR FAYNA_BLOCK_STRICT truthy) a
+//     missing REQUIRED closure PANICS with the full field list. A panic cannot
+//     be silently dropped, prints a stack trace at the offending wiring site,
+//     and fails the test/CI loudly. This is where a developer wiring a new
+//     entity discovers a gap — at their desk, not in prod.
+//   - In prod a missing REQUIRED closure logs a screaming FATAL line at the
+//     seam (so even a caller that drops the returned error leaves an
+//     unmissable log record) AND returns the error so Block() propagates it and
+//     NewServiceAdmin halts boot with a clear "domain block failed" message.
+//
+// OPTIONAL ports (Operation.Activity{Labor,Material,Expense}, Entity pickers,
+// Subscription breadcrumb, Service dashboards) are NEVER flagged — that
+// required-vs-optional discrimination lives entirely in RequireFor, which only
+// asserts a field when its enabling cfg.wantXxx() module is on. MustValidate
+// adds posture, not policy: it changes HOW a gap fails, not WHICH fields gate.
+func (u *UseCases) MustValidate(cfg *blockConfig) error {
+	err := u.RequireFor(cfg)
+	if err == nil {
+		return nil
+	}
+	if blockStrictMode() {
+		// Dev/test: loud, uncatchable-by-accident, stack-traced.
+		panic("FATAL: " + err.Error() + " — REQUIRED block wiring is nil. " +
+			"Fix the closure assignment in service-admin's buildFaynaUseCases " +
+			"(adapters.go) before this reaches prod.")
+	}
+	// Prod: scream at the seam, then return so boot halts. The log line is the
+	// belt to the returned-error's suspenders (a dropped error still screams).
+	log.Printf("FATAL: %v — refusing to register fayna modules with a nil "+
+		"REQUIRED closure (fail-closed wiring).", err)
+	return err
+}
+
+// blockStrictMode reports whether the fail-closed wiring guard should PANIC
+// (dev/test) rather than return-and-log (prod) on a missing REQUIRED closure.
+//
+// True when running under `go test` (testing.Testing(), Go 1.21+ — zero env
+// coupling, auto-on in every test + CI run) OR when FAYNA_BLOCK_STRICT is set to
+// an explicit truthy value (the dev escape hatch for `go run` smoke tests).
+// The env matching mirrors container.go's authzEnforceEnabled — anything else
+// (unset, "", "0", "false") is prod posture.
+func blockStrictMode() bool {
+	if testing.Testing() {
+		return true
+	}
+	switch os.Getenv("FAYNA_BLOCK_STRICT") {
+	case "1", "true", "TRUE", "True", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }

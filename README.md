@@ -2,72 +2,115 @@
 
 **Operational work execution domain for the Ichizen OS monorepo.**
 
-`fayna-golang` owns the job lifecycle — templates, execution, activities, cost capture, and outcome assessment. It's the domain package for everything that answers "what work was done?" and "was it any good?"
+`fayna-golang` owns the job lifecycle — templates, execution, activities, cost
+capture, and outcome assessment. It answers "what work was done?" and "was it
+any good?"
 
 ## Etymology
 
-**fayna** — from Filipino *faena* (Spanish origin), meaning labor, work, or a task that demands effort. Grittier than "operation" — it evokes the production floor, the job site, the hands-on work. In bullfighting, *faena* is the final act — the decisive performance. In Ichizen OS, fayna is where the work gets done and measured.
+**fayna** — from Filipino *faena* (Spanish origin), meaning labor or work that
+demands effort. In Ichizen OS, fayna is where work gets done and measured.
 
-## Architecture
+## Package layout (Option B — entity-first)
 
 ```
-  Domain Packages          centymo (commerce), entydad (identity), fycha (accounting), fayna (operations)
-        │                  Business logic, entity-specific views, route wiring
-        ▼
-  Shared Features          hybra (cross-cutting: attachments, comments, audit)
-        │                  Application patterns used by all domains
-        ▼
-  Framework Layer          pyeza (UI), espyna (backend), esqyma (proto schemas)
-                           Presentation primitives, infrastructure, data contracts
+fayna-golang/
+  assets.go                    embed.FS for CSS/JS (pyeza.CopyNamespacedAssets)
+  assets/css|js/               placeholder asset dirs
+
+  domain/
+    operation/                 package operation — domain facade
+      operation.go             facade: re-exports entity labels/routes as type aliases
+      routes.go                aggregated route constructors
+      <entity>_module.go       per-entity module assembler (block deps → Module)
+      job/                     package job
+      job_phase/               package job_phase
+      job_task/                package job_task
+      job_template/            package job_template
+      job_template_phase/      package job_template_phase
+      job_template_task/       package job_template_task
+      job_activity/            package job_activity
+      activity_labor/          package activity_labor
+      activity_material/       package activity_material
+      activity_expense/        package activity_expense
+      outcome_criteria/        package outcome_criteria
+      task_outcome/            package task_outcome
+      outcome_summary/         aggregate view (job+phase summaries) — legacyAllow
+        job_summary/
+        phase_summary/
+        list/
+
+    fulfillment/               package fulfillment — domain facade
+      fulfillment.go           facade: re-exports FulfillmentLabels/Routes aliases
+      fulfillment_module.go    module assembler
+      fulfillment/             package fulfillment (entity package)
+
+  block/
+    block.go                   Block() entry point; MustValidate fail-closed gate
+    usecases.go                UseCases struct; RequireFor + MustValidate
+    wiring.go                  per-entity wireXxxModule helpers
+
+  tests/e2e/                   Playwright E2E specs (job lifecycle, templates, etc.)
 ```
 
-### What fayna owns
+### Entity package shape
 
-| Layer | Concern | Entities |
-|-------|---------|----------|
-| **Templates** (design-time) | Job blueprints | job_template, job_template_phase, job_template_task |
-| **Execution** (runtime) | Active work | job, job_phase, job_task |
-| **Activities** (cost capture) | Time & materials | job_activity, activity_labor, activity_material, activity_expense |
-| **Settlement** (allocation) | Cost distribution | job_settlement, inventory_movement |
-| **Outcomes** (Layer 7) | Quality assessment | outcome_criteria, criteria_threshold, criteria_option, template_task_criteria, task_outcome, task_outcome_check, phase_outcome_summary, job_outcome_summary |
+Every entity dir (`domain/<d>/<e>/`) follows the same layout:
 
-### What does NOT live in fayna
+```
+<entity>/
+  embed.go        embed.FS (TemplatesFS)
+  labels.go       Labels struct + DefaultLabels()
+  routes.go       Routes struct + DefaultRoutes() + RouteMap()
+  list/           list view + action handler
+  detail/         detail view
+  action/         mutation handlers (create/update/delete)
+  form/           form.Data/FormData + option builders
+  templates/      (job_activity only) extra template packages
+  dashboard/      (job, fulfillment only) dashboard view
+```
 
-| Concern | Where it belongs | Why |
-|---------|-----------------|-----|
-| Sales/revenue/invoicing | centymo | Commerce domain — billing the work |
-| Client/user/role management | entydad | Identity domain — who did the work |
-| Financial reporting | fycha | Accounting domain — what it cost |
-| Attachment handling | hybra | Cross-cutting — shared by all domains |
-| Proto schemas | esqyma (`domain/operation/`) | Data contracts — schema layer |
-| Postgres adapters | espyna | Infrastructure — backend framework |
+### Facade (`<d>.go`)
 
-## View Modules
+`domain/operation/operation.go` and `domain/fulfillment/fulfillment.go` are
+hand-written facades that re-export every entity's `Labels` and `Routes` types
+as named aliases (`type JobLabels = job.Labels`) so consumers write
+`operation.JobLabels` rather than importing each entity package directly. Build
+enforcement: a missing alias is a compile error in the consumer.
 
-### Layers 2-6 (migrated from centymo)
+### Module assemblers (`<e>_module.go`)
 
-- **`views/job/`** — Job lifecycle: list, detail, status transitions, phases/tasks tabs
-- **`views/job_template/`** — Template management: list, detail, phase/task hierarchy
-- **`views/job_activity/`** — Activity log: CRUD, approval workflow, labor/material/expense subtypes
+Each `<entity>_module.go` in `domain/<d>/` is a function `wire<Entity>Module`
+that wires block deps → `espyna.Module` (routes, labels, typed use cases). The
+block assembler (`block/block.go`) calls these functions; the result is passed
+to `pyeza.AppOption` as the registered sidebar module.
 
-### Layer 7 (new)
+### Block assembler (`block/`)
 
-- **`views/outcome_criteria/`** — Criteria library: versioned definitions, thresholds, options
-- **`views/task_outcome/`** — Outcome recording: type-adaptive forms, auto-evaluation
-- **`views/outcome_summary/`** — Report cards: phase/job summaries, determination badges
+`block.go` is the composition root for fayna modules. `UseCases` in
+`usecases.go` carries all function-field ports. `MustValidate` (fail-closed
+wrapper around `RequireFor`) panics in dev/test when a REQUIRED closure is nil
+and logs + returns an error in prod — mirrors the AUTHZ_ENFORCE boot-guard.
+
+## Domains
+
+| Domain | Entities |
+|--------|----------|
+| `operation` | job, job_phase, job_task, job_template, job_template_phase, job_template_task, job_activity, activity_labor, activity_material, activity_expense, outcome_criteria, task_outcome |
+| `fulfillment` | fulfillment |
 
 ## Dependencies
 
+fayna imports only downward (framework + hybra). It never imports peer domain
+packages (centymo, entydad, fycha).
+
 ```
 fayna-golang
-  ├── pyeza-golang/view      (View interface, ViewFunc, ViewResult)
-  ├── pyeza-golang/types      (TableConfig, TableColumn, TableRow)
-  ├── pyeza-golang/route      (URL resolution helpers)
-  ├── hybra-golang/views/attachment  (generic attachment handler)
-  └── esqyma                  (operation protobuf types)
+  ├── pyeza-golang        (view interface, components, asset hosting)
+  ├── espyna-golang       (use cases, ports, Module type)
+  ├── hybra-golang        (cross-cutting: attachment, audit_trail views)
+  └── esqyma              (operation + fulfillment protobuf types)
 ```
-
-fayna depends **only** on framework packages and hybra (downward). It never imports peer domain packages (centymo, entydad, fycha).
 
 ## Module
 

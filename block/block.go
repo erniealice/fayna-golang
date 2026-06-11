@@ -603,10 +603,14 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 
 		// --- Typed use-case wiring contract (espyna-free; supplied by service-admin) ---
 		uc := cfg.useCases
-		// Deterministic completeness gate: a missing REQUIRED closure for an
-		// enabled module is a startup error, NOT a silent runtime nil. Replaces
-		// the prior reflection-drift-prone path (Phase 2, Q-WIRE-1).
-		if err := uc.RequireFor(cfg); err != nil {
+		// FAIL-CLOSED completeness gate: a missing REQUIRED closure for an enabled
+		// module is a boot REFUSAL, NOT a silent runtime nil. MustValidate panics
+		// in dev/test (loud, stack-traced, uncatchable-by-accident) and returns a
+		// screamed boot error in prod (which this AppOption propagates → boot halt).
+		// Mirrors the AUTHZ_ENFORCE boot-guard's fail-closed posture; replaces the
+		// prior reflection-drift-prone path (Phase 2, Q-WIRE-1) and closes the
+		// architecture-roast burn #1 (a returned error a caller could drop).
+		if err := uc.MustValidate(cfg); err != nil {
 			return err
 		}
 

@@ -27,20 +27,6 @@ import (
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	fulfillmentdomain "github.com/erniealice/fayna-golang/domain/fulfillment"
-	activityexpensemod "github.com/erniealice/fayna-golang/domain/operation/views/activity_expense"
-	activitylabormod "github.com/erniealice/fayna-golang/domain/operation/views/activity_labor"
-	activitymaterialmod "github.com/erniealice/fayna-golang/domain/operation/views/activity_material"
-	fulfillmentmod "github.com/erniealice/fayna-golang/domain/fulfillment/views/fulfillment"
-	jobmod "github.com/erniealice/fayna-golang/domain/operation/views/job"
-	jobactivitymod "github.com/erniealice/fayna-golang/domain/operation/views/job_activity"
-	jobphasemod "github.com/erniealice/fayna-golang/domain/operation/views/job_phase"
-	jobtaskmod "github.com/erniealice/fayna-golang/domain/operation/views/job_task"
-	jobtemplatemod "github.com/erniealice/fayna-golang/domain/operation/views/job_template"
-	jobtemplatePhasemod "github.com/erniealice/fayna-golang/domain/operation/views/job_template_phase"
-	jobtemplateTaskmod "github.com/erniealice/fayna-golang/domain/operation/views/job_template_task"
-	outcomecriteriaMod "github.com/erniealice/fayna-golang/domain/operation/views/outcome_criteria"
-	outcomesummaryMod "github.com/erniealice/fayna-golang/domain/operation/views/outcome_summary"
-	taskoutcomeMod "github.com/erniealice/fayna-golang/domain/operation/views/task_outcome"
 	operation "github.com/erniealice/fayna-golang/domain/operation"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 	pyeza "github.com/erniealice/pyeza-golang"
@@ -670,7 +656,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 
 		// --- Register Job module ---
 		if cfg.wantJob() {
-			jobDeps := &jobmod.ModuleDeps{
+			jobDeps := &operation.JobModuleDeps{
 				Routes:           jobRoutes,
 				Labels:           jobLabels,
 				CommonLabels:     ctx.Common,
@@ -701,7 +687,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			// fallback now live in service-admin's adapters.go (Round 2). Here
 			// we just copy the typed closure (nil until Round 2 → empty-state).
 			wireJobDashboard(jobDeps, uc)
-			jobmod.NewModule(jobDeps).RegisterRoutes(ctx.Routes)
+			operation.NewJobModule(jobDeps).RegisterRoutes(ctx.Routes)
 			// Register the client and location search endpoints for the job drawer.
 			handleFunc(ctx.Routes, "GET", jobRoutes.ClientSearchURL, jobClientSearchFn)
 			handleFunc(ctx.Routes, "GET", jobRoutes.LocationSearchURL, jobLocationSearchFn)
@@ -709,7 +695,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 
 		// --- Register JobTemplate module ---
 		if cfg.wantJobTemplate() {
-			jtDeps := &jobtemplatemod.ModuleDeps{
+			jtDeps := &operation.JobTemplateModuleDeps{
 				Routes:           jtRoutes,
 				Labels:           jtLabels,
 				CommonLabels:     ctx.Common,
@@ -727,38 +713,38 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				jtDeps.GetInUseIDs = refChecker.GetJobTemplateInUseIDs
 			}
 			wireJobTemplateDeps(jtDeps, uc)
-			jobtemplatemod.NewModule(jtDeps).RegisterRoutes(ctx.Routes)
+			operation.NewJobTemplateModule(jtDeps).RegisterRoutes(ctx.Routes)
 		}
 
 		// --- Register JobTemplatePhase module (drawer-only) ---
 		// Not in the sidebar — reached via JobTemplate detail Phases tab Add/Edit/Delete CTAs.
 		if cfg.wantJobTemplatePhase() {
-			jtpDeps := &jobtemplatePhasemod.ModuleDeps{
+			jtpDeps := &operation.JobTemplatePhaseModuleDeps{
 				Routes:       jtpRoutes,
 				Labels:       jtpLabels,
 				CommonLabels: ctx.Common,
 			}
 			wireJobTemplatePhaseDeps(jtpDeps, uc)
-			jobtemplatePhasemod.NewModule(jtpDeps).RegisterRoutes(ctx.Routes)
+			operation.NewJobTemplatePhaseModule(jtpDeps).RegisterRoutes(ctx.Routes)
 		}
 
 		// --- Register JobTemplateTask module (drawer-only) ---
 		// Not in the sidebar — reached via JobTemplate detail Tasks tab Add/Edit/Delete CTAs.
 		if cfg.wantJobTemplateTask() {
-			jttDeps := &jobtemplateTaskmod.ModuleDeps{
+			jttDeps := &operation.JobTemplateTaskModuleDeps{
 				Routes:       jttRoutes,
 				Labels:       jttLabels,
 				CommonLabels: ctx.Common,
 			}
 			wireJobTemplateTaskDeps(jttDeps, uc)
-			jobtemplateTaskmod.NewModule(jttDeps).RegisterRoutes(ctx.Routes)
+			operation.NewJobTemplateTaskModule(jttDeps).RegisterRoutes(ctx.Routes)
 		}
 
 		// --- Register JobActivity module ---
 		// Note: ReadActivityLabor / Material / Expense are not yet wired in espyna
 		// use cases — these are nil until activity subtype use cases are added.
 		if cfg.wantJobActivity() {
-			jaDeps := &jobactivitymod.ModuleDeps{
+			jaDeps := &operation.JobActivityModuleDeps{
 				Routes:           jaRoutes,
 				Labels:           jaLabels,
 				CommonLabels:     ctx.Common,
@@ -777,7 +763,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				jaDeps.GetInUseIDs = refChecker.GetJobActivityInUseIDs
 			}
 			wireJobActivityDeps(jaDeps, uc)
-			jobactivitymod.NewModule(jaDeps).RegisterRoutes(ctx.Routes)
+			operation.NewJobActivityModule(jaDeps).RegisterRoutes(ctx.Routes)
 		}
 
 		// --- Register JobPhase module ---
@@ -786,7 +772,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// with no sidebar entry. Phases are normally reached via Job detail Phases tab
 		// deep links (/app/job-phase/{id}).
 		if cfg.wantJobPhase() {
-			jpDeps := &jobphasemod.ModuleDeps{
+			jpDeps := &operation.JobPhaseModuleDeps{
 				Routes:       jpRoutes,
 				Labels:       jpLabels,
 				CommonLabels: ctx.Common,
@@ -801,7 +787,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				jpDeps.GetInUseIDs = refChecker.GetJobPhaseInUseIDs
 			}
 			wireJobPhaseDeps(jpDeps, uc)
-			jobphasemod.NewModule(jpDeps).RegisterRoutes(ctx.Routes)
+			operation.NewJobPhaseModule(jpDeps).RegisterRoutes(ctx.Routes)
 		}
 
 		// --- Register JobTask module ---
@@ -810,7 +796,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// with no sidebar entry. Tasks are normally reached via JobPhase detail Tasks tab
 		// deep links (/app/job-task/{id}).
 		if cfg.wantJobTask() {
-			jkDeps := &jobtaskmod.ModuleDeps{
+			jkDeps := &operation.JobTaskModuleDeps{
 				Routes:       jkRoutes,
 				Labels:       jkLabels,
 				CommonLabels: ctx.Common,
@@ -833,7 +819,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			}
 			jkRoutes.ResourceSearchURL = ""     // resource search not yet implemented
 			jkRoutes.TemplateTaskSearchURL = "" // template-task search not yet implemented
-			jobtaskmod.NewModule(jkDeps).RegisterRoutes(ctx.Routes)
+			operation.NewJobTaskModule(jkDeps).RegisterRoutes(ctx.Routes)
 			handleFunc(ctx.Routes, "GET", jkRoutes.StaffSearchURL, activityLaborStaffSearchFn)
 		}
 
@@ -843,7 +829,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// Use cases (Create/Read/Update/Delete/List) are stubbed with TODO comments until
 		// ActivityLabor is added to espyna OperationUseCases (see wiring.go).
 		if cfg.wantActivityLabor() {
-			alDeps := &activitylabormod.ModuleDeps{
+			alDeps := &operation.ActivityLaborModuleDeps{
 				Routes:       alRoutes,
 				Labels:       alLabels,
 				CommonLabels: ctx.Common,
@@ -853,7 +839,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				// Until then all CRUD handlers return clear gap error messages.
 			}
 			wireActivityLaborDeps(alDeps, uc)
-			activitylabormod.NewModule(alDeps).RegisterRoutes(ctx.Routes)
+			operation.NewActivityLaborModule(alDeps).RegisterRoutes(ctx.Routes)
 			// Register the staff search endpoint (nil-safe — skipped when handler is nil).
 			handleFunc(ctx.Routes, "GET", alRoutes.StaffSearchURL, activityLaborStaffSearchFn)
 		}
@@ -862,14 +848,14 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// ActivityMaterial is the charge-detail sibling for ENTRY_TYPE_MATERIAL job activities.
 		// Not in the sidebar — reached via JobActivity detail charge tab.
 		if cfg.wantActivityMaterial() {
-			amDeps := &activitymaterialmod.ModuleDeps{
+			amDeps := &operation.ActivityMaterialModuleDeps{
 				Routes:       amRoutes,
 				Labels:       amLabels,
 				CommonLabels: ctx.Common,
 				TableLabels:  ctx.Table,
 			}
 			wireActivityMaterialDeps(amDeps, uc)
-			activitymaterialmod.NewModule(amDeps).RegisterRoutes(ctx.Routes)
+			operation.NewActivityMaterialModule(amDeps).RegisterRoutes(ctx.Routes)
 			// Register search endpoints (nil-safe — skipped when handlers are nil).
 			handleFunc(ctx.Routes, "GET", amRoutes.ProductSearchURL, activityMaterialProductSearchFn)
 			handleFunc(ctx.Routes, "GET", amRoutes.LocationSearchURL, activityMaterialLocationSearchFn)
@@ -879,21 +865,21 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		// ActivityExpense is the charge-detail sibling for ENTRY_TYPE_EXPENSE job activities.
 		// Not in the sidebar — reached via JobActivity detail charge tab.
 		if cfg.wantActivityExpense() {
-			aeDeps := &activityexpensemod.ModuleDeps{
+			aeDeps := &operation.ActivityExpenseModuleDeps{
 				Routes:       aeRoutes,
 				Labels:       aeLabels,
 				CommonLabels: ctx.Common,
 				TableLabels:  ctx.Table,
 			}
 			wireActivityExpenseDeps(aeDeps, uc)
-			activityexpensemod.NewModule(aeDeps).RegisterRoutes(ctx.Routes)
+			operation.NewActivityExpenseModule(aeDeps).RegisterRoutes(ctx.Routes)
 			// Register search endpoint (nil-safe — skipped when handler is nil).
 			handleFunc(ctx.Routes, "GET", aeRoutes.ExpenseCategorySearchURL, activityExpenseExpenseCategorySearchFn)
 		}
 
 		// --- Register OutcomeCriteria module ---
 		if cfg.wantOutcomeCriteria() {
-			ocDeps := &outcomecriteriaMod.ModuleDeps{
+			ocDeps := &operation.OutcomeCriteriaModuleDeps{
 				Routes:           ocRoutes,
 				Labels:           ocLabels,
 				CommonLabels:     ctx.Common,
@@ -905,12 +891,12 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				NewID:            newAttachmentID,
 			}
 			wireOutcomeCriteriaDeps(ocDeps, uc)
-			outcomecriteriaMod.NewModule(ocDeps).RegisterRoutes(ctx.Routes)
+			operation.NewOutcomeCriteriaModule(ocDeps).RegisterRoutes(ctx.Routes)
 		}
 
 		// --- Register TaskOutcome module ---
 		if cfg.wantTaskOutcome() {
-			toDeps := &taskoutcomeMod.ModuleDeps{
+			toDeps := &operation.TaskOutcomeModuleDeps{
 				Routes:           toRoutes,
 				Labels:           toLabels,
 				CommonLabels:     ctx.Common,
@@ -922,23 +908,23 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 				NewID:            newAttachmentID,
 			}
 			wireTaskOutcomeDeps(toDeps, uc)
-			taskoutcomeMod.NewModule(toDeps).RegisterRoutes(ctx.Routes)
+			operation.NewTaskOutcomeModule(toDeps).RegisterRoutes(ctx.Routes)
 		}
 
 		// --- Register OutcomeSummary module ---
 		if cfg.wantOutcomeSummary() {
-			osDeps := &outcomesummaryMod.ModuleDeps{
+			osDeps := &operation.OutcomeSummaryModuleDeps{
 				Routes:       osRoutes,
 				Labels:       osLabels,
 				CommonLabels: ctx.Common,
 			}
 			wireOutcomeSummaryDeps(osDeps, uc)
-			outcomesummaryMod.NewModule(osDeps).RegisterRoutes(ctx.Routes)
+			operation.NewOutcomeSummaryModule(osDeps).RegisterRoutes(ctx.Routes)
 		}
 
 		// --- Register Fulfillment module ---
 		if cfg.wantFulfillment() {
-			ffDeps := &fulfillmentmod.ModuleDeps{
+			ffDeps := &fulfillmentdomain.FulfillmentModuleDeps{
 				Routes:           ffRoutes,
 				Labels:           ffLabels,
 				CommonLabels:     ctx.Common,
@@ -954,7 +940,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 			// callsite above for rationale. proto→view translation moves to
 			// service-admin's adapters.go (Round 2); nil until then.
 			wireFulfillmentDashboard(ffDeps, uc)
-			fulfillmentmod.NewModule(ffDeps).RegisterRoutes(ctx.Routes)
+			fulfillmentdomain.NewFulfillmentModule(ffDeps).RegisterRoutes(ctx.Routes)
 		}
 
 		log.Println("  ✓ Operations domain initialized (fayna)")

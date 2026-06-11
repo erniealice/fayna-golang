@@ -16,28 +16,15 @@ package block
 // REQUIRED closures — drift there is a startup error, not a silent nil.
 
 import (
-	fulfillmentmod "github.com/erniealice/fayna-golang/domain/fulfillment/views/fulfillment"
-	jobmod "github.com/erniealice/fayna-golang/domain/operation/views/job"
-	jobactivitymod "github.com/erniealice/fayna-golang/domain/operation/views/job_activity"
-	jobphasemod "github.com/erniealice/fayna-golang/domain/operation/views/job_phase"
-	jobtaskmod "github.com/erniealice/fayna-golang/domain/operation/views/job_task"
-	jobtemplatemod "github.com/erniealice/fayna-golang/domain/operation/views/job_template"
-	jobtemplatePhasemod "github.com/erniealice/fayna-golang/domain/operation/views/job_template_phase"
-	jobtemplateTaskmod "github.com/erniealice/fayna-golang/domain/operation/views/job_template_task"
-	outcomecriteriaMod "github.com/erniealice/fayna-golang/domain/operation/views/outcome_criteria"
-	outcomesummaryMod "github.com/erniealice/fayna-golang/domain/operation/views/outcome_summary"
-	taskoutcomeMod "github.com/erniealice/fayna-golang/domain/operation/views/task_outcome"
-
-	activityexpensemod "github.com/erniealice/fayna-golang/domain/operation/views/activity_expense"
-	activitylabormod "github.com/erniealice/fayna-golang/domain/operation/views/activity_labor"
-	activitymaterialmod "github.com/erniealice/fayna-golang/domain/operation/views/activity_material"
+	fulfillmentdomain "github.com/erniealice/fayna-golang/domain/fulfillment"
+	operation "github.com/erniealice/fayna-golang/domain/operation"
 )
 
 // ---------------------------------------------------------------------------
 // Job module wiring
 // ---------------------------------------------------------------------------
 
-func wireJobDeps(deps *jobmod.ModuleDeps, u *UseCases) {
+func wireJobDeps(deps *operation.JobModuleDeps, u *UseCases) {
 	j := &u.Operation.Job
 	deps.CreateJob = j.CreateJob
 	deps.ReadJob = j.ReadJob
@@ -69,7 +56,7 @@ func wireJobDeps(deps *jobmod.ModuleDeps, u *UseCases) {
 // JobTemplate module wiring
 // ---------------------------------------------------------------------------
 
-func wireJobTemplateDeps(deps *jobtemplatemod.ModuleDeps, u *UseCases) {
+func wireJobTemplateDeps(deps *operation.JobTemplateModuleDeps, u *UseCases) {
 	jt := &u.Operation.JobTemplate
 	deps.CreateJobTemplate = jt.CreateJobTemplate
 	deps.ReadJobTemplate = jt.ReadJobTemplate
@@ -88,7 +75,7 @@ func wireJobTemplateDeps(deps *jobtemplatemod.ModuleDeps, u *UseCases) {
 // JobActivity module wiring
 // ---------------------------------------------------------------------------
 
-func wireJobActivityDeps(deps *jobactivitymod.ModuleDeps, u *UseCases) {
+func wireJobActivityDeps(deps *operation.JobActivityModuleDeps, u *UseCases) {
 	ja := &u.Operation.JobActivity
 	deps.GetJobActivityListPageData = ja.GetJobActivityListPageData
 	deps.ReadJobActivity = ja.ReadJobActivity
@@ -104,7 +91,7 @@ func wireJobActivityDeps(deps *jobactivitymod.ModuleDeps, u *UseCases) {
 // JobPhase module wiring
 // ---------------------------------------------------------------------------
 
-func wireJobPhaseDeps(deps *jobphasemod.ModuleDeps, u *UseCases) {
+func wireJobPhaseDeps(deps *operation.JobPhaseModuleDeps, u *UseCases) {
 	jp := &u.Operation.JobPhase
 	deps.CreateJobPhase = jp.CreateJobPhase
 	deps.ReadJobPhase = jp.ReadJobPhase
@@ -123,7 +110,7 @@ func wireJobPhaseDeps(deps *jobphasemod.ModuleDeps, u *UseCases) {
 // OutcomeCriteria module wiring
 // ---------------------------------------------------------------------------
 
-func wireOutcomeCriteriaDeps(deps *outcomecriteriaMod.ModuleDeps, u *UseCases) {
+func wireOutcomeCriteriaDeps(deps *operation.OutcomeCriteriaModuleDeps, u *UseCases) {
 	oc := &u.Operation.OutcomeCriteria
 	deps.CreateOutcomeCriteria = oc.CreateOutcomeCriteria
 	deps.ReadOutcomeCriteria = oc.ReadOutcomeCriteria
@@ -136,7 +123,7 @@ func wireOutcomeCriteriaDeps(deps *outcomecriteriaMod.ModuleDeps, u *UseCases) {
 // TaskOutcome module wiring
 // ---------------------------------------------------------------------------
 
-func wireTaskOutcomeDeps(deps *taskoutcomeMod.ModuleDeps, u *UseCases) {
+func wireTaskOutcomeDeps(deps *operation.TaskOutcomeModuleDeps, u *UseCases) {
 	to := &u.Operation.TaskOutcome
 	deps.CreateTaskOutcome = to.CreateTaskOutcome
 	deps.ReadTaskOutcome = to.ReadTaskOutcome
@@ -152,7 +139,7 @@ func wireTaskOutcomeDeps(deps *taskoutcomeMod.ModuleDeps, u *UseCases) {
 // OutcomeSummary module wiring
 // ---------------------------------------------------------------------------
 
-func wireOutcomeSummaryDeps(deps *outcomesummaryMod.ModuleDeps, u *UseCases) {
+func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCases) {
 	jos := &u.Operation.JobOutcomeSummary
 	deps.GetJobOutcomeSummaryByJob = jos.GetByJob
 	deps.ListJobOutcomeSummarys = jos.ListJobOutcomeSummaries
@@ -166,7 +153,7 @@ func wireOutcomeSummaryDeps(deps *outcomesummaryMod.ModuleDeps, u *UseCases) {
 // Fulfillment module wiring
 // ---------------------------------------------------------------------------
 
-func wireFulfillmentDeps(deps *fulfillmentmod.ModuleDeps, u *UseCases) {
+func wireFulfillmentDeps(deps *fulfillmentdomain.FulfillmentModuleDeps, u *UseCases) {
 	ff := &u.Fulfillment
 	deps.GetFulfillmentListPageData = ff.GetFulfillmentListPageData
 	deps.GetFulfillmentItemPageData = ff.GetFulfillmentItemPageData
@@ -184,11 +171,11 @@ func wireFulfillmentDeps(deps *fulfillmentmod.ModuleDeps, u *UseCases) {
 // translation lives in service-admin's adapters.go — Round 2). These helpers
 // just copy the typed closure into the module deps. nil → empty-state render.
 
-func wireJobDashboard(deps *jobmod.ModuleDeps, u *UseCases) {
+func wireJobDashboard(deps *operation.JobModuleDeps, u *UseCases) {
 	deps.GetJobDashboardPageData = u.Service.Dashboard.Job
 }
 
-func wireFulfillmentDashboard(deps *fulfillmentmod.ModuleDeps, u *UseCases) {
+func wireFulfillmentDashboard(deps *fulfillmentdomain.FulfillmentModuleDeps, u *UseCases) {
 	deps.GetFulfillmentDashboardPageData = u.Service.Dashboard.Fulfillment
 }
 
@@ -196,7 +183,7 @@ func wireFulfillmentDashboard(deps *fulfillmentmod.ModuleDeps, u *UseCases) {
 // ActivityLabor module wiring (OPTIONAL — nil-able until espyna P5)
 // ---------------------------------------------------------------------------
 
-func wireActivityLaborDeps(deps *activitylabormod.ModuleDeps, u *UseCases) {
+func wireActivityLaborDeps(deps *operation.ActivityLaborModuleDeps, u *UseCases) {
 	al := &u.Operation.ActivityLabor
 	deps.CreateActivityLabor = al.CreateActivityLabor
 	deps.ReadActivityLabor = al.ReadActivityLabor
@@ -209,7 +196,7 @@ func wireActivityLaborDeps(deps *activitylabormod.ModuleDeps, u *UseCases) {
 // ActivityMaterial module wiring (OPTIONAL — nil-able until espyna P5)
 // ---------------------------------------------------------------------------
 
-func wireActivityMaterialDeps(deps *activitymaterialmod.ModuleDeps, u *UseCases) {
+func wireActivityMaterialDeps(deps *operation.ActivityMaterialModuleDeps, u *UseCases) {
 	am := &u.Operation.ActivityMaterial
 	deps.CreateActivityMaterial = am.CreateActivityMaterial
 	deps.ReadActivityMaterial = am.ReadActivityMaterial
@@ -222,7 +209,7 @@ func wireActivityMaterialDeps(deps *activitymaterialmod.ModuleDeps, u *UseCases)
 // ActivityExpense module wiring (OPTIONAL — nil-able until espyna P5)
 // ---------------------------------------------------------------------------
 
-func wireActivityExpenseDeps(deps *activityexpensemod.ModuleDeps, u *UseCases) {
+func wireActivityExpenseDeps(deps *operation.ActivityExpenseModuleDeps, u *UseCases) {
 	ae := &u.Operation.ActivityExpense
 	deps.CreateActivityExpense = ae.CreateActivityExpense
 	deps.ReadActivityExpense = ae.ReadActivityExpense
@@ -235,7 +222,7 @@ func wireActivityExpenseDeps(deps *activityexpensemod.ModuleDeps, u *UseCases) {
 // JobTemplatePhase module wiring
 // ---------------------------------------------------------------------------
 
-func wireJobTemplatePhaseDeps(deps *jobtemplatePhasemod.ModuleDeps, u *UseCases) {
+func wireJobTemplatePhaseDeps(deps *operation.JobTemplatePhaseModuleDeps, u *UseCases) {
 	jtp := &u.Operation.JobTemplatePhase
 	deps.CreateJobTemplatePhase = jtp.CreateJobTemplatePhase
 	deps.ReadJobTemplatePhase = jtp.ReadJobTemplatePhase
@@ -247,7 +234,7 @@ func wireJobTemplatePhaseDeps(deps *jobtemplatePhasemod.ModuleDeps, u *UseCases)
 // JobTemplateTask module wiring
 // ---------------------------------------------------------------------------
 
-func wireJobTemplateTaskDeps(deps *jobtemplateTaskmod.ModuleDeps, u *UseCases) {
+func wireJobTemplateTaskDeps(deps *operation.JobTemplateTaskModuleDeps, u *UseCases) {
 	jtt := &u.Operation.JobTemplateTask
 	deps.CreateJobTemplateTask = jtt.CreateJobTemplateTask
 	deps.ReadJobTemplateTask = jtt.ReadJobTemplateTask
@@ -259,7 +246,7 @@ func wireJobTemplateTaskDeps(deps *jobtemplateTaskmod.ModuleDeps, u *UseCases) {
 // JobTask module wiring
 // ---------------------------------------------------------------------------
 
-func wireJobTaskDeps(deps *jobtaskmod.ModuleDeps, u *UseCases) {
+func wireJobTaskDeps(deps *operation.JobTaskModuleDeps, u *UseCases) {
 	jt := &u.Operation.JobTask
 	deps.CreateJobTask = jt.CreateJobTask
 	deps.ReadJobTask = jt.ReadJobTask

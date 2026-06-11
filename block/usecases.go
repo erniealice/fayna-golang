@@ -46,8 +46,8 @@ import (
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 
-	fulfillmentdashboard "github.com/erniealice/fayna-golang/domain/fulfillment/views/fulfillment/dashboard"
-	jobdashboard "github.com/erniealice/fayna-golang/domain/operation/views/job/dashboard"
+	fulfillmentdashboard "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
+	jobdashboard "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
 )
 
 // UseCases declares everything fayna's Block() needs from outside.

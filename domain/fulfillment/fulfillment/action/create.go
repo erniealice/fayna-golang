@@ -1,0 +1,83 @@
+package action
+
+import (
+	"context"
+	"log"
+	"net/http"
+	"time"
+
+	fulfillmentform "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/form"
+
+	"github.com/erniealice/pyeza-golang/route"
+	"github.com/erniealice/pyeza-golang/view"
+
+	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// NewAddAction creates the fulfillment add action (GET = form, POST = create).
+func NewAddAction(deps *Deps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("fulfillment", "create") {
+			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
+		}
+
+		if viewCtx.Request.Method == http.MethodGet {
+			return view.OK("fulfillment-add-form", &fulfillmentform.Data{
+				FormAction:   deps.Routes.AddURL,
+				Labels:       deps.Labels,
+				CommonLabels: nil, // injected by ViewAdapter
+			})
+		}
+
+		// POST — create fulfillment
+		if err := viewCtx.Request.ParseForm(); err != nil {
+			return view.HTMXError("Invalid form data")
+		}
+
+		r := viewCtx.Request
+
+		supplierID := r.FormValue("supplier_id")
+
+		var scheduledAtProto *timestamppb.Timestamp
+		if raw := r.FormValue("scheduled_at"); raw != "" {
+			parsed, err := time.Parse("2006-01-02T15:04", raw)
+			if err != nil {
+				return view.HTMXError("Invalid form data")
+			}
+			scheduledAtProto = timestamppb.New(parsed.UTC())
+		}
+
+		resp, err := deps.CreateFulfillment(ctx, &fulfillmentpb.CreateFulfillmentRequest{
+			Data: &fulfillmentpb.Fulfillment{
+				RevenueId:    r.FormValue("revenue_id"),
+				SupplierId:   strPtr(supplierID),
+				DeliveryMode: r.FormValue("delivery_mode"),
+				ScheduledAt:  scheduledAtProto,
+				Notes:        r.FormValue("notes"),
+				Status:       "PENDING",
+			},
+		})
+		if err != nil {
+			log.Printf("Failed to create fulfillment: %v", err)
+			return view.HTMXError(err.Error())
+		}
+
+		newID := ""
+		if data := resp.GetData(); data != nil {
+			newID = data.GetId()
+		}
+		if newID != "" {
+			return view.ViewResult{
+				StatusCode: http.StatusOK,
+				Headers: map[string]string{
+					"HX-Trigger":  `{"formSuccess":true}`,
+					"HX-Redirect": route.ResolveURL(deps.Routes.DetailURL, "id", newID),
+				},
+			}
+		}
+
+		return view.HTMXSuccess("fulfillments-table")
+	})
+}

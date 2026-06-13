@@ -58,7 +58,7 @@ import (
 // Construction is service-admin's job; fayna only declares the shape.
 type UseCases struct {
 	// GetWorkspaceIDFromCtx extracts the workspace ID from a request context.
-	// Wired by service-admin as consumer.GetWorkspaceIDFromContext. Used by the
+	// Wired by service-admin as identity.Must(ctx).WorkspaceID. Used by the
 	// dashboard wrappers (Round 2: in adapters.go) for the empty-workspace
 	// fallback so postgres dashboard queries don't render cross-workspace
 	// aggregates when the view-layer Request omits a workspace_id.

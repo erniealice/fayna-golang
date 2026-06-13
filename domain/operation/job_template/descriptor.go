@@ -13,5 +13,10 @@ func Describe() compose.Unit {
 		LabelJSON: compose.JSONBinding{File: "job_template.json", Key: "job_template"},
 		LabelName: "JobTemplateLabels",
 		Templates: TemplatesFS,
+		Nav: compose.NavContrib{
+			Items: []compose.NavItem{
+				{Key: "job-templates", Route: "job_template.list", Params: map[string]string{"status": "active"}, Label: "Templates", Icon: "icon-copy"},
+			},
+		},
 	}
 }

@@ -13,5 +13,11 @@ func Describe() compose.Unit {
 		LabelJSON: compose.JSONBinding{File: "task_outcome.json", Key: "task_outcome"},
 		LabelName: "TaskOutcomeLabels",
 		Templates: TemplatesFS,
+		Nav: compose.NavContrib{
+			Permission: "task_outcome:list",
+			Items: []compose.NavItem{
+				{Key: "outcome-log", Route: "task_outcome.list", Params: map[string]string{"status": "active"}, Label: "Outcome Log", Icon: "icon-clipboard", Permission: "task_outcome:list"},
+			},
+		},
 	}
 }

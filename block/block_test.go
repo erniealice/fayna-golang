@@ -5,6 +5,14 @@ import (
 	"strings"
 	"testing"
 
+	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
+	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
+	joboutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
+	phaseoutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
+	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
@@ -611,5 +619,263 @@ func TestMustValidate_FullyWired_OK(t *testing.T) {
 	}()
 	if err := uc.MustValidate(&blockConfig{job: true}); err != nil {
 		t.Fatalf("MustValidate(fully wired Job) should be nil, got %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Engine Identity Bridge — WorkflowAssigneeQuery (Phase 7, EIB plan)
+//
+// The engine identity bridge adds Service.Workflow.ListPendingActivitiesForAssignee
+// to fayna's UseCases. It is OPTIONAL (nil-able): nil -> the "My Approvals" view
+// renders empty-state gracefully. RequireFor does not gate on it (same treatment
+// as the Service.Dashboard slots).
+// ---------------------------------------------------------------------------
+
+// TestWorkflowAssigneeQuery_NilClosure_GracefulDegradation proves that a nil
+// Workflow.ListPendingActivitiesForAssignee closure does not break RequireFor
+// or MustValidate — the engine identity bridge is intentionally OPTIONAL.
+func TestWorkflowAssigneeQuery_NilClosure_GracefulDegradation(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCases{}
+	wireJobRequired(uc)
+
+	// Service.Workflow.ListPendingActivitiesForAssignee is nil by default.
+	if uc.Service.Workflow.ListPendingActivitiesForAssignee != nil {
+		t.Fatal("zero-value UseCases should have nil ListPendingActivitiesForAssignee")
+	}
+
+	// RequireFor should still pass (Job fully wired, workflow is optional).
+	if err := uc.RequireFor(&blockConfig{job: true}); err != nil {
+		t.Fatalf("RequireFor(job, nil workflow) should pass, got %v", err)
+	}
+
+	// MustValidate should not panic.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("MustValidate must not panic on nil workflow closure; panicked with %v", r)
+		}
+	}()
+	if err := uc.MustValidate(&blockConfig{job: true}); err != nil {
+		t.Fatalf("MustValidate(job, nil workflow) should pass, got %v", err)
+	}
+}
+
+// TestWorkflowAssigneeQuery_WiredClosure_Callable verifies that when the
+// ListPendingActivitiesForAssignee closure is wired, it can be called and
+// returns the expected response shape.
+func TestWorkflowAssigneeQuery_WiredClosure_Callable(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCases{}
+	uc.Service.Workflow.ListPendingActivitiesForAssignee = func(
+		ctx context.Context,
+		req *WorkflowAssigneeQueryRequest,
+	) (*WorkflowAssigneeQueryResponse, error) {
+		// Simulate an empty result (no pending activities).
+		return &WorkflowAssigneeQueryResponse{
+			Activities: nil,
+			Total:      0,
+		}, nil
+	}
+
+	resp, err := uc.Service.Workflow.ListPendingActivitiesForAssignee(
+		context.Background(),
+		&WorkflowAssigneeQueryRequest{
+			WorkspaceUserID: "ws-user-001",
+			WorkspaceID:     "ws-001",
+			Limit:           10,
+			Offset:          0,
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("response should not be nil")
+	}
+	if resp.Total != 0 {
+		t.Fatalf("expected Total=0, got %d", resp.Total)
+	}
+	if len(resp.Activities) != 0 {
+		t.Fatalf("expected empty Activities slice, got %d items", len(resp.Activities))
+	}
+}
+
+// TestWorkflowAssigneeQuery_EnableAll_DoesNotRequireWorkflow confirms that
+// enableAll (the default Block() mode) does not require the workflow closure.
+func TestWorkflowAssigneeQuery_EnableAll_DoesNotRequireWorkflow(t *testing.T) {
+	t.Parallel()
+
+	// This test mirrors TestRequireFor_EmptyUseCases_EnableAll_Errors but
+	// focuses on proving the workflow slot is NOT in the required set. We
+	// set up a fully-wired UseCases (all REQUIRED closures populated) but
+	// leave Service.Workflow nil — RequireFor must still pass.
+	uc := &UseCases{}
+	wireJobRequired(uc)
+	wireJobTemplateRequired(uc)
+
+	// Wire the remaining enableAll-required modules at minimum.
+	uc.Operation.JobActivity.GetJobActivityListPageData = func(context.Context, *jobactivitypb.GetJobActivityListPageDataRequest) (*jobactivitypb.GetJobActivityListPageDataResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobActivity.ReadJobActivity = func(context.Context, *jobactivitypb.ReadJobActivityRequest) (*jobactivitypb.ReadJobActivityResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobActivity.CreateJobActivity = func(context.Context, *jobactivitypb.CreateJobActivityRequest) (*jobactivitypb.CreateJobActivityResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobActivity.UpdateJobActivity = func(context.Context, *jobactivitypb.UpdateJobActivityRequest) (*jobactivitypb.UpdateJobActivityResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobActivity.DeleteJobActivity = func(context.Context, *jobactivitypb.DeleteJobActivityRequest) (*jobactivitypb.DeleteJobActivityResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobActivity.ListJobActivities = func(context.Context, *jobactivitypb.ListJobActivitiesRequest) (*jobactivitypb.ListJobActivitiesResponse, error) {
+		return nil, nil
+	}
+
+	// Service.Workflow stays nil. RequireFor(enableAll) must pass.
+	if uc.Service.Workflow.ListPendingActivitiesForAssignee != nil {
+		t.Fatal("Service.Workflow should be nil for this test")
+	}
+
+	// Note: RequireFor(enableAll) would fail because we haven't wired
+	// every module (JobPhase, JobTask, OutcomeCriteria, TaskOutcome,
+	// OutcomeSummary, Fulfillment). The point of this test is narrower:
+	// confirm that a nil Workflow closure is never the CAUSE of failure.
+	// Wire the remaining required modules minimally.
+	uc.Operation.JobPhase.CreateJobPhase = func(context.Context, *jobphasepb.CreateJobPhaseRequest) (*jobphasepb.CreateJobPhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobPhase.ReadJobPhase = func(context.Context, *jobphasepb.ReadJobPhaseRequest) (*jobphasepb.ReadJobPhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobPhase.UpdateJobPhase = func(context.Context, *jobphasepb.UpdateJobPhaseRequest) (*jobphasepb.UpdateJobPhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobPhase.DeleteJobPhase = func(context.Context, *jobphasepb.DeleteJobPhaseRequest) (*jobphasepb.DeleteJobPhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobPhase.ListJobPhases = func(context.Context, *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error) {
+		return nil, nil
+	}
+
+	// Fulfillment
+	uc.Fulfillment.GetFulfillmentListPageData = func(context.Context, *fulfillmentpb.GetFulfillmentListPageDataRequest) (*fulfillmentpb.GetFulfillmentListPageDataResponse, error) {
+		return nil, nil
+	}
+	uc.Fulfillment.GetFulfillmentItemPageData = func(context.Context, *fulfillmentpb.GetFulfillmentItemPageDataRequest) (*fulfillmentpb.GetFulfillmentItemPageDataResponse, error) {
+		return nil, nil
+	}
+	uc.Fulfillment.CreateFulfillment = func(context.Context, *fulfillmentpb.CreateFulfillmentRequest) (*fulfillmentpb.CreateFulfillmentResponse, error) {
+		return nil, nil
+	}
+	uc.Fulfillment.UpdateFulfillment = func(context.Context, *fulfillmentpb.UpdateFulfillmentRequest) (*fulfillmentpb.UpdateFulfillmentResponse, error) {
+		return nil, nil
+	}
+	uc.Fulfillment.DeleteFulfillment = func(context.Context, *fulfillmentpb.DeleteFulfillmentRequest) (*fulfillmentpb.DeleteFulfillmentResponse, error) {
+		return nil, nil
+	}
+	uc.Fulfillment.TransitionStatus = func(context.Context, *fulfillmentpb.TransitionStatusRequest) (*fulfillmentpb.TransitionStatusResponse, error) {
+		return nil, nil
+	}
+
+	// JobTemplatePhase CRUD (enableAll requires these beyond the list closures)
+	uc.Operation.JobTemplatePhase.CreateJobTemplatePhase = func(context.Context, *jobtemplatephasepb.CreateJobTemplatePhaseRequest) (*jobtemplatephasepb.CreateJobTemplatePhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplatePhase.ReadJobTemplatePhase = func(context.Context, *jobtemplatephasepb.ReadJobTemplatePhaseRequest) (*jobtemplatephasepb.ReadJobTemplatePhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplatePhase.UpdateJobTemplatePhase = func(context.Context, *jobtemplatephasepb.UpdateJobTemplatePhaseRequest) (*jobtemplatephasepb.UpdateJobTemplatePhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplatePhase.DeleteJobTemplatePhase = func(context.Context, *jobtemplatephasepb.DeleteJobTemplatePhaseRequest) (*jobtemplatephasepb.DeleteJobTemplatePhaseResponse, error) {
+		return nil, nil
+	}
+
+	// JobTemplateTask CRUD
+	uc.Operation.JobTemplateTask.CreateJobTemplateTask = func(context.Context, *jobtemplateTaskpb.CreateJobTemplateTaskRequest) (*jobtemplateTaskpb.CreateJobTemplateTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplateTask.ReadJobTemplateTask = func(context.Context, *jobtemplateTaskpb.ReadJobTemplateTaskRequest) (*jobtemplateTaskpb.ReadJobTemplateTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplateTask.UpdateJobTemplateTask = func(context.Context, *jobtemplateTaskpb.UpdateJobTemplateTaskRequest) (*jobtemplateTaskpb.UpdateJobTemplateTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTemplateTask.DeleteJobTemplateTask = func(context.Context, *jobtemplateTaskpb.DeleteJobTemplateTaskRequest) (*jobtemplateTaskpb.DeleteJobTemplateTaskResponse, error) {
+		return nil, nil
+	}
+
+	// JobTask
+	uc.Operation.JobTask.CreateJobTask = func(context.Context, *jobtaskpb.CreateJobTaskRequest) (*jobtaskpb.CreateJobTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTask.ReadJobTask = func(context.Context, *jobtaskpb.ReadJobTaskRequest) (*jobtaskpb.ReadJobTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTask.UpdateJobTask = func(context.Context, *jobtaskpb.UpdateJobTaskRequest) (*jobtaskpb.UpdateJobTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTask.DeleteJobTask = func(context.Context, *jobtaskpb.DeleteJobTaskRequest) (*jobtaskpb.DeleteJobTaskResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobTask.ListJobTasks = func(context.Context, *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error) {
+		return nil, nil
+	}
+
+	// OutcomeCriteria
+	uc.Operation.OutcomeCriteria.CreateOutcomeCriteria = func(context.Context, *criteriapb.CreateOutcomeCriteriaRequest) (*criteriapb.CreateOutcomeCriteriaResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.OutcomeCriteria.ReadOutcomeCriteria = func(context.Context, *criteriapb.ReadOutcomeCriteriaRequest) (*criteriapb.ReadOutcomeCriteriaResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.OutcomeCriteria.UpdateOutcomeCriteria = func(context.Context, *criteriapb.UpdateOutcomeCriteriaRequest) (*criteriapb.UpdateOutcomeCriteriaResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.OutcomeCriteria.DeleteOutcomeCriteria = func(context.Context, *criteriapb.DeleteOutcomeCriteriaRequest) (*criteriapb.DeleteOutcomeCriteriaResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.OutcomeCriteria.ListOutcomeCriterias = func(context.Context, *criteriapb.ListOutcomeCriteriasRequest) (*criteriapb.ListOutcomeCriteriasResponse, error) {
+		return nil, nil
+	}
+
+	// TaskOutcome
+	uc.Operation.TaskOutcome.CreateTaskOutcome = func(context.Context, *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.TaskOutcome.ReadTaskOutcome = func(context.Context, *taskoutcomepb.ReadTaskOutcomeRequest) (*taskoutcomepb.ReadTaskOutcomeResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.TaskOutcome.UpdateTaskOutcome = func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.TaskOutcome.DeleteTaskOutcome = func(context.Context, *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.TaskOutcome.ListTaskOutcomes = func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error) {
+		return nil, nil
+	}
+
+	// OutcomeSummary
+	uc.Operation.JobOutcomeSummary.GetByJob = func(context.Context, *joboutcomesumpb.GetJobOutcomeSummaryByJobRequest) (*joboutcomesumpb.GetJobOutcomeSummaryByJobResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.JobOutcomeSummary.ListJobOutcomeSummaries = func(context.Context, *joboutcomesumpb.ListJobOutcomeSummarysRequest) (*joboutcomesumpb.ListJobOutcomeSummarysResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.PhaseOutcomeSummary.GetByJobPhase = func(context.Context, *phaseoutcomesumpb.GetPhaseOutcomeSummaryByJobPhaseRequest) (*phaseoutcomesumpb.GetPhaseOutcomeSummaryByJobPhaseResponse, error) {
+		return nil, nil
+	}
+	uc.Operation.PhaseOutcomeSummary.ListByJob = func(context.Context, *phaseoutcomesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phaseoutcomesumpb.ListPhaseOutcomeSummarysByJobResponse, error) {
+		return nil, nil
+	}
+
+	// Now try enableAll — Workflow is nil but should not be a problem.
+	if err := uc.RequireFor(&blockConfig{enableAll: true}); err != nil {
+		t.Fatalf("RequireFor(enableAll, nil workflow) should pass; got %v", err)
 	}
 }

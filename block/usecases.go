@@ -48,6 +48,7 @@ import (
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
+	activitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/workflow/activity"
 
 	fulfillmentdashboard "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
 	jobdashboard "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
@@ -278,12 +279,51 @@ type EntityStaffUseCases struct {
 	ListStaffs func(context.Context, *staffpb.ListStaffsRequest) (*staffpb.ListStaffsResponse, error)
 }
 
-// ServiceUseCases — service-driven dashboards. The Dashboard func slots return
-// the fayna VIEW types: proto→view translation is service-admin's job (Round 2,
-// adapters.go), where both the proto Response and the fayna view Response are
-// importable without a dependency cycle. nil until Round 2 wires them.
+// ServiceUseCases — service-driven dashboards + engine identity bridge. The
+// Dashboard func slots return the fayna VIEW types: proto→view translation is
+// service-admin's job (Round 2, adapters.go), where both the proto Response and
+// the fayna view Response are importable without a dependency cycle. nil until
+// Round 2 wires them.
 type ServiceUseCases struct {
 	Dashboard DashboardUseCases
+
+	// Workflow carries the engine identity bridge (read-only). The closure
+	// wraps espyna's WorkflowAssigneeQueryService.ListPendingActivitiesForAssignee
+	// so that view modules can render a "My Approvals" / "Assigned to Me"
+	// queue without importing espyna or knowing the bridge SQL shape. The
+	// two identity inputs (workspace_user_id, workspace_id) are sourced
+	// from session context by service-admin's adapter closure — the view
+	// layer passes them through the request struct but NEVER reads them
+	// from wire / form params.
+	//
+	// OPTIONAL — nil until the engine identity bridge is wired (Phase 5).
+	// nil → "My Approvals" view renders empty-state gracefully.
+	Workflow WorkflowUseCases
+}
+
+// WorkflowUseCases — engine identity bridge read surface. Fields are OPTIONAL
+// (nil-able); fayna's RequireFor does not gate on them because the bridge is a
+// downstream capability that degrades gracefully to empty-state.
+type WorkflowUseCases struct {
+	// ListPendingActivitiesForAssignee returns engine activities assigned to
+	// the logged-in human, scoped to the active workspace. nil → empty-state.
+	ListPendingActivitiesForAssignee func(ctx context.Context, req *WorkflowAssigneeQueryRequest) (*WorkflowAssigneeQueryResponse, error)
+}
+
+// WorkflowAssigneeQueryRequest carries the identity inputs for the engine
+// identity bridge query. Both WorkspaceUserID and WorkspaceID are sourced
+// from session context by the adapter closure — NEVER from request params.
+type WorkflowAssigneeQueryRequest struct {
+	WorkspaceUserID string
+	WorkspaceID     string
+	Limit           int
+	Offset          int
+}
+
+// WorkflowAssigneeQueryResponse wraps the query results.
+type WorkflowAssigneeQueryResponse struct {
+	Activities []*activitypb.Activity
+	Total      int
 }
 
 type DashboardUseCases struct {

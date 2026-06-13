@@ -184,10 +184,13 @@ func handleFunc(r pyeza.RouteRegistrar, method, path string, handler http.Handle
 // listSimpler — minimal DB interface for location search (avoids centymo import).
 // ---------------------------------------------------------------------------
 
-// listSimpler is satisfied by centymo.DataSource and espyna's DatabaseAdapter.
-type listSimpler interface {
+// ListSimpler is satisfied by centymo.DataSource and espyna's DatabaseAdapter.
+type ListSimpler interface {
 	ListSimple(ctx context.Context, collection string) ([]map[string]any, error)
 }
+
+// listSimpler is the internal alias used throughout block.go.
+type listSimpler = ListSimpler
 
 // ---------------------------------------------------------------------------
 // Search handler builders for job drawer auto-complete pickers.

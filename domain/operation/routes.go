@@ -21,6 +21,8 @@ import (
 	outcomecritetriapkg "github.com/erniealice/fayna-golang/domain/operation/outcome_criteria"
 	outcomesummarypkg "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	taskoutcomepkg "github.com/erniealice/fayna-golang/domain/operation/task_outcome"
+	workrequestpkg "github.com/erniealice/fayna-golang/domain/operation/work_request"
+	workrequesttypepkg "github.com/erniealice/fayna-golang/domain/operation/work_request_type"
 )
 
 // Default route constants for operation (job) views.
@@ -203,6 +205,28 @@ const (
 	ActivityExpenseExpenseCategorySearchURL = "/action/activity-expense/search/expense-categories"
 )
 
+// Work Request routes
+const (
+	WorkRequestListURL      = "/app/requests/list/{status}"
+	WorkRequestDetailURL    = "/app/requests/detail/{id}"
+	WorkRequestTableURL     = "/action/work_request/table/{status}"
+	WorkRequestTabActionURL = "/action/work_request/tab/{id}/{tab}"
+	WorkRequestAddURL       = "/action/work_request/add"
+	WorkRequestEditURL      = "/action/work_request/edit/{id}"
+	WorkRequestSetStatusURL = "/action/work_request/set-status/{id}"
+	WorkRequestAssignURL    = "/action/work_request/assign/{id}"
+	WorkRequestBulkAssignURL = "/action/work_request/bulk-assign"
+	WorkRequestResolveURL   = "/action/work_request/resolve/{id}"
+)
+
+// Work Request Type (catalog) routes
+const (
+	WorkRequestTypeListURL  = "/app/request-types/list/{status}"
+	WorkRequestTypeTableURL = "/action/work_request_type/table/{status}"
+	WorkRequestTypeAddURL   = "/action/work_request_type/add"
+	WorkRequestTypeEditURL  = "/action/work_request_type/edit/{id}"
+)
+
 // ---------------------------------------------------------------------------
 // Route type aliases — these make operation.XxxRoutes identical to
 // the entity-package Routes type (same struct, same methods).
@@ -221,6 +245,8 @@ type ActivityExpenseRoutes = activityexpensepkg.Routes
 type OutcomeCriteriaRoutes = outcomecritetriapkg.Routes
 type TaskOutcomeRoutes = taskoutcomepkg.Routes
 type OutcomeSummaryRoutes = outcomesummarypkg.Routes
+type WorkRequestRoutes = workrequestpkg.Routes
+type WorkRequestTypeRoutes = workrequesttypepkg.Routes
 
 // ---------------------------------------------------------------------------
 // Default route constructors — delegate to entity packages.
@@ -243,3 +269,5 @@ func DefaultActivityExpenseRoutes() ActivityExpenseRoutes { return activityexpen
 func DefaultOutcomeCriteriaRoutes() OutcomeCriteriaRoutes { return outcomecritetriapkg.DefaultRoutes() }
 func DefaultTaskOutcomeRoutes() TaskOutcomeRoutes         { return taskoutcomepkg.DefaultRoutes() }
 func DefaultOutcomeSummaryRoutes() OutcomeSummaryRoutes   { return outcomesummarypkg.DefaultRoutes() }
+func DefaultWorkRequestRoutes() WorkRequestRoutes        { return workrequestpkg.DefaultRoutes() }
+func DefaultWorkRequestTypeRoutes() WorkRequestTypeRoutes { return workrequesttypepkg.DefaultRoutes() }

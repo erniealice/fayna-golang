@@ -25,6 +25,8 @@ import (
 	outcomecritetriapkg "github.com/erniealice/fayna-golang/domain/operation/outcome_criteria"
 	outcomesummarypkg "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	taskoutcomepkg "github.com/erniealice/fayna-golang/domain/operation/task_outcome"
+	workrequestpkg "github.com/erniealice/fayna-golang/domain/operation/work_request"
+	workrequesttypepkg "github.com/erniealice/fayna-golang/domain/operation/work_request_type"
 )
 
 // ---------------------------------------------------------------------------
@@ -140,3 +142,21 @@ func DefaultTaskOutcomeLabels() TaskOutcomeLabels { return taskoutcomepkg.Defaul
 type OutcomeSummaryLabels = outcomesummarypkg.Labels
 
 func DefaultOutcomeSummaryLabels() OutcomeSummaryLabels { return outcomesummarypkg.DefaultLabels() }
+
+// ---------------------------------------------------------------------------
+// WorkRequest label types (operation/work_request)
+// ---------------------------------------------------------------------------
+
+type WorkRequestLabels = workrequestpkg.Labels
+
+func DefaultWorkRequestLabels() WorkRequestLabels { return workrequestpkg.DefaultLabels() }
+
+// ---------------------------------------------------------------------------
+// WorkRequestType label types (operation/work_request_type)
+// ---------------------------------------------------------------------------
+
+type WorkRequestTypeLabels = workrequesttypepkg.Labels
+
+func DefaultWorkRequestTypeLabels() WorkRequestTypeLabels {
+	return workrequesttypepkg.DefaultLabels()
+}

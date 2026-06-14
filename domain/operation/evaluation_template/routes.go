@@ -14,9 +14,13 @@ const (
 	TableURL         = "/action/evaluation_template/table/{status}"
 	AddURL           = "/action/evaluation_template/add"
 	EditURL          = "/action/evaluation_template/edit/{id}"
-	ActivateURL      = "/action/evaluation_template/{id}/activate"
-	DeprecateURL     = "/action/evaluation_template/{id}/deprecate"
-	CloneURL         = "/action/evaluation_template/{id}/clone"
+	// Verb-first (verb/{id}) to match the centymo/entydad mutation-route
+	// convention and avoid Go 1.22+ ServeMux ambiguity with EditURL above
+	// (id-first {id}/verb and verb-first edit/{id} at the same depth cannot
+	// disambiguate, e.g. "/action/evaluation_template/edit/activate").
+	ActivateURL      = "/action/evaluation_template/activate/{id}"
+	DeprecateURL     = "/action/evaluation_template/deprecate/{id}"
+	CloneURL         = "/action/evaluation_template/clone/{id}"
 	BulkDeprecateURL = "/action/evaluation_template/bulk/deprecate"
 	TabActionURL     = "/action/evaluation_template/tab/{id}/{tab}"
 )

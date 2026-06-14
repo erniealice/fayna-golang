@@ -7,9 +7,13 @@ package evaluation_template_item
 // dot.snake_case on the proto domain name ("evaluation_template_item.*").
 
 const (
-	AddURL    = "/action/evaluation_template_item/add"
-	EditURL   = "/action/evaluation_template_item/edit/{item_id}"
-	RemoveURL = "/action/evaluation_template_item/{item_id}/remove"
+	AddURL  = "/action/evaluation_template_item/add"
+	EditURL = "/action/evaluation_template_item/edit/{item_id}"
+	// Verb-first (verb/{item_id}) to match the centymo/entydad mutation-route
+	// convention and avoid Go 1.22+ ServeMux ambiguity with EditURL above
+	// (id-first {item_id}/verb and verb-first edit/{item_id} at the same depth
+	// cannot disambiguate, e.g. "/action/evaluation_template_item/edit/remove").
+	RemoveURL = "/action/evaluation_template_item/remove/{item_id}"
 )
 
 // Routes holds the rubric-item drawer route paths.

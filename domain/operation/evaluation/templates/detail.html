@@ -85,7 +85,7 @@
     {{if eq .Evaluation.status "submitted"}}
     <button type="button"
             class="btn btn-primary"
-            hx-post="/action/evaluation/{{.Evaluation.id}}/sign-off"
+            hx-post="{{routeWith "evaluation.sign_off" "id" .Evaluation.id}}"
             hx-swap="none"
             data-testid="evaluation-sign-off-btn">{{.Labels.Actions.SignOff}}</button>
     {{else}}

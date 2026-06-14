@@ -14,8 +14,11 @@ const (
 	DetailURL        = "/app/evaluation-cycles/detail/{id}"
 	TableURL         = "/action/evaluation_cycle/table/{status}"
 	AddURL           = "/action/evaluation_cycle/add"
-	OpenURL          = "/action/evaluation_cycle/{id}/open"
-	CloseURL         = "/action/evaluation_cycle/{id}/close"
+	// Verb-first (verb/{id}) to match the centymo/entydad mutation-route
+	// convention (consistent with the rest of the evaluation domain; avoids
+	// any Go 1.22+ ServeMux ambiguity with verb-first peers at the same depth).
+	OpenURL          = "/action/evaluation_cycle/open/{id}"
+	CloseURL         = "/action/evaluation_cycle/close/{id}"
 	MembersTabURL    = "/action/evaluation_cycle/tab/{id}/members"
 )
 

@@ -25,10 +25,15 @@ const (
 	EditURL          = "/action/evaluation/edit/{id}"
 	DimensionSlotURL = "/action/evaluation/dimension-slot"
 
-	// Named lifecycle actions
-	SignOffURL = "/action/evaluation/{id}/sign-off"
-	ArchiveURL = "/action/evaluation/{id}/archive"
-	DeleteURL  = "/action/evaluation/{id}/delete"
+	// Named lifecycle actions.
+	// Verb-first (verb/{id}) to match the centymo/entydad mutation-route
+	// convention and avoid Go 1.22+ ServeMux ambiguity with EditURL
+	// ("/action/evaluation/edit/{id}"): id-first ({id}/verb) and verb-first
+	// (edit/{id}) patterns at the same depth cannot disambiguate
+	// (e.g. "/action/evaluation/edit/sign-off" matches both).
+	SignOffURL = "/action/evaluation/sign-off/{id}"
+	ArchiveURL = "/action/evaluation/archive/{id}"
+	DeleteURL  = "/action/evaluation/delete/{id}"
 
 	// Bulk
 	BulkArchiveURL = "/action/evaluation/bulk/archive"

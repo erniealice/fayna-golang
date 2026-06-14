@@ -1,0 +1,66 @@
+{{/*
+  evaluation_cycle-drawer-form.html — cycle CREATE drawer (pages.md §F.1 primary
+  action "+ New Cycle"). Collects name, subscription_id (engagement scope),
+  period_start/end, sign_off_due_date, close_date → CreateEvaluationCycle.
+  NO member materialize on create — enrolment happens via Open (OpenUseCase).
+
+  Field ids = proto field names [FORM-001]. Consumes form.Data.
+*/}}
+{{define "evaluation_cycle-drawer-form"}}
+<form class="drawer-form"
+      data-testid="evaluation_cycle-drawer-form"
+      hx-post="{{.FormAction}}"
+      hx-swap="none">
+
+    {{if .WorkspaceID}}<input type="hidden" name="workspace_id" value="{{.WorkspaceID}}">{{end}}
+    {{if .IsEdit}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="form-group">
+        <label class="form-label" for="name">{{.Labels.Form.Name}}</label>
+        <input class="form-input" type="text" id="name" name="name"
+               value="{{.Name}}"
+               placeholder="{{.Labels.Form.NamePlaceholder}}"
+               data-testid="name" required>
+    </div>
+
+    <div class="form-group">
+        <label class="form-label" for="subscription_id">{{.Labels.Form.Subscription}}</label>
+        <input class="form-input" type="text" id="subscription_id" name="subscription_id"
+               value="{{.SubscriptionID}}"
+               data-testid="subscription_id">
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label class="form-label" for="period_start">{{.Labels.Form.PeriodStart}}</label>
+            <input class="form-input" type="date" id="period_start" name="period_start"
+                   value="{{.PeriodStart}}" data-testid="period_start" required>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="period_end">{{.Labels.Form.PeriodEnd}}</label>
+            <input class="form-input" type="date" id="period_end" name="period_end"
+                   value="{{.PeriodEnd}}" data-testid="period_end" required>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label class="form-label" for="sign_off_due_date">{{.Labels.Form.SignOffDueDate}}</label>
+            <input class="form-input" type="date" id="sign_off_due_date" name="sign_off_due_date"
+                   value="{{.SignOffDueDate}}" data-testid="sign_off_due_date">
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="close_date">{{.Labels.Form.CloseDate}}</label>
+            <input class="form-input" type="date" id="close_date" name="close_date"
+                   value="{{.CloseDate}}" data-testid="close_date">
+        </div>
+    </div>
+
+    <div class="drawer-footer">
+        <button type="button" class="btn btn--ghost" data-drawer-close>Cancel</button>
+        <button type="submit" class="btn btn--primary" data-testid="evaluation_cycle-list-add">
+            {{.Labels.Buttons.NewCycle}}
+        </button>
+    </div>
+</form>
+{{end}}

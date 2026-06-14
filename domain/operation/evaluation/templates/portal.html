@@ -1,0 +1,51 @@
+{{/* Full page — client-portal "Rate My Team" (Surface 5) */}}
+{{define "evaluation-portal"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — HTMX navigation */}}
+{{define "evaluation-portal-content"}}
+<div class="page-content" data-testid="rate-my-team-page">
+    <header class="portal-header">
+        <h1>{{.Labels.Portal.Heading}}</h1>
+        <p class="muted">{{.Labels.Portal.Caption}}</p>
+    </header>
+    <div id="rate-my-team-roster">
+        {{template "evaluation-portal-roster" .}}
+    </div>
+</div>
+{{end}}
+
+{{/* Roster cards (HTMX roster-refresh target) */}}
+{{define "evaluation-portal-roster"}}
+{{if .IsEmpty}}
+{{/* Empty-state ASSERTS the IDOR boundary (TEST-1): a client with no roster —
+     or a nil acting_as_client_id (deny-before-SQL in the closure) — lands here. */}}
+<div class="portal-empty" data-testid="client-eval-list-empty">
+    <h3>{{.Labels.Portal.EmptyTitle}}</h3>
+    <p class="muted">{{.Labels.Portal.EmptyMessage}}</p>
+</div>
+{{else}}
+<ul class="associate-card-grid" role="list">
+    {{range .Cards}}
+    <li class="associate-card" data-testid="{{.CardTestID}}" data-staff-id="{{.StaffID}}">
+        <div class="associate-card__head">
+            <span class="associate-card__name">{{.StaffID}}</span>
+            <span class="badge badge--{{.StatusVariant}}">{{.StatusLabel}}</span>
+        </div>
+        <dl class="associate-card__meta">
+            <dt>{{$.Labels.Detail.Period}}</dt><dd>{{.Period}}</dd>
+            <dt>{{$.Labels.Portal.Rating}}</dt>
+            <dd><span data-testid="{{.RatingTestID}}">{{.Rating}}</span></dd>
+        </dl>
+        <button type="button"
+                class="btn btn-primary"
+                hx-get="{{.StartURL}}"
+                hx-target="#sheetContent"
+                hx-swap="innerHTML"
+                data-testid="{{.StartTestID}}">{{$.Labels.Portal.StartReview}}</button>
+    </li>
+    {{end}}
+</ul>
+{{end}}
+{{end}}

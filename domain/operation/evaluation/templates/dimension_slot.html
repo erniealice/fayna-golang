@@ -1,0 +1,91 @@
+{{/*
+dimension_slot.html — the POLYMORPHIC slot fragment (§A.2). HTMX-swapped into
+#evaluation-dimension-slot when the template picker changes. Renders one
+form-group per evaluation_template_item (in sequence_order), the INPUT branching
+on the linked OutcomeCriteria.criteria_type across ALL 5 branches. Each answer
+maps to a different evaluation_response column (numeric/pass_fail/categorical/text).
+
+Data: form.SlotData — .TemplateID .Dimensions .Labels .CommonLabels
+Per-dimension (form.Dimension): .CriteriaID .Label .Prompt .Kind .Weight
+.Required .MinScore .MaxScore .Options .Scored .InputTestID .BarTestID
+
+A hidden dim_type_{criteria_id} carries the branch so the POST handler picks the
+right evaluation_response column. The score input name is dim_{criteria_id}.
+*/}}
+{{define "evaluation-dimension-slot"}}
+{{$labels := .Labels}}
+<fieldset class="eval-dimensions" aria-label="Rubric dimensions">
+    {{range .Dimensions}}
+    <div class="form-group eval-dimension" data-criteria-id="{{.CriteriaID}}">
+        <label class="form-label" for="dim_{{.CriteriaID}}">
+            {{.Label}}{{if .Required}} <span class="form-required" aria-hidden="true">*</span>{{end}}
+            <span class="eval-weight-chip" title="{{$labels.Dimension.WeightChip}}">{{$labels.Dimension.WeightChip}} {{printf "%.2f" .Weight}}</span>
+        </label>
+        {{if .Prompt}}<p class="form-hint">{{.Prompt}}</p>{{end}}
+
+        {{/* dim_type_ carries the criteria_type branch to the POST handler */}}
+        <input type="hidden" name="dim_type_{{.CriteriaID}}" value="{{.Kind}}">
+
+        {{if or (eq .Kind "NUMERIC_SCORE") (eq .Kind "NUMERIC_RANGE")}}
+        {{/* NUMERIC → number input + live rating bar (role=progressbar) */}}
+        <input type="number"
+               id="dim_{{.CriteriaID}}"
+               name="dim_{{.CriteriaID}}"
+               class="form-input"
+               min="{{.MinScore}}"
+               max="{{.MaxScore}}"
+               step="1"
+               {{if .Required}}required{{end}}
+               data-testid="{{.InputTestID}}"
+               aria-describedby="dim-bar-{{.CriteriaID}}">
+        <div class="lf-rating-bar"
+             id="dim-bar-{{.CriteriaID}}"
+             role="progressbar"
+             aria-valuemin="{{.MinScore}}"
+             aria-valuemax="{{.MaxScore}}"
+             aria-valuenow="0"
+             data-testid="{{.BarTestID}}">
+            <span class="lf-rating-bar__fill"></span>
+        </div>
+
+        {{else if eq .Kind "PASS_FAIL"}}
+        {{/* PASS_FAIL → radiogroup → pass_fail_value */}}
+        <div class="eval-radiogroup" role="radiogroup" aria-label="{{.Label}}" data-testid="{{.InputTestID}}">
+            <label class="eval-radio">
+                <input type="radio" name="dim_{{.CriteriaID}}" value="pass" {{if .Required}}required{{end}}>
+                <span>{{$labels.Dimension.Pass}}</span>
+            </label>
+            <label class="eval-radio">
+                <input type="radio" name="dim_{{.CriteriaID}}" value="fail">
+                <span>{{$labels.Dimension.Fail}}</span>
+            </label>
+        </div>
+
+        {{else if eq .Kind "CATEGORICAL"}}
+        {{/* CATEGORICAL → select → categorical_value */}}
+        <select id="dim_{{.CriteriaID}}"
+                name="dim_{{.CriteriaID}}"
+                class="form-select"
+                {{if .Required}}required{{end}}
+                data-testid="{{.InputTestID}}">
+            <option value="">{{$labels.Dimension.Select}}</option>
+            {{range .Options}}
+            <option value="{{.Value}}">{{.Label}}</option>
+            {{end}}
+        </select>
+
+        {{else}}
+        {{/* TEXT / MULTI_CHECK → textarea → text_value (not scored) */}}
+        <textarea id="dim_{{.CriteriaID}}"
+                  name="dim_{{.CriteriaID}}"
+                  class="form-textarea"
+                  rows="3"
+                  {{if .Required}}required{{end}}
+                  data-testid="{{.InputTestID}}"></textarea>
+        {{end}}
+
+        {{if not .Scored}}<p class="form-hint muted">{{$labels.Dimension.NotScored}}</p>{{end}}
+    </div>
+    {{end}}
+</fieldset>
+{{end}}

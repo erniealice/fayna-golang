@@ -1,0 +1,78 @@
+{{/*
+Evaluation score-submission drawer (DF-1, POLYMORPHIC) — loaded into #sheetContent
+via HTMX. Used by both Add (FormAction = AddURL) and Edit (FormAction = EditURL).
+Data: form.Data — .FormAction .WorkspaceID .IsEdit .ID .TemplateID .SeatID
+.PeriodStart .PeriodEnd .Narrative .DimensionSlotURL .Slot .Labels .CommonLabels
+
+§A.1: header is STATIC (proto-field-id = proto name); the dimension slot is the
+polymorphic region driven by the template picker. client_id / subject_staff_id /
+subscription_seat_id / subscription_id are NEVER form fields (server-locked, IDOR).
+*/}}
+{{define "evaluation-drawer-form"}}
+<form hx-post="{{.FormAction}}"
+      hx-swap="none"
+      data-hx-on="sheet-response"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="eval-drawer-title"
+      data-testid="evaluation-form-drawer">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-header">
+        <h2 id="eval-drawer-title">{{.Labels.Drawer.Title}}</h2>
+    </div>
+
+    <div class="sheet-body">
+        {{/* --- Template picker (HTMX trigger → swaps the dimension slot) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "evaluation_template_id"
+                "ID" "evaluation_template_id"
+                "Label" .Labels.Drawer.Template
+                "Value" .TemplateID
+                "Placeholder" .Labels.Drawer.TemplatePick
+                "Required" true
+                "TestId" "eval-template-picker"
+            )}}
+        </div>
+        <div hx-trigger="change from:#evaluation_template_id"
+             hx-get="{{.DimensionSlotURL}}"
+             hx-include="#evaluation_template_id"
+             hx-target="#evaluation-dimension-slot"
+             hx-swap="innerHTML"
+             hidden></div>
+
+        {{/* --- Period --- */}}
+        <div class="form-row">
+            {{template "form-group" (dict "Type" "date" "Name" "period_start" "Label" .Labels.Drawer.PeriodStart "Value" .PeriodStart)}}
+            {{template "form-group" (dict "Type" "date" "Name" "period_end" "Label" .Labels.Drawer.PeriodEnd "Value" .PeriodEnd)}}
+        </div>
+
+        {{/* --- POLYMORPHIC dimension slot (§A.2) --- */}}
+        <div id="evaluation-dimension-slot">
+            {{template "evaluation-dimension-slot" .Slot}}
+        </div>
+
+        {{/* --- Narrative --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "narrative"
+                "ID" "narrative"
+                "Label" .Labels.Drawer.Narrative
+                "Value" .Narrative
+                "Placeholder" .Labels.Form.NarrativePlaceholder
+                "TestId" "evaluation-narrative"
+            )}}
+        </div>
+    </div>
+
+    <div class="sheet-footer">
+        <button type="button" class="btn btn-ghost" data-sheet-cancel>{{.Labels.Drawer.Cancel}}</button>
+        <button type="submit" class="btn btn-secondary" name="intent" value="draft" data-testid="evaluation-save-draft-btn">{{.Labels.Drawer.SaveDraft}}</button>
+        <button type="submit" class="btn btn-primary" name="intent" value="submit" data-testid="evaluation-submit-btn">{{.Labels.Drawer.Submit}}</button>
+    </div>
+</form>
+{{end}}

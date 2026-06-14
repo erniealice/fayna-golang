@@ -1,0 +1,27 @@
+{{/* Full page — direct / non-HTMX access (Surface 1, staff Reviews list) */}}
+{{define "evaluation-list"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — HTMX navigation */}}
+{{define "evaluation-list-content"}}
+<div class="page-content page-content--table" data-testid="evaluation-list-page">
+    {{template "evaluation-status-tabs" .}}
+    {{template "table-card" .Table}}
+</div>
+{{end}}
+
+{{/* Status filter tabs (draft / submitted / signed_off / archived / all) */}}
+{{define "evaluation-status-tabs"}}
+<nav class="status-tabs" aria-label="{{.Labels.Page.Heading}}">
+    {{range .StatusTabs}}
+    <a class="status-tab{{if .Active}} status-tab--active{{end}}"
+       href="{{.Href}}"
+       hx-get="{{.HxGet}}"
+       hx-target="#evaluation-list-table"
+       hx-swap="outerHTML"
+       data-testid="{{.TestID}}"
+       {{if .Active}}aria-current="page"{{end}}>{{.Label}}</a>
+    {{end}}
+</nav>
+{{end}}

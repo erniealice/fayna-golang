@@ -1,0 +1,50 @@
+{{/*
+  members-tab.html — the cycle Members tab partial (evaluation_cycle_member).
+
+  evaluation_cycle_member has NO standalone list page (STR-1) — it surfaces only
+  here. The member count rendered = Y, the frozen denominator of the X-of-Y
+  banner (TEST-2). testid `evaluation-cycle-tab-evaluations` (pages.md §F.4).
+
+  Consumes the evaluation_cycle detail.PageData shape:
+    .Members      []map{ id, subject_staff_id, client_id, is_probation }
+    .MemberCount  int  (= Y)
+    .Labels       evaluation_cycle.Labels
+*/}}
+{{define "evaluation-cycle-members-tab"}}
+<div class="tab-scroll"
+     data-testid="evaluation-cycle-tab-evaluations"
+     data-member-count="{{.MemberCount}}"
+     aria-label="{{.Labels.Tabs.Members}}">
+    <h4 class="section-title">{{.Labels.Tabs.Members}} ({{.MemberCount}})</h4>
+
+    {{if .Members}}
+    <table class="lf-table" data-testid="evaluation-cycle-members-table">
+        <thead>
+            <tr>
+                <th>{{.Labels.Detail.Engagement}}</th>
+                <th>{{.Labels.Detail.Name}}</th>
+                <th>{{.Labels.Detail.Status}}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Members}}
+            <tr data-testid="evaluation-cycle-member-row-{{index . "id"}}">
+                <td>{{index . "client_id"}}</td>
+                <td>{{index . "subject_staff_id"}}</td>
+                <td>
+                    {{if index . "is_probation"}}
+                    <span class="badge badge--warning">Probation</span>
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="coming-soon-panel" data-testid="evaluation-cycle-members-empty">
+        <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+        <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+    </div>
+    {{end}}
+</div>
+{{end}}

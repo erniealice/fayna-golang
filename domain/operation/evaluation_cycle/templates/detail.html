@@ -1,0 +1,66 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "evaluation-cycle-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "evaluation-cycle-detail-content"}}
+<div class="page-content" data-testid="evaluation-cycle-detail-page">
+    {{/* Shared X-of-Y progress banner (read projection — NOT a form) */}}
+    {{if .Banner}}
+    {{template "cycle-progress-banner" .Banner}}
+    {{end}}
+
+    {{/* Tabs: Info / Members */}}
+    <div class="detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "evaluation-cycle-tabs")}}
+    </div>
+
+    <div id="tabContent" class="detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "members"}}
+        {{template "evaluation-cycle-members-tab" .}}
+        {{else}}
+        {{template "evaluation-cycle-tab-info" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "evaluation-cycle-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="info-grid">
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.Name}}</span>
+            <span class="info-value">{{index .Cycle "name"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.Engagement}}</span>
+            <span class="info-value">{{index .Cycle "subscription_id"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.Period}}</span>
+            <span class="info-value">{{index .Cycle "period_start"}} → {{index .Cycle "period_end"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.SignOffDue}}</span>
+            <span class="info-value">{{index .Cycle "sign_off_due_date"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.Closes}}</span>
+            <span class="info-value">{{index .Cycle "close_date"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.Status}}</span>
+            <span>
+                <span class="badge badge--{{index .Cycle "status_variant"}}">
+                    {{index .Cycle "status"}}
+                </span>
+            </span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{/* Members Tab partial is defined in members-tab.html (evaluation_cycle_member) */}}

@@ -32,6 +32,12 @@ import (
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
+	evalpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation"
+	evalcyclepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_cycle"
+	evalcyclememberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_cycle_member"
+	evalresppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_response"
+	evaltemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template"
+	evaltemplateitempb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template_item"
 	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
 	activitylaborpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_labor"
 	activitymaterialpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_material"
@@ -51,7 +57,9 @@ import (
 	activitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/workflow/activity"
 
 	fulfillmentdashboard "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
+	cycleview "github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
 	jobdashboard "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
+	performanceview "github.com/erniealice/fayna-golang/domain/operation/performance"
 )
 
 // UseCases declares everything fayna's Block() needs from outside.
@@ -110,6 +118,19 @@ type OperationUseCases struct {
 	ActivityLabor    ActivityLaborUseCases
 	ActivityMaterial ActivityMaterialUseCases
 	ActivityExpense  ActivityExpenseUseCases
+
+	// Performance-Evaluation domain (20260604) — OPTIONAL / nil-able. NOT in
+	// RequireFor: the eval units have no cfg.wantXxx() gate, so a missing closure
+	// degrades to empty-state rather than a boot refusal. service-admin's
+	// buildFaynaUseCases (adapters_fayna.go) is the espyna→block adapter that
+	// populates these; until that lands they stay nil and the eval views render
+	// empty-state. All IDOR / CR-5 servicing gates live inside the closures
+	// (espyna QUERY PREDICATE); the view supplies no client_id.
+	Evaluation           EvaluationUseCases
+	EvaluationTemplate   EvaluationTemplateUseCases
+	EvaluationTemplateItem EvaluationTemplateItemUseCases
+	EvaluationCycle      EvaluationCycleUseCases
+	EvaluationCycleMember EvaluationCycleMemberUseCases
 }
 
 // JobUseCases — Job CRUD + list + the cross-tab reads the Job module needs.
@@ -243,6 +264,86 @@ type ActivityExpenseUseCases struct {
 	ListActivityExpenses  func(context.Context, *activityexpensepb.ListActivityExpensesRequest) (*activityexpensepb.ListActivityExpensesResponse, error)
 }
 
+// ---------------------------------------------------------------------------
+// Performance-Evaluation domain (20260604) — OPTIONAL / nil-able use-case groups.
+// Field names + closure signatures mirror the eval entity ModuleDeps in
+// domain/operation/. Wired by service-admin's buildFaynaUseCases adapter.
+// ---------------------------------------------------------------------------
+
+// EvaluationUseCases — Evaluation CRUD + page-data + lifecycle + responses +
+// the polymorphic dimension slot's template-item read. All servicing-/IDOR-gated
+// inside the closures (the view supplies no client_id).
+type EvaluationUseCases struct {
+	CreateEvaluation func(ctx context.Context, req *evalpb.CreateEvaluationRequest) (*evalpb.CreateEvaluationResponse, error)
+	ReadEvaluation   func(ctx context.Context, req *evalpb.ReadEvaluationRequest) (*evalpb.ReadEvaluationResponse, error)
+	UpdateEvaluation func(ctx context.Context, req *evalpb.UpdateEvaluationRequest) (*evalpb.UpdateEvaluationResponse, error)
+	DeleteEvaluation func(ctx context.Context, req *evalpb.DeleteEvaluationRequest) (*evalpb.DeleteEvaluationResponse, error)
+	ListEvaluations  func(ctx context.Context, req *evalpb.ListEvaluationsRequest) (*evalpb.ListEvaluationsResponse, error)
+
+	GetListPageData func(ctx context.Context, req *evalpb.GetEvaluationListPageDataRequest) (*evalpb.GetEvaluationListPageDataResponse, error)
+	GetItemPageData func(ctx context.Context, req *evalpb.GetEvaluationItemPageDataRequest) (*evalpb.GetEvaluationItemPageDataResponse, error)
+
+	// Client-portal "Rate My Team" — CLIENT-scoped list page-data variant (IDOR
+	// predicate inside the closure). nil → falls back to GetListPageData.
+	GetPortalPageData func(ctx context.Context, req *evalpb.GetEvaluationListPageDataRequest) (*evalpb.GetEvaluationListPageDataResponse, error)
+
+	// SignOff: SUBMITTED→SIGNED_OFF; Archive: →ARCHIVED. Modeled as shaped
+	// UpdateEvaluation status transitions; the adapter may instead inject
+	// dedicated espyna lifecycle UCs behind the same closure shape.
+	SignOffEvaluation func(ctx context.Context, req *evalpb.UpdateEvaluationRequest) (*evalpb.UpdateEvaluationResponse, error)
+	ArchiveEvaluation func(ctx context.Context, req *evalpb.UpdateEvaluationRequest) (*evalpb.UpdateEvaluationResponse, error)
+
+	ListEvaluationResponses  func(ctx context.Context, req *evalresppb.ListEvaluationResponsesRequest) (*evalresppb.ListEvaluationResponsesResponse, error)
+	CreateEvaluationResponse func(ctx context.Context, req *evalresppb.CreateEvaluationResponseRequest) (*evalresppb.CreateEvaluationResponseResponse, error)
+
+	// Drives the polymorphic dimension slot (one form-group per active template item).
+	ListEvaluationTemplateItems func(ctx context.Context, req *evaltemplateitempb.ListEvaluationTemplateItemsRequest) (*evaltemplateitempb.ListEvaluationTemplateItemsResponse, error)
+}
+
+// EvaluationTemplateUseCases — EvaluationTemplate CRUD + lifecycle (Update-flip)
+// + the Items-count / rubric-list read + the criterion-type lookup.
+type EvaluationTemplateUseCases struct {
+	CreateEvaluationTemplate func(ctx context.Context, req *evaltemplatepb.CreateEvaluationTemplateRequest) (*evaltemplatepb.CreateEvaluationTemplateResponse, error)
+	ReadEvaluationTemplate   func(ctx context.Context, req *evaltemplatepb.ReadEvaluationTemplateRequest) (*evaltemplatepb.ReadEvaluationTemplateResponse, error)
+	UpdateEvaluationTemplate func(ctx context.Context, req *evaltemplatepb.UpdateEvaluationTemplateRequest) (*evaltemplatepb.UpdateEvaluationTemplateResponse, error)
+	DeleteEvaluationTemplate func(ctx context.Context, req *evaltemplatepb.DeleteEvaluationTemplateRequest) (*evaltemplatepb.DeleteEvaluationTemplateResponse, error)
+	ListEvaluationTemplates  func(ctx context.Context, req *evaltemplatepb.ListEvaluationTemplatesRequest) (*evaltemplatepb.ListEvaluationTemplatesResponse, error)
+
+	ListEvaluationTemplateItems func(ctx context.Context, req *evaltemplateitempb.ListEvaluationTemplateItemsRequest) (*evaltemplateitempb.ListEvaluationTemplateItemsResponse, error)
+	ListOutcomeCriterias        func(ctx context.Context, req *criteriapb.ListOutcomeCriteriasRequest) (*criteriapb.ListOutcomeCriteriasResponse, error)
+}
+
+// EvaluationTemplateItemUseCases — rubric-item drawer CRUD + criterion read.
+type EvaluationTemplateItemUseCases struct {
+	CreateEvaluationTemplateItem func(ctx context.Context, req *evaltemplateitempb.CreateEvaluationTemplateItemRequest) (*evaltemplateitempb.CreateEvaluationTemplateItemResponse, error)
+	ReadEvaluationTemplateItem   func(ctx context.Context, req *evaltemplateitempb.ReadEvaluationTemplateItemRequest) (*evaltemplateitempb.ReadEvaluationTemplateItemResponse, error)
+	UpdateEvaluationTemplateItem func(ctx context.Context, req *evaltemplateitempb.UpdateEvaluationTemplateItemRequest) (*evaltemplateitempb.UpdateEvaluationTemplateItemResponse, error)
+	DeleteEvaluationTemplateItem func(ctx context.Context, req *evaltemplateitempb.DeleteEvaluationTemplateItemRequest) (*evaltemplateitempb.DeleteEvaluationTemplateItemResponse, error)
+	ListEvaluationTemplateItems  func(ctx context.Context, req *evaltemplateitempb.ListEvaluationTemplateItemsRequest) (*evaltemplateitempb.ListEvaluationTemplateItemsResponse, error)
+	ListOutcomeCriterias         func(ctx context.Context, req *criteriapb.ListOutcomeCriteriasRequest) (*criteriapb.ListOutcomeCriteriasResponse, error)
+}
+
+// EvaluationCycleUseCases — cycle CRUD + Open/Close orchestration + member list
+// + evaluation list (the inline X-of-Y fallback). Open/Close map to the espyna
+// orchestration UCs (idempotent enrolment over ACTIVE seats; NO DRAFT materialize).
+type EvaluationCycleUseCases struct {
+	CreateEvaluationCycle func(ctx context.Context, req *evalcyclepb.CreateEvaluationCycleRequest) (*evalcyclepb.CreateEvaluationCycleResponse, error)
+	ReadEvaluationCycle   func(ctx context.Context, req *evalcyclepb.ReadEvaluationCycleRequest) (*evalcyclepb.ReadEvaluationCycleResponse, error)
+	ListEvaluationCycles  func(ctx context.Context, req *evalcyclepb.ListEvaluationCyclesRequest) (*evalcyclepb.ListEvaluationCyclesResponse, error)
+	OpenEvaluationCycle   func(ctx context.Context, req *evalcyclepb.UpdateEvaluationCycleRequest) (*evalcyclepb.UpdateEvaluationCycleResponse, error)
+	CloseEvaluationCycle  func(ctx context.Context, req *evalcyclepb.UpdateEvaluationCycleRequest) (*evalcyclepb.UpdateEvaluationCycleResponse, error)
+
+	ListEvaluationCycleMembers func(ctx context.Context, req *evalcyclememberpb.ListEvaluationCycleMembersRequest) (*evalcyclememberpb.ListEvaluationCycleMembersResponse, error)
+	ListEvaluations            func(ctx context.Context, req *evalpb.ListEvaluationsRequest) (*evalpb.ListEvaluationsResponse, error)
+}
+
+// EvaluationCycleMemberUseCases — STR-1: data-only, surfaces via the cycle detail
+// Members tab. Member list is sourced via EvaluationCycle.ListEvaluationCycleMembers,
+// so this group is reserved for any future standalone member reads (currently empty).
+type EvaluationCycleMemberUseCases struct {
+	ListEvaluationCycleMembers func(ctx context.Context, req *evalcyclememberpb.ListEvaluationCycleMembersRequest) (*evalcyclememberpb.ListEvaluationCycleMembersResponse, error)
+}
+
 // FulfillmentUseCases — Fulfillment CRUD + status transition + page data.
 type FulfillmentUseCases struct {
 	GetFulfillmentListPageData func(context.Context, *fulfillmentpb.GetFulfillmentListPageDataRequest) (*fulfillmentpb.GetFulfillmentListPageDataResponse, error)
@@ -299,6 +400,29 @@ type ServiceUseCases struct {
 	// OPTIONAL — nil until the engine identity bridge is wired (Phase 5).
 	// nil → "My Approvals" view renders empty-state gracefully.
 	Workflow WorkflowUseCases
+
+	// Performance — the servicing-gated (CR-5) performance admin panel read +
+	// the cycle X-of-Y progress read. Both return the fayna VIEW projection types
+	// (the espyna projections live in espyna internal/ and are not importable),
+	// so the proto→view translation lives in service-admin's adapters_fayna.go.
+	// OPTIONAL / nil-able: nil GetPanelData → panel empty-state; nil
+	// GetCycleProgress → cycle banner computes X-of-Y inline from the member +
+	// evaluation list closures.
+	Performance PerformanceServiceUseCases
+}
+
+// PerformanceServiceUseCases — view-typed service closures for the
+// Performance-Evaluation feature. service-admin's buildFaynaUseCases supplies
+// the proto→view adapter. nil-able (empty-state / inline-compute fallback).
+type PerformanceServiceUseCases struct {
+	// GetPanelData adapts espyna's GetPerformancePanelData (CR-5 servicing-gated)
+	// to the fayna performance.PanelData projection (Surface 6). nil → empty.
+	GetPanelData func(ctx context.Context) (*performanceview.PanelData, error)
+
+	// GetCycleProgress adapts espyna's F-GATE.2 read-UC to the fayna
+	// evaluation_cycle.CycleProgress X-of-Y projection. nil → the cycle detail /
+	// banner computes inline from ListEvaluationCycleMembers + ListEvaluations.
+	GetCycleProgress func(ctx context.Context, cycleID string) (*cycleview.CycleProgress, error)
 }
 
 // WorkflowUseCases — engine identity bridge read surface. Fields are OPTIONAL

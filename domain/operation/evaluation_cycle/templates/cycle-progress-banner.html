@@ -1,0 +1,49 @@
+{{/*
+  cycle-progress-banner.html — the SHARED "X of Y" READ-PROJECTION partial.
+
+  Rendered identically on THREE surfaces: cycle detail, admin Performance panel,
+  and the client "Rate My Team" portal. It is NOT a form and performs NO
+  materialize-DRAFT INSERT (SR-1 / STR-2). The projection:
+    Y = COUNT(evaluation_cycle_member WHERE evaluation_cycle_id = X)  (frozen denominator)
+    X = COUNT(member ⋈ SUBMITTED/SIGNED_OFF evaluation)              (read-only)
+
+  Expects a *BannerData context (see detail/page.go). Reuse the pyeza progress
+  component for the fill bar; the fill ratio is carried via the --lf-fill custom
+  property (CSP — no inline style attribute on a colored element).
+
+  Caller must guard `{{if .Banner}}` before invoking.
+*/}}
+{{define "cycle-progress-banner"}}
+<section class="lf-cycle-banner alert alert--info"
+         data-testid="evaluation-cycle-banner-{{.CycleID}}"
+         aria-label="{{.CycleName}}">
+    <div class="lf-cycle-banner__head">
+        <span class="lf-cycle-banner__title">{{.CycleName}}</span>
+        <span class="lf-cycle-banner__progress"
+              data-testid="cycle-progress-{{.CycleID}}"
+              role="status"
+              aria-live="polite">
+            {{.ProgressText}}
+        </span>
+    </div>
+
+    {{/* Rating/progress bar — fill via --lf-fill custom property (no inline color) */}}
+    <div class="lf-cycle-banner__bar"
+         role="progressbar"
+         aria-valuenow="{{.Completed}}"
+         aria-valuemin="0"
+         aria-valuemax="{{.Total}}"
+         aria-label="{{.ProgressText}}">
+        <div class="lf-cycle-banner__bar-fill" data-completed="{{.Completed}}" data-total="{{.Total}}"></div>
+    </div>
+
+    <div class="lf-cycle-banner__meta">
+        {{if .SignOffDue}}
+        <span class="lf-cycle-banner__due">{{printf .Labels.SignOffDueFmt .SignOffDue}}</span>
+        {{end}}
+        {{if .CloseDate}}
+        <span class="lf-cycle-banner__close">{{printf .Labels.ClosesFmt .CloseDate}}</span>
+        {{end}}
+    </div>
+</section>
+{{end}}

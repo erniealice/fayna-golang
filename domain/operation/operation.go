@@ -15,6 +15,11 @@ import (
 	activityexpensepkg "github.com/erniealice/fayna-golang/domain/operation/activity_expense"
 	activitylaborpkg "github.com/erniealice/fayna-golang/domain/operation/activity_labor"
 	activitymaterialpkg "github.com/erniealice/fayna-golang/domain/operation/activity_material"
+	evaluationpkg "github.com/erniealice/fayna-golang/domain/operation/evaluation"
+	evaluationcyclepkg "github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
+	evaluationcyclememberpkg "github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle_member"
+	evaluationtemplatepkg "github.com/erniealice/fayna-golang/domain/operation/evaluation_template"
+	evaluationtemplateitempkg "github.com/erniealice/fayna-golang/domain/operation/evaluation_template_item"
 	jobpkg "github.com/erniealice/fayna-golang/domain/operation/job"
 	jobactivitypkg "github.com/erniealice/fayna-golang/domain/operation/job_activity"
 	jobphasepkg "github.com/erniealice/fayna-golang/domain/operation/job_phase"
@@ -24,6 +29,7 @@ import (
 	jobtemplateTaskpkg "github.com/erniealice/fayna-golang/domain/operation/job_template_task"
 	outcomecritetriapkg "github.com/erniealice/fayna-golang/domain/operation/outcome_criteria"
 	outcomesummarypkg "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	performancepkg "github.com/erniealice/fayna-golang/domain/operation/performance"
 	taskoutcomepkg "github.com/erniealice/fayna-golang/domain/operation/task_outcome"
 	workrequestpkg "github.com/erniealice/fayna-golang/domain/operation/work_request"
 	workrequesttypepkg "github.com/erniealice/fayna-golang/domain/operation/work_request_type"
@@ -159,4 +165,62 @@ type WorkRequestTypeLabels = workrequesttypepkg.Labels
 
 func DefaultWorkRequestTypeLabels() WorkRequestTypeLabels {
 	return workrequesttypepkg.DefaultLabels()
+}
+
+// ---------------------------------------------------------------------------
+// Evaluation label types (operation/evaluation) — Performance-Evaluation
+// ---------------------------------------------------------------------------
+
+type EvaluationLabels = evaluationpkg.Labels
+
+func DefaultEvaluationLabels() EvaluationLabels { return evaluationpkg.DefaultLabels() }
+
+// ---------------------------------------------------------------------------
+// EvaluationTemplate label types (operation/evaluation_template)
+// ---------------------------------------------------------------------------
+
+type EvaluationTemplateLabels = evaluationtemplatepkg.Labels
+
+func DefaultEvaluationTemplateLabels() EvaluationTemplateLabels {
+	return evaluationtemplatepkg.DefaultLabels()
+}
+
+// ---------------------------------------------------------------------------
+// EvaluationTemplateItem label types (operation/evaluation_template_item)
+// ---------------------------------------------------------------------------
+
+type EvaluationTemplateItemLabels = evaluationtemplateitempkg.Labels
+
+func DefaultEvaluationTemplateItemLabels() EvaluationTemplateItemLabels {
+	return evaluationtemplateitempkg.DefaultLabels()
+}
+
+// ---------------------------------------------------------------------------
+// EvaluationCycle label types (operation/evaluation_cycle)
+// ---------------------------------------------------------------------------
+
+type EvaluationCycleLabels = evaluationcyclepkg.Labels
+
+func DefaultEvaluationCycleLabels() EvaluationCycleLabels {
+	return evaluationcyclepkg.DefaultLabels()
+}
+
+// ---------------------------------------------------------------------------
+// EvaluationCycleMember label types (operation/evaluation_cycle_member)
+// ---------------------------------------------------------------------------
+
+type EvaluationCycleMemberLabels = evaluationcyclememberpkg.Labels
+
+func DefaultEvaluationCycleMemberLabels() EvaluationCycleMemberLabels {
+	return evaluationcyclememberpkg.DefaultLabels()
+}
+
+// ---------------------------------------------------------------------------
+// PerformancePanel label types (operation/performance)
+// ---------------------------------------------------------------------------
+
+type PerformancePanelLabels = performancepkg.Labels
+
+func DefaultPerformancePanelLabels() PerformancePanelLabels {
+	return performancepkg.DefaultLabels()
 }

@@ -10,6 +10,11 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/activity_expense"
 	"github.com/erniealice/fayna-golang/domain/operation/activity_labor"
 	"github.com/erniealice/fayna-golang/domain/operation/activity_material"
+	"github.com/erniealice/fayna-golang/domain/operation/evaluation"
+	"github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
+	"github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle_member"
+	"github.com/erniealice/fayna-golang/domain/operation/evaluation_template"
+	"github.com/erniealice/fayna-golang/domain/operation/evaluation_template_item"
 	"github.com/erniealice/fayna-golang/domain/operation/job"
 	"github.com/erniealice/fayna-golang/domain/operation/job_activity"
 	"github.com/erniealice/fayna-golang/domain/operation/job_phase"
@@ -19,6 +24,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/job_template_task"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_criteria"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/performance"
 	"github.com/erniealice/fayna-golang/domain/operation/task_outcome"
 	"github.com/erniealice/pyeza-golang/compose"
 )
@@ -410,6 +416,138 @@ func FulfillmentUnit(uc *UseCases, infra *Infra) compose.Unit {
 	return u
 }
 
+// ---------------------------------------------------------------------------
+// Performance-Evaluation units (20260604) — fayna/operation domain.
+//
+// All eval use-case closures are OPTIONAL / nil-able (NOT in RequireFor): a
+// missing closure degrades the view to empty-state rather than refusing boot.
+// service-admin's buildFaynaUseCases (adapters_fayna.go) is the espyna→block
+// adapter that populates uc.Operation.Evaluation* / uc.Service.Performance.
+// All IDOR / CR-5 servicing gates live INSIDE the closures (espyna QUERY
+// PREDICATE) — the view supplies no client_id.
+// ---------------------------------------------------------------------------
+
+// EvaluationUnit registers the evaluation entity (staff Reviews list/detail +
+// the polymorphic drawer-form + the client-portal "Rate My Team").
+func EvaluationUnit(uc *UseCases, infra *Infra) compose.Unit {
+	u := evaluation.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*evaluation.Routes)
+		l := u.Labels.(*evaluation.Labels)
+
+		deps := &operation.EvaluationModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+			NewID:        infra.NewAttachmentID,
+		}
+		wireEvaluationDeps(deps, uc)
+		operation.NewEvaluationModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+// EvaluationTemplateUnit registers the staff-only evaluation_template authoring
+// surface. It wires the rubric-item drawer routes from the item unit so the
+// detail Items tab can mount Add Question / edit / remove endpoints.
+func EvaluationTemplateUnit(uc *UseCases, infra *Infra) compose.Unit {
+	u := evaluation_template.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*evaluation_template.Routes)
+		l := u.Labels.(*evaluation_template.Labels)
+
+		deps := &operation.EvaluationTemplateModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+			NewID:        infra.NewAttachmentID,
+		}
+		if itemRoutes, ok := compose.RoutesOf[*evaluation_template_item.Routes](mc, "operation.evaluation_template_item"); ok {
+			deps.ItemRoutes = *itemRoutes
+		}
+		wireEvaluationTemplateDeps(deps, uc)
+		operation.NewEvaluationTemplateModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+// EvaluationTemplateItemUnit registers the rubric-item drawer (Add/Edit/Remove).
+// No standalone page — surfaces via the evaluation_template detail Items tab.
+func EvaluationTemplateItemUnit(uc *UseCases, infra *Infra) compose.Unit {
+	u := evaluation_template_item.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*evaluation_template_item.Routes)
+		l := u.Labels.(*evaluation_template_item.Labels)
+
+		deps := &operation.EvaluationTemplateItemModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+			NewID:        infra.NewAttachmentID,
+		}
+		wireEvaluationTemplateItemDeps(deps, uc)
+		operation.NewEvaluationTemplateItemModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+// EvaluationCycleUnit registers the evaluation_cycle module (list/detail +
+// Open/Close lifecycle + Members tab + the X-of-Y progress banner).
+func EvaluationCycleUnit(uc *UseCases, infra *Infra) compose.Unit {
+	u := evaluation_cycle.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*evaluation_cycle.Routes)
+		l := u.Labels.(*evaluation_cycle.Labels)
+
+		deps := &operation.EvaluationCycleModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+			NewID:        infra.NewAttachmentID,
+		}
+		wireEvaluationCycleDeps(deps, uc)
+		operation.NewEvaluationCycleModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+// EvaluationCycleMemberUnit (STR-1) is a data/templates-only Unit: it contributes
+// the members-tab.html templates FS + label JSON consumed by the cycle detail
+// view. No Routes, no Nav, no Mount.
+func EvaluationCycleMemberUnit(_ *UseCases, _ *Infra) compose.Unit {
+	return evaluation_cycle_member.Describe()
+}
+
+// PerformanceUnit registers the performance admin panel (Surface 6). The single
+// page view is servicing-gated (CR-5) inside the block-supplied GetPanelData
+// closure; the X-of-Y banner is supplied within PanelData by the adapter.
+func PerformanceUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := performance.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*performance.Routes)
+		l := u.Labels.(*performance.Labels)
+
+		deps := &operation.PerformanceModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+			GetPanelData: uc.Service.Performance.GetPanelData,
+		}
+		operation.NewPerformanceModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
 // AllUnits returns the complete curated unit list for the fayna/operation +
 // fulfillment domains, in the same registration order as Block().
 func AllUnits(uc *UseCases, infra *Infra) []compose.Unit {
@@ -428,5 +566,14 @@ func AllUnits(uc *UseCases, infra *Infra) []compose.Unit {
 		TaskOutcomeUnit(uc, infra),
 		OutcomeSummaryUnit(uc, infra),
 		FulfillmentUnit(uc, infra),
+		// Performance-Evaluation (20260604). evaluation_template_item must be
+		// registered (it has no Nav) so the template unit's RoutesOf lookup
+		// resolves its Add/Edit/Remove drawer URLs.
+		EvaluationUnit(uc, infra),
+		EvaluationTemplateUnit(uc, infra),
+		EvaluationTemplateItemUnit(uc, infra),
+		EvaluationCycleUnit(uc, infra),
+		EvaluationCycleMemberUnit(uc, infra),
+		PerformanceUnit(uc, infra),
 	}
 }

@@ -1,0 +1,128 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "evaluation_template-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "evaluation_template-detail-content"}}
+<div class="page-content" data-testid="evaluation_template-detail-page">
+    <div class="detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "evaluation_template-tabs")}}
+    </div>
+    <div id="tabContent" class="detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "items"}}
+        {{template "evaluation_template-tab-items" .}}
+        {{else}}
+        {{template "evaluation_template-tab-info" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information tab */}}
+{{define "evaluation_template-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}" data-testid="evaluation_template-detail-tab-info">
+    <h4 class="section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="info-grid">
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.Name}}</span>
+            <span class="info-value">{{index .Template "name"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.EvaluationType}}</span>
+            <span><span class="badge badge--info">{{index .Template "evaluation_type"}}</span></span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.RelationshipType}}</span>
+            <span class="info-value">{{index .Template "relationship_type"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.Version}}</span>
+            <span class="info-value">v{{index .Template "version"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.Status}}</span>
+            <span><span class="badge badge--{{index .Template "status_variant"}}">{{index .Template "status"}}</span></span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.Visibility}}</span>
+            <span class="info-value">{{index .Template "visibility"}}</span>
+        </div>
+        <div class="info-item info-item--full">
+            <span class="info-label">{{.Labels.Detail.Description}}</span>
+            <span class="info-value">{{index .Template "description"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="info-value">{{index .Template "date_created_string"}}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">{{.Labels.Detail.ModifiedDate}}</span>
+            <span class="info-value">{{index .Template "date_modified_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{/* Items tab — the rubric builder host (ordered evaluation_template_item list + Add Question) */}}
+{{define "evaluation_template-tab-items"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Items}}" data-testid="evaluation_template-detail-tab-items">
+    <div class="rubric-header">
+        <div>
+            <h4 class="section-title">{{.Labels.Items.Heading}}</h4>
+            <p class="section-caption">{{.Labels.Items.Caption}}</p>
+        </div>
+        <button type="button"
+                class="btn btn--primary"
+                data-testid="evaluation_template_item-add-btn"
+                hx-get="{{.ItemAddURL}}"
+                hx-target="#sheetContent"
+                hx-swap="innerHTML"
+                onclick="lf.Sheet.open()">
+            <i class="icon-plus" aria-hidden="true"></i>
+            {{.Labels.Buttons.AddQuestion}}
+        </button>
+    </div>
+
+    {{if .Items}}
+    <ol class="rubric-list" data-testid="evaluation_template-rubric-list">
+        {{range .Items}}
+        <li class="rubric-row" data-testid="evaluation_template_item-row-{{.id}}" data-sequence="{{.sequence_order}}">
+            <span class="rubric-seq" aria-label="{{$.Labels.Items.Sequence}}">{{.sequence_order}}</span>
+            <span class="rubric-criterion">{{.question_label}}</span>
+            <span class="rubric-type">
+                <span class="badge badge--default">{{.criteria_type}}</span>
+                {{if .not_scored}}<span class="rubric-not-scored">{{.not_scored_label}}</span>{{end}}
+            </span>
+            <span class="rubric-weight" aria-label="{{$.Labels.Items.Weight}}">{{.weight}}</span>
+            <span class="rubric-actions">
+                <button type="button"
+                        class="btn btn--icon"
+                        aria-label="{{$.Labels.Items.Edit}}"
+                        hx-get="{{.edit_url}}"
+                        hx-target="#sheetContent"
+                        hx-swap="innerHTML"
+                        onclick="lf.Sheet.open()">
+                    <i class="icon-edit" aria-hidden="true"></i>
+                </button>
+                <button type="button"
+                        class="btn btn--icon btn--danger"
+                        aria-label="{{$.Labels.Items.Remove}}"
+                        hx-post="{{.remove_url}}"
+                        hx-confirm="{{$.Labels.Confirm.RemoveItemMessage}}"
+                        hx-target="#tabContent"
+                        hx-swap="innerHTML">
+                    <i class="icon-trash" aria-hidden="true"></i>
+                </button>
+            </span>
+        </li>
+        {{end}}
+    </ol>
+    {{else}}
+    <div class="coming-soon-panel" data-testid="evaluation_template-rubric-empty">
+        <div class="coming-soon-title">{{.Labels.Empty.ItemsTitle}}</div>
+        <p class="coming-soon-text">{{.Labels.Empty.ItemsMessage}}</p>
+    </div>
+    {{end}}
+</div>
+{{end}}

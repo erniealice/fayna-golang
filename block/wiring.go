@@ -243,6 +243,74 @@ func wireJobTemplateTaskDeps(deps *operation.JobTemplateTaskModuleDeps, u *UseCa
 }
 
 // ---------------------------------------------------------------------------
+// Performance-Evaluation module wiring (20260604) — OPTIONAL / nil-able.
+//
+// Every assignment is nil-safe: a nil closure copies through and the eval view
+// modules tolerate it (empty-state render). These groups are NOT in RequireFor,
+// so a missing closure never refuses boot. service-admin's buildFaynaUseCases
+// (adapters_fayna.go) is the espyna→block adapter that populates them; until it
+// lands they stay nil and the eval surfaces render empty-state.
+// ---------------------------------------------------------------------------
+
+func wireEvaluationDeps(deps *operation.EvaluationModuleDeps, u *UseCases) {
+	e := &u.Operation.Evaluation
+	deps.CreateEvaluation = e.CreateEvaluation
+	deps.ReadEvaluation = e.ReadEvaluation
+	deps.UpdateEvaluation = e.UpdateEvaluation
+	deps.DeleteEvaluation = e.DeleteEvaluation
+	deps.ListEvaluations = e.ListEvaluations
+	deps.GetListPageData = e.GetListPageData
+	deps.GetItemPageData = e.GetItemPageData
+	deps.GetPortalPageData = e.GetPortalPageData
+	deps.SignOffEvaluation = e.SignOffEvaluation
+	deps.ArchiveEvaluation = e.ArchiveEvaluation
+	deps.ListEvaluationResponses = e.ListEvaluationResponses
+	deps.CreateEvaluationResponse = e.CreateEvaluationResponse
+	deps.ListEvaluationTemplateItems = e.ListEvaluationTemplateItems
+	// deps.NewID is set in the Unit Mount closure from infra.NewAttachmentID
+	// (a generic UUIDv7 generator) — NewID is infra, not a use case.
+}
+
+func wireEvaluationTemplateDeps(deps *operation.EvaluationTemplateModuleDeps, u *UseCases) {
+	t := &u.Operation.EvaluationTemplate
+	deps.CreateEvaluationTemplate = t.CreateEvaluationTemplate
+	deps.ReadEvaluationTemplate = t.ReadEvaluationTemplate
+	deps.UpdateEvaluationTemplate = t.UpdateEvaluationTemplate
+	deps.DeleteEvaluationTemplate = t.DeleteEvaluationTemplate
+	deps.ListEvaluationTemplates = t.ListEvaluationTemplates
+	deps.ListEvaluationTemplateItems = t.ListEvaluationTemplateItems
+	deps.ListOutcomeCriterias = t.ListOutcomeCriterias
+	// deps.NewID is set in the Unit Mount closure from infra.NewAttachmentID.
+}
+
+func wireEvaluationTemplateItemDeps(deps *operation.EvaluationTemplateItemModuleDeps, u *UseCases) {
+	i := &u.Operation.EvaluationTemplateItem
+	deps.CreateEvaluationTemplateItem = i.CreateEvaluationTemplateItem
+	deps.ReadEvaluationTemplateItem = i.ReadEvaluationTemplateItem
+	deps.UpdateEvaluationTemplateItem = i.UpdateEvaluationTemplateItem
+	deps.DeleteEvaluationTemplateItem = i.DeleteEvaluationTemplateItem
+	deps.ListEvaluationTemplateItems = i.ListEvaluationTemplateItems
+	deps.ListOutcomeCriterias = i.ListOutcomeCriterias
+	// deps.NewID is set in the Unit Mount closure from infra.NewAttachmentID.
+}
+
+func wireEvaluationCycleDeps(deps *operation.EvaluationCycleModuleDeps, u *UseCases) {
+	c := &u.Operation.EvaluationCycle
+	deps.CreateEvaluationCycle = c.CreateEvaluationCycle
+	deps.ReadEvaluationCycle = c.ReadEvaluationCycle
+	deps.ListEvaluationCycles = c.ListEvaluationCycles
+	deps.OpenEvaluationCycle = c.OpenEvaluationCycle
+	deps.CloseEvaluationCycle = c.CloseEvaluationCycle
+	deps.ListEvaluationCycleMembers = c.ListEvaluationCycleMembers
+	deps.ListEvaluations = c.ListEvaluations
+	// X-of-Y banner: prefer the view-typed espyna read-UC adapter (Service.
+	// Performance.GetCycleProgress); nil → the detail/list compute inline from
+	// ListEvaluationCycleMembers + ListEvaluations.
+	deps.GetCycleProgress = u.Service.Performance.GetCycleProgress
+	// deps.NewID is set in the Unit Mount closure from infra.NewAttachmentID.
+}
+
+// ---------------------------------------------------------------------------
 // JobTask module wiring
 // ---------------------------------------------------------------------------
 

@@ -1,0 +1,98 @@
+{{/*
+Rubric-item drawer form (DF-2 rubric-item row) — loaded into #sheetContent via
+HTMX from the evaluation_template detail Items tab. Used by Add and Edit.
+Data: .OutcomeCriteriaID, .CriteriaOptions, .CriteriaTypeLabel, .SequenceOrder,
+      .WeightOverride, .QuestionLabel, .QuestionPrompt, .RequiredOverride,
+      .EvaluationTemplateID, .ID, .FormAction, .IsEdit, .WorkspaceID,
+      .CommonLabels, .Labels
+The criterion's response type (criteria_type) is INHERITED read-only from the
+chosen OutcomeCriteria — it is not an editable field here. A weighted question
+must use a numeric response type (BLOCKER-2, enforced on template activation).
+*/}}
+{{define "evaluation_template_item-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="evaluation_template_item-drawer-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+    <input type="hidden" name="evaluation_template_id" value="{{.EvaluationTemplateID}}">
+
+    <div class="sheet-body">
+        {{/* --- Criterion (autocomplete; scope=EVALUATION) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "outcome_criteria_id"
+                "Label" .Labels.Form.Criterion
+                "Placeholder" .Labels.Form.CriterionPlaceholder
+                "Value" .OutcomeCriteriaID
+                "Options" .CriteriaOptions
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Response type (read-only inherited from the criterion) --- */}}
+        {{if .CriteriaTypeLabel}}
+        <div class="form-row single">
+            <div class="form-group">
+                <span class="form-label">{{.Labels.Form.CriteriaType}}</span>
+                <span class="badge badge--default" data-testid="evaluation_template_item-criteria-type">{{.CriteriaTypeLabel}}</span>
+                <small class="form-info">{{.Labels.Form.CriteriaTypeInfo}}</small>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* --- Sequence order --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "sequence_order"
+                "Label" .Labels.Form.SequenceOrder
+                "Value" .SequenceOrder
+            )}}
+        </div>
+
+        {{/* --- Weight override --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "weight_override"
+                "Label" .Labels.Form.WeightOverride
+                "Value" .WeightOverride
+                "Info" .Labels.Form.WeightInfo
+            )}}
+        </div>
+
+        {{/* --- Question label override --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "question_label"
+                "Label" .Labels.Form.QuestionLabel
+                "Placeholder" .Labels.Form.QuestionLabelPlaceholder
+                "Value" .QuestionLabel
+            )}}
+        </div>
+
+        {{/* --- Question prompt (helper text) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "question_prompt"
+                "Label" .Labels.Form.QuestionPrompt
+                "Value" .QuestionPrompt
+            )}}
+        </div>
+
+        {{/* --- Required override --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "toggle"
+                "Name" "required_override"
+                "Label" .Labels.Form.RequiredOverride
+                "Checked" .RequiredOverride
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

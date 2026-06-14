@@ -1,0 +1,63 @@
+{{/* Performance admin panel (Surface 6, pages.md §G). data-page="performance".
+     Composition page: cycle-status matrix (Overdue / Due / Up-to-date) as
+     <section aria-labelledby> groups (HTML-1), with the shared X-of-Y cycle
+     banner rendered atop. Servicing-gated at the espyna layer (CR-5). */}}
+
+{{/* Full page — direct access / non-HTMX */}}
+{{define "performance-panel"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — HTMX navigation */}}
+{{define "performance-panel-content"}}
+<div class="page-content" data-page="performance" data-testid="performance-panel">
+
+    {{with .Banner}}
+    <section class="cycle-banner" data-testid="{{.BannerTestID}}" aria-labelledby="{{.ProgressID}}-name">
+        <span id="{{.ProgressID}}-name" class="cycle-banner__name">{{.Name}}</span>
+        <span id="{{.ProgressID}}" class="cycle-banner__progress" data-testid="{{.ProgressID}}">{{.ProgressText}}</span>
+        {{if .SignOffText}}<span class="cycle-banner__signoff">{{.SignOffText}}</span>{{end}}
+        {{if .CloseText}}<span class="cycle-banner__close">{{.CloseText}}</span>{{end}}
+    </section>
+    {{end}}
+
+    {{if not .HasRows}}
+    <div class="empty-state" data-testid="performance-panel-empty">
+        <h3 class="empty-state__title">{{.Labels.Empty.Title}}</h3>
+        <p class="empty-state__message">{{.Labels.Empty.Message}}</p>
+    </div>
+    {{else}}
+    {{range .Groups}}
+    <section class="perf-group" data-testid="{{.TestID}}" aria-labelledby="{{.HeadID}}">
+        <h3 id="{{.HeadID}}" class="perf-group__heading">{{.Heading}}</h3>
+        {{if .HasRows}}
+        <ul class="perf-group__rows">
+            {{range .Rows}}
+            <li class="perf-row" data-testid="{{.RowTestID}}" data-staff-id="{{.StaffID}}" data-seat-id="{{.SeatID}}">
+                <span class="perf-row__associate">{{.AssociateName}}</span>
+                <span class="perf-row__client">{{.ClientName}}</span>
+                <span class="perf-row__rating{{if not .HasRating}} perf-row__rating--none{{end}}" data-testid="{{.RatingTestID}}">{{.RatingText}}</span>
+                <span class="perf-row__actions">
+                    <a class="btn btn--primary btn--sm"
+                       href="{{.StartReviewURL}}"
+                       hx-get="{{.StartReviewURL}}"
+                       hx-target="#drawer-mount"
+                       data-testid="{{.StartReviewTestID}}">{{$.Labels.Actions.StartReview}}</a>
+                    {{if .ViewReviewURL}}
+                    <a class="btn btn--ghost btn--sm"
+                       href="{{.ViewReviewURL}}"
+                       data-testid="{{.ViewReviewTestID}}">{{$.Labels.Actions.ViewLastReview}}</a>
+                    {{end}}
+                </span>
+            </li>
+            {{end}}
+        </ul>
+        {{else}}
+        <p class="perf-group__empty">{{$.Labels.Empty.Message}}</p>
+        {{end}}
+    </section>
+    {{end}}
+    {{end}}
+
+</div>
+{{end}}

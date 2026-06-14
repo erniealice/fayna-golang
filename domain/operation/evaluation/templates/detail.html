@@ -1,0 +1,103 @@
+{{/* Full page — direct / non-HTMX access (Surface 2, evaluation detail) */}}
+{{define "evaluation-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — HTMX navigation */}}
+{{define "evaluation-detail-content"}}
+<div class="page-content" data-testid="evaluation-detail-page">
+    <div class="eval-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "eval-tabs")}}
+    </div>
+    <div id="tabContent" class="eval-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "evaluation-tab-info" .}}
+        {{else if eq .ActiveTab "scores"}}
+        {{template "evaluation-tab-scores" .}}
+        {{else if eq .ActiveTab "signoff"}}
+        {{template "evaluation-tab-signoff" .}}
+        {{else if eq .ActiveTab "audit"}}
+        {{template "evaluation-tab-audit" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* --- Info tab (default) --- */}}
+{{define "evaluation-tab-info"}}
+<section class="tab-scroll" data-testid="evaluation-detail-tab-info" aria-labelledby="eval-info-heading">
+    <h4 id="eval-info-heading" class="eval-section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="eval-info-grid">
+        <div class="eval-info-item"><span class="eval-info-label">{{.Labels.Detail.Associate}}</span><span class="eval-info-value">{{.Evaluation.subject_staff_id}}</span></div>
+        <div class="eval-info-item"><span class="eval-info-label">{{.Labels.Detail.Client}}</span><span class="eval-info-value">{{.Evaluation.client_id}}</span></div>
+        <div class="eval-info-item"><span class="eval-info-label">{{.Labels.Detail.Period}}</span><span class="eval-info-value">{{.Evaluation.period_start}} – {{.Evaluation.period_end}}</span></div>
+        <div class="eval-info-item"><span class="eval-info-label">{{.Labels.Detail.Type}}</span><span class="eval-info-value">{{.Evaluation.evaluation_type}}</span></div>
+        <div class="eval-info-item">
+            <span class="eval-info-label">{{.Labels.Detail.Status}}</span>
+            <span><span class="badge badge--{{.Evaluation.status_variant}}">{{.Evaluation.status}}</span></span>
+        </div>
+        <div class="eval-info-item">
+            <span class="eval-info-label">{{.Labels.Detail.OverallScore}}</span>
+            <span class="eval-info-value" data-testid="{{.Evaluation.overall_score_id}}">{{.Evaluation.overall_score}}</span>
+        </div>
+        <div class="eval-info-item eval-info-item--full"><span class="eval-info-label">{{.Labels.Detail.Narrative}}</span><span class="eval-info-value">{{.Evaluation.narrative}}</span></div>
+    </div>
+</section>
+{{end}}
+
+{{/* --- Scores tab (evaluation_response SNAPSHOT rows + weighted footer) --- */}}
+{{define "evaluation-tab-scores"}}
+<section class="tab-scroll" data-testid="evaluation-detail-tab-scores" aria-labelledby="eval-scores-heading">
+    <h4 id="eval-scores-heading" class="eval-section-title">{{.Labels.Tabs.Scores}}</h4>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th scope="col">{{.Labels.Scores.Criterion}}</th>
+                <th scope="col">{{.Labels.Scores.Weight}}</th>
+                <th scope="col">{{.Labels.Scores.Type}}</th>
+                <th scope="col">{{.Labels.Scores.Answer}}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Responses}}
+            <tr data-testid="{{.TestID}}">
+                <td>{{.Label}}</td>
+                <td>{{printf "%.2f" .Weight}}</td>
+                <td>{{.TypeLabel}}</td>
+                <td>{{if .Scored}}{{.Answer}}{{else}}<span class="muted">{{$.Labels.Scores.NotScored}}</span>{{end}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="3">{{.Labels.Scores.Weighted}}</td>
+                <td data-testid="eval-scores-weighted">{{.WeightedAverage}}</td>
+            </tr>
+        </tfoot>
+    </table>
+</section>
+{{end}}
+
+{{/* --- Sign Off tab --- */}}
+{{define "evaluation-tab-signoff"}}
+<section class="tab-scroll" data-testid="evaluation-detail-tab-signoff" aria-labelledby="eval-signoff-heading">
+    <h4 id="eval-signoff-heading" class="eval-section-title">{{.Labels.Tabs.SignOff}}</h4>
+    {{if eq .Evaluation.status "submitted"}}
+    <button type="button"
+            class="btn btn-primary"
+            hx-post="/action/evaluation/{{.Evaluation.id}}/sign-off"
+            hx-swap="none"
+            data-testid="evaluation-sign-off-btn">{{.Labels.Actions.SignOff}}</button>
+    {{else}}
+    <p class="muted">{{.Evaluation.status}}</p>
+    {{end}}
+</section>
+{{end}}
+
+{{/* --- Audit tab --- */}}
+{{define "evaluation-tab-audit"}}
+<section class="tab-scroll" data-testid="evaluation-detail-tab-audit" aria-labelledby="eval-audit-heading">
+    <h4 id="eval-audit-heading" class="eval-section-title">{{.Labels.Tabs.Audit}}</h4>
+    <p class="muted">{{.Evaluation.date_created_string}}</p>
+</section>
+{{end}}

@@ -1,0 +1,79 @@
+{{/*
+Evaluation template header drawer form (DF-2 template header) — loaded into
+#sheetContent via HTMX. Used by both Add and Edit actions.
+Data: .Name, .Description, .EvaluationType, .RelationshipType, .VisibilityType,
+      .EvaluationTypeOptions, .RelationshipOptions, .VisibilityOptions,
+      .ID, .FormAction, .IsEdit, .WorkspaceID, .CommonLabels, .Labels
+Staff-only authoring surface (clients have NO evaluation_template:*).
+*/}}
+{{define "evaluation_template-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="evaluation_template-drawer-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Name --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.Form.Name
+                "Placeholder" .Labels.Form.NamePlaceholder
+                "Value" .Name
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Description --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "description"
+                "Label" .Labels.Form.Description
+                "Placeholder" .Labels.Form.DescPlaceholder
+                "Value" .Description
+            )}}
+        </div>
+
+        {{/* --- Evaluation type --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "evaluation_type"
+                "Label" .Labels.Form.EvaluationType
+                "Value" .EvaluationType
+                "Options" .EvaluationTypeOptions
+                "Info" .Labels.Form.EvaluationTypeInfo
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Relationship type --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "relationship_type"
+                "Label" .Labels.Form.RelationshipType
+                "Value" .RelationshipType
+                "Options" .RelationshipOptions
+                "Info" .Labels.Form.RelationshipTypeInfo
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Visibility --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "visibility_type"
+                "Label" .Labels.Form.Visibility
+                "Value" .VisibilityType
+                "Options" .VisibilityOptions
+                "Info" .Labels.Form.VisibilityInfo
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

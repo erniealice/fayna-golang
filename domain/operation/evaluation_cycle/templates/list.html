@@ -1,0 +1,26 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "evaluation-cycle-list"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "evaluation-cycle-list-content"}}
+<div class="page-content page-content--table">
+    {{/* Status filter tabs */}}
+    <nav class="status-tabs" aria-label="{{.Labels.Page.Heading}}">
+        {{range .StatusTabs}}
+        <a class="status-tab{{if .Active}} status-tab--active{{end}}"
+           href="{{.Href}}"
+           hx-get="{{.HxGet}}"
+           hx-target="#evaluation_cycle-list-table"
+           hx-swap="outerHTML"
+           data-testid="{{.TestID}}"
+           {{if .Active}}aria-current="page"{{end}}>
+            {{.Label}}
+        </a>
+        {{end}}
+    </nav>
+
+    {{template "table-card" .Table}}
+</div>
+{{end}}

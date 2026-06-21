@@ -1,6 +1,6 @@
 package evaluation
 
-import "github.com/erniealice/pyeza-golang/compose"
+import "github.com/erniealice/espyna-golang/consumer/compose"
 
 // Describe returns the compose Unit for the evaluation entity.
 //

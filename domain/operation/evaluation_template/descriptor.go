@@ -1,6 +1,6 @@
 package evaluation_template
 
-import "github.com/erniealice/pyeza-golang/compose"
+import "github.com/erniealice/espyna-golang/consumer/compose"
 
 // Describe returns the compose Unit for the evaluation_template module.
 // Staff-only authoring surface — Nav permission is evaluation_template:list

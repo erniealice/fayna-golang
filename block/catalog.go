@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/erniealice/espyna-golang/consumer/compose"
 	fulfillmentdomain "github.com/erniealice/fayna-golang/domain/fulfillment"
 	fulfillmentpkg "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment"
 	operation "github.com/erniealice/fayna-golang/domain/operation"
@@ -26,7 +27,6 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/fayna-golang/domain/operation/performance"
 	"github.com/erniealice/fayna-golang/domain/operation/task_outcome"
-	"github.com/erniealice/pyeza-golang/compose"
 )
 
 func JobUnit(uc *UseCases, infra *Infra) compose.Unit {

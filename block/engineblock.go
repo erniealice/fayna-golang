@@ -9,20 +9,19 @@ import (
 	jobdashboardview "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
 
 	"github.com/erniealice/espyna-golang/consumer"
-	composehelper "github.com/erniealice/espyna-golang/consumer/compose"
+	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
 	espynaports "github.com/erniealice/espyna-golang/ports"
 	"github.com/erniealice/espyna-golang/reference"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	fulfillmentdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/fulfillment"
 	jobdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/job"
-	"github.com/erniealice/pyeza-golang"
 )
 
 // faynaEngineBlock returns a pyeza.AppOption that registers all fayna
 // operation + fulfillment domain modules via the compose engine.
-func EngineBlock() pyeza.AppOption {
-	return func(ctx *pyeza.AppContext) error {
-		uc, err := composehelper.RequireUseCases(ctx, "faynaEngineBlock")
+func EngineBlock() consumerapp.AppOption {
+	return func(ctx *consumerapp.AppContext) error {
+		uc, err := consumerapp.RequireUseCases(ctx, "faynaEngineBlock")
 		if err != nil {
 			return err
 		}
@@ -93,7 +92,7 @@ func EngineBlock() pyeza.AppOption {
 		}
 
 		units := AllUnits(adapted, infra)
-		return composehelper.AssembleEngineBlock("fayna", units, ctx)
+		return consumerapp.AssembleEngineBlock("fayna", units, ctx)
 	}
 }
 

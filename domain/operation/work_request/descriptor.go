@@ -1,6 +1,6 @@
 package work_request
 
-import "github.com/erniealice/pyeza-golang/compose"
+import "github.com/erniealice/espyna-golang/consumer/compose"
 
 // Describe returns the compose Unit for the work_request entity.
 // The engine overlays lyngua JSON for routes and labels, then calls Mount

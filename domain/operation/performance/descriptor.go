@@ -1,6 +1,6 @@
 package performance
 
-import "github.com/erniealice/pyeza-golang/compose"
+import "github.com/erniealice/espyna-golang/consumer/compose"
 
 // Describe returns the compose Unit for the performance admin panel (Surface 6).
 // The engine overlays lyngua JSON (route.json key "performance"; performance.json

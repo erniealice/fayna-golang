@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"strings"
 
+	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
 	"github.com/erniealice/espyna-golang/reference"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
@@ -483,7 +484,7 @@ func newActivityExpenseExpenseCategorySearchHandler(db listSimpler) http.Handler
 // Block registers fayna domain modules (operations: jobs, templates, activities,
 // outcomes, fulfillment). Call with no options to register ALL modules. Call with
 // specific With*() options to register a subset.
-func Block(opts ...BlockOption) pyeza.AppOption {
+func Block(opts ...BlockOption) consumerapp.AppOption {
 	cfg := &blockConfig{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -498,7 +499,7 @@ func Block(opts ...BlockOption) pyeza.AppOption {
 		cfg.jobTemplatePhase || cfg.jobTemplateTask
 	cfg.enableAll = !moduleSelected
 
-	return func(ctx *pyeza.AppContext) error {
+	return func(ctx *consumerapp.AppContext) error {
 		// --- Type-assert translations ---
 		translations, ok := ctx.Translations.(*lynguaV1.TranslationProvider)
 		if !ok || translations == nil {

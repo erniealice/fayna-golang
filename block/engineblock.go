@@ -179,6 +179,11 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		}
 
 		if op.TemplateTaskCriteria != nil {
+			result.Operation.TemplateTaskCriteria.CreateTemplateTaskCriteria = op.TemplateTaskCriteria.CreateTemplateTaskCriteria.Execute
+			result.Operation.TemplateTaskCriteria.ReadTemplateTaskCriteria = op.TemplateTaskCriteria.ReadTemplateTaskCriteria.Execute
+			result.Operation.TemplateTaskCriteria.UpdateTemplateTaskCriteria = op.TemplateTaskCriteria.UpdateTemplateTaskCriteria.Execute
+			result.Operation.TemplateTaskCriteria.DeleteTemplateTaskCriteria = op.TemplateTaskCriteria.DeleteTemplateTaskCriteria.Execute
+			result.Operation.TemplateTaskCriteria.ListTemplateTaskCriterias = op.TemplateTaskCriteria.ListTemplateTaskCriteria.Execute
 			result.Operation.TemplateTaskCriteria.ListByTemplateTask = op.TemplateTaskCriteria.ListByTemplateTask.Execute
 		}
 

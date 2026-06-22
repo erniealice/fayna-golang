@@ -141,6 +141,15 @@ func wireScoringComponentDeps(deps *operation.ScoringComponentModuleDeps, u *Use
 	deps.ListScoringComponents = sc.ListScoringComponents
 }
 
+func wireTemplateTaskCriteriaDeps(deps *operation.TemplateTaskCriteriaModuleDeps, u *UseCases) {
+	ttc := &u.Operation.TemplateTaskCriteria
+	deps.CreateTemplateTaskCriteria = ttc.CreateTemplateTaskCriteria
+	deps.ReadTemplateTaskCriteria = ttc.ReadTemplateTaskCriteria
+	deps.UpdateTemplateTaskCriteria = ttc.UpdateTemplateTaskCriteria
+	deps.DeleteTemplateTaskCriteria = ttc.DeleteTemplateTaskCriteria
+	deps.ListTemplateTaskCriterias = ttc.ListTemplateTaskCriterias
+}
+
 func wireScoringComponentCriteriaDeps(deps *operation.ScoringComponentCriteriaModuleDeps, u *UseCases) {
 	scc := &u.Operation.ScoringComponentCriteria
 	deps.CreateScoringComponentCriteria = scc.CreateScoringComponentCriteria

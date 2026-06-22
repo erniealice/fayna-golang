@@ -34,6 +34,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/scoring_component_criteria"
 	"github.com/erniealice/fayna-golang/domain/operation/scoring_scheme"
 	"github.com/erniealice/fayna-golang/domain/operation/task_outcome"
+	"github.com/erniealice/fayna-golang/domain/operation/template_task_criteria"
 )
 
 func JobUnit(uc *UseCases, infra *Infra) compose.Unit {
@@ -422,6 +423,25 @@ func ScoringComponentCriteriaUnit(uc *UseCases, _ *Infra) compose.Unit {
 	return u
 }
 
+func TemplateTaskCriteriaUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := template_task_criteria.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*template_task_criteria.Routes)
+		l := u.Labels.(*template_task_criteria.Labels)
+
+		deps := &operation.TemplateTaskCriteriaModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireTemplateTaskCriteriaDeps(deps, uc)
+		operation.NewTemplateTaskCriteriaModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
 func ScoreScaleUnit(uc *UseCases, _ *Infra) compose.Unit {
 	u := score_scale.Describe()
 	u.Mount = func(mc *compose.MountContext) error {
@@ -716,6 +736,7 @@ func AllUnits(uc *UseCases, infra *Infra) []compose.Unit {
 		ScoringSchemeUnit(uc, infra),
 		ScoringComponentUnit(uc, infra),
 		ScoringComponentCriteriaUnit(uc, infra),
+		TemplateTaskCriteriaUnit(uc, infra),
 		ScoreScaleUnit(uc, infra),
 		ScoreScaleBandUnit(uc, infra),
 		JobOutcomeLineUnit(uc, infra),

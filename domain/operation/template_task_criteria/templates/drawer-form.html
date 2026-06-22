@@ -1,0 +1,52 @@
+{{/*
+Template task criteria drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .JobTemplateTaskID, .OutcomeCriteriaID, .SequenceOrder, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "template-task-criteria-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="template-task-criteria-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Job Template Task ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "job_template_task_id"
+                "Label" .Labels.Form.JobTemplateTaskID
+                "Value" .JobTemplateTaskID
+                "Required" true
+                "Info" .Labels.Form.JobTemplateTaskIDInfo
+            )}}
+        </div>
+
+        {{/* --- Outcome Criteria ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "outcome_criteria_id"
+                "Label" .Labels.Form.OutcomeCriteriaID
+                "Value" .OutcomeCriteriaID
+                "Required" true
+                "Info" .Labels.Form.OutcomeCriteriaIDInfo
+            )}}
+        </div>
+
+        {{/* --- Sequence Order --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "sequence_order"
+                "Label" .Labels.Form.SequenceOrder
+                "Value" .SequenceOrder
+                "Required" false
+                "Min" 0
+                "Info" .Labels.Form.SequenceOrderInfo
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

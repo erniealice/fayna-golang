@@ -221,9 +221,14 @@ type JobTemplateTaskUseCases struct {
 	ListByPhase           func(context.Context, *jobtemplateTaskpb.ListJobTemplateTasksByPhaseRequest) (*jobtemplateTaskpb.ListJobTemplateTasksByPhaseResponse, error)
 }
 
-// TemplateTaskCriteriaUseCases — criteria-by-task list for the JobTemplate detail.
+// TemplateTaskCriteriaUseCases — TemplateTaskCriteria CRUD + list + criteria-by-task list.
 type TemplateTaskCriteriaUseCases struct {
-	ListByTemplateTask func(context.Context, *templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskResponse, error)
+	CreateTemplateTaskCriteria func(context.Context, *templatetaskcriteriapb.CreateTemplateTaskCriteriaRequest) (*templatetaskcriteriapb.CreateTemplateTaskCriteriaResponse, error)
+	ReadTemplateTaskCriteria   func(context.Context, *templatetaskcriteriapb.ReadTemplateTaskCriteriaRequest) (*templatetaskcriteriapb.ReadTemplateTaskCriteriaResponse, error)
+	UpdateTemplateTaskCriteria func(context.Context, *templatetaskcriteriapb.UpdateTemplateTaskCriteriaRequest) (*templatetaskcriteriapb.UpdateTemplateTaskCriteriaResponse, error)
+	DeleteTemplateTaskCriteria func(context.Context, *templatetaskcriteriapb.DeleteTemplateTaskCriteriaRequest) (*templatetaskcriteriapb.DeleteTemplateTaskCriteriaResponse, error)
+	ListTemplateTaskCriterias  func(context.Context, *templatetaskcriteriapb.ListTemplateTaskCriteriasRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasResponse, error)
+	ListByTemplateTask         func(context.Context, *templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskResponse, error)
 }
 
 // OutcomeCriteriaUseCases — OutcomeCriteria CRUD + list.

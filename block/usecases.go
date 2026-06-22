@@ -32,17 +32,18 @@ import (
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
+	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
+	activitylaborpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_labor"
+	activitymaterialpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_material"
 	evalpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation"
 	evalcyclepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_cycle"
 	evalcyclememberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_cycle_member"
 	evalresppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_response"
 	evaltemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template"
 	evaltemplateitempb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template_item"
-	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
-	activitylaborpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_labor"
-	activitymaterialpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_material"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
+	joboutcomelinepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_line"
 	joboutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
@@ -51,6 +52,12 @@ import (
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phaseoutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
+	reportingcheckpointpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/reporting_checkpoint"
+	scorescalepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/score_scale"
+	scorescalebandpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/score_scale_band"
+	scoringcomponentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_component"
+	scoringcomponentcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_component_criteria"
+	scoringschemepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_scheme"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
@@ -126,11 +133,23 @@ type OperationUseCases struct {
 	// populates these; until that lands they stay nil and the eval views render
 	// empty-state. All IDOR / CR-5 servicing gates live inside the closures
 	// (espyna QUERY PREDICATE); the view supplies no client_id.
-	Evaluation           EvaluationUseCases
-	EvaluationTemplate   EvaluationTemplateUseCases
+	Evaluation             EvaluationUseCases
+	EvaluationTemplate     EvaluationTemplateUseCases
 	EvaluationTemplateItem EvaluationTemplateItemUseCases
-	EvaluationCycle      EvaluationCycleUseCases
-	EvaluationCycleMember EvaluationCycleMemberUseCases
+	EvaluationCycle        EvaluationCycleUseCases
+	EvaluationCycleMember  EvaluationCycleMemberUseCases
+
+	// Education grading (20260616 v1) — single-repo CRUD entities. OPTIONAL /
+	// nil-able (NOT in RequireFor): a missing closure degrades the view to
+	// empty-state rather than refusing boot. buildFaynaUseCases populates these
+	// from espyna's uc.Operation.{Entity} use-case sub-aggregates.
+	ScoringScheme            ScoringSchemeUseCases
+	ScoringComponent         ScoringComponentUseCases
+	ScoringComponentCriteria ScoringComponentCriteriaUseCases
+	ScoreScale               ScoreScaleUseCases
+	ScoreScaleBand           ScoreScaleBandUseCases
+	JobOutcomeLine           JobOutcomeLineUseCases
+	ReportingCheckpoint      ReportingCheckpointUseCases
 }
 
 // JobUseCases — Job CRUD + list + the cross-tab reads the Job module needs.
@@ -223,6 +242,69 @@ type TaskOutcomeUseCases struct {
 	UpdateTaskOutcome func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error)
 	DeleteTaskOutcome func(context.Context, *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error)
 	ListTaskOutcomes  func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
+}
+
+// ScoringSchemeUseCases — ScoringScheme CRUD + list (education grading 20260616).
+type ScoringSchemeUseCases struct {
+	CreateScoringScheme func(context.Context, *scoringschemepb.CreateScoringSchemeRequest) (*scoringschemepb.CreateScoringSchemeResponse, error)
+	ReadScoringScheme   func(context.Context, *scoringschemepb.ReadScoringSchemeRequest) (*scoringschemepb.ReadScoringSchemeResponse, error)
+	UpdateScoringScheme func(context.Context, *scoringschemepb.UpdateScoringSchemeRequest) (*scoringschemepb.UpdateScoringSchemeResponse, error)
+	DeleteScoringScheme func(context.Context, *scoringschemepb.DeleteScoringSchemeRequest) (*scoringschemepb.DeleteScoringSchemeResponse, error)
+	ListScoringSchemes  func(context.Context, *scoringschemepb.ListScoringSchemesRequest) (*scoringschemepb.ListScoringSchemesResponse, error)
+}
+
+// ScoringComponentUseCases — ScoringComponent CRUD + list (education grading 20260616).
+type ScoringComponentUseCases struct {
+	CreateScoringComponent func(context.Context, *scoringcomponentpb.CreateScoringComponentRequest) (*scoringcomponentpb.CreateScoringComponentResponse, error)
+	ReadScoringComponent   func(context.Context, *scoringcomponentpb.ReadScoringComponentRequest) (*scoringcomponentpb.ReadScoringComponentResponse, error)
+	UpdateScoringComponent func(context.Context, *scoringcomponentpb.UpdateScoringComponentRequest) (*scoringcomponentpb.UpdateScoringComponentResponse, error)
+	DeleteScoringComponent func(context.Context, *scoringcomponentpb.DeleteScoringComponentRequest) (*scoringcomponentpb.DeleteScoringComponentResponse, error)
+	ListScoringComponents  func(context.Context, *scoringcomponentpb.ListScoringComponentsRequest) (*scoringcomponentpb.ListScoringComponentsResponse, error)
+}
+
+// ScoringComponentCriteriaUseCases — ScoringComponentCriteria CRUD + list (education grading 20260616).
+type ScoringComponentCriteriaUseCases struct {
+	CreateScoringComponentCriteria func(context.Context, *scoringcomponentcriteriapb.CreateScoringComponentCriteriaRequest) (*scoringcomponentcriteriapb.CreateScoringComponentCriteriaResponse, error)
+	ReadScoringComponentCriteria   func(context.Context, *scoringcomponentcriteriapb.ReadScoringComponentCriteriaRequest) (*scoringcomponentcriteriapb.ReadScoringComponentCriteriaResponse, error)
+	UpdateScoringComponentCriteria func(context.Context, *scoringcomponentcriteriapb.UpdateScoringComponentCriteriaRequest) (*scoringcomponentcriteriapb.UpdateScoringComponentCriteriaResponse, error)
+	DeleteScoringComponentCriteria func(context.Context, *scoringcomponentcriteriapb.DeleteScoringComponentCriteriaRequest) (*scoringcomponentcriteriapb.DeleteScoringComponentCriteriaResponse, error)
+	ListScoringComponentCriterias  func(context.Context, *scoringcomponentcriteriapb.ListScoringComponentCriteriasRequest) (*scoringcomponentcriteriapb.ListScoringComponentCriteriasResponse, error)
+}
+
+// ScoreScaleUseCases — ScoreScale CRUD + list (education grading 20260616).
+type ScoreScaleUseCases struct {
+	CreateScoreScale func(context.Context, *scorescalepb.CreateScoreScaleRequest) (*scorescalepb.CreateScoreScaleResponse, error)
+	ReadScoreScale   func(context.Context, *scorescalepb.ReadScoreScaleRequest) (*scorescalepb.ReadScoreScaleResponse, error)
+	UpdateScoreScale func(context.Context, *scorescalepb.UpdateScoreScaleRequest) (*scorescalepb.UpdateScoreScaleResponse, error)
+	DeleteScoreScale func(context.Context, *scorescalepb.DeleteScoreScaleRequest) (*scorescalepb.DeleteScoreScaleResponse, error)
+	ListScoreScales  func(context.Context, *scorescalepb.ListScoreScalesRequest) (*scorescalepb.ListScoreScalesResponse, error)
+}
+
+// ScoreScaleBandUseCases — ScoreScaleBand CRUD + list (education grading 20260616).
+type ScoreScaleBandUseCases struct {
+	CreateScoreScaleBand func(context.Context, *scorescalebandpb.CreateScoreScaleBandRequest) (*scorescalebandpb.CreateScoreScaleBandResponse, error)
+	ReadScoreScaleBand   func(context.Context, *scorescalebandpb.ReadScoreScaleBandRequest) (*scorescalebandpb.ReadScoreScaleBandResponse, error)
+	UpdateScoreScaleBand func(context.Context, *scorescalebandpb.UpdateScoreScaleBandRequest) (*scorescalebandpb.UpdateScoreScaleBandResponse, error)
+	DeleteScoreScaleBand func(context.Context, *scorescalebandpb.DeleteScoreScaleBandRequest) (*scorescalebandpb.DeleteScoreScaleBandResponse, error)
+	ListScoreScaleBands  func(context.Context, *scorescalebandpb.ListScoreScaleBandsRequest) (*scorescalebandpb.ListScoreScaleBandsResponse, error)
+}
+
+// JobOutcomeLineUseCases — JobOutcomeLine CRUD + list (education grading 20260616).
+type JobOutcomeLineUseCases struct {
+	CreateJobOutcomeLine func(context.Context, *joboutcomelinepb.CreateJobOutcomeLineRequest) (*joboutcomelinepb.CreateJobOutcomeLineResponse, error)
+	ReadJobOutcomeLine   func(context.Context, *joboutcomelinepb.ReadJobOutcomeLineRequest) (*joboutcomelinepb.ReadJobOutcomeLineResponse, error)
+	UpdateJobOutcomeLine func(context.Context, *joboutcomelinepb.UpdateJobOutcomeLineRequest) (*joboutcomelinepb.UpdateJobOutcomeLineResponse, error)
+	DeleteJobOutcomeLine func(context.Context, *joboutcomelinepb.DeleteJobOutcomeLineRequest) (*joboutcomelinepb.DeleteJobOutcomeLineResponse, error)
+	ListJobOutcomeLines  func(context.Context, *joboutcomelinepb.ListJobOutcomeLinesRequest) (*joboutcomelinepb.ListJobOutcomeLinesResponse, error)
+}
+
+// ReportingCheckpointUseCases — ReportingCheckpoint CRUD + list (education grading 20260616).
+type ReportingCheckpointUseCases struct {
+	CreateReportingCheckpoint func(context.Context, *reportingcheckpointpb.CreateReportingCheckpointRequest) (*reportingcheckpointpb.CreateReportingCheckpointResponse, error)
+	ReadReportingCheckpoint   func(context.Context, *reportingcheckpointpb.ReadReportingCheckpointRequest) (*reportingcheckpointpb.ReadReportingCheckpointResponse, error)
+	UpdateReportingCheckpoint func(context.Context, *reportingcheckpointpb.UpdateReportingCheckpointRequest) (*reportingcheckpointpb.UpdateReportingCheckpointResponse, error)
+	DeleteReportingCheckpoint func(context.Context, *reportingcheckpointpb.DeleteReportingCheckpointRequest) (*reportingcheckpointpb.DeleteReportingCheckpointResponse, error)
+	ListReportingCheckpoints  func(context.Context, *reportingcheckpointpb.ListReportingCheckpointsRequest) (*reportingcheckpointpb.ListReportingCheckpointsResponse, error)
 }
 
 // JobOutcomeSummaryUseCases — job-level outcome summary reads.

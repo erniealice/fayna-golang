@@ -1,0 +1,114 @@
+{{/*
+Score scale band drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .ScoreScaleId, .SequenceOrder, .InputMin, .InputMax, .InputMatch,
+      .OutputValue, .OutputLabel, .BandRole, .Determination,
+      .DeterminationOptions, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "score-scale-band-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="score-scale-band-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Score Scale ID (FK) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "score_scale_id"
+                "Label" .Labels.Form.ScoreScaleId
+                "Value" .ScoreScaleId
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Sequence Order --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "sequence_order"
+                "Label" .Labels.Form.SequenceOrder
+                "Value" .SequenceOrder
+                "Required" true
+                "Min" 1
+            )}}
+        </div>
+
+        {{/* --- Output Label --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "output_label"
+                "Label" .Labels.Form.OutputLabel
+                "Value" .OutputLabel
+                "Required" true
+                "Placeholder" .Labels.Form.OutputLabelPlaceholder
+            )}}
+        </div>
+
+        {{/* --- Input Min (optional) --- */}}
+        <div class="form-row double">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "input_min"
+                "Label" .Labels.Form.InputMin
+                "Value" .InputMin
+                "Placeholder" .Labels.Form.InputMinPlaceholder
+            )}}
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "input_max"
+                "Label" .Labels.Form.InputMax
+                "Value" .InputMax
+                "Placeholder" .Labels.Form.InputMaxPlaceholder
+            )}}
+        </div>
+
+        {{/* --- Input Match (optional) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "input_match"
+                "Label" .Labels.Form.InputMatch
+                "Value" .InputMatch
+                "Placeholder" .Labels.Form.InputMatchPlaceholder
+            )}}
+        </div>
+
+        {{/* --- Output Value (optional) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "output_value"
+                "Label" .Labels.Form.OutputValue
+                "Value" .OutputValue
+            )}}
+        </div>
+
+        {{/* --- Band Role (optional) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "band_role"
+                "Label" .Labels.Form.BandRole
+                "Value" .BandRole
+                "Placeholder" .Labels.Form.BandRolePlaceholder
+            )}}
+        </div>
+
+        {{/* --- Determination (optional enum) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "determination"
+                "Label" .Labels.Form.Determination
+                "Value" .Determination
+                "Options" .DeterminationOptions
+                "Info" .Labels.Form.DeterminationInfo
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

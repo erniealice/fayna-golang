@@ -1,0 +1,102 @@
+{{/*
+Reporting checkpoint drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .Label, .CheckpointGroupID, .RoleCode, .SequenceOrder, .WorkspaceIDField, .PeriodID,
+      .IsTerminal, .VersionStatus, .VersionStatusOptions, .ID, .FormAction, .IsEdit,
+      .CommonLabels, .Labels
+*/}}
+{{define "reporting-checkpoint-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="reporting-checkpoint-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Label --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "label"
+                "Label" .Labels.Detail.Label
+                "Value" .Label
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Checkpoint Group ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "checkpoint_group_id"
+                "Label" .Labels.Detail.CheckpointGroupID
+                "Value" .CheckpointGroupID
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Role Code --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "role_code"
+                "Label" .Labels.Detail.RoleCode
+                "Value" .RoleCode
+            )}}
+        </div>
+
+        {{/* --- Sequence Order --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "sequence_order"
+                "Label" .Labels.Detail.SequenceOrder
+                "Value" .SequenceOrder
+                "Info" .Labels.Form.SequenceOrderInfo
+            )}}
+        </div>
+
+        {{/* --- Version Status --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "version_status"
+                "Label" .Labels.Detail.VersionStatus
+                "Value" .VersionStatus
+                "Options" .VersionStatusOptions
+                "Info" .Labels.Form.VersionStatusInfo
+            )}}
+        </div>
+
+        {{/* --- Workspace ID (optional FK) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "workspace_id"
+                "Label" .Labels.Detail.WorkspaceID
+                "Value" .WorkspaceIDField
+            )}}
+        </div>
+
+        {{/* --- Period ID (optional FK) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "period_id"
+                "Label" .Labels.Detail.PeriodID
+                "Value" .PeriodID
+            )}}
+        </div>
+
+        {{/* --- Is Terminal --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "toggle"
+                "Name" "is_terminal"
+                "Label" .Labels.Detail.IsTerminal
+                "Checked" .IsTerminal
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

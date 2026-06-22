@@ -208,6 +208,63 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.PhaseOutcomeSummary.GetByJobPhase = op.PhaseOutcomeSummary.GetByJobPhase.Execute
 			result.Operation.PhaseOutcomeSummary.ListByJob = op.PhaseOutcomeSummary.ListByJob.Execute
 		}
+
+		// -- Education grading (20260616 v1) — single-repo CRUD entities -----------
+		if op.ScoringScheme != nil {
+			result.Operation.ScoringScheme.CreateScoringScheme = op.ScoringScheme.CreateScoringScheme.Execute
+			result.Operation.ScoringScheme.ReadScoringScheme = op.ScoringScheme.ReadScoringScheme.Execute
+			result.Operation.ScoringScheme.UpdateScoringScheme = op.ScoringScheme.UpdateScoringScheme.Execute
+			result.Operation.ScoringScheme.DeleteScoringScheme = op.ScoringScheme.DeleteScoringScheme.Execute
+			result.Operation.ScoringScheme.ListScoringSchemes = op.ScoringScheme.ListScoringSchemes.Execute
+		}
+
+		if op.ScoringComponent != nil {
+			result.Operation.ScoringComponent.CreateScoringComponent = op.ScoringComponent.CreateScoringComponent.Execute
+			result.Operation.ScoringComponent.ReadScoringComponent = op.ScoringComponent.ReadScoringComponent.Execute
+			result.Operation.ScoringComponent.UpdateScoringComponent = op.ScoringComponent.UpdateScoringComponent.Execute
+			result.Operation.ScoringComponent.DeleteScoringComponent = op.ScoringComponent.DeleteScoringComponent.Execute
+			result.Operation.ScoringComponent.ListScoringComponents = op.ScoringComponent.ListScoringComponents.Execute
+		}
+
+		if op.ScoringComponentCriteria != nil {
+			result.Operation.ScoringComponentCriteria.CreateScoringComponentCriteria = op.ScoringComponentCriteria.CreateScoringComponentCriteria.Execute
+			result.Operation.ScoringComponentCriteria.ReadScoringComponentCriteria = op.ScoringComponentCriteria.ReadScoringComponentCriteria.Execute
+			result.Operation.ScoringComponentCriteria.UpdateScoringComponentCriteria = op.ScoringComponentCriteria.UpdateScoringComponentCriteria.Execute
+			result.Operation.ScoringComponentCriteria.DeleteScoringComponentCriteria = op.ScoringComponentCriteria.DeleteScoringComponentCriteria.Execute
+			result.Operation.ScoringComponentCriteria.ListScoringComponentCriterias = op.ScoringComponentCriteria.ListScoringComponentCriterias.Execute
+		}
+
+		if op.ScoreScale != nil {
+			result.Operation.ScoreScale.CreateScoreScale = op.ScoreScale.CreateScoreScale.Execute
+			result.Operation.ScoreScale.ReadScoreScale = op.ScoreScale.ReadScoreScale.Execute
+			result.Operation.ScoreScale.UpdateScoreScale = op.ScoreScale.UpdateScoreScale.Execute
+			result.Operation.ScoreScale.DeleteScoreScale = op.ScoreScale.DeleteScoreScale.Execute
+			result.Operation.ScoreScale.ListScoreScales = op.ScoreScale.ListScoreScales.Execute
+		}
+
+		if op.ScoreScaleBand != nil {
+			result.Operation.ScoreScaleBand.CreateScoreScaleBand = op.ScoreScaleBand.CreateScoreScaleBand.Execute
+			result.Operation.ScoreScaleBand.ReadScoreScaleBand = op.ScoreScaleBand.ReadScoreScaleBand.Execute
+			result.Operation.ScoreScaleBand.UpdateScoreScaleBand = op.ScoreScaleBand.UpdateScoreScaleBand.Execute
+			result.Operation.ScoreScaleBand.DeleteScoreScaleBand = op.ScoreScaleBand.DeleteScoreScaleBand.Execute
+			result.Operation.ScoreScaleBand.ListScoreScaleBands = op.ScoreScaleBand.ListScoreScaleBands.Execute
+		}
+
+		if op.JobOutcomeLine != nil {
+			result.Operation.JobOutcomeLine.CreateJobOutcomeLine = op.JobOutcomeLine.CreateJobOutcomeLine.Execute
+			result.Operation.JobOutcomeLine.ReadJobOutcomeLine = op.JobOutcomeLine.ReadJobOutcomeLine.Execute
+			result.Operation.JobOutcomeLine.UpdateJobOutcomeLine = op.JobOutcomeLine.UpdateJobOutcomeLine.Execute
+			result.Operation.JobOutcomeLine.DeleteJobOutcomeLine = op.JobOutcomeLine.DeleteJobOutcomeLine.Execute
+			result.Operation.JobOutcomeLine.ListJobOutcomeLines = op.JobOutcomeLine.ListJobOutcomeLines.Execute
+		}
+
+		if op.ReportingCheckpoint != nil {
+			result.Operation.ReportingCheckpoint.CreateReportingCheckpoint = op.ReportingCheckpoint.CreateReportingCheckpoint.Execute
+			result.Operation.ReportingCheckpoint.ReadReportingCheckpoint = op.ReportingCheckpoint.ReadReportingCheckpoint.Execute
+			result.Operation.ReportingCheckpoint.UpdateReportingCheckpoint = op.ReportingCheckpoint.UpdateReportingCheckpoint.Execute
+			result.Operation.ReportingCheckpoint.DeleteReportingCheckpoint = op.ReportingCheckpoint.DeleteReportingCheckpoint.Execute
+			result.Operation.ReportingCheckpoint.ListReportingCheckpoints = op.ReportingCheckpoint.ListReportingCheckpoints.Execute
+		}
 	}
 
 	// -- Fulfillment domain ------------------------------------------------------

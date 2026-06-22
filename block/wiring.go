@@ -120,6 +120,73 @@ func wireOutcomeCriteriaDeps(deps *operation.OutcomeCriteriaModuleDeps, u *UseCa
 }
 
 // ---------------------------------------------------------------------------
+// Education grading module wiring (20260616 v1)
+// ---------------------------------------------------------------------------
+
+func wireScoringSchemeDeps(deps *operation.ScoringSchemeModuleDeps, u *UseCases) {
+	ss := &u.Operation.ScoringScheme
+	deps.CreateScoringScheme = ss.CreateScoringScheme
+	deps.ReadScoringScheme = ss.ReadScoringScheme
+	deps.UpdateScoringScheme = ss.UpdateScoringScheme
+	deps.DeleteScoringScheme = ss.DeleteScoringScheme
+	deps.ListScoringSchemes = ss.ListScoringSchemes
+}
+
+func wireScoringComponentDeps(deps *operation.ScoringComponentModuleDeps, u *UseCases) {
+	sc := &u.Operation.ScoringComponent
+	deps.CreateScoringComponent = sc.CreateScoringComponent
+	deps.ReadScoringComponent = sc.ReadScoringComponent
+	deps.UpdateScoringComponent = sc.UpdateScoringComponent
+	deps.DeleteScoringComponent = sc.DeleteScoringComponent
+	deps.ListScoringComponents = sc.ListScoringComponents
+}
+
+func wireScoringComponentCriteriaDeps(deps *operation.ScoringComponentCriteriaModuleDeps, u *UseCases) {
+	scc := &u.Operation.ScoringComponentCriteria
+	deps.CreateScoringComponentCriteria = scc.CreateScoringComponentCriteria
+	deps.ReadScoringComponentCriteria = scc.ReadScoringComponentCriteria
+	deps.UpdateScoringComponentCriteria = scc.UpdateScoringComponentCriteria
+	deps.DeleteScoringComponentCriteria = scc.DeleteScoringComponentCriteria
+	deps.ListScoringComponentCriterias = scc.ListScoringComponentCriterias
+}
+
+func wireScoreScaleDeps(deps *operation.ScoreScaleModuleDeps, u *UseCases) {
+	ss := &u.Operation.ScoreScale
+	deps.CreateScoreScale = ss.CreateScoreScale
+	deps.ReadScoreScale = ss.ReadScoreScale
+	deps.UpdateScoreScale = ss.UpdateScoreScale
+	deps.DeleteScoreScale = ss.DeleteScoreScale
+	deps.ListScoreScales = ss.ListScoreScales
+}
+
+func wireScoreScaleBandDeps(deps *operation.ScoreScaleBandModuleDeps, u *UseCases) {
+	ssb := &u.Operation.ScoreScaleBand
+	deps.CreateScoreScaleBand = ssb.CreateScoreScaleBand
+	deps.ReadScoreScaleBand = ssb.ReadScoreScaleBand
+	deps.UpdateScoreScaleBand = ssb.UpdateScoreScaleBand
+	deps.DeleteScoreScaleBand = ssb.DeleteScoreScaleBand
+	deps.ListScoreScaleBands = ssb.ListScoreScaleBands
+}
+
+func wireJobOutcomeLineDeps(deps *operation.JobOutcomeLineModuleDeps, u *UseCases) {
+	jol := &u.Operation.JobOutcomeLine
+	deps.CreateJobOutcomeLine = jol.CreateJobOutcomeLine
+	deps.ReadJobOutcomeLine = jol.ReadJobOutcomeLine
+	deps.UpdateJobOutcomeLine = jol.UpdateJobOutcomeLine
+	deps.DeleteJobOutcomeLine = jol.DeleteJobOutcomeLine
+	deps.ListJobOutcomeLines = jol.ListJobOutcomeLines
+}
+
+func wireReportingCheckpointDeps(deps *operation.ReportingCheckpointModuleDeps, u *UseCases) {
+	rc := &u.Operation.ReportingCheckpoint
+	deps.CreateReportingCheckpoint = rc.CreateReportingCheckpoint
+	deps.ReadReportingCheckpoint = rc.ReadReportingCheckpoint
+	deps.UpdateReportingCheckpoint = rc.UpdateReportingCheckpoint
+	deps.DeleteReportingCheckpoint = rc.DeleteReportingCheckpoint
+	deps.ListReportingCheckpoints = rc.ListReportingCheckpoints
+}
+
+// ---------------------------------------------------------------------------
 // TaskOutcome module wiring
 // ---------------------------------------------------------------------------
 

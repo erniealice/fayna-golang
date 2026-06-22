@@ -1,0 +1,78 @@
+{{/*
+Job outcome line drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .Label, .WeightOrCredits, .OutputValue, .OutputLabel, .ScoreScaleBandId, .ReportingRole, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "job-outcome-line-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="job-outcome-line-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Label --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "label"
+                "Label" .Labels.Detail.Label
+                "Value" .Label
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Reporting Role --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "reporting_role"
+                "Label" .Labels.Detail.ReportingRole
+                "Value" .ReportingRole
+                "Options" .ReportingRoleOptions
+                "Info" .Labels.Form.ReportingRoleInfo
+            )}}
+        </div>
+
+        {{/* --- Weight / Credits --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "weight_or_credits"
+                "Label" .Labels.Detail.WeightOrCredits
+                "Value" .WeightOrCredits
+            )}}
+        </div>
+
+        {{/* --- Output Value --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "output_value"
+                "Label" .Labels.Detail.OutputValue
+                "Value" .OutputValue
+            )}}
+        </div>
+
+        {{/* --- Output Label (optional string) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "output_label"
+                "Label" .Labels.Detail.OutputLabel
+                "Value" .OutputLabel
+            )}}
+        </div>
+
+        {{/* --- Score Scale Band ID (optional FK) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "score_scale_band_id"
+                "Label" .Labels.Detail.ScoreScaleBandId
+                "Value" .ScoreScaleBandId
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

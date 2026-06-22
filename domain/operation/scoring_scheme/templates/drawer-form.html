@@ -1,0 +1,62 @@
+{{/*
+Scoring scheme drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .Name, .CompositeMethod, .RoundingMode, .WeightsMustSumToOne, .ScoreScaleId,
+      .ID, .FormAction, .IsEdit, .CommonLabels, .Labels,
+      .CompositeMethodOptions, .RoundingModeOptions
+*/}}
+{{define "scoring-scheme-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="scoring-scheme-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Name --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.Detail.Name
+                "Value" .Name
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Composite Method --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "composite_method"
+                "Label" .Labels.Detail.CompositeMethod
+                "Value" .CompositeMethod
+                "Options" .CompositeMethodOptions
+                "Info" .Labels.Form.CompositeMethodInfo
+            )}}
+        </div>
+
+        {{/* --- Rounding Mode --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "rounding_mode"
+                "Label" .Labels.Detail.RoundingMode
+                "Value" .RoundingMode
+                "Options" .RoundingModeOptions
+                "Info" .Labels.Form.RoundingModeInfo
+            )}}
+        </div>
+
+        {{/* --- Weights Must Sum To One --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "toggle"
+                "Name" "weights_must_sum_to_one"
+                "Label" .Labels.Detail.WeightsMustSumToOne
+                "Checked" .WeightsMustSumToOne
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

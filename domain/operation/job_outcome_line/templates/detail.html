@@ -1,0 +1,78 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-outcome-line-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "job-outcome-line-detail-content"}}
+<div class="page-content jol-detail-layout">
+    {{/* --- Tabs --- */}}
+    <div class="jol-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "jol-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="jol-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "job-outcome-line-tab-info" .}}
+        {{else if eq .ActiveTab "audit-history"}}
+        {{template "audit-history-tab" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "job-outcome-line-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="jol-section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="jol-info-grid">
+        <div class="jol-info-item">
+            <span class="jol-info-label">{{.Labels.Detail.Label}}</span>
+            <span class="jol-info-value">{{index .Line "label"}}</span>
+        </div>
+        <div class="jol-info-item">
+            <span class="jol-info-label">{{.Labels.Detail.ReportingRole}}</span>
+            <span>
+                <span class="badge badge--{{index .Line "reporting_role_variant"}}">
+                    {{index .Line "reporting_role"}}
+                </span>
+            </span>
+        </div>
+        <div class="jol-info-item">
+            <span class="jol-info-label">{{.Labels.Detail.WeightOrCredits}}</span>
+            <span class="jol-info-value">{{index .Line "weight_or_credits"}}</span>
+        </div>
+        <div class="jol-info-item">
+            <span class="jol-info-label">{{.Labels.Detail.OutputValue}}</span>
+            <span class="jol-info-value">{{index .Line "output_value"}}</span>
+        </div>
+        <div class="jol-info-item">
+            <span class="jol-info-label">{{.Labels.Detail.OutputLabel}}</span>
+            <span class="jol-info-value">{{index .Line "output_label"}}</span>
+        </div>
+        <div class="jol-info-item">
+            <span class="jol-info-label">{{.Labels.Detail.ScoreScaleBandId}}</span>
+            <span class="jol-info-value">{{index .Line "score_scale_band_id"}}</span>
+        </div>
+        <div class="jol-info-item">
+            <span class="jol-info-label">{{.Labels.Detail.Active}}</span>
+            <span>
+                {{if index .Line "active"}}
+                <span class="badge badge--success">Active</span>
+                {{else}}
+                <span class="badge badge--default">Inactive</span>
+                {{end}}
+            </span>
+        </div>
+        <div class="jol-info-item">
+            <span class="jol-info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="jol-info-value">{{index .Line "date_created_string"}}</span>
+        </div>
+        <div class="jol-info-item">
+            <span class="jol-info-label">{{.Labels.Detail.ModifiedDate}}</span>
+            <span class="jol-info-value">{{index .Line "date_modified_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}

@@ -1,0 +1,116 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "scoring-scheme-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "scoring-scheme-detail-content"}}
+<div class="page-content oc-detail-layout" data-page-css="/assets/css/fayna/fayna-criteria-detail.css?v={{.CacheVersion}}">
+    {{/* --- Tabs --- */}}
+    <div class="oc-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "ss-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="oc-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "scoring-scheme-tab-info" .}}
+        {{else if eq .ActiveTab "criteria"}}
+        {{template "scoring-scheme-tab-criteria" .}}
+        {{else if eq .ActiveTab "versions"}}
+        {{template "scoring-scheme-tab-versions" .}}
+        {{else if eq .ActiveTab "audit-history"}}
+        {{template "audit-history-tab" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "scoring-scheme-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="oc-section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="oc-info-grid">
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Name}}</span>
+            <span class="oc-info-value">{{index .Scheme "name"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.CompositeMethod}}</span>
+            <span>
+                <span class="badge badge--default">
+                    {{index .Scheme "composite_method"}}
+                </span>
+            </span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.RoundingMode}}</span>
+            <span class="oc-info-value">{{index .Scheme "rounding_mode"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.WeightsMustSumToOne}}</span>
+            <span>
+                {{if index .Scheme "weights_must_sum_to_one"}}
+                <span class="badge badge--info">{{.Labels.Detail.WeightsMustSumToOne}}</span>
+                {{end}}
+            </span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Version}}</span>
+            <span class="oc-info-value">{{index .Scheme "version"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Status}}</span>
+            <span>
+                <span class="badge badge--{{index .Scheme "version_status_variant"}}">
+                    {{index .Scheme "version_status"}}
+                </span>
+            </span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.SchemeGroupId}}</span>
+            <span class="oc-info-value">{{index .Scheme "scheme_group_id"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.ScoreScaleId}}</span>
+            <span class="oc-info-value">{{index .Scheme "score_scale_id"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="oc-info-value">{{index .Scheme "date_created_string"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.ModifiedDate}}</span>
+            <span class="oc-info-value">{{index .Scheme "date_modified_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{/* Criteria Tab */}}
+{{define "scoring-scheme-tab-criteria"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Criteria}}">
+    {{if .CriteriaTable}}
+        {{template "table-card" .CriteriaTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Versions Tab */}}
+{{define "scoring-scheme-tab-versions"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Versions}}">
+    {{if .VersionsTable}}
+        {{template "table-card" .VersionsTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+        </div>
+    {{end}}
+</div>
+{{end}}

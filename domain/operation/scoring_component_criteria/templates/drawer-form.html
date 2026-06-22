@@ -1,0 +1,51 @@
+{{/*
+Scoring component criteria drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .ScoringSchemeID, .ScoringComponentID, .OutcomeCriteriaID, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "scoring-component-criteria-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="scoring-component-criteria-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Scoring Scheme ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "scoring_scheme_id"
+                "Label" .Labels.Form.ScoringSchemeID
+                "Value" .ScoringSchemeID
+                "Required" true
+                "Info" .Labels.Form.ScoringSchemeIDInfo
+            )}}
+        </div>
+
+        {{/* --- Scoring Component ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "scoring_component_id"
+                "Label" .Labels.Form.ScoringComponentID
+                "Value" .ScoringComponentID
+                "Required" true
+                "Info" .Labels.Form.ScoringComponentIDInfo
+            )}}
+        </div>
+
+        {{/* --- Outcome Criteria ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "outcome_criteria_id"
+                "Label" .Labels.Form.OutcomeCriteriaID
+                "Value" .OutcomeCriteriaID
+                "Required" true
+                "Info" .Labels.Form.OutcomeCriteriaIDInfo
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

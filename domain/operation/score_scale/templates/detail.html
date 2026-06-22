@@ -1,0 +1,98 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "score-scale-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "score-scale-detail-content"}}
+<div class="page-content ss-detail-layout">
+    {{/* --- Tabs --- */}}
+    <div class="ss-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "ss-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="ss-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "score-scale-tab-info" .}}
+        {{else if eq .ActiveTab "history"}}
+        {{template "score-scale-tab-history" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "score-scale-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="ss-section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="ss-info-grid">
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.Name}}</span>
+            <span class="ss-info-value">{{index .Scale "name"}}</span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.ScaleKind}}</span>
+            <span>
+                <span class="badge badge--{{index .Scale "scale_kind_variant"}}">
+                    {{index .Scale "scale_kind"}}
+                </span>
+            </span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.VersionStatus}}</span>
+            <span>
+                <span class="badge badge--{{index .Scale "version_status_variant"}}">
+                    {{index .Scale "version_status"}}
+                </span>
+            </span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.Version}}</span>
+            <span class="ss-info-value">{{index .Scale "version"}}</span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.InputUnit}}</span>
+            <span class="ss-info-value">{{index .Scale "input_unit"}}</span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.InputMin}}</span>
+            <span class="ss-info-value">{{index .Scale "input_min"}}</span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.InputMax}}</span>
+            <span class="ss-info-value">{{index .Scale "input_max"}}</span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.OutputUnit}}</span>
+            <span class="ss-info-value">{{index .Scale "output_unit"}}</span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.ScaleGroupId}}</span>
+            <span class="ss-info-value">{{index .Scale "scale_group_id"}}</span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.CreatedBy}}</span>
+            <span class="ss-info-value">{{index .Scale "created_by"}}</span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="ss-info-value">{{index .Scale "date_created_string"}}</span>
+        </div>
+        <div class="ss-info-item">
+            <span class="ss-info-label">{{.Labels.Detail.ModifiedDate}}</span>
+            <span class="ss-info-value">{{index .Scale "date_modified_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{/* History Tab */}}
+{{define "score-scale-tab-history"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.History}}">
+    <div class="coming-soon-panel">
+        <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+        <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+    </div>
+</div>
+{{end}}

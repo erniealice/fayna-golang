@@ -1,0 +1,95 @@
+{{/*
+Scoring component drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .ScoringSchemeId, .Code, .Label, .Weight, .SequenceOrder, .ParentComponentId, .Active, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "scoring-component-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="scoring-component-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Scoring Scheme ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "scoring_scheme_id"
+                "Label" .Labels.Form.ScoringSchemeId
+                "Value" .ScoringSchemeId
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Code --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "code"
+                "Label" .Labels.Form.Code
+                "Value" .Code
+                "Placeholder" .Labels.Form.CodePlaceholder
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Label --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "label"
+                "Label" .Labels.Form.Label
+                "Value" .Label
+                "Placeholder" .Labels.Form.LabelPlaceholder
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Weight --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "weight"
+                "Label" .Labels.Form.Weight
+                "Value" .Weight
+                "Info" .Labels.Form.WeightInfo
+            )}}
+        </div>
+
+        {{/* --- Sequence Order --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "sequence_order"
+                "Label" .Labels.Form.SequenceOrder
+                "Value" .SequenceOrder
+                "Info" .Labels.Form.SequenceOrderInfo
+            )}}
+        </div>
+
+        {{/* --- Parent Component ID (optional) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "parent_component_id"
+                "Label" .Labels.Form.ParentComponentId
+                "Value" .ParentComponentId
+                "Info" .Labels.Form.ParentComponentIdInfo
+            )}}
+        </div>
+
+        {{/* --- Active (edit only) --- */}}
+        {{if .IsEdit}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "toggle"
+                "Name" "active"
+                "Label" .Labels.Form.Active
+                "Checked" .Active
+            )}}
+        </div>
+        {{end}}
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

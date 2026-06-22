@@ -1,0 +1,100 @@
+{{/*
+Score scale drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .Name, .ScaleKind, .VersionStatus, .InputUnit, .InputMin, .InputMax,
+      .OutputUnit, .ScaleGroupId, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+*/}}
+{{define "score-scale-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="score-scale-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{/* --- Name --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.Detail.Name
+                "Value" .Name
+                "Required" true
+            )}}
+        </div>
+
+        {{/* --- Scale Kind --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "scale_kind"
+                "Label" .Labels.Detail.ScaleKind
+                "Value" .ScaleKind
+                "Options" .ScaleKindOptions
+                "Info" .Labels.Form.ScaleKindInfo
+            )}}
+        </div>
+
+        {{/* --- Version Status --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "version_status"
+                "Label" .Labels.Detail.VersionStatus
+                "Value" .VersionStatus
+                "Options" .VersionStatusOptions
+                "Info" .Labels.Form.VersionStatusInfo
+            )}}
+        </div>
+
+        {{/* --- Input Unit --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "input_unit"
+                "Label" .Labels.Detail.InputUnit
+                "Value" .InputUnit
+                "Hint" .Labels.Form.InputUnitHint
+            )}}
+        </div>
+
+        {{/* --- Input Min / Max --- */}}
+        <div class="form-row double">
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "input_min"
+                "Label" .Labels.Detail.InputMin
+                "Value" .InputMin
+            )}}
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "input_max"
+                "Label" .Labels.Detail.InputMax
+                "Value" .InputMax
+            )}}
+        </div>
+
+        {{/* --- Output Unit --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "output_unit"
+                "Label" .Labels.Detail.OutputUnit
+                "Value" .OutputUnit
+                "Hint" .Labels.Form.OutputUnitHint
+            )}}
+        </div>
+
+        {{/* --- Scale Group ID --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "scale_group_id"
+                "Label" .Labels.Detail.ScaleGroupId
+                "Value" .ScaleGroupId
+                "Hint" .Labels.Form.ScaleGroupIdHint
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

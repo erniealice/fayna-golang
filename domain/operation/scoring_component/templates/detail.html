@@ -1,0 +1,74 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "scoring-component-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "scoring-component-detail-content"}}
+<div class="page-content sc-detail-layout">
+    {{/* --- Tabs --- */}}
+    <div class="sc-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "sc-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="sc-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "scoring-component-tab-info" .}}
+        {{else if eq .ActiveTab "audit-history"}}
+        {{template "audit-history-tab" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "scoring-component-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="sc-section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="sc-info-grid">
+        <div class="sc-info-item">
+            <span class="sc-info-label">{{.Labels.Detail.Code}}</span>
+            <span class="sc-info-value">{{index .Component "code"}}</span>
+        </div>
+        <div class="sc-info-item">
+            <span class="sc-info-label">{{.Labels.Detail.Label}}</span>
+            <span class="sc-info-value">{{index .Component "label"}}</span>
+        </div>
+        <div class="sc-info-item">
+            <span class="sc-info-label">{{.Labels.Detail.ScoringSchemeId}}</span>
+            <span class="sc-info-value">{{index .Component "scoring_scheme_id"}}</span>
+        </div>
+        <div class="sc-info-item">
+            <span class="sc-info-label">{{.Labels.Detail.Weight}}</span>
+            <span class="sc-info-value">{{index .Component "weight"}}</span>
+        </div>
+        <div class="sc-info-item">
+            <span class="sc-info-label">{{.Labels.Detail.SequenceOrder}}</span>
+            <span class="sc-info-value">{{index .Component "sequence_order"}}</span>
+        </div>
+        <div class="sc-info-item">
+            <span class="sc-info-label">{{.Labels.Detail.ParentComponentId}}</span>
+            <span class="sc-info-value">{{index .Component "parent_component_id"}}</span>
+        </div>
+        <div class="sc-info-item">
+            <span class="sc-info-label">{{.Labels.Detail.Active}}</span>
+            <span>
+                {{if index .Component "active"}}
+                <span class="badge badge--success">Yes</span>
+                {{else}}
+                <span class="badge badge--default">No</span>
+                {{end}}
+            </span>
+        </div>
+        <div class="sc-info-item">
+            <span class="sc-info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="sc-info-value">{{index .Component "date_created_string"}}</span>
+        </div>
+        <div class="sc-info-item">
+            <span class="sc-info-label">{{.Labels.Detail.ModifiedDate}}</span>
+            <span class="sc-info-value">{{index .Component "date_modified_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}

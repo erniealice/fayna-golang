@@ -18,6 +18,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/evaluation_template_item"
 	"github.com/erniealice/fayna-golang/domain/operation/job"
 	"github.com/erniealice/fayna-golang/domain/operation/job_activity"
+	"github.com/erniealice/fayna-golang/domain/operation/job_outcome_line"
 	"github.com/erniealice/fayna-golang/domain/operation/job_phase"
 	"github.com/erniealice/fayna-golang/domain/operation/job_task"
 	"github.com/erniealice/fayna-golang/domain/operation/job_template"
@@ -26,6 +27,12 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_criteria"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/fayna-golang/domain/operation/performance"
+	"github.com/erniealice/fayna-golang/domain/operation/reporting_checkpoint"
+	"github.com/erniealice/fayna-golang/domain/operation/score_scale"
+	"github.com/erniealice/fayna-golang/domain/operation/score_scale_band"
+	"github.com/erniealice/fayna-golang/domain/operation/scoring_component"
+	"github.com/erniealice/fayna-golang/domain/operation/scoring_component_criteria"
+	"github.com/erniealice/fayna-golang/domain/operation/scoring_scheme"
 	"github.com/erniealice/fayna-golang/domain/operation/task_outcome"
 )
 
@@ -349,6 +356,148 @@ func OutcomeCriteriaUnit(uc *UseCases, infra *Infra) compose.Unit {
 	return u
 }
 
+// ---------------------------------------------------------------------------
+// Education grading units (20260616 v1) — fayna/operation domain.
+//
+// All grading CRUD closures are OPTIONAL / nil-able (NOT in RequireFor): a
+// missing closure degrades the view to empty-state rather than refusing boot.
+// buildFaynaUseCases (engineblock.go) is the espyna→block adapter that populates
+// uc.Operation.{Entity}. Audit-history ops are nil-able (history tab empty).
+// ---------------------------------------------------------------------------
+
+func ScoringSchemeUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := scoring_scheme.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*scoring_scheme.Routes)
+		l := u.Labels.(*scoring_scheme.Labels)
+
+		deps := &operation.ScoringSchemeModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireScoringSchemeDeps(deps, uc)
+		operation.NewScoringSchemeModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+func ScoringComponentUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := scoring_component.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*scoring_component.Routes)
+		l := u.Labels.(*scoring_component.Labels)
+
+		deps := &operation.ScoringComponentModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireScoringComponentDeps(deps, uc)
+		operation.NewScoringComponentModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+func ScoringComponentCriteriaUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := scoring_component_criteria.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*scoring_component_criteria.Routes)
+		l := u.Labels.(*scoring_component_criteria.Labels)
+
+		deps := &operation.ScoringComponentCriteriaModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireScoringComponentCriteriaDeps(deps, uc)
+		operation.NewScoringComponentCriteriaModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+func ScoreScaleUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := score_scale.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*score_scale.Routes)
+		l := u.Labels.(*score_scale.Labels)
+
+		deps := &operation.ScoreScaleModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireScoreScaleDeps(deps, uc)
+		operation.NewScoreScaleModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+func ScoreScaleBandUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := score_scale_band.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*score_scale_band.Routes)
+		l := u.Labels.(*score_scale_band.Labels)
+
+		deps := &operation.ScoreScaleBandModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireScoreScaleBandDeps(deps, uc)
+		operation.NewScoreScaleBandModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+func JobOutcomeLineUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := job_outcome_line.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*job_outcome_line.Routes)
+		l := u.Labels.(*job_outcome_line.Labels)
+
+		deps := &operation.JobOutcomeLineModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireJobOutcomeLineDeps(deps, uc)
+		operation.NewJobOutcomeLineModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+func ReportingCheckpointUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := reporting_checkpoint.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*reporting_checkpoint.Routes)
+		l := u.Labels.(*reporting_checkpoint.Labels)
+
+		deps := &operation.ReportingCheckpointModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireReportingCheckpointDeps(deps, uc)
+		operation.NewReportingCheckpointModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
 func TaskOutcomeUnit(uc *UseCases, infra *Infra) compose.Unit {
 	u := task_outcome.Describe()
 	u.Mount = func(mc *compose.MountContext) error {
@@ -563,6 +712,14 @@ func AllUnits(uc *UseCases, infra *Infra) []compose.Unit {
 		ActivityMaterialUnit(uc, infra),
 		ActivityExpenseUnit(uc, infra),
 		OutcomeCriteriaUnit(uc, infra),
+		// Education grading (20260616 v1) — single-repo CRUD entities.
+		ScoringSchemeUnit(uc, infra),
+		ScoringComponentUnit(uc, infra),
+		ScoringComponentCriteriaUnit(uc, infra),
+		ScoreScaleUnit(uc, infra),
+		ScoreScaleBandUnit(uc, infra),
+		JobOutcomeLineUnit(uc, infra),
+		ReportingCheckpointUnit(uc, infra),
 		TaskOutcomeUnit(uc, infra),
 		OutcomeSummaryUnit(uc, infra),
 		FulfillmentUnit(uc, infra),

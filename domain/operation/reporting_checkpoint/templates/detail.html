@@ -1,0 +1,84 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "reporting-checkpoint-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "reporting-checkpoint-detail-content"}}
+<div class="page-content rc-detail-layout" data-page-css="/assets/css/fayna/fayna-criteria-detail.css?v={{.CacheVersion}}">
+    {{/* --- Tabs --- */}}
+    <div class="rc-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "rc-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="rc-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "reporting-checkpoint-tab-info" .}}
+        {{else if eq .ActiveTab "audit-history"}}
+        {{template "audit-history-tab" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "reporting-checkpoint-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="oc-section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="oc-info-grid">
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Label}}</span>
+            <span class="oc-info-value">{{index .Checkpoint "label"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.CheckpointGroupID}}</span>
+            <span class="oc-info-value">{{index .Checkpoint "checkpoint_group_id"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.RoleCode}}</span>
+            <span class="oc-info-value">{{index .Checkpoint "role_code"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.SequenceOrder}}</span>
+            <span class="oc-info-value">{{index .Checkpoint "sequence_order"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.Version}}</span>
+            <span class="oc-info-value">{{index .Checkpoint "version"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.VersionStatus}}</span>
+            <span>
+                <span class="badge badge--{{index .Checkpoint "version_status_variant"}}">
+                    {{index .Checkpoint "version_status"}}
+                </span>
+            </span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.WorkspaceID}}</span>
+            <span class="oc-info-value">{{index .Checkpoint "workspace_id"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.PeriodID}}</span>
+            <span class="oc-info-value">{{index .Checkpoint "period_id"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.IsTerminal}}</span>
+            <span>
+                {{if index .Checkpoint "is_terminal"}}
+                <span class="badge badge--info">{{.Labels.Detail.IsTerminal}}</span>
+                {{end}}
+            </span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="oc-info-value">{{index .Checkpoint "date_created_string"}}</span>
+        </div>
+        <div class="oc-info-item">
+            <span class="oc-info-label">{{.Labels.Detail.ModifiedDate}}</span>
+            <span class="oc-info-value">{{index .Checkpoint "date_modified_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}

@@ -7,7 +7,7 @@ import (
 	"math"
 
 	espynahttp "github.com/erniealice/espyna-golang/contrib/http"
-	"github.com/erniealice/espyna-golang/tableparams"
+	"github.com/erniealice/espyna-golang/shared/tableparams"
 	fulfillment "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 

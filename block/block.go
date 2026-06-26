@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
-	"github.com/erniealice/espyna-golang/reference"
+	"github.com/erniealice/espyna-golang/ports"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
@@ -507,9 +507,9 @@ func Block(opts ...BlockOption) consumerapp.AppOption {
 		}
 
 		// --- Type-assert reference checker (optional; nil = no in-use gating) ---
-		var refChecker reference.Checker
+		var refChecker ports.Checker
 		if ctx.RefChecker != nil {
-			refChecker, _ = ctx.RefChecker.(reference.Checker)
+			refChecker, _ = ctx.RefChecker.(ports.Checker)
 		}
 
 		// --- Type-assert attachment operations ---

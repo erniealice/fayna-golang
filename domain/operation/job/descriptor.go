@@ -18,6 +18,7 @@ func Describe() compose.Unit {
 			AppEntry: &compose.AppEntry{
 				Key:        "job",
 				Route:      "job.list",
+				Params:     map[string]string{"status": "active"},
 				Label:      "Operations",
 				Icon:       "icon-briefcase",
 				Permission: "job:list",

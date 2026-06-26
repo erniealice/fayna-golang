@@ -11,7 +11,6 @@ import (
 	"github.com/erniealice/espyna-golang/consumer"
 	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
 	espynaports "github.com/erniealice/espyna-golang/ports"
-	"github.com/erniealice/espyna-golang/reference"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	fulfillmentdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/fulfillment"
 	jobdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/job"
@@ -83,7 +82,7 @@ func EngineBlock() consumerapp.AppOption {
 		infra.DeleteAttachment, _ = ctx.DeleteAttachment.(func(context.Context, *attachmentpb.DeleteAttachmentRequest) (*attachmentpb.DeleteAttachmentResponse, error))
 		infra.NewAttachmentID, _ = ctx.NewAttachmentID.(func() string)
 		if ctx.RefChecker != nil {
-			if rc, ok := ctx.RefChecker.(reference.Checker); ok {
+			if rc, ok := ctx.RefChecker.(espynaports.Checker); ok {
 				infra.RefChecker = rc
 			}
 		}

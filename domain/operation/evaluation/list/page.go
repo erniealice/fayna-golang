@@ -221,7 +221,7 @@ func buildTableRows(
 			ID:   id,
 			Href: detailURL,
 			Cells: []types.TableCell{
-				{Type: "text", Value: stringOrDash(e.GetSubjectStaffId())},
+				{Type: "text", Value: stringOrDash(e.GetStaffId())},
 				{Type: "text", Value: stringOrDash(e.GetClientId())},
 				{Type: "text", Value: period},
 				{Type: "badge", Value: typeLabel, Variant: typeVariant(e.GetEvaluationType())},
@@ -231,7 +231,7 @@ func buildTableRows(
 			},
 			DataAttrs: map[string]string{
 				"status":           evStatus,
-				"subject-staff-id": e.GetSubjectStaffId(),
+				"subject-staff-id": e.GetStaffId(),
 				"client-id":        e.GetClientId(),
 				"evaluation-type":  typeLabel,
 				// bulk-archivable gates the Bulk Archive action to SUBMITTED rows

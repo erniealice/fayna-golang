@@ -298,7 +298,7 @@ func computeProgressInline(ctx context.Context, deps *DetailViewDeps, cycleID st
 			st != evalpb.EvaluationStatus_EVALUATION_STATUS_SIGNED_OFF {
 			continue
 		}
-		completed[e.GetSubjectStaffId()+"|"+e.GetClientId()] = true
+		completed[e.GetStaffId()+"|"+e.GetClientId()] = true
 	}
 	for _, m := range members {
 		if completed[m.GetSubjectStaffId()+"|"+m.GetClientId()] {

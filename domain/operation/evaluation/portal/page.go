@@ -131,7 +131,7 @@ func loadCards(ctx context.Context, deps *PortalViewDeps) ([]Card, view.ViewResu
 func buildCards(items []*evalpb.Evaluation, deps *PortalViewDeps) []Card {
 	cards := make([]Card, 0, len(items))
 	for _, e := range items {
-		staffID := e.GetSubjectStaffId()
+		staffID := e.GetStaffId()
 		cards = append(cards, Card{
 			EvaluationID:  e.GetId(),
 			StaffID:       staffID,

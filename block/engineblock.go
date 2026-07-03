@@ -3,6 +3,7 @@ package block
 import (
 	"context"
 	"log"
+	"sort"
 	"time"
 
 	fulfillmentdashboardview "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
@@ -466,11 +467,22 @@ func newStaffResolver(
 		if err != nil {
 			return "", err
 		}
+		// Collect every active staff row that re-verifies to this user, then
+		// select deterministically (stable sort by staff id ascending). A user may
+		// hold multiple staff rows (1:1 today, but not guaranteed); the resolved
+		// staff_id is a security identity (the write-ownership axis), so
+		// multi-staff-per-user selection MUST NOT depend on the adapter's row
+		// return order.
+		var staffIDs []string
 		for _, s := range resp.GetData() {
 			if s.GetUserId() == userID && s.GetActive() {
-				return s.GetId(), nil
+				staffIDs = append(staffIDs, s.GetId())
 			}
 		}
-		return "", nil
+		if len(staffIDs) == 0 {
+			return "", nil
+		}
+		sort.Strings(staffIDs)
+		return staffIDs[0], nil
 	}
 }

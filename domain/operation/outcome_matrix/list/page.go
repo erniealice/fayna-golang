@@ -66,9 +66,17 @@ func NewView(deps *PageViewDeps) view.View {
 
 		templateID := viewCtx.Request.PathValue("id")
 
-		// Scope resolution: requested via ?scope=all, gated on workspace:list.
-		requestedAll := viewCtx.Request.URL.Query().Get("scope") == "all"
+		// Scope resolution. Explicit ?scope=all|mine is honored as requested. With
+		// NO explicit scope, an operator holding workspace:list defaults to ALL: a
+		// non-staff MINE view is zero rows by design, so an admin landing on the
+		// page should see the roster. The server-side re-check below (effectiveAll)
+		// still gates ALL on workspace:list, unchanged.
 		canSeeAll := perms.Can(scopeEntity, scopeAction)
+		scopeParam := viewCtx.Request.URL.Query().Get("scope")
+		requestedAll := scopeParam == "all"
+		if scopeParam == "" {
+			requestedAll = canSeeAll
+		}
 		effectiveAll := requestedAll && canSeeAll
 
 		l := deps.Labels

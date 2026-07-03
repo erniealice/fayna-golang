@@ -25,6 +25,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/job_template_phase"
 	"github.com/erniealice/fayna-golang/domain/operation/job_template_task"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_criteria"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/fayna-golang/domain/operation/performance"
 	"github.com/erniealice/fayna-golang/domain/operation/reporting_checkpoint"
@@ -542,6 +543,30 @@ func TaskOutcomeUnit(uc *UseCases, infra *Infra) compose.Unit {
 	return u
 }
 
+// OutcomeMatrixUnit registers the generic principal-scoped grading grid
+// (rows = client × job_template, columns = phase→task→criterion, cells =
+// task_outcome) — the cross-vertical replacement for the education-specific
+// grade_sheet. Read + batch-save only (no CRUD sub-entity). All auth/scope/IDOR
+// gates live in the espyna read use case + the record action; the closures here
+// are nil-safe (empty-state / fail-closed) on non-postgres builds.
+func OutcomeMatrixUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := outcome_matrix.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*outcome_matrix.Routes)
+		l := u.Labels.(*outcome_matrix.Labels)
+
+		deps := &operation.OutcomeMatrixModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+		}
+		wireOutcomeMatrixDeps(deps, uc)
+		operation.NewOutcomeMatrixModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
 func OutcomeSummaryUnit(uc *UseCases, _ *Infra) compose.Unit {
 	u := outcome_summary.Describe()
 	u.Mount = func(mc *compose.MountContext) error {
@@ -742,6 +767,7 @@ func AllUnits(uc *UseCases, infra *Infra) []compose.Unit {
 		JobOutcomeLineUnit(uc, infra),
 		ReportingCheckpointUnit(uc, infra),
 		TaskOutcomeUnit(uc, infra),
+		OutcomeMatrixUnit(uc, infra),
 		OutcomeSummaryUnit(uc, infra),
 		FulfillmentUnit(uc, infra),
 		// Performance-Evaluation (20260604). evaluation_template_item must be

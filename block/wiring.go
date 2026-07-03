@@ -212,6 +212,23 @@ func wireTaskOutcomeDeps(deps *operation.TaskOutcomeModuleDeps, u *UseCases) {
 }
 
 // ---------------------------------------------------------------------------
+// OutcomeMatrix module wiring
+// ---------------------------------------------------------------------------
+
+func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases) {
+	om := &u.Operation.OutcomeMatrix
+	deps.GetOutcomeMatrix = om.GetOutcomeMatrix
+	deps.ResolveStaff = om.ResolveStaff
+
+	// Batch-save write path routes through the typed task_outcome CRUD use cases
+	// (Read backs the IDOR ownership check; Update/Create apply the values).
+	to := &u.Operation.TaskOutcome
+	deps.CreateTaskOutcome = to.CreateTaskOutcome
+	deps.UpdateTaskOutcome = to.UpdateTaskOutcome
+	deps.ReadTaskOutcome = to.ReadTaskOutcome
+}
+
+// ---------------------------------------------------------------------------
 // OutcomeSummary module wiring
 // ---------------------------------------------------------------------------
 

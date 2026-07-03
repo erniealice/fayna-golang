@@ -62,6 +62,7 @@ import (
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 	activitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/workflow/activity"
+	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 
 	fulfillmentdashboard "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
 	cycleview "github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
@@ -114,6 +115,11 @@ type OperationUseCases struct {
 	JobTemplateTask  JobTemplateTaskUseCases
 	OutcomeCriteria  OutcomeCriteriaUseCases
 	TaskOutcome      TaskOutcomeUseCases
+	// OutcomeMatrix — the generic principal-scoped grading grid (read) + the
+	// acting-staff resolver its read-only + IDOR gates depend on. Sourced from
+	// espyna's SERVICE aggregate (service/operation/outcome_matrix), surfaced
+	// here on Operation because the view module lives in fayna domain/operation.
+	OutcomeMatrix OutcomeMatrixUseCases
 	// TemplateTaskCriteria — JobTemplate detail criteria-by-task list.
 	TemplateTaskCriteria TemplateTaskCriteriaUseCases
 	JobOutcomeSummary    JobOutcomeSummaryUseCases
@@ -247,6 +253,19 @@ type TaskOutcomeUseCases struct {
 	UpdateTaskOutcome func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error)
 	DeleteTaskOutcome func(context.Context, *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error)
 	ListTaskOutcomes  func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
+}
+
+// OutcomeMatrixUseCases — the generic, cross-vertical grading grid.
+// GetOutcomeMatrix reads the principal-scoped outcome matrix (espyna's
+// service/operation/outcome_matrix read use case). ResolveStaff maps the acting
+// session user → their active staff_id via the typed staff list use case (never
+// raw SQL) — the ownership identity the view's read-only gate and the record
+// action's IDOR guard both key on. OPTIONAL / nil-able (NOT in RequireFor): a
+// nil GetOutcomeMatrix renders the grid empty; a nil/empty ResolveStaff fails
+// the read-only + IDOR gates closed.
+type OutcomeMatrixUseCases struct {
+	GetOutcomeMatrix func(context.Context, *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
+	ResolveStaff     func(ctx context.Context) (string, error)
 }
 
 // ScoringSchemeUseCases — ScoringScheme CRUD + list (education grading 20260616).

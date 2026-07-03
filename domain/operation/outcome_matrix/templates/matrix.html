@@ -1,0 +1,18 @@
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "outcome-matrix-content"}}
+<div class="page-content page-content--grid" data-testid="outcome-matrix">
+    <div class="om-toolbar">
+        <div class="om-subject" data-testid="om-subject-picker">
+            <span class="om-subject-label">{{.Labels.Picker.Template}}:</span>
+            <span class="om-subject-name">{{.SubjectName}}</span>
+        </div>
+        <div class="om-scope-toggle" data-testid="om-scope-toggle">
+            <a href="{{.ScopeMineURL}}" class="om-scope{{if eq .ScopeActive "mine"}} om-scope--active{{end}}" data-testid="om-scope-mine">{{.Labels.Scope.Mine}}</a>
+            {{if .ShowScopeAll}}
+            <a href="{{.ScopeAllURL}}" class="om-scope{{if eq .ScopeActive "all"}} om-scope--active{{end}}" data-testid="om-scope-all">{{.Labels.Scope.All}}</a>
+            {{end}}
+        </div>
+    </div>
+    {{template "cell-grid-card" .Grid}}
+</div>
+{{end}}

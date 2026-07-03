@@ -11,7 +11,9 @@ import (
 	"github.com/erniealice/espyna-golang/consumer"
 	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
 	espynaports "github.com/erniealice/espyna-golang/ports"
+	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
+	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	fulfillmentdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/fulfillment"
 	jobdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/job"
 )
@@ -298,6 +300,24 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		}
 	}
 
+	// -- Service/operation OutcomeMatrix (generic grading grid) ------------------
+	//
+	// The read use case lives on espyna's SERVICE aggregate (service/operation/
+	// outcome_matrix), NOT the Operation aggregate — hence it is sourced from
+	// uc.Service.OutcomeMatrix here while surfacing on fayna's Operation group
+	// (the view module lives in fayna domain/operation/outcome_matrix). Nil-safe:
+	// a nil Service / OutcomeMatrix leaves the closure nil → the grid renders empty.
+	if uc.Service != nil && uc.Service.OutcomeMatrix != nil &&
+		uc.Service.OutcomeMatrix.GetOutcomeMatrix != nil {
+		result.Operation.OutcomeMatrix.GetOutcomeMatrix = uc.Service.OutcomeMatrix.GetOutcomeMatrix.Execute
+	}
+	// ResolveStaff maps the session user → active staff_id through the typed staff
+	// list use case (the read-only gate + record-action IDOR guard authority).
+	// Wired only when the staff list closure is present; "" fails those gates closed.
+	if result.Entity.Staff.ListStaffs != nil {
+		result.Operation.OutcomeMatrix.ResolveStaff = newStaffResolver(result.Entity.Staff.ListStaffs)
+	}
+
 	// -- Service.Dashboard.Job — proto→view translation --------------------------
 	//
 	// Proto Response carries *JobStats (pointer-to-struct), TrendLabels/Values,
@@ -412,4 +432,45 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 	}
 
 	return result
+}
+
+// newStaffResolver returns a ResolveStaff closure mapping the acting session
+// user to their active staff_id via the typed staff list use case (never raw
+// SQL). Returns "" when there is no authenticated user or no matching active
+// staff — a fail-closed identity the outcome-matrix read-only gate and the
+// record-action IDOR guard both treat as "cannot edit". The user_id filter
+// narrows the query server-side; the result is re-verified client-side because
+// the resolved staff_id is a security identity (the write-ownership axis) and
+// must never be a row the filter did not actually match to this user.
+func newStaffResolver(
+	listStaffs func(context.Context, *staffpb.ListStaffsRequest) (*staffpb.ListStaffsResponse, error),
+) func(context.Context) (string, error) {
+	return func(ctx context.Context) (string, error) {
+		userID := consumer.GetUserIDFromContext(ctx)
+		if userID == "" || listStaffs == nil {
+			return "", nil
+		}
+		resp, err := listStaffs(ctx, &staffpb.ListStaffsRequest{
+			Filters: &commonpb.FilterRequest{
+				Filters: []*commonpb.TypedFilter{{
+					Field: "user_id",
+					FilterType: &commonpb.TypedFilter_StringFilter{
+						StringFilter: &commonpb.StringFilter{
+							Value:    userID,
+							Operator: commonpb.StringOperator_STRING_EQUALS,
+						},
+					},
+				}},
+			},
+		})
+		if err != nil {
+			return "", err
+		}
+		for _, s := range resp.GetData() {
+			if s.GetUserId() == userID && s.GetActive() {
+				return s.GetId(), nil
+			}
+		}
+		return "", nil
+	}
 }

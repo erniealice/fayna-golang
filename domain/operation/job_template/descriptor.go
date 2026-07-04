@@ -15,7 +15,7 @@ func Describe() compose.Unit {
 		Templates: TemplatesFS,
 		Nav: compose.NavContrib{
 			Items: []compose.NavItem{
-				{Key: "job-templates", Route: "job_template.list", Params: map[string]string{"status": "active"}, Label: "Templates", Icon: "icon-copy"},
+				{Key: "job-templates", Route: "job_template.list", Params: map[string]string{"status": "active"}, Label: "Templates", Icon: "icon-copy", LabelKey: "job_templates_label", IconKey: "job_templates_icon"},
 			},
 		},
 	}

@@ -24,10 +24,10 @@ func Describe() compose.Unit {
 				Permission: "job:list",
 			},
 			Items: []compose.NavItem{
-				{Key: "jobs-draft", Route: "job.list", Params: map[string]string{"status": "draft"}, Label: "Draft", Icon: "icon-edit"},
-				{Key: "jobs-active", Route: "job.list", Params: map[string]string{"status": "active"}, Label: "Active", Icon: "icon-briefcase"},
-				{Key: "jobs-on-hold", Route: "job.list", Params: map[string]string{"status": "paused"}, Label: "On Hold", Icon: "icon-pause-circle"},
-				{Key: "jobs-completed", Route: "job.list", Params: map[string]string{"status": "completed"}, Label: "Complete", Icon: "icon-check-circle"},
+				{Key: "jobs-draft", Route: "job.list", Params: map[string]string{"status": "draft"}, Label: "Draft", Icon: "icon-edit", LabelKey: "draft_label", IconKey: "jobs_draft_icon"},
+				{Key: "jobs-active", Route: "job.list", Params: map[string]string{"status": "active"}, Label: "Active", Icon: "icon-briefcase", LabelKey: "active_label", IconKey: "jobs_active_icon"},
+				{Key: "jobs-on-hold", Route: "job.list", Params: map[string]string{"status": "paused"}, Label: "On Hold", Icon: "icon-pause-circle", LabelKey: "jobs_on_hold_label", IconKey: "jobs_on_hold_icon"},
+				{Key: "jobs-completed", Route: "job.list", Params: map[string]string{"status": "completed"}, Label: "Complete", Icon: "icon-check-circle", LabelKey: "complete_label", IconKey: "jobs_completed_icon"},
 			},
 		},
 	}

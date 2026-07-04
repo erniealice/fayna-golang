@@ -16,7 +16,7 @@ func Describe() compose.Unit {
 		Nav: compose.NavContrib{
 			Permission: "job_outcome_summary:list",
 			Items: []compose.NavItem{
-				{Key: "report-cards", Route: "outcome_summary.list", Label: "Outcome Reports", Icon: "icon-bar-chart", Permission: "job_outcome_summary:list"},
+				{Key: "report-cards", Route: "outcome_summary.list", Label: "Outcome Reports", Icon: "icon-bar-chart", Permission: "job_outcome_summary:list", LabelKey: "job_outcome_summary_label", IconKey: "job_outcome_summary_icon"},
 			},
 		},
 	}

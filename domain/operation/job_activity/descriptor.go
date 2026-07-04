@@ -16,10 +16,10 @@ func Describe() compose.Unit {
 		Nav: compose.NavContrib{
 			Permission: "job_activity:list",
 			Items: []compose.NavItem{
-				{Key: "te-drafts", Route: "job_activity.list", Query: "?status=draft", Label: "Drafts", Icon: "icon-edit", Permission: "job_activity:list"},
-				{Key: "te-pending", Route: "job_activity.list", Query: "?status=submitted", Label: "Awaiting Approval", Icon: "icon-clock", Permission: "job_activity:list"},
-				{Key: "te-approved", Route: "job_activity.list", Query: "?status=approved", Label: "Approved", Icon: "icon-check", Permission: "job_activity:list"},
-				{Key: "te-posted", Route: "job_activity.list", Query: "?status=posted", Label: "Posted", Icon: "icon-check-circle", Permission: "job_activity:list"},
+				{Key: "te-drafts", Route: "job_activity.list", Query: "?status=draft", Label: "Drafts", Icon: "icon-edit", Permission: "job_activity:list", LabelKey: "time_expenses_drafts_label", IconKey: "time_expenses_drafts_icon"},
+				{Key: "te-pending", Route: "job_activity.list", Query: "?status=submitted", Label: "Awaiting Approval", Icon: "icon-clock", Permission: "job_activity:list", LabelKey: "time_expenses_pending_label", IconKey: "time_expenses_pending_icon"},
+				{Key: "te-approved", Route: "job_activity.list", Query: "?status=approved", Label: "Approved", Icon: "icon-check", Permission: "job_activity:list", LabelKey: "time_expenses_approved_label", IconKey: "time_expenses_approved_icon"},
+				{Key: "te-posted", Route: "job_activity.list", Query: "?status=posted", Label: "Posted", Icon: "icon-check-circle", Permission: "job_activity:list", LabelKey: "time_expenses_posted_label", IconKey: "time_expenses_posted_icon"},
 			},
 		},
 	}

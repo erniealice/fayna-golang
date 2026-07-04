@@ -16,7 +16,7 @@ func Describe() compose.Unit {
 		Nav: compose.NavContrib{
 			Permission: "task_outcome:list",
 			Items: []compose.NavItem{
-				{Key: "outcome-log", Route: "task_outcome.list", Params: map[string]string{"status": "active"}, Label: "Outcome Log", Icon: "icon-clipboard", Permission: "task_outcome:list"},
+				{Key: "outcome-log", Route: "task_outcome.list", Params: map[string]string{"status": "active"}, Label: "Outcome Log", Icon: "icon-clipboard", Permission: "task_outcome:list", LabelKey: "outcome_log_label", IconKey: "outcome_log_icon"},
 			},
 		},
 	}

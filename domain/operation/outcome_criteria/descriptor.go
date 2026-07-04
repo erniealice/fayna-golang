@@ -16,7 +16,7 @@ func Describe() compose.Unit {
 		Nav: compose.NavContrib{
 			Permission: "outcome_criteria:list",
 			Items: []compose.NavItem{
-				{Key: "criteria", Route: "outcome_criteria.list", Params: map[string]string{"status": "active"}, Label: "Criteria", Icon: "icon-check-square", Permission: "outcome_criteria:list"},
+				{Key: "criteria", Route: "outcome_criteria.list", Params: map[string]string{"status": "active"}, Label: "Criteria", Icon: "icon-check-square", Permission: "outcome_criteria:list", LabelKey: "criteria_label", IconKey: "criteria_icon"},
 			},
 		},
 	}

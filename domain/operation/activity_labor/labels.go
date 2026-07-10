@@ -31,9 +31,9 @@ type ButtonLabels struct {
 type ColumnLabels struct {
 	Staff     string `json:"staff"`
 	Hours     string `json:"hours"`
-	RateType  string `json:"rateType"`
-	TimeStart string `json:"timeStart"`
-	TimeEnd   string `json:"timeEnd"`
+	RateType  string `json:"rate_type"`
+	TimeStart string `json:"time_start"`
+	TimeEnd   string `json:"time_end"`
 }
 
 type EmptyLabels struct {
@@ -42,33 +42,33 @@ type EmptyLabels struct {
 }
 
 type FormLabels struct {
-	SectionCharge    string `json:"sectionCharge"`
+	SectionCharge    string `json:"section_charge"`
 	Staff            string `json:"staff"`
 	Hours            string `json:"hours"`
-	RateType         string `json:"rateType"`
-	TimeStart        string `json:"timeStart"`
-	TimeEnd          string `json:"timeEnd"`
-	RateTypeStandard string `json:"rateTypeStandard"`
-	RateTypeOvertime string `json:"rateTypeOvertime"`
-	RateTypePremium  string `json:"rateTypePremium"`
-	SubmitCreate     string `json:"submitCreate"`
-	SubmitUpdate     string `json:"submitUpdate"`
+	RateType         string `json:"rate_type"`
+	TimeStart        string `json:"time_start"`
+	TimeEnd          string `json:"time_end"`
+	RateTypeStandard string `json:"rate_type_standard"`
+	RateTypeOvertime string `json:"rate_type_overtime"`
+	RateTypePremium  string `json:"rate_type_premium"`
+	SubmitCreate     string `json:"submit_create"`
+	SubmitUpdate     string `json:"submit_update"`
 }
 
 type DetailLabels struct {
-	PageTitle   string `json:"pageTitle"`
-	TitlePrefix string `json:"titlePrefix"`
+	PageTitle   string `json:"page_title"`
+	TitlePrefix string `json:"title_prefix"`
 	Staff       string `json:"staff"`
 	Hours       string `json:"hours"`
-	RateType    string `json:"rateType"`
-	TimeStart   string `json:"timeStart"`
-	TimeEnd     string `json:"timeEnd"`
+	RateType    string `json:"rate_type"`
+	TimeStart   string `json:"time_start"`
+	TimeEnd     string `json:"time_end"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
+	PermissionDenied string `json:"permission_denied"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
 }
 
 // DefaultActivityLaborLabels returns ActivityLaborLabels with sensible English defaults.

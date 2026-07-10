@@ -17,7 +17,7 @@ type Labels struct {
 	Status      StatusLabels     `json:"status"`
 	Tabs        TabLabels        `json:"tabs"`
 	Errors      ErrorLabels      `json:"errors"`
-	BulkActions BulkActionLabels `json:"bulkActions"`
+	BulkActions BulkActionLabels `json:"bulk_actions"`
 	// Charge holds labels for the charge tab (job-activity-tab-charge):
 	// labor/material/expense subtype field labels, edit CTAs, and empty states.
 	// 2026-06-01 Wave 4.3 label sweep.
@@ -29,21 +29,21 @@ type Labels struct {
 // 2026-06-01 Wave 4.3 label sweep.
 type ChargeLabels struct {
 	// Labor subtype
-	EditLabor      string `json:"editLabor"`
-	EditLaborTitle string `json:"editLaborTitle"`
-	EmptyLabor     string `json:"emptyLabor"`
+	EditLabor      string `json:"edit_labor"`
+	EditLaborTitle string `json:"edit_labor_title"`
+	EmptyLabor     string `json:"empty_labor"`
 	// Material subtype
-	EditMaterial      string `json:"editMaterial"`
-	EditMaterialTitle string `json:"editMaterialTitle"`
-	EmptyMaterial     string `json:"emptyMaterial"`
+	EditMaterial      string `json:"edit_material"`
+	EditMaterialTitle string `json:"edit_material_title"`
+	EmptyMaterial     string `json:"empty_material"`
 	// Expense subtype
-	EditExpense      string `json:"editExpense"`
-	EditExpenseTitle string `json:"editExpenseTitle"`
-	EmptyExpense     string `json:"emptyExpense"`
-	VendorRef        string `json:"vendorRef"`
-	ReceiptURL       string `json:"receiptUrl"`
-	PaymentMethod    string `json:"paymentMethod"`
-	MarkupPct        string `json:"markupPct"`
+	EditExpense      string `json:"edit_expense"`
+	EditExpenseTitle string `json:"edit_expense_title"`
+	EmptyExpense     string `json:"empty_expense"`
+	VendorRef        string `json:"vendor_ref"`
+	ReceiptURL       string `json:"receipt_url"`
+	PaymentMethod    string `json:"payment_method"`
+	MarkupPct        string `json:"markup_pct"`
 	// Fallback for equipment/subcontract/unspecified entry types.
 	Unavailable string `json:"unavailable"`
 }
@@ -63,13 +63,13 @@ type PageLabels struct {
 }
 
 type ButtonLabels struct {
-	AddActivity string `json:"addActivity"`
+	AddActivity string `json:"add_activity"`
 }
 
 type ColumnLabels struct {
 	Date        string `json:"date"`
 	Job         string `json:"job"`
-	EntryType   string `json:"entryType"`
+	EntryType   string `json:"entry_type"`
 	Description string `json:"description"`
 	Quantity    string `json:"quantity"`
 	Amount      string `json:"amount"`
@@ -84,38 +84,38 @@ type EmptyLabels struct {
 type FormLabels struct {
 	Job                string `json:"job"`
 	Task               string `json:"task"`
-	EntryType          string `json:"entryType"`
+	EntryType          string `json:"entry_type"`
 	Description        string `json:"description"`
-	BillableStatus     string `json:"billableStatus"`
+	BillableStatus     string `json:"billable_status"`
 	Hours              string `json:"hours"`
-	HourlyRate         string `json:"hourlyRate"`
+	HourlyRate         string `json:"hourly_rate"`
 	Product            string `json:"product"`
 	Quantity           string `json:"quantity"`
-	UnitCost           string `json:"unitCost"`
+	UnitCost           string `json:"unit_cost"`
 	Amount             string `json:"amount"`
 	Category           string `json:"category"`
-	EntryTypeInfo      string `json:"entryTypeInfo"`
-	BillableStatusInfo string `json:"billableStatusInfo"`
-	QuantityInfo       string `json:"quantityInfo"`
-	UnitCostInfo       string `json:"unitCostInfo"`
+	EntryTypeInfo      string `json:"entry_type_info"`
+	BillableStatusInfo string `json:"billable_status_info"`
+	QuantityInfo       string `json:"quantity_info"`
+	UnitCostInfo       string `json:"unit_cost_info"`
 
 	// 2026-04-29 milestone-billing plan §5/§6 — operator-facing JobActivity
 	// drawer fields and tab CTAs. The selectors driving phase5 specs 09/11
 	// reference these labels via lyngua.
-	AddCta                    string `json:"addCta"`
-	BillRate                  string `json:"billRate"`
-	BillAmount                string `json:"billAmount"`
-	BillableStatusIncluded    string `json:"billableStatusIncluded"`
-	BillableStatusBillable    string `json:"billableStatusBillable"`
-	BillableStatusNonBillable string `json:"billableStatusNonBillable"`
-	BillableStatusWriteOff    string `json:"billableStatusWriteOff"`
-	EntryTypeLabor            string `json:"entryTypeLabor"`
-	EntryTypeMaterial         string `json:"entryTypeMaterial"`
-	EntryTypeExpense          string `json:"entryTypeExpense"`
-	EntryTypeEquipment        string `json:"entryTypeEquipment"`
-	EntryTypeSubcontract      string `json:"entryTypeSubcontract"`
-	SubmitCreate              string `json:"submitCreate"`
-	SubmitUpdate              string `json:"submitUpdate"`
+	AddCta                    string `json:"add_cta"`
+	BillRate                  string `json:"bill_rate"`
+	BillAmount                string `json:"bill_amount"`
+	BillableStatusIncluded    string `json:"billable_status_included"`
+	BillableStatusBillable    string `json:"billable_status_billable"`
+	BillableStatusNonBillable string `json:"billable_status_non_billable"`
+	BillableStatusWriteOff    string `json:"billable_status_write_off"`
+	EntryTypeLabor            string `json:"entry_type_labor"`
+	EntryTypeMaterial         string `json:"entry_type_material"`
+	EntryTypeExpense          string `json:"entry_type_expense"`
+	EntryTypeEquipment        string `json:"entry_type_equipment"`
+	EntryTypeSubcontract      string `json:"entry_type_subcontract"`
+	SubmitCreate              string `json:"submit_create"`
+	SubmitUpdate              string `json:"submit_update"`
 }
 
 type ActionLabels struct {
@@ -130,33 +130,33 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle      string `json:"pageTitle"`
-	TitlePrefix    string `json:"titlePrefix"`
+	PageTitle      string `json:"page_title"`
+	TitlePrefix    string `json:"title_prefix"`
 	Job            string `json:"job"`
-	EntryType      string `json:"entryType"`
-	EntryDate      string `json:"entryDate"`
+	EntryType      string `json:"entry_type"`
+	EntryDate      string `json:"entry_date"`
 	Description    string `json:"description"`
 	Quantity       string `json:"quantity"`
-	UnitCost       string `json:"unitCost"`
-	TotalCost      string `json:"totalCost"`
+	UnitCost       string `json:"unit_cost"`
+	TotalCost      string `json:"total_cost"`
 	Currency       string `json:"currency"`
-	BillableStatus string `json:"billableStatus"`
-	ApprovalStatus string `json:"approvalStatus"`
-	PostingStatus  string `json:"postingStatus"`
-	CreatedDate    string `json:"createdDate"`
+	BillableStatus string `json:"billable_status"`
+	ApprovalStatus string `json:"approval_status"`
+	PostingStatus  string `json:"posting_status"`
+	CreatedDate    string `json:"created_date"`
 	// Labor subtype
 	Staff     string `json:"staff"`
 	Hours     string `json:"hours"`
-	RateType  string `json:"rateType"`
-	TimeStart string `json:"timeStart"`
-	TimeEnd   string `json:"timeEnd"`
+	RateType  string `json:"rate_type"`
+	TimeStart string `json:"time_start"`
+	TimeEnd   string `json:"time_end"`
 	// Material subtype
 	Product       string `json:"product"`
-	UnitOfMeasure string `json:"unitOfMeasure"`
-	LotNumber     string `json:"lotNumber"`
+	UnitOfMeasure string `json:"unit_of_measure"`
+	LotNumber     string `json:"lot_number"`
 	Location      string `json:"location"`
 	// Expense subtype
-	ExpenseCategory string `json:"expenseCategory"`
+	ExpenseCategory string `json:"expense_category"`
 	Vendor          string `json:"vendor"`
 	Receipt         string `json:"receipt"`
 	Reimbursable    string `json:"reimbursable"`
@@ -170,25 +170,25 @@ type StatusLabels struct {
 }
 
 type ErrorLabels struct {
-	PermissionDenied     string `json:"permissionDenied"`
-	NotFound             string `json:"notFound"`
-	IDRequired           string `json:"idRequired"`
-	InUse                string `json:"inUse"`
-	InvalidForm          string `json:"invalidForm"`
-	NoActivitiesSelected string `json:"noActivitiesSelected"`
-	InvoiceGenFailed     string `json:"invoiceGenFailed"`
+	PermissionDenied     string `json:"permission_denied"`
+	NotFound             string `json:"not_found"`
+	IDRequired           string `json:"id_required"`
+	InUse                string `json:"in_use"`
+	InvalidForm          string `json:"invalid_form"`
+	NoActivitiesSelected string `json:"no_activities_selected"`
+	InvoiceGenFailed     string `json:"invoice_gen_failed"`
 }
 
 // BulkActionLabels holds translatable strings for job activity bulk-action controls.
 type BulkActionLabels struct {
 	Delete                 string `json:"delete"`
-	BulkDelete             string `json:"bulkDelete"`
-	BulkDeleteConfirmTitle string `json:"bulkDeleteConfirmTitle"`
-	BulkDeleteConfirmMsg   string `json:"bulkDeleteConfirmMsg"`
-	GenerateInvoice        string `json:"generateInvoice"`
-	GenerateInvoiceConfirm string `json:"generateInvoiceConfirm"`
-	SelectAll              string `json:"selectAll"`
-	SelectedCount          string `json:"selectedCount"`
+	BulkDelete             string `json:"bulk_delete"`
+	BulkDeleteConfirmTitle string `json:"bulk_delete_confirm_title"`
+	BulkDeleteConfirmMsg   string `json:"bulk_delete_confirm_msg"`
+	GenerateInvoice        string `json:"generate_invoice"`
+	GenerateInvoiceConfirm string `json:"generate_invoice_confirm"`
+	SelectAll              string `json:"select_all"`
+	SelectedCount          string `json:"selected_count"`
 	Cancel                 string `json:"cancel"`
 }
 

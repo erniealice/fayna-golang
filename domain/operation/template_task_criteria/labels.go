@@ -16,42 +16,42 @@ type Labels struct {
 
 type PageLabels struct {
 	Heading         string `json:"heading"`
-	HeadingActive   string `json:"headingActive"`
-	HeadingInactive string `json:"headingInactive"`
+	HeadingActive   string `json:"heading_active"`
+	HeadingInactive string `json:"heading_inactive"`
 	Caption         string `json:"caption"`
-	CaptionActive   string `json:"captionActive"`
-	CaptionInactive string `json:"captionInactive"`
+	CaptionActive   string `json:"caption_active"`
+	CaptionInactive string `json:"caption_inactive"`
 }
 
 type ButtonLabels struct {
-	AddLink string `json:"addLink"`
+	AddLink string `json:"add_link"`
 }
 
 type ColumnLabels struct {
-	JobTemplateTaskID string `json:"jobTemplateTaskId"`
-	OutcomeCriteriaID string `json:"outcomeCriteriaId"`
-	SequenceOrder     string `json:"sequenceOrder"`
+	JobTemplateTaskID string `json:"job_template_task_id"`
+	OutcomeCriteriaID string `json:"outcome_criteria_id"`
+	SequenceOrder     string `json:"sequence_order"`
 	Status            string `json:"status"`
 }
 
 type EmptyLabels struct {
 	Title           string `json:"title"`
 	Message         string `json:"message"`
-	ActiveTitle     string `json:"activeTitle"`
-	ActiveMessage   string `json:"activeMessage"`
-	InactiveTitle   string `json:"inactiveTitle"`
-	InactiveMessage string `json:"inactiveMessage"`
+	ActiveTitle     string `json:"active_title"`
+	ActiveMessage   string `json:"active_message"`
+	InactiveTitle   string `json:"inactive_title"`
+	InactiveMessage string `json:"inactive_message"`
 }
 
 type FormLabels struct {
-	JobTemplateTaskID     string `json:"jobTemplateTaskId"`
-	JobTemplateTaskIDInfo string `json:"jobTemplateTaskIdInfo"`
-	OutcomeCriteriaID     string `json:"outcomeCriteriaId"`
-	OutcomeCriteriaIDInfo string `json:"outcomeCriteriaIdInfo"`
-	SequenceOrder         string `json:"sequenceOrder"`
-	SequenceOrderInfo     string `json:"sequenceOrderInfo"`
-	RequiredOverride      string `json:"requiredOverride"`
-	RequiredOverrideInfo  string `json:"requiredOverrideInfo"`
+	JobTemplateTaskID     string `json:"job_template_task_id"`
+	JobTemplateTaskIDInfo string `json:"job_template_task_id_info"`
+	OutcomeCriteriaID     string `json:"outcome_criteria_id"`
+	OutcomeCriteriaIDInfo string `json:"outcome_criteria_id_info"`
+	SequenceOrder         string `json:"sequence_order"`
+	SequenceOrderInfo     string `json:"sequence_order_info"`
+	RequiredOverride      string `json:"required_override"`
+	RequiredOverrideInfo  string `json:"required_override_info"`
 }
 
 type ActionLabels struct {
@@ -61,13 +61,13 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle         string `json:"pageTitle"`
-	JobTemplateTaskID string `json:"jobTemplateTaskId"`
-	OutcomeCriteriaID string `json:"outcomeCriteriaId"`
-	SequenceOrder     string `json:"sequenceOrder"`
-	RequiredOverride  string `json:"requiredOverride"`
+	PageTitle         string `json:"page_title"`
+	JobTemplateTaskID string `json:"job_template_task_id"`
+	OutcomeCriteriaID string `json:"outcome_criteria_id"`
+	SequenceOrder     string `json:"sequence_order"`
+	RequiredOverride  string `json:"required_override"`
 	Status            string `json:"status"`
-	CreatedDate       string `json:"createdDate"`
+	CreatedDate       string `json:"created_date"`
 }
 
 type TabLabels struct {
@@ -77,15 +77,15 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	InvalidFormData  string `json:"invalidFormData"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
-	NoPermission     string `json:"noPermission"`
+	PermissionDenied string `json:"permission_denied"`
+	InvalidFormData  string `json:"invalid_form_data"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
+	NoPermission     string `json:"no_permission"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

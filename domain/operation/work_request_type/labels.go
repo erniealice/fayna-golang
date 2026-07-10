@@ -39,8 +39,8 @@ type StatusLabels struct {
 
 // CategoryLabels holds translatable strings for the 2 type categories.
 type CategoryLabels struct {
-	PersonScoped  string `json:"personScoped"`
-	AccountScoped string `json:"accountScoped"`
+	PersonScoped  string `json:"person_scoped"`
+	AccountScoped string `json:"account_scoped"`
 }
 
 // ColumnLabels holds translatable strings for catalog table column headers.
@@ -48,9 +48,9 @@ type ColumnLabels struct {
 	Code            string `json:"code"`
 	Name            string `json:"name"`
 	Category        string `json:"category"`
-	DefaultSLAHours string `json:"defaultSlaHours"`
+	DefaultSLAHours string `json:"default_sla_hours"`
 	Status          string `json:"status"`
-	SortOrder       string `json:"sortOrder"`
+	SortOrder       string `json:"sort_order"`
 }
 
 // ActionLabels holds translatable strings for action button labels.
@@ -64,19 +64,19 @@ type ActionLabels struct {
 // FormLabels holds translatable strings for the catalog drawer form.
 type FormLabels struct {
 	Code                       string `json:"code"`
-	CodePlaceholder            string `json:"codePlaceholder"`
-	LabelKey                   string `json:"labelKey"`
-	LabelKeyPlaceholder        string `json:"labelKeyPlaceholder"`
-	DescriptionKey             string `json:"descriptionKey"`
-	DescriptionKeyPlaceholder  string `json:"descriptionKeyPlaceholder"`
+	CodePlaceholder            string `json:"code_placeholder"`
+	LabelKey                   string `json:"label_key"`
+	LabelKeyPlaceholder        string `json:"label_key_placeholder"`
+	DescriptionKey             string `json:"description_key"`
+	DescriptionKeyPlaceholder  string `json:"description_key_placeholder"`
 	Category                   string `json:"category"`
-	RequiresResource           string `json:"requiresResource"`
-	DefaultSLAHours            string `json:"defaultSlaHours"`
-	DefaultSLAHoursPlaceholder string `json:"defaultSlaHoursPlaceholder"`
-	SortOrder                  string `json:"sortOrder"`
-	SortOrderPlaceholder       string `json:"sortOrderPlaceholder"`
-	IconKey                    string `json:"iconKey"`
-	IconKeyPlaceholder         string `json:"iconKeyPlaceholder"`
+	RequiresResource           string `json:"requires_resource"`
+	DefaultSLAHours            string `json:"default_sla_hours"`
+	DefaultSLAHoursPlaceholder string `json:"default_sla_hours_placeholder"`
+	SortOrder                  string `json:"sort_order"`
+	SortOrderPlaceholder       string `json:"sort_order_placeholder"`
+	IconKey                    string `json:"icon_key"`
+	IconKeyPlaceholder         string `json:"icon_key_placeholder"`
 	Status                     string `json:"status"`
 }
 
@@ -88,10 +88,10 @@ type EmptyLabels struct {
 
 // ErrorLabels holds translatable strings for error messaging.
 type ErrorLabels struct {
-	NotFound         string `json:"notFound"`
-	PermissionDenied string `json:"permissionDenied"`
-	IDRequired       string `json:"idRequired"`
-	InvalidForm      string `json:"invalidForm"`
+	NotFound         string `json:"not_found"`
+	PermissionDenied string `json:"permission_denied"`
+	IDRequired       string `json:"id_required"`
+	InvalidForm      string `json:"invalid_form"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

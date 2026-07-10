@@ -22,22 +22,22 @@ type Labels struct {
 type PageLabels struct {
 	Heading          string `json:"heading"`
 	Caption          string `json:"caption"`
-	HeadingPending   string `json:"headingPending"`
-	HeadingActive    string `json:"headingActive"`
-	HeadingCompleted string `json:"headingCompleted"`
+	HeadingPending   string `json:"heading_pending"`
+	HeadingActive    string `json:"heading_active"`
+	HeadingCompleted string `json:"heading_completed"`
 }
 
 type ButtonLabels struct {
-	AddPhase string `json:"addPhase"`
+	AddPhase string `json:"add_phase"`
 }
 
 type ColumnLabels struct {
 	Name         string `json:"name"`
 	Job          string `json:"job"`
-	PhaseOrder   string `json:"phaseOrder"`
+	PhaseOrder   string `json:"phase_order"`
 	Status       string `json:"status"`
-	PlannedStart string `json:"plannedStart"`
-	PlannedEnd   string `json:"plannedEnd"`
+	PlannedStart string `json:"planned_start"`
+	PlannedEnd   string `json:"planned_end"`
 }
 
 type EmptyLabels struct {
@@ -46,45 +46,45 @@ type EmptyLabels struct {
 }
 
 type FormLabels struct {
-	SectionPhase             string `json:"sectionPhase"`
-	SectionResourceTiming    string `json:"sectionResourceTiming"`
+	SectionPhase             string `json:"section_phase"`
+	SectionResourceTiming    string `json:"section_resource_timing"`
 	Name                     string `json:"name"`
-	NamePlaceholder          string `json:"namePlaceholder"`
-	PhaseOrder               string `json:"phaseOrder"`
+	NamePlaceholder          string `json:"name_placeholder"`
+	PhaseOrder               string `json:"phase_order"`
 	Status                   string `json:"status"`
-	PlannedStart             string `json:"plannedStart"`
-	PlannedEnd               string `json:"plannedEnd"`
-	ActualStart              string `json:"actualStart"`
-	ActualEnd                string `json:"actualEnd"`
-	TemplatePhasePlaceholder string `json:"templatePhasePlaceholder"`
+	PlannedStart             string `json:"planned_start"`
+	PlannedEnd               string `json:"planned_end"`
+	ActualStart              string `json:"actual_start"`
+	ActualEnd                string `json:"actual_end"`
+	TemplatePhasePlaceholder string `json:"template_phase_placeholder"`
 	Resource                 string `json:"resource"`
-	ResourcePlaceholder      string `json:"resourcePlaceholder"`
-	SetupMinutes             string `json:"setupMinutes"`
-	RunMinutesPerUnit        string `json:"runMinutesPerUnit"`
-	PredecessorPhase         string `json:"predecessorPhase"`
-	PredecessorPlaceholder   string `json:"predecessorPlaceholder"`
+	ResourcePlaceholder      string `json:"resource_placeholder"`
+	SetupMinutes             string `json:"setup_minutes"`
+	RunMinutesPerUnit        string `json:"run_minutes_per_unit"`
+	PredecessorPhase         string `json:"predecessor_phase"`
+	PredecessorPlaceholder   string `json:"predecessor_placeholder"`
 }
 
 type ActionLabels struct {
 	View         string `json:"view"`
 	Edit         string `json:"edit"`
 	Delete       string `json:"delete"`
-	MarkComplete string `json:"markComplete"`
+	MarkComplete string `json:"mark_complete"`
 }
 
 type DetailLabels struct {
-	PageTitle         string `json:"pageTitle"`
+	PageTitle         string `json:"page_title"`
 	Name              string `json:"name"`
 	Job               string `json:"job"`
 	Status            string `json:"status"`
-	PhaseOrder        string `json:"phaseOrder"`
-	PlannedStart      string `json:"plannedStart"`
-	PlannedEnd        string `json:"plannedEnd"`
-	ActualStart       string `json:"actualStart"`
-	ActualEnd         string `json:"actualEnd"`
+	PhaseOrder        string `json:"phase_order"`
+	PlannedStart      string `json:"planned_start"`
+	PlannedEnd        string `json:"planned_end"`
+	ActualStart       string `json:"actual_start"`
+	ActualEnd         string `json:"actual_end"`
 	Resource          string `json:"resource"`
-	SetupMinutes      string `json:"setupMinutes"`
-	RunMinutesPerUnit string `json:"runMinutesPerUnit"`
+	SetupMinutes      string `json:"setup_minutes"`
+	RunMinutesPerUnit string `json:"run_minutes_per_unit"`
 }
 
 type TabLabels struct {
@@ -97,13 +97,13 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
+	PermissionDenied string `json:"permission_denied"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
 }
 
 // DefaultJobPhaseLabels returns JobPhaseLabels with sensible English defaults.

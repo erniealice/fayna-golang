@@ -16,49 +16,49 @@ type Labels struct {
 
 type PageLabels struct {
 	Heading         string `json:"heading"`
-	HeadingActive   string `json:"headingActive"`
-	HeadingInactive string `json:"headingInactive"`
+	HeadingActive   string `json:"heading_active"`
+	HeadingInactive string `json:"heading_inactive"`
 	Caption         string `json:"caption"`
-	CaptionActive   string `json:"captionActive"`
-	CaptionInactive string `json:"captionInactive"`
+	CaptionActive   string `json:"caption_active"`
+	CaptionInactive string `json:"caption_inactive"`
 }
 
 type ButtonLabels struct {
-	AddScoreScale string `json:"addScoreScale"`
+	AddScoreScale string `json:"add_score_scale"`
 }
 
 type ColumnLabels struct {
 	Name          string `json:"name"`
-	ScaleKind     string `json:"scaleKind"`
-	VersionStatus string `json:"versionStatus"`
+	ScaleKind     string `json:"scale_kind"`
+	VersionStatus string `json:"version_status"`
 	Version       string `json:"version"`
-	InputUnit     string `json:"inputUnit"`
-	OutputUnit    string `json:"outputUnit"`
+	InputUnit     string `json:"input_unit"`
+	OutputUnit    string `json:"output_unit"`
 }
 
 type EmptyLabels struct {
 	Title           string `json:"title"`
 	Message         string `json:"message"`
-	ActiveTitle     string `json:"activeTitle"`
-	ActiveMessage   string `json:"activeMessage"`
-	InactiveTitle   string `json:"inactiveTitle"`
-	InactiveMessage string `json:"inactiveMessage"`
+	ActiveTitle     string `json:"active_title"`
+	ActiveMessage   string `json:"active_message"`
+	InactiveTitle   string `json:"inactive_title"`
+	InactiveMessage string `json:"inactive_message"`
 }
 
 type FormLabels struct {
 	Name              string `json:"name"`
-	NamePlaceholder   string `json:"namePlaceholder"`
-	ScaleKind         string `json:"scaleKind"`
-	ScaleKindInfo     string `json:"scaleKindInfo"`
-	InputUnit         string `json:"inputUnit"`
-	InputUnitHint     string `json:"inputUnitHint"`
-	InputMin          string `json:"inputMin"`
-	InputMax          string `json:"inputMax"`
-	OutputUnit        string `json:"outputUnit"`
-	OutputUnitHint    string `json:"outputUnitHint"`
-	ScaleGroupId      string `json:"scaleGroupId"`
-	ScaleGroupIdHint  string `json:"scaleGroupIdHint"`
-	VersionStatusInfo string `json:"versionStatusInfo"`
+	NamePlaceholder   string `json:"name_placeholder"`
+	ScaleKind         string `json:"scale_kind"`
+	ScaleKindInfo     string `json:"scale_kind_info"`
+	InputUnit         string `json:"input_unit"`
+	InputUnitHint     string `json:"input_unit_hint"`
+	InputMin          string `json:"input_min"`
+	InputMax          string `json:"input_max"`
+	OutputUnit        string `json:"output_unit"`
+	OutputUnitHint    string `json:"output_unit_hint"`
+	ScaleGroupId      string `json:"scale_group_id"`
+	ScaleGroupIdHint  string `json:"scale_group_id_hint"`
+	VersionStatusInfo string `json:"version_status_info"`
 }
 
 type ActionLabels struct {
@@ -68,20 +68,20 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle     string `json:"pageTitle"`
+	PageTitle     string `json:"page_title"`
 	Name          string `json:"name"`
-	ScaleKind     string `json:"scaleKind"`
-	VersionStatus string `json:"versionStatus"`
+	ScaleKind     string `json:"scale_kind"`
+	VersionStatus string `json:"version_status"`
 	Version       string `json:"version"`
-	InputUnit     string `json:"inputUnit"`
-	InputMin      string `json:"inputMin"`
-	InputMax      string `json:"inputMax"`
-	OutputUnit    string `json:"outputUnit"`
-	ScaleGroupId  string `json:"scaleGroupId"`
+	InputUnit     string `json:"input_unit"`
+	InputMin      string `json:"input_min"`
+	InputMax      string `json:"input_max"`
+	OutputUnit    string `json:"output_unit"`
+	ScaleGroupId  string `json:"scale_group_id"`
 	Active        string `json:"active"`
-	CreatedBy     string `json:"createdBy"`
-	CreatedDate   string `json:"createdDate"`
-	ModifiedDate  string `json:"modifiedDate"`
+	CreatedBy     string `json:"created_by"`
+	CreatedDate   string `json:"created_date"`
+	ModifiedDate  string `json:"modified_date"`
 }
 
 type TabLabels struct {
@@ -91,15 +91,15 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	InvalidFormData  string `json:"invalidFormData"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
-	NoPermission     string `json:"noPermission"`
+	PermissionDenied string `json:"permission_denied"`
+	InvalidFormData  string `json:"invalid_form_data"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
+	NoPermission     string `json:"no_permission"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

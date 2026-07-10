@@ -48,16 +48,16 @@ type EntityLabels struct {
 type StatusLabels struct {
 	Draft     string `json:"draft"`
 	Submitted string `json:"submitted"`
-	SignedOff string `json:"signedOff"`
+	SignedOff string `json:"signed_off"`
 	Archived  string `json:"archived"`
 }
 
 // TypeLabels holds the 4 evaluation type chips.
 type TypeLabels struct {
-	PerformanceReview string `json:"performanceReview"`
+	PerformanceReview string `json:"performance_review"`
 	CSAT              string `json:"csat"`
-	CourseEval        string `json:"courseEval"`
-	VendorScorecard   string `json:"vendorScorecard"`
+	CourseEval        string `json:"course_eval"`
+	VendorScorecard   string `json:"vendor_scorecard"`
 }
 
 // ColumnLabels holds list table column headers.
@@ -74,7 +74,7 @@ type ColumnLabels struct {
 // ActionLabels holds list/detail/row action button labels.
 type ActionLabels struct {
 	View    string `json:"view"`
-	SignOff string `json:"signOff"`
+	SignOff string `json:"sign_off"`
 	Archive string `json:"archive"`
 	Delete  string `json:"delete"`
 	Bulk    string `json:"bulk"`
@@ -82,21 +82,21 @@ type ActionLabels struct {
 
 // DetailLabels holds detail-header field labels.
 type DetailLabels struct {
-	PageTitle   string `json:"pageTitle"`
-	Associate   string `json:"associate"`
-	Client      string `json:"client"`
-	Period      string `json:"period"`
-	Type        string `json:"type"`
-	Status      string `json:"status"`
-	OverallScore string `json:"overallScore"`
-	Narrative   string `json:"narrative"`
+	PageTitle    string `json:"page_title"`
+	Associate    string `json:"associate"`
+	Client       string `json:"client"`
+	Period       string `json:"period"`
+	Type         string `json:"type"`
+	Status       string `json:"status"`
+	OverallScore string `json:"overall_score"`
+	Narrative    string `json:"narrative"`
 }
 
 // TabLabels holds detail-page tab labels.
 type TabLabels struct {
 	Info    string `json:"info"`
 	Scores  string `json:"scores"`
-	SignOff string `json:"signOff"`
+	SignOff string `json:"sign_off"`
 	Audit   string `json:"audit"`
 }
 
@@ -106,9 +106,9 @@ type ScoresLabels struct {
 	Weight     string `json:"weight"`
 	Type       string `json:"type"`
 	Answer     string `json:"answer"`
-	NotScored  string `json:"notScored"`
+	NotScored  string `json:"not_scored"`
 	Weighted   string `json:"weighted"`
-	OverallNil string `json:"overallNil"`
+	OverallNil string `json:"overall_nil"`
 }
 
 // DimensionLabels holds the polymorphic dimension-slot labels — one helper per
@@ -117,33 +117,33 @@ type DimensionLabels struct {
 	Pass       string `json:"pass"`
 	Fail       string `json:"fail"`
 	Select     string `json:"select"`
-	NotScored  string `json:"notScored"`
-	WeightChip string `json:"weightChip"`
-	ScoreOutOf string `json:"scoreOutOf"`
+	NotScored  string `json:"not_scored"`
+	WeightChip string `json:"weight_chip"`
+	ScoreOutOf string `json:"score_out_of"`
 }
 
 // DrawerLabels holds the score-submission drawer (DF-1) labels.
 type DrawerLabels struct {
-	Title         string `json:"title"`
-	Template      string `json:"template"`
-	TemplatePick  string `json:"templatePick"`
-	PeriodStart   string `json:"periodStart"`
-	PeriodEnd     string `json:"periodEnd"`
-	Narrative     string `json:"narrative"`
-	SaveDraft     string `json:"saveDraft"`
-	Submit        string `json:"submit"`
-	Cancel        string `json:"cancel"`
+	Title        string `json:"title"`
+	Template     string `json:"template"`
+	TemplatePick string `json:"template_pick"`
+	PeriodStart  string `json:"period_start"`
+	PeriodEnd    string `json:"period_end"`
+	Narrative    string `json:"narrative"`
+	SaveDraft    string `json:"save_draft"`
+	Submit       string `json:"submit"`
+	Cancel       string `json:"cancel"`
 }
 
 // PortalLabels holds the client-portal "Rate My Team" labels (§H).
 type PortalLabels struct {
-	Heading     string `json:"heading"`
-	Caption     string `json:"caption"`
-	StartReview string `json:"startReview"`
-	Rating      string `json:"rating"`
-	RateBand    string `json:"rateBand"`
-	EmptyTitle  string `json:"emptyTitle"`
-	EmptyMessage string `json:"emptyMessage"`
+	Heading      string `json:"heading"`
+	Caption      string `json:"caption"`
+	StartReview  string `json:"start_review"`
+	Rating       string `json:"rating"`
+	RateBand     string `json:"rate_band"`
+	EmptyTitle   string `json:"empty_title"`
+	EmptyMessage string `json:"empty_message"`
 }
 
 // EmptyLabels holds empty-state messaging.
@@ -154,16 +154,16 @@ type EmptyLabels struct {
 
 // FormLabels holds drawer form placeholders.
 type FormLabels struct {
-	NarrativePlaceholder string `json:"narrativePlaceholder"`
+	NarrativePlaceholder string `json:"narrative_placeholder"`
 }
 
 // ErrorLabels holds error messaging.
 type ErrorLabels struct {
-	NotFound         string `json:"notFound"`
-	PermissionDenied string `json:"permissionDenied"`
-	IDRequired       string `json:"idRequired"`
-	InvalidForm      string `json:"invalidForm"`
-	NoClient         string `json:"noClient"`
+	NotFound         string `json:"not_found"`
+	PermissionDenied string `json:"permission_denied"`
+	IDRequired       string `json:"id_required"`
+	InvalidForm      string `json:"invalid_form"`
+	NoClient         string `json:"no_client"`
 }
 
 // DefaultLabels returns Labels with English defaults.

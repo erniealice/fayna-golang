@@ -18,43 +18,43 @@ type Labels struct {
 
 type PageLabels struct {
 	Heading         string `json:"heading"`
-	HeadingActive   string `json:"headingActive"`
-	HeadingInactive string `json:"headingInactive"`
+	HeadingActive   string `json:"heading_active"`
+	HeadingInactive string `json:"heading_inactive"`
 	Caption         string `json:"caption"`
-	CaptionActive   string `json:"captionActive"`
-	CaptionInactive string `json:"captionInactive"`
+	CaptionActive   string `json:"caption_active"`
+	CaptionInactive string `json:"caption_inactive"`
 }
 
 type ButtonLabels struct {
-	AddLine string `json:"addLine"`
+	AddLine string `json:"add_line"`
 }
 
 type ColumnLabels struct {
 	Label         string `json:"label"`
-	ReportingRole string `json:"reportingRole"`
-	OutputValue   string `json:"outputValue"`
-	OutputLabel   string `json:"outputLabel"`
+	ReportingRole string `json:"reporting_role"`
+	OutputValue   string `json:"output_value"`
+	OutputLabel   string `json:"output_label"`
 	Active        string `json:"active"`
 }
 
 type EmptyLabels struct {
 	Title           string `json:"title"`
 	Message         string `json:"message"`
-	ActiveTitle     string `json:"activeTitle"`
-	ActiveMessage   string `json:"activeMessage"`
-	InactiveTitle   string `json:"inactiveTitle"`
-	InactiveMessage string `json:"inactiveMessage"`
+	ActiveTitle     string `json:"active_title"`
+	ActiveMessage   string `json:"active_message"`
+	InactiveTitle   string `json:"inactive_title"`
+	InactiveMessage string `json:"inactive_message"`
 }
 
 type FormLabels struct {
 	Label             string `json:"label"`
-	LabelPlaceholder  string `json:"labelPlaceholder"`
-	WeightOrCredits   string `json:"weightOrCredits"`
-	OutputValue       string `json:"outputValue"`
-	OutputLabel       string `json:"outputLabel"`
-	ScoreScaleBandId  string `json:"scoreScaleBandId"`
-	ReportingRole     string `json:"reportingRole"`
-	ReportingRoleInfo string `json:"reportingRoleInfo"`
+	LabelPlaceholder  string `json:"label_placeholder"`
+	WeightOrCredits   string `json:"weight_or_credits"`
+	OutputValue       string `json:"output_value"`
+	OutputLabel       string `json:"output_label"`
+	ScoreScaleBandId  string `json:"score_scale_band_id"`
+	ReportingRole     string `json:"reporting_role"`
+	ReportingRoleInfo string `json:"reporting_role_info"`
 }
 
 type ActionLabels struct {
@@ -64,16 +64,16 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle        string `json:"pageTitle"`
+	PageTitle        string `json:"page_title"`
 	Label            string `json:"label"`
-	WeightOrCredits  string `json:"weightOrCredits"`
-	OutputValue      string `json:"outputValue"`
-	OutputLabel      string `json:"outputLabel"`
-	ScoreScaleBandId string `json:"scoreScaleBandId"`
-	ReportingRole    string `json:"reportingRole"`
+	WeightOrCredits  string `json:"weight_or_credits"`
+	OutputValue      string `json:"output_value"`
+	OutputLabel      string `json:"output_label"`
+	ScoreScaleBandId string `json:"score_scale_band_id"`
+	ReportingRole    string `json:"reporting_role"`
 	Active           string `json:"active"`
-	CreatedDate      string `json:"createdDate"`
-	ModifiedDate     string `json:"modifiedDate"`
+	CreatedDate      string `json:"created_date"`
+	ModifiedDate     string `json:"modified_date"`
 }
 
 type TabLabels struct {
@@ -83,15 +83,15 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	InvalidFormData  string `json:"invalidFormData"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
-	NoPermission     string `json:"noPermission"`
+	PermissionDenied string `json:"permission_denied"`
+	InvalidFormData  string `json:"invalid_form_data"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
+	NoPermission     string `json:"no_permission"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

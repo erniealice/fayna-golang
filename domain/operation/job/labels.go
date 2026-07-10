@@ -17,7 +17,7 @@ type Labels struct {
 	Tabs        TabLabels        `json:"tabs"`
 	Confirm     ConfirmLabels    `json:"confirm"`
 	Errors      ErrorLabels      `json:"errors"`
-	BulkActions BulkActionLabels `json:"bulkActions"`
+	BulkActions BulkActionLabels `json:"bulk_actions"`
 	// Dashboard labels for the Job live dashboard
 	// (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
 	Dashboard DashboardLabels `json:"dashboard"`
@@ -29,47 +29,47 @@ type DashboardLabels struct {
 	Title    string `json:"title"`
 	Subtitle string `json:"subtitle"`
 	// Stats
-	StatActive    string `json:"statActive"`
-	StatDoneMonth string `json:"statDoneMonth"`
-	StatOverdue   string `json:"statOverdue"`
-	StatHoursWeek string `json:"statHoursWeek"`
+	StatActive    string `json:"stat_active"`
+	StatDoneMonth string `json:"stat_done_month"`
+	StatOverdue   string `json:"stat_overdue"`
+	StatHoursWeek string `json:"stat_hours_week"`
 	// Widgets
-	HoursPerWeek      string `json:"hoursPerWeek"`
-	UpcomingDeadlines string `json:"upcomingDeadlines"`
-	RecentActivity    string `json:"recentActivity"`
-	NoDeadlines       string `json:"noDeadlines"`
-	NoActivity        string `json:"noActivity"`
+	HoursPerWeek      string `json:"hours_per_week"`
+	UpcomingDeadlines string `json:"upcoming_deadlines"`
+	RecentActivity    string `json:"recent_activity"`
+	NoDeadlines       string `json:"no_deadlines"`
+	NoActivity        string `json:"no_activity"`
 	// Quick actions
-	QuickNewJob      string `json:"quickNewJob"`
-	QuickNewTemplate string `json:"quickNewTemplate"`
-	QuickLogHours    string `json:"quickLogHours"`
-	QuickJobCalendar string `json:"quickJobCalendar"`
+	QuickNewJob      string `json:"quick_new_job"`
+	QuickNewTemplate string `json:"quick_new_template"`
+	QuickLogHours    string `json:"quick_log_hours"`
+	QuickJobCalendar string `json:"quick_job_calendar"`
 	// Common
-	ViewAll   string `json:"viewAll"`
-	AxisHours string `json:"axisHours"`
+	ViewAll   string `json:"view_all"`
+	AxisHours string `json:"axis_hours"`
 }
 
 type PageLabels struct {
 	Heading          string `json:"heading"`
 	Caption          string `json:"caption"`
-	HeadingDraft     string `json:"headingDraft"`
-	CaptionDraft     string `json:"captionDraft"`
-	HeadingActive    string `json:"headingActive"`
-	CaptionActive    string `json:"captionActive"`
-	HeadingCompleted string `json:"headingCompleted"`
-	CaptionCompleted string `json:"captionCompleted"`
-	HeadingClosed    string `json:"headingClosed"`
-	CaptionClosed    string `json:"captionClosed"`
-	HeadingPlanned   string `json:"headingPlanned"`
-	CaptionPlanned   string `json:"captionPlanned"`
-	HeadingReleased  string `json:"headingReleased"`
-	CaptionReleased  string `json:"captionReleased"`
-	HeadingOnHold    string `json:"headingOnHold"`
-	CaptionOnHold    string `json:"captionOnHold"`
+	HeadingDraft     string `json:"heading_draft"`
+	CaptionDraft     string `json:"caption_draft"`
+	HeadingActive    string `json:"heading_active"`
+	CaptionActive    string `json:"caption_active"`
+	HeadingCompleted string `json:"heading_completed"`
+	CaptionCompleted string `json:"caption_completed"`
+	HeadingClosed    string `json:"heading_closed"`
+	CaptionClosed    string `json:"caption_closed"`
+	HeadingPlanned   string `json:"heading_planned"`
+	CaptionPlanned   string `json:"caption_planned"`
+	HeadingReleased  string `json:"heading_released"`
+	CaptionReleased  string `json:"caption_released"`
+	HeadingOnHold    string `json:"heading_on_hold"`
+	CaptionOnHold    string `json:"caption_on_hold"`
 }
 
 type ButtonLabels struct {
-	AddJob string `json:"addJob"`
+	AddJob string `json:"add_job"`
 }
 
 type ColumnLabels struct {
@@ -83,33 +83,33 @@ type ColumnLabels struct {
 type EmptyLabels struct {
 	Title             string `json:"title"`
 	Message           string `json:"message"`
-	PhasesTitle       string `json:"phasesTitle"`
-	PhasesMessage     string `json:"phasesMessage"`
-	ActivitiesTitle   string `json:"activitiesTitle"`
-	ActivitiesMessage string `json:"activitiesMessage"`
-	SettlementTitle   string `json:"settlementTitle"`
-	SettlementMessage string `json:"settlementMessage"`
-	OutcomesTitle     string `json:"outcomesTitle"`
-	OutcomesMessage   string `json:"outcomesMessage"`
+	PhasesTitle       string `json:"phases_title"`
+	PhasesMessage     string `json:"phases_message"`
+	ActivitiesTitle   string `json:"activities_title"`
+	ActivitiesMessage string `json:"activities_message"`
+	SettlementTitle   string `json:"settlement_title"`
+	SettlementMessage string `json:"settlement_message"`
+	OutcomesTitle     string `json:"outcomes_title"`
+	OutcomesMessage   string `json:"outcomes_message"`
 
 	// 2026-06-01 Wave 4.3 label sweep — budget & actuals tab empty states
 	// (job/templates/detail.html job-tab-budget / job-tab-actuals).
-	BudgetTitle           string `json:"budgetTitle"`
-	BudgetMessage         string `json:"budgetMessage"`
-	BudgetNoPhasesTitle   string `json:"budgetNoPhasesTitle"`
-	BudgetNoPhasesMessage string `json:"budgetNoPhasesMessage"`
-	BudgetNoTasks         string `json:"budgetNoTasks"`
-	ActualsTitle          string `json:"actualsTitle"`
-	ActualsMessage        string `json:"actualsMessage"`
+	BudgetTitle           string `json:"budget_title"`
+	BudgetMessage         string `json:"budget_message"`
+	BudgetNoPhasesTitle   string `json:"budget_no_phases_title"`
+	BudgetNoPhasesMessage string `json:"budget_no_phases_message"`
+	BudgetNoTasks         string `json:"budget_no_tasks"`
+	ActualsTitle          string `json:"actuals_title"`
+	ActualsMessage        string `json:"actuals_message"`
 }
 
 type FormLabels struct {
-	NamePlaceholder     string `json:"namePlaceholder"`
-	ClientPlaceholder   string `json:"clientPlaceholder"`
-	LocationPlaceholder string `json:"locationPlaceholder"`
-	NameInfo            string `json:"nameInfo"`
-	ClientInfo          string `json:"clientInfo"`
-	LocationInfo        string `json:"locationInfo"`
+	NamePlaceholder     string `json:"name_placeholder"`
+	ClientPlaceholder   string `json:"client_placeholder"`
+	LocationPlaceholder string `json:"location_placeholder"`
+	NameInfo            string `json:"name_info"`
+	ClientInfo          string `json:"client_info"`
+	LocationInfo        string `json:"location_info"`
 }
 
 type ActionLabels struct {
@@ -119,59 +119,59 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle    string `json:"pageTitle"`
-	TitlePrefix  string `json:"titlePrefix"`
-	SectionInfo  string `json:"sectionInfo"`
+	PageTitle    string `json:"page_title"`
+	TitlePrefix  string `json:"title_prefix"`
+	SectionInfo  string `json:"section_info"`
 	Approval     string `json:"approval"`
 	Description  string `json:"description"`
 	Quantity     string `json:"quantity"`
-	UnitCost     string `json:"unitCost"`
-	TotalCost    string `json:"totalCost"`
-	EntryDate    string `json:"entryDate"`
-	EntryType    string `json:"entryType"`
-	PhaseName    string `json:"phaseName"`
-	PhaseOrder   string `json:"phaseOrder"`
-	PhaseStatus  string `json:"phaseStatus"`
-	TaskName     string `json:"taskName"`
-	TaskOrder    string `json:"taskOrder"`
-	TaskStatus   string `json:"taskStatus"`
-	AssignedTo   string `json:"assignedTo"`
-	TargetType   string `json:"targetType"`
-	TargetID     string `json:"targetId"`
-	AllocatedAmt string `json:"allocatedAmount"`
-	SettleDate   string `json:"settlementDate"`
-	SettleStatus string `json:"settlementStatus"`
+	UnitCost     string `json:"unit_cost"`
+	TotalCost    string `json:"total_cost"`
+	EntryDate    string `json:"entry_date"`
+	EntryType    string `json:"entry_type"`
+	PhaseName    string `json:"phase_name"`
+	PhaseOrder   string `json:"phase_order"`
+	PhaseStatus  string `json:"phase_status"`
+	TaskName     string `json:"task_name"`
+	TaskOrder    string `json:"task_order"`
+	TaskStatus   string `json:"task_status"`
+	AssignedTo   string `json:"assigned_to"`
+	TargetType   string `json:"target_type"`
+	TargetID     string `json:"target_id"`
+	AllocatedAmt string `json:"allocated_amount"`
+	SettleDate   string `json:"settlement_date"`
+	SettleStatus string `json:"settlement_status"`
 
 	// 2026-04-29 auto-spawn-jobs-from-subscription plan §5.4 / §9 — breadcrumb
 	// link rendered when Job.origin_type = ORIGIN_TYPE_SUBSCRIPTION pointing
 	// back to the centymo subscription detail page.
-	OriginSubscriptionLink string `json:"originSubscriptionLink"`
+	OriginSubscriptionLink string `json:"origin_subscription_link"`
 
 	// 2026-04-29 milestone-billing plan §4 — phase set-status surface on the
 	// Job detail Phases tab. PhasesSectionTitle heads the per-phase mini-table;
 	// PhaseMarkComplete is the row CTA; PhaseStatusPending / PhaseStatusActive /
 	// PhaseStatusCompleted render the status badge.
-	PhasesSectionTitle   string `json:"phasesSectionTitle"`
-	PhaseMarkComplete    string `json:"phaseMarkComplete"`
-	PhaseStatusPending   string `json:"phaseStatusPending"`
-	PhaseStatusActive    string `json:"phaseStatusActive"`
-	PhaseStatusCompleted string `json:"phaseStatusCompleted"`
+	PhasesSectionTitle   string `json:"phases_section_title"`
+	PhaseMarkComplete    string `json:"phase_mark_complete"`
+	PhaseStatusPending   string `json:"phase_status_pending"`
+	PhaseStatusActive    string `json:"phase_status_active"`
+	PhaseStatusCompleted string `json:"phase_status_completed"`
 
 	// 2026-06-01 Wave 4.3 label sweep — Budget tab (job-tab-budget).
-	BudgetSectionTitle   string `json:"budgetSectionTitle"`
-	BudgetTask           string `json:"budgetTask"`
-	BudgetHours          string `json:"budgetHours"`
-	BudgetSubtotalSuffix string `json:"budgetSubtotalSuffix"`
-	BudgetTotalHours     string `json:"budgetTotalHours"`
+	BudgetSectionTitle   string `json:"budget_section_title"`
+	BudgetTask           string `json:"budget_task"`
+	BudgetHours          string `json:"budget_hours"`
+	BudgetSubtotalSuffix string `json:"budget_subtotal_suffix"`
+	BudgetTotalHours     string `json:"budget_total_hours"`
 
 	// 2026-06-01 Wave 4.3 label sweep — Actuals tab (job-tab-actuals).
-	ActualsSectionTitle  string `json:"actualsSectionTitle"`
-	ActualsCount         string `json:"actualsCount"`
-	ActualsGrandTotal    string `json:"actualsGrandTotal"`
-	VarianceSectionTitle string `json:"varianceSectionTitle"`
-	VarianceBudgetHours  string `json:"varianceBudgetHours"`
-	VarianceActualsCost  string `json:"varianceActualsCost"`
-	VarianceNote         string `json:"varianceNote"`
+	ActualsSectionTitle  string `json:"actuals_section_title"`
+	ActualsCount         string `json:"actuals_count"`
+	ActualsGrandTotal    string `json:"actuals_grand_total"`
+	VarianceSectionTitle string `json:"variance_section_title"`
+	VarianceBudgetHours  string `json:"variance_budget_hours"`
+	VarianceActualsCost  string `json:"variance_actuals_cost"`
+	VarianceNote         string `json:"variance_note"`
 }
 
 type TabLabels struct {
@@ -188,30 +188,30 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	NotFound             string `json:"notFound"`
-	PermissionDenied     string `json:"permissionDenied"`
-	InUse                string `json:"inUse"`
-	IDRequired           string `json:"idRequired"`
-	InvalidForm          string `json:"invalidForm"`
-	NoIDs                string `json:"noIds"`
-	StatusRequired       string `json:"statusRequired"`
-	TargetStatusRequired string `json:"targetStatusRequired"`
+	NotFound             string `json:"not_found"`
+	PermissionDenied     string `json:"permission_denied"`
+	InUse                string `json:"in_use"`
+	IDRequired           string `json:"id_required"`
+	InvalidForm          string `json:"invalid_form"`
+	NoIDs                string `json:"no_ids"`
+	StatusRequired       string `json:"status_required"`
+	TargetStatusRequired string `json:"target_status_required"`
 }
 
 // BulkActionLabels holds translatable strings for job bulk-action controls.
 type BulkActionLabels struct {
 	Delete                 string `json:"delete"`
-	BulkDelete             string `json:"bulkDelete"`
-	BulkDeleteConfirmTitle string `json:"bulkDeleteConfirmTitle"`
-	BulkDeleteConfirmMsg   string `json:"bulkDeleteConfirmMsg"`
-	SetStatus              string `json:"setStatus"`
-	BulkSetStatus          string `json:"bulkSetStatus"`
-	SelectAll              string `json:"selectAll"`
-	SelectedCount          string `json:"selectedCount"`
+	BulkDelete             string `json:"bulk_delete"`
+	BulkDeleteConfirmTitle string `json:"bulk_delete_confirm_title"`
+	BulkDeleteConfirmMsg   string `json:"bulk_delete_confirm_msg"`
+	SetStatus              string `json:"set_status"`
+	BulkSetStatus          string `json:"bulk_set_status"`
+	SelectAll              string `json:"select_all"`
+	SelectedCount          string `json:"selected_count"`
 	Cancel                 string `json:"cancel"`
 }
 

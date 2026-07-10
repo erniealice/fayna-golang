@@ -17,22 +17,22 @@ type Labels struct {
 
 type ColumnLabels struct {
 	Name        string `json:"name"`
-	PhaseOrder  string `json:"phaseOrder"`
-	EstDuration string `json:"estDuration"`
+	PhaseOrder  string `json:"phase_order"`
+	EstDuration string `json:"est_duration"`
 }
 
 type FormLabels struct {
-	SectionPhase           string `json:"sectionPhase"`
-	SectionResource        string `json:"sectionResource"`
-	SectionDependencies    string `json:"sectionDependencies"`
+	SectionPhase           string `json:"section_phase"`
+	SectionResource        string `json:"section_resource"`
+	SectionDependencies    string `json:"section_dependencies"`
 	Name                   string `json:"name"`
-	NamePlaceholder        string `json:"namePlaceholder"`
-	PhaseOrder             string `json:"phaseOrder"`
-	EstDurationMinutes     string `json:"estDurationMinutes"`
+	NamePlaceholder        string `json:"name_placeholder"`
+	PhaseOrder             string `json:"phase_order"`
+	EstDurationMinutes     string `json:"est_duration_minutes"`
 	Resource               string `json:"resource"`
-	ResourcePlaceholder    string `json:"resourcePlaceholder"`
-	PredecessorPhase       string `json:"predecessorPhase"`
-	PredecessorPlaceholder string `json:"predecessorPlaceholder"`
+	ResourcePlaceholder    string `json:"resource_placeholder"`
+	PredecessorPhase       string `json:"predecessor_phase"`
+	PredecessorPlaceholder string `json:"predecessor_placeholder"`
 }
 
 type ActionLabels struct {
@@ -42,9 +42,9 @@ type ActionLabels struct {
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
+	PermissionDenied string `json:"permission_denied"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
 }
 
 // DefaultJobTemplatePhaseLabels returns JobTemplatePhaseLabels with sensible English defaults.

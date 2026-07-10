@@ -8,15 +8,15 @@ package evaluation_cycle_member
 
 // Labels holds all translatable strings for the cycle-member surface.
 type Labels struct {
-	Tab     TabLabels     `json:"tab"`
-	Columns ColumnLabels  `json:"columns"`
-	Empty   EmptyLabels   `json:"empty"`
-	Badges  BadgeLabels   `json:"badges"`
+	Tab     TabLabels    `json:"tab"`
+	Columns ColumnLabels `json:"columns"`
+	Empty   EmptyLabels  `json:"empty"`
+	Badges  BadgeLabels  `json:"badges"`
 }
 
 type TabLabels struct {
 	Title    string `json:"title"`
-	CountFmt string `json:"countFmt"` // "%d members"
+	CountFmt string `json:"count_fmt"` // "%d members"
 }
 
 type ColumnLabels struct {

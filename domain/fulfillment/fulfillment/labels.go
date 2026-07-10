@@ -26,24 +26,24 @@ type DashboardLabels struct {
 	Title    string `json:"title"`
 	Subtitle string `json:"subtitle"`
 	// Stats
-	StatPending        string `json:"statPending"`
-	StatInTransit      string `json:"statInTransit"`
-	StatDeliveredToday string `json:"statDeliveredToday"`
-	StatExceptions     string `json:"statExceptions"`
+	StatPending        string `json:"stat_pending"`
+	StatInTransit      string `json:"stat_in_transit"`
+	StatDeliveredToday string `json:"stat_delivered_today"`
+	StatExceptions     string `json:"stat_exceptions"`
 	// Widgets
-	DailyDelivered   string `json:"dailyDelivered"`
-	StatusMix        string `json:"statusMix"`
-	RecentExceptions string `json:"recentExceptions"`
-	NoExceptions     string `json:"noExceptions"`
+	DailyDelivered   string `json:"daily_delivered"`
+	StatusMix        string `json:"status_mix"`
+	RecentExceptions string `json:"recent_exceptions"`
+	NoExceptions     string `json:"no_exceptions"`
 	// Quick actions
-	QuickNewFulfillment string `json:"quickNewFulfillment"`
-	QuickPickPack       string `json:"quickPickPack"`
-	QuickProcessReturn  string `json:"quickProcessReturn"`
-	QuickMarkDelivered  string `json:"quickMarkDelivered"`
+	QuickNewFulfillment string `json:"quick_new_fulfillment"`
+	QuickPickPack       string `json:"quick_pick_pack"`
+	QuickProcessReturn  string `json:"quick_process_return"`
+	QuickMarkDelivered  string `json:"quick_mark_delivered"`
 	// Common
-	ViewAll            string `json:"viewAll"`
-	AxisCount          string `json:"axisCount"`
-	AvgFulfillmentDays string `json:"avgFulfillmentDays"`
+	ViewAll            string `json:"view_all"`
+	AxisCount          string `json:"axis_count"`
+	AvgFulfillmentDays string `json:"avg_fulfillment_days"`
 }
 
 type StatusLabels struct {

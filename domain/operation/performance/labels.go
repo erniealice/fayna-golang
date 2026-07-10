@@ -7,14 +7,14 @@ package performance
 
 // Labels holds all translatable strings for the performance admin panel.
 type Labels struct {
-	Page    PageLabels    `json:"page"`
-	Groups  GroupLabels   `json:"groups"`
-	Columns ColumnLabels  `json:"columns"`
-	Actions ActionLabels  `json:"actions"`
-	Rating  RatingLabels  `json:"rating"`
-	Banner  BannerLabels  `json:"banner"`
-	Empty   EmptyLabels   `json:"empty"`
-	Errors  ErrorLabels   `json:"errors"`
+	Page    PageLabels   `json:"page"`
+	Groups  GroupLabels  `json:"groups"`
+	Columns ColumnLabels `json:"columns"`
+	Actions ActionLabels `json:"actions"`
+	Rating  RatingLabels `json:"rating"`
+	Banner  BannerLabels `json:"banner"`
+	Empty   EmptyLabels  `json:"empty"`
+	Errors  ErrorLabels  `json:"errors"`
 }
 
 type PageLabels struct {
@@ -24,9 +24,9 @@ type PageLabels struct {
 
 // GroupLabels are the three cycle-status matrix section headings (pages.md §G.1).
 type GroupLabels struct {
-	Overdue   string `json:"overdue"`
-	Due       string `json:"due"`
-	UpToDate  string `json:"upToDate"`
+	Overdue  string `json:"overdue"`
+	Due      string `json:"due"`
+	UpToDate string `json:"up_to_date"`
 }
 
 type ColumnLabels struct {
@@ -37,8 +37,8 @@ type ColumnLabels struct {
 }
 
 type ActionLabels struct {
-	StartReview    string `json:"startReview"`
-	ViewLastReview string `json:"viewLastReview"`
+	StartReview    string `json:"start_review"`
+	ViewLastReview string `json:"view_last_review"`
 }
 
 type RatingLabels struct {
@@ -49,9 +49,9 @@ type RatingLabels struct {
 // BannerLabels feed the "X of Y" cycle-progress banner rendered atop the panel
 // (the shared read-projection, §F.2). v1, Phase E.
 type BannerLabels struct {
-	Progress    string `json:"progress"`    // "%d of %d complete"
-	SignOffsDue string `json:"signOffsDue"` // "sign-offs due %s"
-	Closes      string `json:"closes"`      // "closes %s"
+	Progress    string `json:"progress"`      // "%d of %d complete"
+	SignOffsDue string `json:"sign_offs_due"` // "sign-offs due %s"
+	Closes      string `json:"closes"`        // "closes %s"
 }
 
 type EmptyLabels struct {
@@ -60,8 +60,8 @@ type EmptyLabels struct {
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	LoadFailed       string `json:"loadFailed"`
+	PermissionDenied string `json:"permission_denied"`
+	LoadFailed       string `json:"load_failed"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

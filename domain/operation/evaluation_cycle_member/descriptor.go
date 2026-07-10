@@ -14,7 +14,7 @@ func Describe() compose.Unit {
 	return compose.Unit{
 		Key:       "operation.evaluation_cycle_member",
 		Labels:    &l,
-		LabelJSON: compose.JSONBinding{File: "evaluation_cycle_member.json", Key: "evaluationCycleMember"},
+		LabelJSON: compose.JSONBinding{File: "evaluation_cycle_member.json", Key: "evaluation_cycle_member"},
 		LabelName: "EvaluationCycleMemberLabels",
 		Templates: TemplatesFS,
 	}

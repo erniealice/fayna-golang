@@ -17,7 +17,7 @@ func Describe() compose.Unit {
 		Routes:    &r,
 		RouteJSON: compose.JSONBinding{File: "route.json", Key: "outcome_matrix"},
 		Labels:    &l,
-		LabelJSON: compose.JSONBinding{File: "outcome_matrix.json", Key: "outcomeMatrix"},
+		LabelJSON: compose.JSONBinding{File: "outcome_matrix.json", Key: "outcome_matrix"},
 		LabelName: "OutcomeMatrixLabels",
 		Templates: TemplatesFS,
 	}

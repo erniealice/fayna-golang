@@ -47,14 +47,14 @@ type ScopeLabels struct {
 // JSON object populates both.
 type GridLabels struct {
 	pyezatypes.CellGridLabels
-	CriterionColumn string `json:"criterionColumn"`
-	ScoreColumn     string `json:"scoreColumn"`
-	ReadOnlyTooltip string `json:"readOnlyTooltip"`
+	CriterionColumn string `json:"criterion_column"`
+	ScoreColumn     string `json:"score_column"`
+	ReadOnlyTooltip string `json:"read_only_tooltip"`
 }
 
 // ErrorLabels — generic permission-denied string.
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
+	PermissionDenied string `json:"permission_denied"`
 }
 
 // DefaultLabels returns Labels with English (general tier) defaults, byte-for-byte

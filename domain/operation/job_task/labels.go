@@ -22,24 +22,24 @@ type Labels struct {
 type PageLabels struct {
 	Heading           string `json:"heading"`
 	Caption           string `json:"caption"`
-	HeadingPending    string `json:"headingPending"`
-	HeadingInProgress string `json:"headingInProgress"`
-	HeadingCompleted  string `json:"headingCompleted"`
+	HeadingPending    string `json:"heading_pending"`
+	HeadingInProgress string `json:"heading_in_progress"`
+	HeadingCompleted  string `json:"heading_completed"`
 }
 
 type ButtonLabels struct {
-	AddTask string `json:"addTask"`
+	AddTask string `json:"add_task"`
 }
 
 type ColumnLabels struct {
 	Name              string `json:"name"`
 	Phase             string `json:"phase"`
-	StepOrder         string `json:"stepOrder"`
+	StepOrder         string `json:"step_order"`
 	Status            string `json:"status"`
-	AssignedTo        string `json:"assignedTo"`
-	PercentComplete   string `json:"percentComplete"`
-	PlannedQuantity   string `json:"plannedQuantity"`
-	CompletedQuantity string `json:"completedQuantity"`
+	AssignedTo        string `json:"assigned_to"`
+	PercentComplete   string `json:"percent_complete"`
+	PlannedQuantity   string `json:"planned_quantity"`
+	CompletedQuantity string `json:"completed_quantity"`
 }
 
 type EmptyLabels struct {
@@ -48,27 +48,27 @@ type EmptyLabels struct {
 }
 
 type FormLabels struct {
-	SectionTask               string `json:"sectionTask"`
-	SectionAssignmentResource string `json:"sectionAssignmentResource"`
-	SectionSchedule           string `json:"sectionSchedule"`
-	SectionActuals            string `json:"sectionActuals"`
+	SectionTask               string `json:"section_task"`
+	SectionAssignmentResource string `json:"section_assignment_resource"`
+	SectionSchedule           string `json:"section_schedule"`
+	SectionActuals            string `json:"section_actuals"`
 	Name                      string `json:"name"`
-	NamePlaceholder           string `json:"namePlaceholder"`
-	StepOrder                 string `json:"stepOrder"`
+	NamePlaceholder           string `json:"name_placeholder"`
+	StepOrder                 string `json:"step_order"`
 	Status                    string `json:"status"`
-	IsAdHoc                   string `json:"isAdHoc"`
-	AssignedTo                string `json:"assignedTo"`
-	AssignedToPlaceholder     string `json:"assignedToPlaceholder"`
-	ResourceID                string `json:"resourceId"`
-	ResourcePlaceholder       string `json:"resourcePlaceholder"`
-	TemplateTaskID            string `json:"templateTaskId"`
-	TemplateTaskPlaceholder   string `json:"templateTaskPlaceholder"`
-	PlannedQuantity           string `json:"plannedQuantity"`
-	CompletedQuantity         string `json:"completedQuantity"`
-	PercentComplete           string `json:"percentComplete"`
-	AllowParallel             string `json:"allowParallel"`
-	ActualStart               string `json:"actualStart"`
-	ActualEnd                 string `json:"actualEnd"`
+	IsAdHoc                   string `json:"is_ad_hoc"`
+	AssignedTo                string `json:"assigned_to"`
+	AssignedToPlaceholder     string `json:"assigned_to_placeholder"`
+	ResourceID                string `json:"resource_id"`
+	ResourcePlaceholder       string `json:"resource_placeholder"`
+	TemplateTaskID            string `json:"template_task_id"`
+	TemplateTaskPlaceholder   string `json:"template_task_placeholder"`
+	PlannedQuantity           string `json:"planned_quantity"`
+	CompletedQuantity         string `json:"completed_quantity"`
+	PercentComplete           string `json:"percent_complete"`
+	AllowParallel             string `json:"allow_parallel"`
+	ActualStart               string `json:"actual_start"`
+	ActualEnd                 string `json:"actual_end"`
 }
 
 type ActionLabels struct {
@@ -78,21 +78,21 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle         string `json:"pageTitle"`
+	PageTitle         string `json:"page_title"`
 	Name              string `json:"name"`
 	Phase             string `json:"phase"`
-	StepOrder         string `json:"stepOrder"`
+	StepOrder         string `json:"step_order"`
 	Status            string `json:"status"`
-	IsAdHoc           string `json:"isAdHoc"`
-	AssignedTo        string `json:"assignedTo"`
+	IsAdHoc           string `json:"is_ad_hoc"`
+	AssignedTo        string `json:"assigned_to"`
 	Resource          string `json:"resource"`
-	TemplateTask      string `json:"templateTask"`
-	PlannedQuantity   string `json:"plannedQuantity"`
-	CompletedQuantity string `json:"completedQuantity"`
-	PercentComplete   string `json:"percentComplete"`
-	AllowParallel     string `json:"allowParallel"`
-	ActualStart       string `json:"actualStart"`
-	ActualEnd         string `json:"actualEnd"`
+	TemplateTask      string `json:"template_task"`
+	PlannedQuantity   string `json:"planned_quantity"`
+	CompletedQuantity string `json:"completed_quantity"`
+	PercentComplete   string `json:"percent_complete"`
+	AllowParallel     string `json:"allow_parallel"`
+	ActualStart       string `json:"actual_start"`
+	ActualEnd         string `json:"actual_end"`
 }
 
 type TabLabels struct {
@@ -104,13 +104,13 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
+	PermissionDenied string `json:"permission_denied"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
 }
 
 // DefaultJobTaskLabels returns JobTaskLabels with sensible English defaults.

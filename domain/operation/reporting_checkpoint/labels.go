@@ -16,47 +16,47 @@ type Labels struct {
 
 type PageLabels struct {
 	Heading         string `json:"heading"`
-	HeadingActive   string `json:"headingActive"`
-	HeadingInactive string `json:"headingInactive"`
+	HeadingActive   string `json:"heading_active"`
+	HeadingInactive string `json:"heading_inactive"`
 	Caption         string `json:"caption"`
-	CaptionActive   string `json:"captionActive"`
-	CaptionInactive string `json:"captionInactive"`
+	CaptionActive   string `json:"caption_active"`
+	CaptionInactive string `json:"caption_inactive"`
 }
 
 type ButtonLabels struct {
-	AddCheckpoint string `json:"addCheckpoint"`
+	AddCheckpoint string `json:"add_checkpoint"`
 }
 
 type ColumnLabels struct {
 	Label         string `json:"label"`
-	RoleCode      string `json:"roleCode"`
-	SequenceOrder string `json:"sequenceOrder"`
+	RoleCode      string `json:"role_code"`
+	SequenceOrder string `json:"sequence_order"`
 	Version       string `json:"version"`
-	VersionStatus string `json:"versionStatus"`
+	VersionStatus string `json:"version_status"`
 }
 
 type EmptyLabels struct {
 	Title           string `json:"title"`
 	Message         string `json:"message"`
-	ActiveTitle     string `json:"activeTitle"`
-	ActiveMessage   string `json:"activeMessage"`
-	InactiveTitle   string `json:"inactiveTitle"`
-	InactiveMessage string `json:"inactiveMessage"`
+	ActiveTitle     string `json:"active_title"`
+	ActiveMessage   string `json:"active_message"`
+	InactiveTitle   string `json:"inactive_title"`
+	InactiveMessage string `json:"inactive_message"`
 }
 
 type FormLabels struct {
 	Label               string `json:"label"`
-	LabelPlaceholder    string `json:"labelPlaceholder"`
-	CheckpointGroupID   string `json:"checkpointGroupId"`
-	RoleCode            string `json:"roleCode"`
-	RoleCodePlaceholder string `json:"roleCodePlaceholder"`
-	SequenceOrder       string `json:"sequenceOrder"`
-	WorkspaceID         string `json:"workspaceId"`
-	PeriodID            string `json:"periodId"`
-	IsTerminal          string `json:"isTerminal"`
-	VersionStatus       string `json:"versionStatus"`
-	VersionStatusInfo   string `json:"versionStatusInfo"`
-	SequenceOrderInfo   string `json:"sequenceOrderInfo"`
+	LabelPlaceholder    string `json:"label_placeholder"`
+	CheckpointGroupID   string `json:"checkpoint_group_id"`
+	RoleCode            string `json:"role_code"`
+	RoleCodePlaceholder string `json:"role_code_placeholder"`
+	SequenceOrder       string `json:"sequence_order"`
+	WorkspaceID         string `json:"workspace_id"`
+	PeriodID            string `json:"period_id"`
+	IsTerminal          string `json:"is_terminal"`
+	VersionStatus       string `json:"version_status"`
+	VersionStatusInfo   string `json:"version_status_info"`
+	SequenceOrderInfo   string `json:"sequence_order_info"`
 }
 
 type ActionLabels struct {
@@ -66,19 +66,19 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle         string `json:"pageTitle"`
+	PageTitle         string `json:"page_title"`
 	Label             string `json:"label"`
-	CheckpointGroupID string `json:"checkpointGroupId"`
-	RoleCode          string `json:"roleCode"`
-	SequenceOrder     string `json:"sequenceOrder"`
+	CheckpointGroupID string `json:"checkpoint_group_id"`
+	RoleCode          string `json:"role_code"`
+	SequenceOrder     string `json:"sequence_order"`
 	Version           string `json:"version"`
-	VersionStatus     string `json:"versionStatus"`
-	WorkspaceID       string `json:"workspaceId"`
-	PeriodID          string `json:"periodId"`
-	IsTerminal        string `json:"isTerminal"`
+	VersionStatus     string `json:"version_status"`
+	WorkspaceID       string `json:"workspace_id"`
+	PeriodID          string `json:"period_id"`
+	IsTerminal        string `json:"is_terminal"`
 	Active            string `json:"active"`
-	CreatedDate       string `json:"createdDate"`
-	ModifiedDate      string `json:"modifiedDate"`
+	CreatedDate       string `json:"created_date"`
+	ModifiedDate      string `json:"modified_date"`
 }
 
 type TabLabels struct {
@@ -88,15 +88,15 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	InvalidFormData  string `json:"invalidFormData"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
-	NoPermission     string `json:"noPermission"`
+	PermissionDenied string `json:"permission_denied"`
+	InvalidFormData  string `json:"invalid_form_data"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
+	NoPermission     string `json:"no_permission"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

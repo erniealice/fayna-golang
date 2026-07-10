@@ -13,7 +13,7 @@ func Describe() compose.Unit {
 		Routes:    &r,
 		RouteJSON: compose.JSONBinding{File: "route.json", Key: "evaluation_cycle"},
 		Labels:    &l,
-		LabelJSON: compose.JSONBinding{File: "evaluation_cycle.json", Key: "evaluationCycle"},
+		LabelJSON: compose.JSONBinding{File: "evaluation_cycle.json", Key: "evaluation_cycle"},
 		LabelName: "EvaluationCycleLabels",
 		Templates: TemplatesFS,
 		Nav: compose.NavContrib{

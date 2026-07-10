@@ -29,10 +29,10 @@ type ButtonLabels struct {
 }
 
 type ColumnLabels struct {
-	ExpenseCategory string `json:"expenseCategory"`
-	VendorRef       string `json:"vendorRef"`
-	PaymentMethod   string `json:"paymentMethod"`
-	MarkupPct       string `json:"markupPct"`
+	ExpenseCategory string `json:"expense_category"`
+	VendorRef       string `json:"vendor_ref"`
+	PaymentMethod   string `json:"payment_method"`
+	MarkupPct       string `json:"markup_pct"`
 }
 
 type EmptyLabels struct {
@@ -41,33 +41,33 @@ type EmptyLabels struct {
 }
 
 type FormLabels struct {
-	SectionExpense           string `json:"sectionExpense"`
-	ExpenseCategory          string `json:"expenseCategory"`
-	VendorRef                string `json:"vendorRef"`
-	ReceiptURL               string `json:"receiptUrl"`
-	PaymentMethod            string `json:"paymentMethod"`
-	PaymentMethodEmployee    string `json:"paymentMethodEmployee"`
-	PaymentMethodCompanyCard string `json:"paymentMethodCompanyCard"`
-	PaymentMethodVendorBill  string `json:"paymentMethodVendorBill"`
-	MarkupPctOverride        string `json:"markupPctOverride"`
-	SubmitCreate             string `json:"submitCreate"`
-	SubmitUpdate             string `json:"submitUpdate"`
+	SectionExpense           string `json:"section_expense"`
+	ExpenseCategory          string `json:"expense_category"`
+	VendorRef                string `json:"vendor_ref"`
+	ReceiptURL               string `json:"receipt_url"`
+	PaymentMethod            string `json:"payment_method"`
+	PaymentMethodEmployee    string `json:"payment_method_employee"`
+	PaymentMethodCompanyCard string `json:"payment_method_company_card"`
+	PaymentMethodVendorBill  string `json:"payment_method_vendor_bill"`
+	MarkupPctOverride        string `json:"markup_pct_override"`
+	SubmitCreate             string `json:"submit_create"`
+	SubmitUpdate             string `json:"submit_update"`
 }
 
 type DetailLabels struct {
-	PageTitle         string `json:"pageTitle"`
-	TitlePrefix       string `json:"titlePrefix"`
-	ExpenseCategory   string `json:"expenseCategory"`
-	VendorRef         string `json:"vendorRef"`
-	ReceiptURL        string `json:"receiptUrl"`
-	PaymentMethod     string `json:"paymentMethod"`
-	MarkupPctOverride string `json:"markupPctOverride"`
+	PageTitle         string `json:"page_title"`
+	TitlePrefix       string `json:"title_prefix"`
+	ExpenseCategory   string `json:"expense_category"`
+	VendorRef         string `json:"vendor_ref"`
+	ReceiptURL        string `json:"receipt_url"`
+	PaymentMethod     string `json:"payment_method"`
+	MarkupPctOverride string `json:"markup_pct_override"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
+	PermissionDenied string `json:"permission_denied"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
 }
 
 // DefaultActivityExpenseLabels returns ActivityExpenseLabels with sensible English defaults.

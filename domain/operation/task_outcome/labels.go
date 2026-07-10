@@ -31,7 +31,7 @@ type PageLabels struct {
 }
 
 type ButtonLabels struct {
-	RecordOutcome string `json:"recordOutcome"`
+	RecordOutcome string `json:"record_outcome"`
 }
 
 type ColumnLabels struct {
@@ -39,7 +39,7 @@ type ColumnLabels struct {
 	Criteria      string `json:"criteria"`
 	Value         string `json:"value"`
 	Determination string `json:"determination"`
-	RecordedBy    string `json:"recordedBy"`
+	RecordedBy    string `json:"recorded_by"`
 	Date          string `json:"date"`
 }
 
@@ -53,7 +53,7 @@ type FormLabels struct {
 	Criteria         string `json:"criteria"`
 	Value            string `json:"value"`
 	Notes            string `json:"notes"`
-	NotesPlaceholder string `json:"notesPlaceholder"`
+	NotesPlaceholder string `json:"notes_placeholder"`
 	Determination    string `json:"determination"`
 }
 
@@ -64,30 +64,30 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle           string `json:"pageTitle"`
+	PageTitle           string `json:"page_title"`
 	Task                string `json:"task"`
 	Criteria            string `json:"criteria"`
-	CriteriaType        string `json:"criteriaType"`
+	CriteriaType        string `json:"criteria_type"`
 	Value               string `json:"value"`
 	Determination       string `json:"determination"`
-	DeterminationSource string `json:"determinationSource"`
-	DeterminationNote   string `json:"determinationNote"`
-	RecordedBy          string `json:"recordedBy"`
-	RecordedDate        string `json:"recordedDate"`
-	RevisionNumber      string `json:"revisionNumber"`
-	CreatedDate         string `json:"createdDate"`
+	DeterminationSource string `json:"determination_source"`
+	DeterminationNote   string `json:"determination_note"`
+	RecordedBy          string `json:"recorded_by"`
+	RecordedDate        string `json:"recorded_date"`
+	RevisionNumber      string `json:"revision_number"`
+	CreatedDate         string `json:"created_date"`
 }
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	InvalidFormData  string `json:"invalidFormData"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
+	PermissionDenied string `json:"permission_denied"`
+	InvalidFormData  string `json:"invalid_form_data"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
 }
 
 // DefaultTaskOutcomeLabels returns TaskOutcomeLabels with sensible English defaults.

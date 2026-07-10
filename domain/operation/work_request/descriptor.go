@@ -11,9 +11,9 @@ func Describe() compose.Unit {
 	return compose.Unit{
 		Key:       "operation.work_request",
 		Routes:    &r,
-		RouteJSON: compose.JSONBinding{File: "route.json", Key: "workRequest"},
+		RouteJSON: compose.JSONBinding{File: "route.json", Key: "work_request"},
 		Labels:    &l,
-		LabelJSON: compose.JSONBinding{File: "work_request.json", Key: "workRequest"},
+		LabelJSON: compose.JSONBinding{File: "work_request.json", Key: "work_request"},
 		LabelName: "WorkRequestLabels",
 		Templates: TemplatesFS,
 		Nav: compose.NavContrib{

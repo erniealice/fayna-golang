@@ -19,11 +19,11 @@ type ColumnLabels struct {
 	Job           string `json:"job"`
 	Determination string `json:"determination"`
 	Score         string `json:"score"`
-	ScoringMethod string `json:"scoringMethod"`
+	ScoringMethod string `json:"scoring_method"`
 	Total         string `json:"total"`
 	Pass          string `json:"pass"`
 	Fail          string `json:"fail"`
-	IssuedBy      string `json:"issuedBy"`
+	IssuedBy      string `json:"issued_by"`
 }
 
 type EmptyLabels struct {
@@ -32,36 +32,36 @@ type EmptyLabels struct {
 }
 
 type PageLabels struct {
-	JobHeading   string `json:"jobHeading"`
-	JobCaption   string `json:"jobCaption"`
-	PhaseHeading string `json:"phaseHeading"`
-	PhaseCaption string `json:"phaseCaption"`
+	JobHeading   string `json:"job_heading"`
+	JobCaption   string `json:"job_caption"`
+	PhaseHeading string `json:"phase_heading"`
+	PhaseCaption string `json:"phase_caption"`
 }
 
 type ButtonLabels struct {
-	GenerateSummary string `json:"generateSummary"`
+	GenerateSummary string `json:"generate_summary"`
 }
 
 type DetailLabels struct {
-	OverallDetermination string `json:"overallDetermination"`
-	PhaseDetermination   string `json:"phaseDetermination"`
+	OverallDetermination string `json:"overall_determination"`
+	PhaseDetermination   string `json:"phase_determination"`
 	Score                string `json:"score"`
-	ScoringMethod        string `json:"scoringMethod"`
-	TotalCriteria        string `json:"totalCriteria"`
-	PassCount            string `json:"passCount"`
-	FailCount            string `json:"failCount"`
-	ConditionalCount     string `json:"conditionalCount"`
-	DeferredCount        string `json:"deferredCount"`
-	NaCount              string `json:"naCount"`
+	ScoringMethod        string `json:"scoring_method"`
+	TotalCriteria        string `json:"total_criteria"`
+	PassCount            string `json:"pass_count"`
+	FailCount            string `json:"fail_count"`
+	ConditionalCount     string `json:"conditional_count"`
+	DeferredCount        string `json:"deferred_count"`
+	NaCount              string `json:"na_count"`
 	Narrative            string `json:"narrative"`
-	IssuedBy             string `json:"issuedBy"`
-	IssuedDate           string `json:"issuedDate"`
-	ValidUntilDate       string `json:"validUntilDate"`
+	IssuedBy             string `json:"issued_by"`
+	IssuedDate           string `json:"issued_date"`
+	ValidUntilDate       string `json:"valid_until_date"`
 }
 
 type ErrorLabels struct {
-	NotFound         string `json:"notFound"`
-	PermissionDenied string `json:"permissionDenied"`
+	NotFound         string `json:"not_found"`
+	PermissionDenied string `json:"permission_denied"`
 }
 
 // DefaultOutcomeSummaryLabels returns OutcomeSummaryLabels with sensible English defaults.

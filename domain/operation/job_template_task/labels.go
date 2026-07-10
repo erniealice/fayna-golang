@@ -17,20 +17,20 @@ type Labels struct {
 
 type ColumnLabels struct {
 	Name        string `json:"name"`
-	StepOrder   string `json:"stepOrder"`
-	EstDuration string `json:"estDuration"`
+	StepOrder   string `json:"step_order"`
+	EstDuration string `json:"est_duration"`
 	Phase       string `json:"phase"`
 }
 
 type FormLabels struct {
-	SectionTask         string `json:"sectionTask"`
-	SectionResource     string `json:"sectionResource"`
+	SectionTask         string `json:"section_task"`
+	SectionResource     string `json:"section_resource"`
 	Name                string `json:"name"`
-	NamePlaceholder     string `json:"namePlaceholder"`
-	StepOrder           string `json:"stepOrder"`
-	EstDurationMinutes  string `json:"estDurationMinutes"`
+	NamePlaceholder     string `json:"name_placeholder"`
+	StepOrder           string `json:"step_order"`
+	EstDurationMinutes  string `json:"est_duration_minutes"`
 	Resource            string `json:"resource"`
-	ResourcePlaceholder string `json:"resourcePlaceholder"`
+	ResourcePlaceholder string `json:"resource_placeholder"`
 }
 
 type ActionLabels struct {
@@ -40,9 +40,9 @@ type ActionLabels struct {
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
+	PermissionDenied string `json:"permission_denied"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
 }
 
 // DefaultJobTemplateTaskLabels returns JobTemplateTaskLabels with sensible English defaults.

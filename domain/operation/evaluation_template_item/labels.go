@@ -12,31 +12,31 @@ type Labels struct {
 }
 
 type FormLabels struct {
-	Criterion             string `json:"criterion"`
-	CriterionPlaceholder  string `json:"criterionPlaceholder"`
-	CriteriaType          string `json:"criteriaType"`
-	SequenceOrder         string `json:"sequenceOrder"`
-	WeightOverride        string `json:"weightOverride"`
-	QuestionLabel         string `json:"questionLabel"`
-	QuestionLabelPlaceholder string `json:"questionLabelPlaceholder"`
-	QuestionPrompt        string `json:"questionPrompt"`
-	RequiredOverride      string `json:"requiredOverride"`
-	CriteriaTypeInfo      string `json:"criteriaTypeInfo"`
-	WeightInfo            string `json:"weightInfo"`
+	Criterion                string `json:"criterion"`
+	CriterionPlaceholder     string `json:"criterion_placeholder"`
+	CriteriaType             string `json:"criteria_type"`
+	SequenceOrder            string `json:"sequence_order"`
+	WeightOverride           string `json:"weight_override"`
+	QuestionLabel            string `json:"question_label"`
+	QuestionLabelPlaceholder string `json:"question_label_placeholder"`
+	QuestionPrompt           string `json:"question_prompt"`
+	RequiredOverride         string `json:"required_override"`
+	CriteriaTypeInfo         string `json:"criteria_type_info"`
+	WeightInfo               string `json:"weight_info"`
 }
 
 type ConfirmLabels struct {
 	Remove        string `json:"remove"`
-	RemoveMessage string `json:"removeMessage"`
+	RemoveMessage string `json:"remove_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied   string `json:"permissionDenied"`
-	InvalidFormData    string `json:"invalidFormData"`
-	NotFound           string `json:"notFound"`
-	IDRequired         string `json:"idRequired"`
-	TemplateIDRequired string `json:"templateIDRequired"`
-	CriterionRequired  string `json:"criterionRequired"`
+	PermissionDenied   string `json:"permission_denied"`
+	InvalidFormData    string `json:"invalid_form_data"`
+	NotFound           string `json:"not_found"`
+	IDRequired         string `json:"id_required"`
+	TemplateIDRequired string `json:"template_idrequired"`
+	CriterionRequired  string `json:"criterion_required"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

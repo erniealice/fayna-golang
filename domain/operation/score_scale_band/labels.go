@@ -16,23 +16,23 @@ type Labels struct {
 
 type PageLabels struct {
 	Heading         string `json:"heading"`
-	HeadingActive   string `json:"headingActive"`
-	HeadingInactive string `json:"headingInactive"`
+	HeadingActive   string `json:"heading_active"`
+	HeadingInactive string `json:"heading_inactive"`
 	Caption         string `json:"caption"`
-	CaptionActive   string `json:"captionActive"`
-	CaptionInactive string `json:"captionInactive"`
+	CaptionActive   string `json:"caption_active"`
+	CaptionInactive string `json:"caption_inactive"`
 }
 
 type ButtonLabels struct {
-	AddBand string `json:"addBand"`
+	AddBand string `json:"add_band"`
 }
 
 type ColumnLabels struct {
-	OutputLabel   string `json:"outputLabel"`
-	SequenceOrder string `json:"sequenceOrder"`
-	InputMin      string `json:"inputMin"`
-	InputMax      string `json:"inputMax"`
-	OutputValue   string `json:"outputValue"`
+	OutputLabel   string `json:"output_label"`
+	SequenceOrder string `json:"sequence_order"`
+	InputMin      string `json:"input_min"`
+	InputMax      string `json:"input_max"`
+	OutputValue   string `json:"output_value"`
 	Determination string `json:"determination"`
 	Status        string `json:"status"`
 }
@@ -40,28 +40,28 @@ type ColumnLabels struct {
 type EmptyLabels struct {
 	Title           string `json:"title"`
 	Message         string `json:"message"`
-	ActiveTitle     string `json:"activeTitle"`
-	ActiveMessage   string `json:"activeMessage"`
-	InactiveTitle   string `json:"inactiveTitle"`
-	InactiveMessage string `json:"inactiveMessage"`
+	ActiveTitle     string `json:"active_title"`
+	ActiveMessage   string `json:"active_message"`
+	InactiveTitle   string `json:"inactive_title"`
+	InactiveMessage string `json:"inactive_message"`
 }
 
 type FormLabels struct {
-	ScoreScaleId           string `json:"scoreScaleId"`
-	SequenceOrder          string `json:"sequenceOrder"`
-	InputMin               string `json:"inputMin"`
-	InputMinPlaceholder    string `json:"inputMinPlaceholder"`
-	InputMax               string `json:"inputMax"`
-	InputMaxPlaceholder    string `json:"inputMaxPlaceholder"`
-	InputMatch             string `json:"inputMatch"`
-	InputMatchPlaceholder  string `json:"inputMatchPlaceholder"`
-	OutputValue            string `json:"outputValue"`
-	OutputLabel            string `json:"outputLabel"`
-	OutputLabelPlaceholder string `json:"outputLabelPlaceholder"`
-	BandRole               string `json:"bandRole"`
-	BandRolePlaceholder    string `json:"bandRolePlaceholder"`
+	ScoreScaleId           string `json:"score_scale_id"`
+	SequenceOrder          string `json:"sequence_order"`
+	InputMin               string `json:"input_min"`
+	InputMinPlaceholder    string `json:"input_min_placeholder"`
+	InputMax               string `json:"input_max"`
+	InputMaxPlaceholder    string `json:"input_max_placeholder"`
+	InputMatch             string `json:"input_match"`
+	InputMatchPlaceholder  string `json:"input_match_placeholder"`
+	OutputValue            string `json:"output_value"`
+	OutputLabel            string `json:"output_label"`
+	OutputLabelPlaceholder string `json:"output_label_placeholder"`
+	BandRole               string `json:"band_role"`
+	BandRolePlaceholder    string `json:"band_role_placeholder"`
 	Determination          string `json:"determination"`
-	DeterminationInfo      string `json:"determinationInfo"`
+	DeterminationInfo      string `json:"determination_info"`
 }
 
 type ActionLabels struct {
@@ -71,19 +71,19 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle     string `json:"pageTitle"`
-	ScoreScaleId  string `json:"scoreScaleId"`
-	SequenceOrder string `json:"sequenceOrder"`
-	InputMin      string `json:"inputMin"`
-	InputMax      string `json:"inputMax"`
-	InputMatch    string `json:"inputMatch"`
-	OutputValue   string `json:"outputValue"`
-	OutputLabel   string `json:"outputLabel"`
-	BandRole      string `json:"bandRole"`
+	PageTitle     string `json:"page_title"`
+	ScoreScaleId  string `json:"score_scale_id"`
+	SequenceOrder string `json:"sequence_order"`
+	InputMin      string `json:"input_min"`
+	InputMax      string `json:"input_max"`
+	InputMatch    string `json:"input_match"`
+	OutputValue   string `json:"output_value"`
+	OutputLabel   string `json:"output_label"`
+	BandRole      string `json:"band_role"`
 	Determination string `json:"determination"`
 	Status        string `json:"status"`
-	CreatedDate   string `json:"createdDate"`
-	ModifiedDate  string `json:"modifiedDate"`
+	CreatedDate   string `json:"created_date"`
+	ModifiedDate  string `json:"modified_date"`
 }
 
 type TabLabels struct {
@@ -93,15 +93,15 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	InvalidFormData  string `json:"invalidFormData"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
-	NoPermission     string `json:"noPermission"`
+	PermissionDenied string `json:"permission_denied"`
+	InvalidFormData  string `json:"invalid_form_data"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
+	NoPermission     string `json:"no_permission"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

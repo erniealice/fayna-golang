@@ -8,20 +8,20 @@ package work_request
 
 // Labels holds all translatable strings for the work_request module.
 type Labels struct {
-	Page    PageLabels    `json:"page"`
-	Entity  EntityLabels  `json:"entity"`
-	Status  StatusLabels  `json:"status"`
-	Origin  OriginLabels  `json:"origin"`
-	SLA     SLALabels     `json:"sla"`
-	Columns ColumnLabels  `json:"columns"`
-	Actions ActionLabels  `json:"actions"`
-	Detail  DetailLabels  `json:"detail"`
-	Tabs    TabLabels     `json:"tabs"`
-	KPI     KPILabels     `json:"kpi"`
-	Empty   EmptyLabels   `json:"empty"`
-	Form    FormLabels    `json:"form"`
-	Errors  ErrorLabels   `json:"errors"`
-	Filters FilterLabels  `json:"filters"`
+	Page    PageLabels   `json:"page"`
+	Entity  EntityLabels `json:"entity"`
+	Status  StatusLabels `json:"status"`
+	Origin  OriginLabels `json:"origin"`
+	SLA     SLALabels    `json:"sla"`
+	Columns ColumnLabels `json:"columns"`
+	Actions ActionLabels `json:"actions"`
+	Detail  DetailLabels `json:"detail"`
+	Tabs    TabLabels    `json:"tabs"`
+	KPI     KPILabels    `json:"kpi"`
+	Empty   EmptyLabels  `json:"empty"`
+	Form    FormLabels   `json:"form"`
+	Errors  ErrorLabels  `json:"errors"`
+	Filters FilterLabels `json:"filters"`
 }
 
 // PageLabels holds translatable strings for the inbox page headings.
@@ -40,35 +40,35 @@ type EntityLabels struct {
 type StatusLabels struct {
 	New             string `json:"new"`
 	Submitted       string `json:"submitted"`
-	InReview        string `json:"inReview"`
+	InReview        string `json:"in_review"`
 	Approved        string `json:"approved"`
 	Declined        string `json:"declined"`
 	Completed       string `json:"completed"`
 	Cancelled       string `json:"cancelled"`
-	ReturnedForInfo string `json:"returnedForInfo"`
-	OnHold          string `json:"onHold"`
+	ReturnedForInfo string `json:"returned_for_info"`
+	OnHold          string `json:"on_hold"`
 	Escalated       string `json:"escalated"`
-	PendingOverride string `json:"pendingOverride"`
+	PendingOverride string `json:"pending_override"`
 }
 
 // OriginLabels holds translatable strings for the 3 request origins.
 type OriginLabels struct {
-	ClientOriginated      string `json:"clientOriginated"`
-	ClientRelatedInternal string `json:"clientRelatedInternal"`
+	ClientOriginated      string `json:"client_originated"`
+	ClientRelatedInternal string `json:"client_related_internal"`
 	Internal              string `json:"internal"`
 }
 
 // SLALabels holds translatable strings for the 4 SLA states.
 type SLALabels struct {
-	OnTrack  string `json:"onTrack"`
-	AtRisk   string `json:"atRisk"`
+	OnTrack  string `json:"on_track"`
+	AtRisk   string `json:"at_risk"`
 	Breached string `json:"breached"`
-	NoSLA    string `json:"noSla"`
+	NoSLA    string `json:"no_sla"`
 }
 
 // ColumnLabels holds translatable strings for inbox table column headers.
 type ColumnLabels struct {
-	RequestNumber string `json:"requestNumber"`
+	RequestNumber string `json:"request_number"`
 	Title         string `json:"title"`
 	Status        string `json:"status"`
 	Origin        string `json:"origin"`
@@ -81,35 +81,35 @@ type ColumnLabels struct {
 
 // ActionLabels holds translatable strings for action button labels.
 type ActionLabels struct {
-	LogRequest       string `json:"logRequest"`
-	NewInternal      string `json:"newInternal"`
-	Assign           string `json:"assign"`
-	BulkAssign       string `json:"bulkAssign"`
-	SetStatus        string `json:"setStatus"`
-	Resolve          string `json:"resolve"`
-	Edit             string `json:"edit"`
-	View             string `json:"view"`
-	Open             string `json:"open"`
-	InReview         string `json:"inReview"`
-	ReturnForInfo    string `json:"returnForInfo"`
-	PutOnHold        string `json:"putOnHold"`
-	Escalate         string `json:"escalate"`
-	SendToOverride   string `json:"sendToOverride"`
-	Approve          string `json:"approve"`
-	Decline          string `json:"decline"`
-	Resume           string `json:"resume"`
+	LogRequest     string `json:"log_request"`
+	NewInternal    string `json:"new_internal"`
+	Assign         string `json:"assign"`
+	BulkAssign     string `json:"bulk_assign"`
+	SetStatus      string `json:"set_status"`
+	Resolve        string `json:"resolve"`
+	Edit           string `json:"edit"`
+	View           string `json:"view"`
+	Open           string `json:"open"`
+	InReview       string `json:"in_review"`
+	ReturnForInfo  string `json:"return_for_info"`
+	PutOnHold      string `json:"put_on_hold"`
+	Escalate       string `json:"escalate"`
+	SendToOverride string `json:"send_to_override"`
+	Approve        string `json:"approve"`
+	Decline        string `json:"decline"`
+	Resume         string `json:"resume"`
 }
 
 // DetailLabels holds translatable strings for the request detail page.
 type DetailLabels struct {
-	PageTitle      string `json:"pageTitle"`
-	SectionInfo    string `json:"sectionInfo"`
-	RequestedBy    string `json:"requestedBy"`
-	AssignedTo     string `json:"assignedTo"`
+	PageTitle      string `json:"page_title"`
+	SectionInfo    string `json:"section_info"`
+	RequestedBy    string `json:"requested_by"`
+	AssignedTo     string `json:"assigned_to"`
 	Type           string `json:"type"`
 	Priority       string `json:"priority"`
-	PriorityNormal string `json:"priorityNormal"`
-	PriorityHigh   string `json:"priorityHigh"`
+	PriorityNormal string `json:"priority_normal"`
+	PriorityHigh   string `json:"priority_high"`
 }
 
 // TabLabels holds translatable strings for detail page tab labels.
@@ -122,10 +122,10 @@ type TabLabels struct {
 
 // KPILabels holds translatable strings for the inbox KPI stat cards.
 type KPILabels struct {
-	OpenTotal    string `json:"openTotal"`
-	SLABreached  string `json:"slaBreached"`
-	AvgResponse  string `json:"avgResponse"`
-	ResolvedWeek string `json:"resolvedWeek"`
+	OpenTotal    string `json:"open_total"`
+	SLABreached  string `json:"sla_breached"`
+	AvgResponse  string `json:"avg_response"`
+	ResolvedWeek string `json:"resolved_week"`
 }
 
 // EmptyLabels holds translatable strings for empty state messaging.
@@ -136,30 +136,30 @@ type EmptyLabels struct {
 
 // FormLabels holds translatable strings for the request drawer form.
 type FormLabels struct {
-	TitlePlaceholder         string `json:"titlePlaceholder"`
-	DescriptionPlaceholder   string `json:"descriptionPlaceholder"`
-	JustificationPlaceholder string `json:"justificationPlaceholder"`
-	AssignToPlaceholder      string `json:"assignToPlaceholder"`
-	ResolutionNotePlaceholder string `json:"resolutionNotePlaceholder"`
+	TitlePlaceholder          string `json:"title_placeholder"`
+	DescriptionPlaceholder    string `json:"description_placeholder"`
+	JustificationPlaceholder  string `json:"justification_placeholder"`
+	AssignToPlaceholder       string `json:"assign_to_placeholder"`
+	ResolutionNotePlaceholder string `json:"resolution_note_placeholder"`
 }
 
 // FilterLabels holds translatable strings for inbox filter chips.
 type FilterLabels struct {
-	AllOpen      string `json:"allOpen"`
-	SLABreached  string `json:"slaBreached"`
-	HighPriority string `json:"highPriority"`
-	NewToday     string `json:"newToday"`
-	MyQueue      string `json:"myQueue"`
+	AllOpen      string `json:"all_open"`
+	SLABreached  string `json:"sla_breached"`
+	HighPriority string `json:"high_priority"`
+	NewToday     string `json:"new_today"`
+	MyQueue      string `json:"my_queue"`
 	Unassigned   string `json:"unassigned"`
 }
 
 // ErrorLabels holds translatable strings for error messaging.
 type ErrorLabels struct {
-	NotFound         string `json:"notFound"`
-	PermissionDenied string `json:"permissionDenied"`
-	IDRequired       string `json:"idRequired"`
-	InvalidForm      string `json:"invalidForm"`
-	StatusRequired   string `json:"statusRequired"`
+	NotFound         string `json:"not_found"`
+	PermissionDenied string `json:"permission_denied"`
+	IDRequired       string `json:"id_required"`
+	InvalidForm      string `json:"invalid_form"`
+	StatusRequired   string `json:"status_required"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

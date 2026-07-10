@@ -30,8 +30,8 @@ type ButtonLabels struct {
 
 type ColumnLabels struct {
 	Product       string `json:"product"`
-	UnitOfMeasure string `json:"unitOfMeasure"`
-	LotNumber     string `json:"lotNumber"`
+	UnitOfMeasure string `json:"unit_of_measure"`
+	LotNumber     string `json:"lot_number"`
 	Location      string `json:"location"`
 }
 
@@ -41,28 +41,28 @@ type EmptyLabels struct {
 }
 
 type FormLabels struct {
-	SectionMaterial string `json:"sectionMaterial"`
+	SectionMaterial string `json:"section_material"`
 	Product         string `json:"product"`
-	UnitOfMeasure   string `json:"unitOfMeasure"`
-	LotNumber       string `json:"lotNumber"`
+	UnitOfMeasure   string `json:"unit_of_measure"`
+	LotNumber       string `json:"lot_number"`
 	Location        string `json:"location"`
-	SubmitCreate    string `json:"submitCreate"`
-	SubmitUpdate    string `json:"submitUpdate"`
+	SubmitCreate    string `json:"submit_create"`
+	SubmitUpdate    string `json:"submit_update"`
 }
 
 type DetailLabels struct {
-	PageTitle     string `json:"pageTitle"`
-	TitlePrefix   string `json:"titlePrefix"`
+	PageTitle     string `json:"page_title"`
+	TitlePrefix   string `json:"title_prefix"`
 	Product       string `json:"product"`
-	UnitOfMeasure string `json:"unitOfMeasure"`
-	LotNumber     string `json:"lotNumber"`
+	UnitOfMeasure string `json:"unit_of_measure"`
+	LotNumber     string `json:"lot_number"`
 	Location      string `json:"location"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
+	PermissionDenied string `json:"permission_denied"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
 }
 
 // DefaultActivityMaterialLabels returns ActivityMaterialLabels with sensible English defaults.

@@ -25,24 +25,24 @@ type Labels struct {
 
 type PageLabels struct {
 	Heading           string `json:"heading"`
-	HeadingDraft      string `json:"headingDraft"`
-	HeadingActive     string `json:"headingActive"`
-	HeadingDeprecated string `json:"headingDeprecated"`
+	HeadingDraft      string `json:"heading_draft"`
+	HeadingActive     string `json:"heading_active"`
+	HeadingDeprecated string `json:"heading_deprecated"`
 	Caption           string `json:"caption"`
-	CaptionDraft      string `json:"captionDraft"`
-	CaptionActive     string `json:"captionActive"`
-	CaptionDeprecated string `json:"captionDeprecated"`
+	CaptionDraft      string `json:"caption_draft"`
+	CaptionActive     string `json:"caption_active"`
+	CaptionDeprecated string `json:"caption_deprecated"`
 }
 
 type ButtonLabels struct {
-	AddTemplate string `json:"addTemplate"`
-	AddQuestion string `json:"addQuestion"`
+	AddTemplate string `json:"add_template"`
+	AddQuestion string `json:"add_question"`
 }
 
 type ColumnLabels struct {
 	Name             string `json:"name"`
-	EvaluationType   string `json:"evaluationType"`
-	RelationshipType string `json:"relationshipType"`
+	EvaluationType   string `json:"evaluation_type"`
+	RelationshipType string `json:"relationship_type"`
 	Version          string `json:"version"`
 	Status           string `json:"status"`
 	Visibility       string `json:"visibility"`
@@ -53,27 +53,27 @@ type ColumnLabels struct {
 type EmptyLabels struct {
 	Title             string `json:"title"`
 	Message           string `json:"message"`
-	DraftTitle        string `json:"draftTitle"`
-	DraftMessage      string `json:"draftMessage"`
-	ActiveTitle       string `json:"activeTitle"`
-	ActiveMessage     string `json:"activeMessage"`
-	DeprecatedTitle   string `json:"deprecatedTitle"`
-	DeprecatedMessage string `json:"deprecatedMessage"`
-	ItemsTitle        string `json:"itemsTitle"`
-	ItemsMessage      string `json:"itemsMessage"`
+	DraftTitle        string `json:"draft_title"`
+	DraftMessage      string `json:"draft_message"`
+	ActiveTitle       string `json:"active_title"`
+	ActiveMessage     string `json:"active_message"`
+	DeprecatedTitle   string `json:"deprecated_title"`
+	DeprecatedMessage string `json:"deprecated_message"`
+	ItemsTitle        string `json:"items_title"`
+	ItemsMessage      string `json:"items_message"`
 }
 
 type FormLabels struct {
-	Name                  string `json:"name"`
-	NamePlaceholder       string `json:"namePlaceholder"`
-	Description           string `json:"description"`
-	DescPlaceholder       string `json:"descriptionPlaceholder"`
-	EvaluationType        string `json:"evaluationType"`
-	RelationshipType      string `json:"relationshipType"`
-	Visibility            string `json:"visibility"`
-	EvaluationTypeInfo    string `json:"evaluationTypeInfo"`
-	RelationshipTypeInfo  string `json:"relationshipTypeInfo"`
-	VisibilityInfo        string `json:"visibilityInfo"`
+	Name                 string `json:"name"`
+	NamePlaceholder      string `json:"name_placeholder"`
+	Description          string `json:"description"`
+	DescPlaceholder      string `json:"description_placeholder"`
+	EvaluationType       string `json:"evaluation_type"`
+	RelationshipType     string `json:"relationship_type"`
+	Visibility           string `json:"visibility"`
+	EvaluationTypeInfo   string `json:"evaluation_type_info"`
+	RelationshipTypeInfo string `json:"relationship_type_info"`
+	VisibilityInfo       string `json:"visibility_info"`
 }
 
 type ActionLabels struct {
@@ -84,17 +84,17 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle        string `json:"pageTitle"`
+	PageTitle        string `json:"page_title"`
 	Name             string `json:"name"`
 	Description      string `json:"description"`
-	EvaluationType   string `json:"evaluationType"`
-	RelationshipType string `json:"relationshipType"`
+	EvaluationType   string `json:"evaluation_type"`
+	RelationshipType string `json:"relationship_type"`
 	Version          string `json:"version"`
 	Status           string `json:"status"`
 	Visibility       string `json:"visibility"`
-	CopiedFrom       string `json:"copiedFrom"`
-	CreatedDate      string `json:"createdDate"`
-	ModifiedDate     string `json:"modifiedDate"`
+	CopiedFrom       string `json:"copied_from"`
+	CreatedDate      string `json:"created_date"`
+	ModifiedDate     string `json:"modified_date"`
 }
 
 type TabLabels struct {
@@ -109,30 +109,30 @@ type ItemLabels struct {
 	Caption        string `json:"caption"`
 	Sequence       string `json:"sequence"`
 	Criterion      string `json:"criterion"`
-	CriteriaType   string `json:"criteriaType"`
+	CriteriaType   string `json:"criteria_type"`
 	Weight         string `json:"weight"`
-	QuestionLabel  string `json:"questionLabel"`
-	QuestionPrompt string `json:"questionPrompt"`
+	QuestionLabel  string `json:"question_label"`
+	QuestionPrompt string `json:"question_prompt"`
 	Required       string `json:"required"`
 	Edit           string `json:"edit"`
 	Remove         string `json:"remove"`
-	NotScored      string `json:"notScored"`
+	NotScored      string `json:"not_scored"`
 }
 
 type ConfirmLabels struct {
 	Deprecate         string `json:"deprecate"`
-	DeprecateMessage  string `json:"deprecateMessage"`
-	RemoveItem        string `json:"removeItem"`
-	RemoveItemMessage string `json:"removeItemMessage"`
+	DeprecateMessage  string `json:"deprecate_message"`
+	RemoveItem        string `json:"remove_item"`
+	RemoveItemMessage string `json:"remove_item_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied  string `json:"permissionDenied"`
-	InvalidFormData   string `json:"invalidFormData"`
-	NotFound          string `json:"notFound"`
-	IDRequired        string `json:"idRequired"`
-	NoPermission      string `json:"noPermission"`
-	WeightedNonNumeric string `json:"weightedNonNumeric"`
+	PermissionDenied   string `json:"permission_denied"`
+	InvalidFormData    string `json:"invalid_form_data"`
+	NotFound           string `json:"not_found"`
+	IDRequired         string `json:"id_required"`
+	NoPermission       string `json:"no_permission"`
+	WeightedNonNumeric string `json:"weighted_non_numeric"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

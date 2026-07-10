@@ -28,7 +28,7 @@ type PageLabels struct {
 }
 
 type ButtonLabels struct {
-	NewCycle string `json:"newCycle"`
+	NewCycle string `json:"new_cycle"`
 }
 
 type ColumnLabels struct {
@@ -36,7 +36,7 @@ type ColumnLabels struct {
 	Engagement string `json:"engagement"`
 	Period     string `json:"period"`
 	Progress   string `json:"progress"`
-	SignOffDue string `json:"signOffDue"`
+	SignOffDue string `json:"sign_off_due"`
 	Closes     string `json:"closes"`
 	Status     string `json:"status"`
 }
@@ -53,11 +53,11 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle  string `json:"pageTitle"`
+	PageTitle  string `json:"page_title"`
 	Name       string `json:"name"`
 	Engagement string `json:"engagement"`
 	Period     string `json:"period"`
-	SignOffDue string `json:"signOffDue"`
+	SignOffDue string `json:"sign_off_due"`
 	Closes     string `json:"closes"`
 	Status     string `json:"status"`
 }
@@ -70,40 +70,40 @@ type TabLabels struct {
 // BannerLabels — the shared "X of Y" progress banner (rendered on cycle
 // detail + perf panel + portal). Read-only projection; NOT a form.
 type BannerLabels struct {
-	ProgressFmt   string `json:"progressFmt"`   // "%d of %d complete"
-	SignOffDueFmt string `json:"signOffDueFmt"` // "sign-offs due %s"
-	ClosesFmt     string `json:"closesFmt"`     // "closes %s"
-	Complete      string `json:"complete"`      // "complete"
+	ProgressFmt   string `json:"progress_fmt"`     // "%d of %d complete"
+	SignOffDueFmt string `json:"sign_off_due_fmt"` // "sign-offs due %s"
+	ClosesFmt     string `json:"closes_fmt"`       // "closes %s"
+	Complete      string `json:"complete"`         // "complete"
 }
 
 type StatusLabels struct {
 	Open    string `json:"open"`
-	SignOff string `json:"signOff"`
+	SignOff string `json:"sign_off"`
 	Closed  string `json:"closed"`
 }
 
 type FormLabels struct {
-	Name           string `json:"name"`
-	NamePlaceholder string `json:"namePlaceholder"`
-	Subscription   string `json:"subscription"`
-	PeriodStart    string `json:"periodStart"`
-	PeriodEnd      string `json:"periodEnd"`
-	SignOffDueDate string `json:"signOffDueDate"`
-	CloseDate      string `json:"closeDate"`
+	Name            string `json:"name"`
+	NamePlaceholder string `json:"name_placeholder"`
+	Subscription    string `json:"subscription"`
+	PeriodStart     string `json:"period_start"`
+	PeriodEnd       string `json:"period_end"`
+	SignOffDueDate  string `json:"sign_off_due_date"`
+	CloseDate       string `json:"close_date"`
 }
 
 type ConfirmLabels struct {
 	Open         string `json:"open"`
-	OpenMessage  string `json:"openMessage"`
+	OpenMessage  string `json:"open_message"`
 	Close        string `json:"close"`
-	CloseMessage string `json:"closeMessage"`
+	CloseMessage string `json:"close_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	InvalidFormData  string `json:"invalidFormData"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
+	PermissionDenied string `json:"permission_denied"`
+	InvalidFormData  string `json:"invalid_form_data"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

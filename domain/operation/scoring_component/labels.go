@@ -16,46 +16,46 @@ type Labels struct {
 
 type PageLabels struct {
 	Heading         string `json:"heading"`
-	HeadingActive   string `json:"headingActive"`
-	HeadingInactive string `json:"headingInactive"`
+	HeadingActive   string `json:"heading_active"`
+	HeadingInactive string `json:"heading_inactive"`
 	Caption         string `json:"caption"`
-	CaptionActive   string `json:"captionActive"`
-	CaptionInactive string `json:"captionInactive"`
+	CaptionActive   string `json:"caption_active"`
+	CaptionInactive string `json:"caption_inactive"`
 }
 
 type ButtonLabels struct {
-	AddComponent string `json:"addComponent"`
+	AddComponent string `json:"add_component"`
 }
 
 type ColumnLabels struct {
 	Code          string `json:"code"`
 	Label         string `json:"label"`
 	Weight        string `json:"weight"`
-	SequenceOrder string `json:"sequenceOrder"`
+	SequenceOrder string `json:"sequence_order"`
 	Active        string `json:"active"`
 }
 
 type EmptyLabels struct {
 	Title           string `json:"title"`
 	Message         string `json:"message"`
-	ActiveTitle     string `json:"activeTitle"`
-	ActiveMessage   string `json:"activeMessage"`
-	InactiveTitle   string `json:"inactiveTitle"`
-	InactiveMessage string `json:"inactiveMessage"`
+	ActiveTitle     string `json:"active_title"`
+	ActiveMessage   string `json:"active_message"`
+	InactiveTitle   string `json:"inactive_title"`
+	InactiveMessage string `json:"inactive_message"`
 }
 
 type FormLabels struct {
-	ScoringSchemeId       string `json:"scoringSchemeId"`
+	ScoringSchemeId       string `json:"scoring_scheme_id"`
 	Code                  string `json:"code"`
-	CodePlaceholder       string `json:"codePlaceholder"`
+	CodePlaceholder       string `json:"code_placeholder"`
 	Label                 string `json:"label"`
-	LabelPlaceholder      string `json:"labelPlaceholder"`
+	LabelPlaceholder      string `json:"label_placeholder"`
 	Weight                string `json:"weight"`
-	WeightInfo            string `json:"weightInfo"`
-	SequenceOrder         string `json:"sequenceOrder"`
-	SequenceOrderInfo     string `json:"sequenceOrderInfo"`
-	ParentComponentId     string `json:"parentComponentId"`
-	ParentComponentIdInfo string `json:"parentComponentIdInfo"`
+	WeightInfo            string `json:"weight_info"`
+	SequenceOrder         string `json:"sequence_order"`
+	SequenceOrderInfo     string `json:"sequence_order_info"`
+	ParentComponentId     string `json:"parent_component_id"`
+	ParentComponentIdInfo string `json:"parent_component_id_info"`
 	Active                string `json:"active"`
 }
 
@@ -66,16 +66,16 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle         string `json:"pageTitle"`
-	ScoringSchemeId   string `json:"scoringSchemeId"`
+	PageTitle         string `json:"page_title"`
+	ScoringSchemeId   string `json:"scoring_scheme_id"`
 	Code              string `json:"code"`
 	Label             string `json:"label"`
 	Weight            string `json:"weight"`
-	SequenceOrder     string `json:"sequenceOrder"`
-	ParentComponentId string `json:"parentComponentId"`
+	SequenceOrder     string `json:"sequence_order"`
+	ParentComponentId string `json:"parent_component_id"`
 	Active            string `json:"active"`
-	CreatedDate       string `json:"createdDate"`
-	ModifiedDate      string `json:"modifiedDate"`
+	CreatedDate       string `json:"created_date"`
+	ModifiedDate      string `json:"modified_date"`
 }
 
 type TabLabels struct {
@@ -85,15 +85,15 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	InvalidFormData  string `json:"invalidFormData"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
-	NoPermission     string `json:"noPermission"`
+	PermissionDenied string `json:"permission_denied"`
+	InvalidFormData  string `json:"invalid_form_data"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
+	NoPermission     string `json:"no_permission"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

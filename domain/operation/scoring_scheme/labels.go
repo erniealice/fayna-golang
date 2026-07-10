@@ -16,20 +16,20 @@ type Labels struct {
 
 type PageLabels struct {
 	Heading         string `json:"heading"`
-	HeadingActive   string `json:"headingActive"`
-	HeadingInactive string `json:"headingInactive"`
+	HeadingActive   string `json:"heading_active"`
+	HeadingInactive string `json:"heading_inactive"`
 	Caption         string `json:"caption"`
-	CaptionActive   string `json:"captionActive"`
-	CaptionInactive string `json:"captionInactive"`
+	CaptionActive   string `json:"caption_active"`
+	CaptionInactive string `json:"caption_inactive"`
 }
 
 type ButtonLabels struct {
-	AddScheme string `json:"addScheme"`
+	AddScheme string `json:"add_scheme"`
 }
 
 type ColumnLabels struct {
 	Name            string `json:"name"`
-	CompositeMethod string `json:"compositeMethod"`
+	CompositeMethod string `json:"composite_method"`
 	Version         string `json:"version"`
 	Status          string `json:"status"`
 }
@@ -37,21 +37,21 @@ type ColumnLabels struct {
 type EmptyLabels struct {
 	Title           string `json:"title"`
 	Message         string `json:"message"`
-	ActiveTitle     string `json:"activeTitle"`
-	ActiveMessage   string `json:"activeMessage"`
-	InactiveTitle   string `json:"inactiveTitle"`
-	InactiveMessage string `json:"inactiveMessage"`
+	ActiveTitle     string `json:"active_title"`
+	ActiveMessage   string `json:"active_message"`
+	InactiveTitle   string `json:"inactive_title"`
+	InactiveMessage string `json:"inactive_message"`
 }
 
 type FormLabels struct {
 	Name                    string `json:"name"`
-	NamePlaceholder         string `json:"namePlaceholder"`
-	CompositeMethod         string `json:"compositeMethod"`
-	CompositeMethodInfo     string `json:"compositeMethodInfo"`
-	RoundingMode            string `json:"roundingMode"`
-	RoundingModeInfo        string `json:"roundingModeInfo"`
-	WeightsMustSumToOne     string `json:"weightsMustSumToOne"`
-	WeightsMustSumToOneInfo string `json:"weightsMustSumToOneInfo"`
+	NamePlaceholder         string `json:"name_placeholder"`
+	CompositeMethod         string `json:"composite_method"`
+	CompositeMethodInfo     string `json:"composite_method_info"`
+	RoundingMode            string `json:"rounding_mode"`
+	RoundingModeInfo        string `json:"rounding_mode_info"`
+	WeightsMustSumToOne     string `json:"weights_must_sum_to_one"`
+	WeightsMustSumToOneInfo string `json:"weights_must_sum_to_one_info"`
 }
 
 type ActionLabels struct {
@@ -61,17 +61,17 @@ type ActionLabels struct {
 }
 
 type DetailLabels struct {
-	PageTitle           string `json:"pageTitle"`
+	PageTitle           string `json:"page_title"`
 	Name                string `json:"name"`
-	CompositeMethod     string `json:"compositeMethod"`
-	RoundingMode        string `json:"roundingMode"`
-	WeightsMustSumToOne string `json:"weightsMustSumToOne"`
+	CompositeMethod     string `json:"composite_method"`
+	RoundingMode        string `json:"rounding_mode"`
+	WeightsMustSumToOne string `json:"weights_must_sum_to_one"`
 	Version             string `json:"version"`
 	Status              string `json:"status"`
-	SchemeGroupId       string `json:"schemeGroupId"`
-	ScoreScaleId        string `json:"scoreScaleId"`
-	CreatedDate         string `json:"createdDate"`
-	ModifiedDate        string `json:"modifiedDate"`
+	SchemeGroupId       string `json:"scheme_group_id"`
+	ScoreScaleId        string `json:"score_scale_id"`
+	CreatedDate         string `json:"created_date"`
+	ModifiedDate        string `json:"modified_date"`
 }
 
 type TabLabels struct {
@@ -84,15 +84,15 @@ type TabLabels struct {
 
 type ConfirmLabels struct {
 	Delete        string `json:"delete"`
-	DeleteMessage string `json:"deleteMessage"`
+	DeleteMessage string `json:"delete_message"`
 }
 
 type ErrorLabels struct {
-	PermissionDenied string `json:"permissionDenied"`
-	InvalidFormData  string `json:"invalidFormData"`
-	NotFound         string `json:"notFound"`
-	IDRequired       string `json:"idRequired"`
-	NoPermission     string `json:"noPermission"`
+	PermissionDenied string `json:"permission_denied"`
+	InvalidFormData  string `json:"invalid_form_data"`
+	NotFound         string `json:"not_found"`
+	IDRequired       string `json:"id_required"`
+	NoPermission     string `json:"no_permission"`
 }
 
 // DefaultLabels returns Labels with sensible English defaults.

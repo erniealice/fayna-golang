@@ -15,14 +15,9 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
-	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
-	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
-	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
-	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
-	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
-	subscriptionseatpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_seat"
+	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
 
 // businessTypeEducation is the compose MountContext.BusinessType value that
@@ -44,22 +39,15 @@ type ListViewDeps struct {
 	// businessTypeEducation above.
 	BusinessType string
 
-	// Template-grain delivery-summary deps (education tier only). All
-	// optional/nil-safe — a nil dependency degrades the column it backs to
-	// blank rather than panicking. MatrixDetailURL is the cross-unit
-	// outcome_matrix.matrix route ("/outcome-matrix/{id}", id=job_template_id)
-	// each summary row links to.
-	ListJobTemplates                func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
-	GetSubscriptionSeatListPageData func(ctx context.Context, req *subscriptionseatpb.GetSubscriptionSeatListPageDataRequest) (*subscriptionseatpb.GetSubscriptionSeatListPageDataResponse, error)
-	ListSubscriptionGroupMembers    func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
-	ListSubscriptionGroups          func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
-	ListProductPlans                func(ctx context.Context, req *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error)
-	// GetStaffListPageData — the User-hydrating staff read. Never the bare
-	// ListStaffs RPC: confirmed against the postgres adapter, it never
-	// populates Staff.User (a plain table scan, no join to "user") — a
-	// deliverer resolved through it renders its raw staff id.
-	GetStaffListPageData func(ctx context.Context, req *staffpb.GetStaffListPageDataRequest) (*staffpb.GetStaffListPageDataResponse, error)
-	MatrixDetailURL      string
+	// Template-grain delivery summary (education tier only). ONE server-side
+	// GROUP-BY read (espyna service/operation/job_template_summary) that
+	// aggregates + resolver-scopes + resolves every column in the adapter —
+	// replacing the former ~76-fetch Go aggregation. Optional/nil-safe: a nil
+	// closure renders the education-tier list empty. MatrixDetailURL is the
+	// cross-unit outcome_matrix.matrix route ("/outcome-matrix/{id}",
+	// id=job_template_id) each summary row links to.
+	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
+	MatrixDetailURL          string
 }
 
 // PageData holds the data for the job list page.

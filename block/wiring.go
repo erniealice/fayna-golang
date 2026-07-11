@@ -52,16 +52,10 @@ func wireJobDeps(deps *operation.JobModuleDeps, u *UseCases) {
 	deps.ReadSubscription = u.Subscription.Subscription.ReadSubscription
 
 	// Template-grain delivery summary (education tier; List view — 20260710
-	// staff-class-list plan). All nil-safe: a nil closure degrades the column
-	// it backs to blank rather than panicking.
-	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
-	deps.GetSubscriptionSeatListPageData = u.Subscription.SubscriptionSeat.GetSubscriptionSeatListPageData
-	deps.ListSubscriptionGroupMembers = u.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers
-	deps.ListSubscriptionGroups = u.Subscription.SubscriptionGroup.ListSubscriptionGroups
-	deps.ListProductPlans = u.Product.ProductPlan.ListProductPlans
-	// GetStaffListPageData (NOT the bare ListStaffs, which never hydrates
-	// Staff.User) — see block/usecases.go EntityStaffUseCases.
-	deps.GetStaffListPageData = u.Entity.Staff.GetStaffListPageData
+	// staff-class-list plan, S6). The former ~76-fetch Go aggregation (jobs +
+	// seats + group/plan/staff lookups) is now ONE server-side GROUP-BY read;
+	// nil-safe (a nil closure renders the education-tier list empty).
+	deps.ListJobTemplateSummaries = u.Operation.JobTemplateSummary.ListJobTemplateSummaries
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +237,13 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	// search picker already uses — already wired in engineblock.go, no new
 	// espyna surface needed here).
 	deps.ListClients = u.Entity.Client.ListClients
+
+	// Page-header delivery-group resolution (round 4 item 2) — all three are
+	// already-wired top-level closures reused from elsewhere in the block
+	// (the job list's template-grain summary uses the same three).
+	deps.ListJobs = u.Operation.Job.ListJobs
+	deps.ListSubscriptionGroupMembers = u.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers
+	deps.ListSubscriptionGroups = u.Subscription.SubscriptionGroup.ListSubscriptionGroups
 }
 
 // ---------------------------------------------------------------------------

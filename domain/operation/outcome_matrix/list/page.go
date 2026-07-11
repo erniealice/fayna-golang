@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	deliverygroup "github.com/erniealice/fayna-golang/domain/operation/deliverygroup"
 	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 
 	pyeza "github.com/erniealice/pyeza-golang"
@@ -16,7 +17,10 @@ import (
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
+	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	outcomecriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
+	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
+	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
 
@@ -60,6 +64,19 @@ type PageViewDeps struct {
 	// Same closure the job drawer's client search picker already uses
 	// (block.go newJobClientSearchHandler) — no new espyna surface.
 	ListClients func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+
+	// Page-header delivery-group resolution (round 4 item 2): ListJobs finds
+	// ONE job under the template to read its origin subscription id from;
+	// ListSubscriptionGroupMembers/ListSubscriptionGroups feed the shared
+	// domain/operation/deliverygroup resolver (the SAME chain job/list/
+	// template_summary.go's delivery summary uses — extracted so neither
+	// file duplicates it). All three are already-wired top-level closures
+	// (u.Operation.Job.ListJobs, u.Subscription.SubscriptionGroupMember.*,
+	// u.Subscription.SubscriptionGroup.*) — no new espyna surface. Nil-safe:
+	// nil -> the header caption renders blank.
+	ListJobs                     func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+	ListSubscriptionGroups       func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 }
 
 // PageData holds the data for the outcome matrix page. The Grid field is named
@@ -127,6 +144,25 @@ func NewView(deps *PageViewDeps) view.View {
 			subjectName = resp.GetJobTemplateName()
 		}
 
+		// Header title = the job_template name; header caption = its delivery
+		// group (section) name (round 4 item 2 — replaces the in-body
+		// "Subject: ..." line and the table's duplicate <caption>, both
+		// removed below / in matrix.html). groupName resolves via the SAME
+		// job -> origin subscription -> subscription_group_member ->
+		// subscription_group chain job/list/template_summary.go uses,
+		// through the shared domain/operation/deliverygroup package — one
+		// sample job under the template is enough (every job of one
+		// template shares the same section, verified
+		// docs/plan/20260710-staff-class-list/s3b-view.md).
+		headerTitle := l.Page.Title
+		if subjectName != "" {
+			headerTitle = subjectName
+		}
+		groupName := ""
+		if originID := sampleOriginSubscription(ctx, deps, templateID); originID != "" {
+			groupName, _ = deliverygroup.ResolveOne(ctx, deps.ListSubscriptionGroupMembers, deps.ListSubscriptionGroups, originID)
+		}
+
 		scopeActive := "mine"
 		if effectiveAll {
 			scopeActive = "all"
@@ -135,12 +171,13 @@ func NewView(deps *PageViewDeps) view.View {
 		pageData := &PageData{
 			PageData: types.PageData{
 				CacheVersion:    viewCtx.CacheVersion,
-				Title:           l.Page.Title,
+				Title:           headerTitle,
 				ContentTemplate: "outcome-matrix-content",
 				CurrentPath:     viewCtx.CurrentPath,
 				ActiveNav:       deps.Routes.ActiveNav,
 				ActiveSubNav:    deps.Routes.ActiveSubNav,
-				HeaderTitle:     l.Page.Title,
+				HeaderTitle:     headerTitle,
+				HeaderSubtitle:  groupName,
 				HeaderIcon:      "icon-grid",
 				CommonLabels:    deps.CommonLabels,
 			},
@@ -155,6 +192,48 @@ func NewView(deps *PageViewDeps) view.View {
 
 		return view.OK("outcome-matrix", pageData)
 	})
+}
+
+// sampleOriginSubscription finds ONE job under templateID and returns its
+// origin subscription id (ORIGIN_TYPE_SUBSCRIPTION jobs only). Limit 1 — any
+// single job's origin is enough; every job under one job_template shares the
+// same delivery group (section), so no pagination loop is needed here
+// (contrast job/list/template_summary.go, which pages through ALL scoped
+// jobs because it also needs the per-template item COUNT — this call only
+// needs one sample). Nil-safe: deps.ListJobs == nil -> "".
+func sampleOriginSubscription(ctx context.Context, deps *PageViewDeps, templateID string) string {
+	if deps.ListJobs == nil || templateID == "" {
+		return ""
+	}
+	resp, err := deps.ListJobs(ctx, &jobpb.ListJobsRequest{
+		Filters: &commonpb.FilterRequest{
+			Filters: []*commonpb.TypedFilter{{
+				Field: "job_template_id",
+				FilterType: &commonpb.TypedFilter_StringFilter{
+					StringFilter: &commonpb.StringFilter{
+						Value:    templateID,
+						Operator: commonpb.StringOperator_STRING_EQUALS,
+					},
+				},
+			}},
+		},
+		Pagination: &commonpb.PaginationRequest{
+			Limit:  1,
+			Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: 1}},
+		},
+	})
+	if err != nil {
+		log.Printf("Failed to sample a job for template %s: %v", templateID, err)
+		return ""
+	}
+	for _, j := range resp.GetData() {
+		if j.GetOriginType() == enums.OriginType_ORIGIN_TYPE_SUBSCRIPTION {
+			if oid := j.GetOriginId(); oid != "" {
+				return oid
+			}
+		}
+	}
+	return ""
 }
 
 // buildGrid converts the proto response into a *types.CellGridConfig. The acting
@@ -176,8 +255,13 @@ func buildGrid(
 	}
 
 	cfg := &types.CellGridConfig{
-		ID:               "outcome-matrix-grid",
-		Caption:          l.Page.Title,
+		ID: "outcome-matrix-grid",
+		// Caption intentionally left unset (round 4 item 2): the page
+		// header (HeaderTitle/HeaderSubtitle, set in NewView) now carries
+		// the template name + delivery group — the table's own <caption>
+		// used to duplicate the header with the same static l.Page.Title
+		// text. cell-grid-card.html's {{if .Caption}} guard already no-ops
+		// on empty, so this is a clean removal, not a hidden feature loss.
 		FreezeFirstCol:   true,
 		FreezeHeaderRows: 3,
 		SaveURL:          route.ResolveURL(deps.Routes.RecordURL, "id", templateID),

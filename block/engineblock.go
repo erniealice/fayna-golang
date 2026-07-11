@@ -342,6 +342,19 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		result.Operation.OutcomeMatrix.ResolveStaff = newStaffResolver(result.Entity.Staff.ListStaffs)
 	}
 
+	// -- Service/operation JobTemplateSummary (generic template-grain summary) ----
+	//
+	// Like OutcomeMatrix, the read use case lives on espyna's SERVICE aggregate
+	// (service/operation/job_template_summary), sourced here from
+	// uc.Service.JobTemplateSummary while surfacing on fayna's Operation group
+	// (the consuming view is the Job list module). Nil-safe: a nil Service /
+	// JobTemplateSummary leaves the closure nil → the education-tier list renders
+	// empty.
+	if uc.Service != nil && uc.Service.JobTemplateSummary != nil &&
+		uc.Service.JobTemplateSummary.ListJobTemplateSummaries != nil {
+		result.Operation.JobTemplateSummary.ListJobTemplateSummaries = uc.Service.JobTemplateSummary.ListJobTemplateSummaries.Execute
+	}
+
 	// -- Service.Dashboard.Job — proto→view translation --------------------------
 	//
 	// Proto Response carries *JobStats (pointer-to-struct), TrendLabels/Values,

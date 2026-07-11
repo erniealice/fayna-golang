@@ -11,7 +11,10 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
+	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
+	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
+	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
 
@@ -39,6 +42,14 @@ type OutcomeMatrixModuleDeps struct {
 	// doc comment). Same closure the job drawer's client search picker
 	// already uses; optional/nil-safe.
 	ListClients func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+
+	// Page-header delivery-group resolution (round 4 item 2) — see
+	// list/page.go's PageViewDeps doc comment for the full chain. All three
+	// are already-wired top-level closures reused from elsewhere in the
+	// block; optional/nil-safe.
+	ListJobs                     func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+	ListSubscriptionGroups       func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 }
 
 // OutcomeMatrixModule holds the constructed outcome matrix views.
@@ -51,12 +62,15 @@ type OutcomeMatrixModule struct {
 // NewOutcomeMatrixModule creates the outcome matrix module with all views wired.
 func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule {
 	matrixView := outcomematrixlist.NewView(&outcomematrixlist.PageViewDeps{
-		Routes:           deps.Routes,
-		Labels:           deps.Labels,
-		CommonLabels:     deps.CommonLabels,
-		GetOutcomeMatrix: deps.GetOutcomeMatrix,
-		ResolveStaff:     deps.ResolveStaff,
-		ListClients:      deps.ListClients,
+		Routes:                       deps.Routes,
+		Labels:                       deps.Labels,
+		CommonLabels:                 deps.CommonLabels,
+		GetOutcomeMatrix:             deps.GetOutcomeMatrix,
+		ResolveStaff:                 deps.ResolveStaff,
+		ListClients:                  deps.ListClients,
+		ListJobs:                     deps.ListJobs,
+		ListSubscriptionGroupMembers: deps.ListSubscriptionGroupMembers,
+		ListSubscriptionGroups:       deps.ListSubscriptionGroups,
 	})
 
 	recordView := outcomematrixaction.NewRecordAction(&outcomematrixaction.Deps{

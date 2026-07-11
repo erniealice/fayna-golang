@@ -66,6 +66,7 @@ import (
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	subscriptionseatpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_seat"
 	activitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/workflow/activity"
+	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 
 	fulfillmentdashboard "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
@@ -130,6 +131,11 @@ type OperationUseCases struct {
 	// espyna's SERVICE aggregate (service/operation/outcome_matrix), surfaced
 	// here on Operation because the view module lives in fayna domain/operation.
 	OutcomeMatrix OutcomeMatrixUseCases
+	// JobTemplateSummary — the generic resolver-scoped, template-grain delivery
+	// summary (read). Sourced from espyna's SERVICE aggregate
+	// (service/operation/job_template_summary), surfaced here on Operation
+	// because the consuming view is the Job list module (education tier).
+	JobTemplateSummary JobTemplateSummaryUseCases
 	// TemplateTaskCriteria — JobTemplate detail criteria-by-task list.
 	TemplateTaskCriteria TemplateTaskCriteriaUseCases
 	JobOutcomeSummary    JobOutcomeSummaryUseCases
@@ -281,6 +287,17 @@ type TaskOutcomeUseCases struct {
 type OutcomeMatrixUseCases struct {
 	GetOutcomeMatrix func(context.Context, *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
 	ResolveStaff     func(ctx context.Context) (string, error)
+}
+
+// JobTemplateSummaryUseCases — the generic resolver-scoped, template-grain
+// delivery summary. ListJobTemplateSummaries returns one aggregated row per
+// job_template with >=1 scoped job for the requested job status (the education-
+// tier "class list"), sourced from espyna's service/operation/
+// job_template_summary read use case. Row scoping is entirely resolver-level
+// (principalscope inside the adapter). OPTIONAL / nil-able (NOT in RequireFor):
+// a nil closure renders the education-tier list empty.
+type JobTemplateSummaryUseCases struct {
+	ListJobTemplateSummaries func(context.Context, *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 }
 
 // ScoringSchemeUseCases — ScoringScheme CRUD + list (education grading 20260616).

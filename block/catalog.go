@@ -57,12 +57,20 @@ func JobUnit(uc *UseCases, infra *Infra) compose.Unit {
 			SubscriptionDetailURL: infra.SubscriptionDetailURL,
 			ClientSearchURL:       r.ClientSearchURL,
 			LocationSearchURL:     r.LocationSearchURL,
+			// BusinessType branches the List view to the template-grain
+			// delivery summary for "education" (20260710 staff-class-list).
+			BusinessType: mc.BusinessType,
 		}
 		if jaRoutes, ok := compose.RoutesOf[*job_activity.Routes](mc, "operation.job_activity"); ok {
 			deps.JobActivityRoutes = *jaRoutes
 		}
 		if jaLabels, ok := compose.LabelsOf[*job_activity.Labels](mc, "operation.job_activity"); ok {
 			deps.JobActivityLabels = *jaLabels
+		}
+		// outcome_matrix.matrix route — the template-grain delivery summary
+		// row link ("/outcome-matrix/{id}", id=job_template_id).
+		if omRoutes, ok := compose.RoutesOf[*outcome_matrix.Routes](mc, "operation.outcome_matrix"); ok {
+			deps.MatrixDetailURL = omRoutes.MatrixURL
 		}
 		if infra.RefChecker != nil {
 			deps.GetInUseIDs = infra.RefChecker.GetJobInUseIDs

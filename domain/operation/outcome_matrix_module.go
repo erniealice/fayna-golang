@@ -10,6 +10,7 @@ import (
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/view"
 
+	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
@@ -32,6 +33,12 @@ type OutcomeMatrixModuleDeps struct {
 	ReadTaskOutcome   func(ctx context.Context, req *taskoutcomepb.ReadTaskOutcomeRequest) (*taskoutcomepb.ReadTaskOutcomeResponse, error)
 
 	ResolveStaff func(ctx context.Context) (string, error)
+
+	// ListClients hydrates the roster's display names (the matrix's client_id
+	// rows are otherwise opaque — see list/page.go's PageViewDeps.ListClients
+	// doc comment). Same closure the job drawer's client search picker
+	// already uses; optional/nil-safe.
+	ListClients func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
 }
 
 // OutcomeMatrixModule holds the constructed outcome matrix views.
@@ -49,6 +56,7 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		CommonLabels:     deps.CommonLabels,
 		GetOutcomeMatrix: deps.GetOutcomeMatrix,
 		ResolveStaff:     deps.ResolveStaff,
+		ListClients:      deps.ListClients,
 	})
 
 	recordView := outcomematrixaction.NewRecordAction(&outcomematrixaction.Deps{

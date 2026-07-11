@@ -84,7 +84,7 @@ func TestBuildTableRows_JobPermissionMatrix(t *testing.T) {
 			t.Parallel()
 
 			perms := types.NewUserPermissions(tc.perms)
-			rows := buildTableRows(jobs, "active", l, routes, map[string]bool{}, perms)
+			rows := buildTableRows(jobs, l, routes, map[string]bool{}, perms)
 			if len(rows) != 1 {
 				t.Fatalf("rows = %d, want 1", len(rows))
 			}
@@ -117,7 +117,7 @@ func TestBuildTableRows_Job_InUseUsesInUseTooltip(t *testing.T) {
 
 	// Admin perms — but in-use blocks delete.
 	perms := types.NewUserPermissions([]string{"job:list", "job:read", "job:update", "job:delete"})
-	rows := buildTableRows(jobs, "active", l, routes, map[string]bool{"job-2": true}, perms)
+	rows := buildTableRows(jobs, l, routes, map[string]bool{"job-2": true}, perms)
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d, want 1", len(rows))
 	}
@@ -133,9 +133,12 @@ func TestBuildTableRows_Job_InUseUsesInUseTooltip(t *testing.T) {
 	}
 }
 
-// TestBuildTableRows_Job_StatusMismatchFiltersOut verifies that rows whose
-// JobStatus doesn't match the page's status filter are dropped.
-func TestBuildTableRows_Job_StatusMismatchFiltersOut(t *testing.T) {
+// TestBuildTableRows_Job_RendersEveryGivenJob verifies buildTableRows no
+// longer re-filters by status client-side (2026-07-11, 20260710
+// staff-class-list plan build spec §3 — the truncation-bug fix moved status
+// filtering server-side into fetchScopedJobs' TypedFilter; the caller is now
+// trusted to pass an already-scoped slice, and every row it's given renders).
+func TestBuildTableRows_Job_RendersEveryGivenJob(t *testing.T) {
 	t.Parallel()
 
 	jobs := []*jobpb.Job{
@@ -146,11 +149,31 @@ func TestBuildTableRows_Job_StatusMismatchFiltersOut(t *testing.T) {
 	routes := jobTestRoutes()
 	perms := types.NewUserPermissions([]string{"job:list", "job:read"})
 
-	rows := buildTableRows(jobs, "active", l, routes, nil, perms)
-	if len(rows) != 1 {
-		t.Fatalf("rows = %d, want 1 (only active row should pass)", len(rows))
+	rows := buildTableRows(jobs, l, routes, nil, perms)
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2 (buildTableRows renders every job it's given)", len(rows))
 	}
-	if rows[0].ID != "job-active" {
-		t.Errorf("rows[0].ID = %q, want %q", rows[0].ID, "job-active")
+}
+
+// TestJobStatusFilterValue verifies the URL status segment -> JobStatus enum
+// name mapping fetchScopedJobs uses for the server-side TypedFilter.
+func TestJobStatusFilterValue(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct{ in, want string }{
+		{"active", "JOB_STATUS_ACTIVE"},
+		{"draft", "JOB_STATUS_DRAFT"},
+		{"paused", "JOB_STATUS_PAUSED"},
+		{"completed", "JOB_STATUS_COMPLETED"},
+		{"closed", "JOB_STATUS_CLOSED"},
+		{"planned", "JOB_STATUS_PLANNED"},
+		{"released", "JOB_STATUS_RELEASED"},
+		{"bogus-status", "JOB_STATUS_ACTIVE"},
+		{"", "JOB_STATUS_ACTIVE"},
+	}
+	for _, tc := range cases {
+		if got := jobStatusFilterValue(tc.in); got != tc.want {
+			t.Errorf("jobStatusFilterValue(%q) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }

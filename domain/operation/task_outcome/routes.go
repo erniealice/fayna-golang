@@ -41,7 +41,7 @@ type Routes struct {
 func DefaultRoutes() Routes {
 	return Routes{
 		ActiveNav:    "job",
-		ActiveSubNav: "outcomes",
+		ActiveSubNav: "outcome-log",
 
 		ListURL:   ListURL,
 		DetailURL: DetailURL,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
@@ -13,9 +14,22 @@ import (
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
+	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
+	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
+	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	subscriptionseatpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_seat"
 )
+
+// businessTypeEducation is the compose MountContext.BusinessType value that
+// swaps this List view's content from the classic per-job table to the
+// template-grain delivery summary (20260710 staff-class-list plan; O3 defers
+// every other tier).
+const businessTypeEducation = "education"
 
 // ListViewDeps holds view dependencies.
 type ListViewDeps struct {
@@ -25,6 +39,27 @@ type ListViewDeps struct {
 	Labels       job.Labels
 	CommonLabels pyeza.CommonLabels
 	TableLabels  types.TableLabels
+
+	// BusinessType (compose MountContext.BusinessType) — see
+	// businessTypeEducation above.
+	BusinessType string
+
+	// Template-grain delivery-summary deps (education tier only). All
+	// optional/nil-safe — a nil dependency degrades the column it backs to
+	// blank rather than panicking. MatrixDetailURL is the cross-unit
+	// outcome_matrix.matrix route ("/outcome-matrix/{id}", id=job_template_id)
+	// each summary row links to.
+	ListJobTemplates                func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+	GetSubscriptionSeatListPageData func(ctx context.Context, req *subscriptionseatpb.GetSubscriptionSeatListPageDataRequest) (*subscriptionseatpb.GetSubscriptionSeatListPageDataResponse, error)
+	ListSubscriptionGroupMembers    func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+	ListSubscriptionGroups          func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
+	ListProductPlans                func(ctx context.Context, req *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error)
+	// GetStaffListPageData — the User-hydrating staff read. Never the bare
+	// ListStaffs RPC: confirmed against the postgres adapter, it never
+	// populates Staff.User (a plain table scan, no join to "user") — a
+	// deliverer resolved through it renders its raw staff id.
+	GetStaffListPageData func(ctx context.Context, req *staffpb.GetStaffListPageDataRequest) (*staffpb.GetStaffListPageDataResponse, error)
+	MatrixDetailURL      string
 }
 
 // PageData holds the data for the job list page.
@@ -34,7 +69,10 @@ type PageData struct {
 	Table           *types.TableConfig
 }
 
-// NewView creates the job list view.
+// NewView creates the job list view. BusinessType "education" swaps the
+// content to the template-grain delivery summary (buildDeliverySummaryTable,
+// template_summary.go); every other tier keeps the classic per-job table
+// (buildJobTable, below) — 20260710 staff-class-list plan, O3.
 func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
@@ -48,71 +86,18 @@ func NewView(deps *ListViewDeps) view.View {
 			status = "active"
 		}
 
-		resp, err := deps.ListJobs(ctx, &jobpb.ListJobsRequest{})
+		l := deps.Labels
+		var tableConfig *types.TableConfig
+		var err error
+		if deps.BusinessType == businessTypeEducation {
+			tableConfig, err = buildDeliverySummaryTable(ctx, deps, status, perms)
+		} else {
+			tableConfig, err = buildJobTable(ctx, deps, status, perms)
+		}
 		if err != nil {
 			log.Printf("Failed to list jobs: %v", err)
 			return view.Error(fmt.Errorf("failed to load jobs: %w", err))
 		}
-
-		// Collect IDs and check which are in use (referenced by dependent tables).
-		var inUseIDs map[string]bool
-		if deps.GetInUseIDs != nil {
-			var itemIDs []string
-			for _, j := range resp.GetData() {
-				itemIDs = append(itemIDs, j.GetId())
-			}
-			inUseIDs, _ = deps.GetInUseIDs(ctx, itemIDs)
-		}
-
-		l := deps.Labels
-		columns := jobColumns(l)
-		rows := buildTableRows(resp.GetData(), status, l, deps.Routes, inUseIDs, perms)
-		types.ApplyColumnStyles(columns, rows)
-
-		tableConfig := &types.TableConfig{
-			ID:                   "jobs-table",
-			Columns:              columns,
-			Rows:                 rows,
-			ShowSearch:           true,
-			ShowActions:          true,
-			ShowSort:             true,
-			ShowColumns:          true,
-			ShowDensity:          true,
-			ShowEntries:          true,
-			DefaultSortColumn:    "name",
-			DefaultSortDirection: "asc",
-			Labels:               deps.TableLabels,
-			EmptyState: types.TableEmptyState{
-				Title:   l.Empty.Title,
-				Message: l.Empty.Message,
-			},
-			PrimaryAction: &types.PrimaryAction{
-				Label:           l.Buttons.AddJob,
-				ActionURL:       deps.Routes.AddURL,
-				Icon:            "icon-plus",
-				Disabled:        !perms.Can("job", "create"),
-				DisabledTooltip: l.Errors.PermissionDenied,
-			},
-			BulkActions: &types.BulkActionsConfig{
-				Enabled:        true,
-				SelectAllLabel: l.BulkActions.SelectAll,
-				SelectedLabel:  l.BulkActions.SelectedCount,
-				CancelLabel:    l.BulkActions.Cancel,
-				Actions: []types.BulkAction{
-					{
-						Key:              "delete",
-						Label:            l.BulkActions.Delete,
-						Icon:             "icon-trash-2",
-						Variant:          "danger",
-						Endpoint:         deps.Routes.BulkDeleteURL,
-						ConfirmTitle:     l.BulkActions.BulkDeleteConfirmTitle,
-						ConfirmMessage:   l.BulkActions.BulkDeleteConfirmMsg,
-						RequiresDataAttr: "deletable",
-					},
-				},
-			},
-		}
-		types.ApplyTableSettings(tableConfig)
 
 		pageData := &PageData{
 			PageData: types.PageData{
@@ -120,7 +105,7 @@ func NewView(deps *ListViewDeps) view.View {
 				Title:          statusPageTitle(l, status),
 				CurrentPath:    viewCtx.CurrentPath,
 				ActiveNav:      deps.Routes.ActiveNav,
-				ActiveSubNav:   deps.Routes.ActiveSubNav,
+				ActiveSubNav:   jobSubNav(status),
 				HeaderTitle:    statusPageTitle(l, status),
 				HeaderSubtitle: statusPageCaption(l, status),
 				HeaderIcon:     "icon-briefcase",
@@ -144,6 +129,135 @@ func NewView(deps *ListViewDeps) view.View {
 	})
 }
 
+// jobListPageLimit is the page size used by fetchScopedJobs' loop — the
+// fetchSubscriptionsForPricePlan shape (centymo price_schedule/detail/plan/
+// subscriptions.go), capped at the adapter's per-call maximum.
+const jobListPageLimit = 100
+
+// fetchScopedJobs pages through ListJobs for ONE status (server-side
+// TypedFilter — never client-side), stopping when a batch is short. Row
+// scoping (STAFF principals see only their delivery graph) is resolver-level
+// (espyna principalscope) — this helper adds no staff_id filter. Shared by
+// both the classic per-job table and the education template-grain delivery
+// summary.
+func fetchScopedJobs(ctx context.Context, deps *ListViewDeps, status string) ([]*jobpb.Job, error) {
+	statusValue := jobStatusFilterValue(status)
+	var out []*jobpb.Job
+	for page := int32(1); ; page++ {
+		resp, err := deps.ListJobs(ctx, &jobpb.ListJobsRequest{
+			Filters: &commonpb.FilterRequest{
+				Filters: []*commonpb.TypedFilter{{
+					Field: "status",
+					FilterType: &commonpb.TypedFilter_StringFilter{
+						StringFilter: &commonpb.StringFilter{
+							Value:    statusValue,
+							Operator: commonpb.StringOperator_STRING_EQUALS,
+						},
+					},
+				}},
+			},
+			Pagination: &commonpb.PaginationRequest{
+				Limit:  jobListPageLimit,
+				Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
+			},
+		})
+		if err != nil {
+			return out, err
+		}
+		batch := resp.GetData()
+		out = append(out, batch...)
+		if int32(len(batch)) < jobListPageLimit {
+			return out, nil
+		}
+	}
+}
+
+// jobStatusFilterValue maps a URL status segment ("active", "on-hold", ...)
+// to the full JobStatus enum name the job.status column stores (e.g.
+// "JOB_STATUS_ACTIVE" — protojson enum serialization, confirmed against
+// education1). Unrecognised segments fall back to the active status so the
+// filter never silently degrades to "no filter" (every job returned).
+func jobStatusFilterValue(status string) string {
+	name := "JOB_STATUS_" + strings.ToUpper(strings.ReplaceAll(status, "-", "_"))
+	if _, ok := enums.JobStatus_value[name]; ok {
+		return name
+	}
+	return "JOB_STATUS_ACTIVE"
+}
+
+// buildJobTable builds the classic per-job TableConfig (professional/general/
+// service/... tiers). Fixed 2026-07-11 (20260710 staff-class-list plan build
+// spec §3): status is now a server-side TypedFilter (was: fetched with no
+// filter, then filtered client-side after truncation) and fetchScopedJobs
+// pages through every matching row (was: one adapter-capped page of 100).
+func buildJobTable(ctx context.Context, deps *ListViewDeps, status string, perms *types.UserPermissions) (*types.TableConfig, error) {
+	jobs, err := fetchScopedJobs(ctx, deps, status)
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect IDs and check which are in use (referenced by dependent tables).
+	var inUseIDs map[string]bool
+	if deps.GetInUseIDs != nil {
+		var itemIDs []string
+		for _, j := range jobs {
+			itemIDs = append(itemIDs, j.GetId())
+		}
+		inUseIDs, _ = deps.GetInUseIDs(ctx, itemIDs)
+	}
+
+	l := deps.Labels
+	columns := jobColumns(l)
+	rows := buildTableRows(jobs, l, deps.Routes, inUseIDs, perms)
+	types.ApplyColumnStyles(columns, rows)
+
+	tableConfig := &types.TableConfig{
+		ID:                   "jobs-table",
+		Columns:              columns,
+		Rows:                 rows,
+		ShowSearch:           true,
+		ShowActions:          true,
+		ShowSort:             true,
+		ShowColumns:          true,
+		ShowDensity:          true,
+		ShowEntries:          true,
+		DefaultSortColumn:    "name",
+		DefaultSortDirection: "asc",
+		Labels:               deps.TableLabels,
+		EmptyState: types.TableEmptyState{
+			Title:   l.Empty.Title,
+			Message: l.Empty.Message,
+		},
+		PrimaryAction: &types.PrimaryAction{
+			Label:           l.Buttons.AddJob,
+			ActionURL:       deps.Routes.AddURL,
+			Icon:            "icon-plus",
+			Disabled:        !perms.Can("job", "create"),
+			DisabledTooltip: l.Errors.PermissionDenied,
+		},
+		BulkActions: &types.BulkActionsConfig{
+			Enabled:        true,
+			SelectAllLabel: l.BulkActions.SelectAll,
+			SelectedLabel:  l.BulkActions.SelectedCount,
+			CancelLabel:    l.BulkActions.Cancel,
+			Actions: []types.BulkAction{
+				{
+					Key:              "delete",
+					Label:            l.BulkActions.Delete,
+					Icon:             "icon-trash-2",
+					Variant:          "danger",
+					Endpoint:         deps.Routes.BulkDeleteURL,
+					ConfirmTitle:     l.BulkActions.BulkDeleteConfirmTitle,
+					ConfirmMessage:   l.BulkActions.BulkDeleteConfirmMsg,
+					RequiresDataAttr: "deletable",
+				},
+			},
+		},
+	}
+	types.ApplyTableSettings(tableConfig)
+	return tableConfig, nil
+}
+
 func jobColumns(l job.Labels) []types.TableColumn {
 	return []types.TableColumn{
 		{Key: "name", Label: l.Columns.Name},
@@ -153,13 +267,13 @@ func jobColumns(l job.Labels) []types.TableColumn {
 	}
 }
 
-func buildTableRows(jobs []*jobpb.Job, status string, l job.Labels, routes job.Routes, inUseIDs map[string]bool, perms *types.UserPermissions) []types.TableRow {
+// buildTableRows renders one row per job. status filtering is now applied
+// server-side by fetchScopedJobs (TypedFilter) — jobs arrives pre-filtered,
+// so no client-side status re-check happens here.
+func buildTableRows(jobs []*jobpb.Job, l job.Labels, routes job.Routes, inUseIDs map[string]bool, perms *types.UserPermissions) []types.TableRow {
 	rows := []types.TableRow{}
 	for _, j := range jobs {
 		jobStatus := jobStatusString(j.GetStatus())
-		if jobStatus != status {
-			continue
-		}
 
 		id := j.GetId()
 		name := j.GetName()
@@ -266,6 +380,16 @@ func jobStatusVariant(status string) string {
 	default:
 		return "default"
 	}
+}
+
+// jobSubNav maps a job status to its sidebar item-key suffix ("jobs-" +
+// status), with the "paused" status rewritten to the sidebar's "on-hold" key
+// (descriptor.go's jobs-on-hold nav item routes to status=paused).
+func jobSubNav(status string) string {
+	if status == "paused" {
+		return "jobs-on-hold"
+	}
+	return "jobs-" + status
 }
 
 func statusPageTitle(l job.Labels, status string) string {

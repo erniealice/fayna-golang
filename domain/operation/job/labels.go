@@ -78,6 +78,13 @@ type ColumnLabels struct {
 	Status   string `json:"status"`
 	Created  string `json:"created"`
 	Location string `json:"location"`
+	// Template-grain delivery summary columns (education tier List view —
+	// 20260710 staff-class-list plan). Generic Go defaults; education
+	// overrides to "Section"/"Teacher"/"Students"/"Academic Year".
+	Group     string `json:"group"`
+	Deliverer string `json:"deliverer"`
+	Items     string `json:"items"`
+	Schedule  string `json:"schedule"`
 }
 
 type EmptyLabels struct {
@@ -234,11 +241,15 @@ func DefaultLabels() Labels {
 			AddJob: "Add Job",
 		},
 		Columns: ColumnLabels{
-			Name:     "Name",
-			Client:   "Client",
-			Status:   "Status",
-			Created:  "Created",
-			Location: "Location",
+			Name:      "Name",
+			Client:    "Client",
+			Status:    "Status",
+			Created:   "Created",
+			Location:  "Location",
+			Group:     "Group",
+			Deliverer: "Deliverer",
+			Items:     "Items",
+			Schedule:  "Schedule",
 		},
 		Empty: EmptyLabels{
 			Title:             "No jobs found",

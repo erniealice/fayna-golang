@@ -164,7 +164,7 @@ func NewView(deps *DetailViewDeps) view.View {
 				Title:          headerTitle,
 				CurrentPath:    viewCtx.CurrentPath,
 				ActiveNav:      "job",
-				ActiveSubNav:   "activities",
+				ActiveSubNav:   jobActivitySubNav(record.GetApprovalStatus(), record.GetPostingStatus()),
 				HeaderTitle:    headerTitle,
 				HeaderSubtitle: l.Detail.PageTitle,
 				HeaderIcon:     "icon-clock",
@@ -377,6 +377,24 @@ func entryTypeString(t jobactivitypb.EntryType) string {
 		return "Subcontract"
 	default:
 		return "unspecified"
+	}
+}
+
+// jobActivitySubNav maps a loaded activity's approval/posting status to the
+// sidebar item key of the te-* list tab it belongs to (mirrors the list
+// view's ?status= query filter: draft, submitted (pending), approved
+// (approved + unposted), posted).
+func jobActivitySubNav(approval jobactivitypb.ActivityApprovalStatus, posting jobactivitypb.ActivityPostingStatus) string {
+	if posting == jobactivitypb.ActivityPostingStatus_ACTIVITY_POSTING_STATUS_POSTED {
+		return "te-posted"
+	}
+	switch approval {
+	case jobactivitypb.ActivityApprovalStatus_ACTIVITY_APPROVAL_STATUS_SUBMITTED:
+		return "te-pending"
+	case jobactivitypb.ActivityApprovalStatus_ACTIVITY_APPROVAL_STATUS_APPROVED:
+		return "te-approved"
+	default:
+		return "te-drafts"
 	}
 }
 

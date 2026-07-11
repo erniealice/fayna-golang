@@ -155,7 +155,7 @@ func NewView(deps *ListViewDeps) view.View {
 				Title:          l.Page.Heading,
 				CurrentPath:    viewCtx.CurrentPath,
 				ActiveNav:      "job",
-				ActiveSubNav:   "activities",
+				ActiveSubNav:   jobActivitySubNav(statusFilter),
 				HeaderTitle:    l.Page.Heading,
 				HeaderSubtitle: l.Page.Caption,
 				HeaderIcon:     "icon-clock",
@@ -310,6 +310,24 @@ func entryTypeString(t jobactivitypb.EntryType) string {
 		return "Subcontract"
 	default:
 		return "unspecified"
+	}
+}
+
+// jobActivitySubNav maps the ?status= query filter to its sidebar item key
+// (descriptor.go's te-* nav items route to these exact query values: draft,
+// submitted, approved, posted). Empty/unrecognized falls back to te-drafts.
+func jobActivitySubNav(statusFilter string) string {
+	switch statusFilter {
+	case "draft":
+		return "te-drafts"
+	case "submitted":
+		return "te-pending"
+	case "approved":
+		return "te-approved"
+	case "posted":
+		return "te-posted"
+	default:
+		return "te-drafts"
 	}
 }
 

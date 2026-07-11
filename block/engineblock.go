@@ -162,6 +162,7 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.JobTemplate.UpdateJobTemplate = op.JobTemplate.UpdateJobTemplate.Execute
 			result.Operation.JobTemplate.DeleteJobTemplate = op.JobTemplate.DeleteJobTemplate.Execute
 			result.Operation.JobTemplate.GetJobTemplateListPageData = op.JobTemplate.GetJobTemplateListPageData.Execute
+			result.Operation.JobTemplate.ListJobTemplates = op.JobTemplate.ListJobTemplates.Execute
 		}
 
 		if op.JobTemplatePhase != nil {
@@ -290,6 +291,27 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		result.Subscription.Subscription.ReadSubscription = uc.Subscription.Subscription.ReadSubscription.Execute
 	}
 
+	// -- Subscription (template-grain delivery summary deps; education tier's
+	// job list — optional; nil → the group/deliverer/schedule columns render
+	// blank) -----------------------------------------------------------------
+	if uc.Subscription != nil {
+		if uc.Subscription.SubscriptionSeat != nil {
+			result.Subscription.SubscriptionSeat.GetSubscriptionSeatListPageData = uc.Subscription.SubscriptionSeat.GetSubscriptionSeatListPageData.Execute
+		}
+		if uc.Subscription.SubscriptionGroup != nil {
+			result.Subscription.SubscriptionGroup.ListSubscriptionGroups = uc.Subscription.SubscriptionGroup.ListSubscriptionGroups.Execute
+		}
+		if uc.Subscription.SubscriptionGroupMember != nil {
+			result.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers = uc.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers.Execute
+		}
+	}
+
+	// -- Product (cross-domain; template-grain delivery summary's deliverer
+	// resolution — optional; nil → deliverer column renders blank) -----------
+	if uc.Product != nil && uc.Product.ProductPlan != nil {
+		result.Product.ProductPlan.ListProductPlans = uc.Product.ProductPlan.ListProductPlans.Execute
+	}
+
 	// -- Entity (drawer search pickers; optional → flat-filter fallback) ---------
 	if uc.Entity != nil {
 		if uc.Entity.Client != nil {
@@ -298,6 +320,7 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		}
 		if uc.Entity.Staff != nil {
 			result.Entity.Staff.ListStaffs = uc.Entity.Staff.ListStaffs.Execute
+			result.Entity.Staff.GetStaffListPageData = uc.Entity.Staff.GetStaffListPageData.Execute
 		}
 	}
 

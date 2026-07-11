@@ -11,6 +11,7 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
+	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
@@ -19,7 +20,11 @@ import (
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	jobtemplatetaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
+	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
+	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
+	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	subscriptionseatpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_seat"
 
 	jobaction "github.com/erniealice/fayna-golang/domain/operation/job/action"
 	jobdashboard "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
@@ -57,6 +62,29 @@ type JobModuleDeps struct {
 	UpdateJob func(ctx context.Context, req *jobpb.UpdateJobRequest) (*jobpb.UpdateJobResponse, error)
 	DeleteJob func(ctx context.Context, req *jobpb.DeleteJobRequest) (*jobpb.DeleteJobResponse, error)
 	ListJobs  func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+
+	// BusinessType (compose MountContext.BusinessType) branches the List view
+	// to the template-grain delivery summary for the "education" tier; every
+	// other value keeps the classic per-job list (docs/plan/20260710-staff-
+	// class-list — O3 defers non-education tiers).
+	BusinessType string
+
+	// Template-grain delivery-summary deps (education tier; List view only).
+	// All optional/nil-safe — a nil dependency degrades the column it backs to
+	// blank rather than panicking. MatrixDetailURL is the cross-unit
+	// outcome_matrix.matrix route ("/outcome-matrix/{id}", id=job_template_id)
+	// each summary row links to.
+	ListJobTemplates                func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+	GetSubscriptionSeatListPageData func(ctx context.Context, req *subscriptionseatpb.GetSubscriptionSeatListPageDataRequest) (*subscriptionseatpb.GetSubscriptionSeatListPageDataResponse, error)
+	ListSubscriptionGroupMembers    func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+	ListSubscriptionGroups          func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
+	ListProductPlans                func(ctx context.Context, req *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error)
+	// GetStaffListPageData — the User-hydrating staff read (NOT the bare
+	// ListStaffs RPC used elsewhere in this package, e.g. the drawer search
+	// pickers — that one never populates Staff.User; see block/usecases.go
+	// EntityStaffUseCases).
+	GetStaffListPageData func(ctx context.Context, req *staffpb.GetStaffListPageDataRequest) (*staffpb.GetStaffListPageDataResponse, error)
+	MatrixDetailURL      string
 
 	// Job phase operations (list only — CRUD is now owned by the job_phase module)
 	ListJobPhases func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
@@ -187,6 +215,15 @@ func NewJobModule(deps *JobModuleDeps) *JobModule {
 			Labels:       deps.Labels,
 			CommonLabels: deps.CommonLabels,
 			TableLabels:  deps.TableLabels,
+			BusinessType: deps.BusinessType,
+			// Template-grain delivery-summary deps (education tier).
+			ListJobTemplates:                deps.ListJobTemplates,
+			GetSubscriptionSeatListPageData: deps.GetSubscriptionSeatListPageData,
+			ListSubscriptionGroupMembers:    deps.ListSubscriptionGroupMembers,
+			ListSubscriptionGroups:          deps.ListSubscriptionGroups,
+			ListProductPlans:                deps.ListProductPlans,
+			GetStaffListPageData:            deps.GetStaffListPageData,
+			MatrixDetailURL:                 deps.MatrixDetailURL,
 		}),
 		Detail:           jobdetail.NewView(detailDeps),
 		TabAction:        jobdetail.NewTabAction(detailDeps),

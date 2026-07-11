@@ -13,10 +13,22 @@ import (
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
+	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	outcomecriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
+
+// clientNamePageLimit chunks the roster's client-id set into ListFilter(IN)
+// batches so each ListClients call's result set stays under the adapter's
+// 100-row default (the generic dbOps.List cap — see
+// job/list/template_summary.go's identical pattern for
+// subscription_group_member). The matrix roster is one job_template's scoped
+// students (~26-30/section observed on education1), so this is one call in
+// practice; chunking keeps it correct if a scope=ALL admin roster ever grows
+// past 100.
+const clientNamePageLimit = 100
 
 // Scope-toggle permission (same as grade_sheet.go's superAdminScopeCode). A
 // teacher-only principal never gets the widened "all clients" view.
@@ -39,6 +51,15 @@ type PageViewDeps struct {
 	// identity, fail-closed). Wired via the module Deps (grade_sheet.go's
 	// resolveStaff precedent), never raw SQL from the view.
 	ResolveStaff func(ctx context.Context) (string, error)
+
+	// ListClients hydrates the roster's display names. GetOutcomeMatrix
+	// deliberately returns an OPAQUE client_id as ClientLabel (espyna
+	// outcome_matrix_query.go:364 "opaque id; the view resolves a display
+	// name") — this closure is that resolution. Optional/nil-safe: nil ->
+	// rows fall back to a truncated id (short()), same as before this fix.
+	// Same closure the job drawer's client search picker already uses
+	// (block.go newJobClientSearchHandler) — no new espyna surface.
+	ListClients func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
 }
 
 // PageData holds the data for the outcome matrix page. The Grid field is named
@@ -99,7 +120,7 @@ func NewView(deps *PageViewDeps) view.View {
 			}
 		}
 
-		grid := buildGrid(deps, perms, resp, effectiveAll, templateID, viewCtx)
+		grid := buildGrid(ctx, deps, perms, resp, effectiveAll, templateID, viewCtx)
 
 		subjectName := ""
 		if resp != nil {
@@ -139,6 +160,7 @@ func NewView(deps *PageViewDeps) view.View {
 // buildGrid converts the proto response into a *types.CellGridConfig. The acting
 // staff read-only gating is applied here (view layer, per view-scope.md §4).
 func buildGrid(
+	ctx context.Context,
 	deps *PageViewDeps,
 	perms *types.UserPermissions,
 	resp *matrixpb.GetOutcomeMatrixResponse,
@@ -177,9 +199,88 @@ func buildGrid(
 		actingStaff, _ = deps.ResolveStaff(viewCtx.Request.Context())
 	}
 
+	// Roster name hydration: GetOutcomeMatrix's ClientLabel is deliberately
+	// the opaque client_id (espyna outcome_matrix_query.go:364 "the view
+	// resolves a display name") — resolve it here, the same User-hydrating
+	// page-data pattern used for the job list's deliverer column
+	// (job/list/template_summary.go fetchAllStaff), except Client carries its
+	// own `name` column directly (no join needed — see clientDisplayName).
+	clientNames := fetchClientNames(ctx, deps, distinctClientIDs(resp.GetRows()))
+
 	cfg.Columns = buildColumns(resp.GetPhases())
-	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip)
+	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames)
 	return cfg
+}
+
+// distinctClientIDs collects the roster's DISTINCT client ids in row order.
+func distinctClientIDs(rows []*matrixpb.OutcomeRow) []string {
+	ids := make([]string, 0, len(rows))
+	seen := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		if cid := r.GetClientId(); cid != "" && !seen[cid] {
+			seen[cid] = true
+			ids = append(ids, cid)
+		}
+	}
+	return ids
+}
+
+// fetchClientNames resolves client_id -> display name via ListClients,
+// chunked into batches of clientNamePageLimit ids per ListFilter(IN) call
+// (bounded output regardless of adapter Pagination support, mirroring
+// job/list/template_summary.go's fetchSubscriptionGroupIDs). Optional/
+// nil-safe: deps.ListClients == nil -> empty map -> every row falls back to
+// short(clientID) in rowLabel, i.e. today's (bugged) behavior.
+func fetchClientNames(ctx context.Context, deps *PageViewDeps, clientIDs []string) map[string]string {
+	out := map[string]string{}
+	if deps.ListClients == nil || len(clientIDs) == 0 {
+		return out
+	}
+	for start := 0; start < len(clientIDs); start += clientNamePageLimit {
+		end := start + clientNamePageLimit
+		if end > len(clientIDs) {
+			end = len(clientIDs)
+		}
+		chunk := clientIDs[start:end]
+		resp, err := deps.ListClients(ctx, &clientpb.ListClientsRequest{
+			Filters: &commonpb.FilterRequest{
+				Filters: []*commonpb.TypedFilter{{
+					Field: "id",
+					FilterType: &commonpb.TypedFilter_ListFilter{
+						ListFilter: &commonpb.ListFilter{Values: chunk, Operator: commonpb.ListOperator_LIST_IN},
+					},
+				}},
+			},
+		})
+		if err != nil {
+			log.Printf("Failed to list clients for outcome matrix roster: %v", err)
+			continue
+		}
+		for _, c := range resp.GetData() {
+			if id := c.GetId(); id != "" {
+				out[id] = clientDisplayName(c)
+			}
+		}
+	}
+	return out
+}
+
+// clientDisplayName mirrors the established fayna client-name pattern
+// (block.go newJobClientSearchHandler): the client's own `name` column
+// first (populated directly on `client`, no join — this is what makes
+// Client different from Staff, which has no name column of its own and
+// needs the User-hydrating GetStaffListPageData read instead), falling back
+// to the embedded User's first+last name, then the raw id.
+func clientDisplayName(c *clientpb.Client) string {
+	if name := strings.TrimSpace(c.GetName()); name != "" {
+		return name
+	}
+	if u := c.GetUser(); u != nil {
+		if name := strings.TrimSpace(u.GetFirstName() + " " + u.GetLastName()); name != "" {
+			return name
+		}
+	}
+	return c.GetId()
 }
 
 // buildColumns maps the proto phase→task→criterion tree into CellGridLevel1/2/3.
@@ -210,13 +311,13 @@ func buildColumns(phases []*matrixpb.PhaseColumn) []types.CellGridLevel1 {
 }
 
 // buildRows maps the proto rows into CellGridRows with the read-only gate applied.
-func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string) []types.CellGridRow {
+func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string, clientNames map[string]string) []types.CellGridRow {
 	out := make([]types.CellGridRow, 0, len(rows))
 	for _, r := range rows {
 		clientID := r.GetClientId()
 		gr := types.CellGridRow{
 			ID:     clientID,
-			Label:  rowLabel(r),
+			Label:  rowLabel(r, clientNames),
 			Cells:  make(map[string]types.CellGridCell, len(r.GetCells())),
 			TestID: "om-row-" + short(clientID),
 		}
@@ -306,9 +407,15 @@ func criterionLabel(cr *matrixpb.CriterionColumn) string {
 	return cr.GetColumnKey()
 }
 
-func rowLabel(r *matrixpb.OutcomeRow) string {
-	if lbl := r.GetClientLabel(); lbl != "" {
-		return lbl
+// rowLabel prefers the hydrated display name (fetchClientNames). GetOutcomeMatrix's
+// ClientLabel is deliberately the opaque client_id when no hydration ran
+// (espyna outcome_matrix_query.go:364) — it is NEVER a real name, so it is
+// no longer consulted here (the pre-fix bug: this function trusted it and
+// always got the id back). Falls back to a truncated id when the roster
+// fetch found no match (deps.ListClients nil, or the client row missing).
+func rowLabel(r *matrixpb.OutcomeRow, clientNames map[string]string) string {
+	if name := clientNames[r.GetClientId()]; name != "" {
+		return name
 	}
 	return short(r.GetClientId())
 }

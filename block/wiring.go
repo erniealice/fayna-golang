@@ -50,6 +50,18 @@ func wireJobDeps(deps *operation.JobModuleDeps, u *UseCases) {
 	// Cross-domain Subscription read for the Job detail origin breadcrumb
 	// (2026-04-29 auto-spawn-jobs-from-subscription plan §5.4).
 	deps.ReadSubscription = u.Subscription.Subscription.ReadSubscription
+
+	// Template-grain delivery summary (education tier; List view — 20260710
+	// staff-class-list plan). All nil-safe: a nil closure degrades the column
+	// it backs to blank rather than panicking.
+	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
+	deps.GetSubscriptionSeatListPageData = u.Subscription.SubscriptionSeat.GetSubscriptionSeatListPageData
+	deps.ListSubscriptionGroupMembers = u.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers
+	deps.ListSubscriptionGroups = u.Subscription.SubscriptionGroup.ListSubscriptionGroups
+	deps.ListProductPlans = u.Product.ProductPlan.ListProductPlans
+	// GetStaffListPageData (NOT the bare ListStaffs, which never hydrates
+	// Staff.User) — see block/usecases.go EntityStaffUseCases.
+	deps.GetStaffListPageData = u.Entity.Staff.GetStaffListPageData
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +238,11 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	deps.CreateTaskOutcome = to.CreateTaskOutcome
 	deps.UpdateTaskOutcome = to.UpdateTaskOutcome
 	deps.ReadTaskOutcome = to.ReadTaskOutcome
+
+	// Roster display-name hydration (the same closure the job drawer's client
+	// search picker already uses — already wired in engineblock.go, no new
+	// espyna surface needed here).
+	deps.ListClients = u.Entity.Client.ListClients
 }
 
 // ---------------------------------------------------------------------------

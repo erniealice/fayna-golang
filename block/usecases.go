@@ -60,7 +60,11 @@ import (
 	scoringschemepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_scheme"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
+	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
+	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	subscriptionseatpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_seat"
 	activitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/workflow/activity"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 
@@ -94,6 +98,12 @@ type UseCases struct {
 	// Entity — cross-domain reads used by the job/activity drawer search pickers
 	// (client + staff auto-complete). Optional: nil → flat-filter fallback.
 	Entity EntityUseCases
+
+	// Product — cross-domain read used by the job list's template-grain
+	// delivery summary (education tier) to translate a subscription_seat's
+	// product_plan_id into the product_id matched against a job_template's
+	// output_product_id. Optional: nil → the deliverer column renders blank.
+	Product ProductUseCases
 
 	// Service — service-driven dashboard closures. These return the fayna VIEW
 	// types directly (NOT proto types): the proto→view translation lives in
@@ -207,6 +217,11 @@ type JobTemplateUseCases struct {
 	UpdateJobTemplate          func(context.Context, *jobtemplatepb.UpdateJobTemplateRequest) (*jobtemplatepb.UpdateJobTemplateResponse, error)
 	DeleteJobTemplate          func(context.Context, *jobtemplatepb.DeleteJobTemplateRequest) (*jobtemplatepb.DeleteJobTemplateResponse, error)
 	GetJobTemplateListPageData func(context.Context, *jobtemplatepb.GetJobTemplateListPageDataRequest) (*jobtemplatepb.GetJobTemplateListPageDataResponse, error)
+	// ListJobTemplates — bare paginated list (Pagination IS honored by the
+	// postgres adapter, unlike several sibling bare-List RPCs). Used by the
+	// job list's template-grain delivery summary (education tier) to page
+	// through every job_template referenced by the scoped job set.
+	ListJobTemplates func(context.Context, *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
 }
 
 // JobTemplatePhaseUseCases — JobTemplatePhase CRUD + ListByJobTemplate.
@@ -460,14 +475,59 @@ type FulfillmentUseCases struct {
 	TransitionStatus           func(context.Context, *fulfillmentpb.TransitionStatusRequest) (*fulfillmentpb.TransitionStatusResponse, error)
 }
 
-// SubscriptionUseCases — cross-domain Subscription read (Job origin breadcrumb).
-// Mirrors the aggregate's Subscription.Subscription.ReadSubscription path.
+// SubscriptionUseCases — cross-domain Subscription reads. Subscription.
+// Subscription is the Job origin breadcrumb (ReadSubscription). The
+// SubscriptionSeat/SubscriptionGroup/SubscriptionGroupMember groups are the
+// job list's template-grain delivery summary (education tier) deps: seat →
+// deliverer (staff), group member → delivery group, group → group name +
+// nested schedule (price_schedule) name.
 type SubscriptionUseCases struct {
-	Subscription SubscriptionSubscriptionUseCases
+	Subscription            SubscriptionSubscriptionUseCases
+	SubscriptionSeat        SubscriptionSeatUseCases
+	SubscriptionGroup       SubscriptionGroupUseCases
+	SubscriptionGroupMember SubscriptionGroupMemberUseCases
 }
 
 type SubscriptionSubscriptionUseCases struct {
 	ReadSubscription func(context.Context, *subscriptionpb.ReadSubscriptionRequest) (*subscriptionpb.ReadSubscriptionResponse, error)
+}
+
+// SubscriptionSeatUseCases — the paginated seat page-data read (staff-scoped,
+// fail-closed, at the espyna adapter — see principalscope.StaffScopeClause).
+// The bare ListSubscriptionSeats RPC is NOT used here: it silently caps at
+// the adapter's 100-row default (its Pagination field is not forwarded),
+// while GetSubscriptionSeatListPageData honors Pagination for a real
+// page-loop.
+type SubscriptionSeatUseCases struct {
+	GetSubscriptionSeatListPageData func(context.Context, *subscriptionseatpb.GetSubscriptionSeatListPageDataRequest) (*subscriptionseatpb.GetSubscriptionSeatListPageDataResponse, error)
+}
+
+// SubscriptionGroupUseCases — bare list (the adapter's listAll ignores
+// Pagination, but the workspace's subscription_group population is small —
+// ground truth: 16 rows, both AY 2024-25 and 2025-26 — so one call is
+// complete). The adapter hydrates
+// each group's nested PriceSchedule (STATUS-AGNOSTIC join), so no separate
+// PriceSchedule read is needed for the schedule-name column.
+type SubscriptionGroupUseCases struct {
+	ListSubscriptionGroups func(context.Context, *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
+}
+
+// SubscriptionGroupMemberUseCases — bare list, called with a chunked
+// subscription_id ListFilter (IN) so each call's result set stays under the
+// adapter's 100-row default (its listAll also ignores Pagination).
+type SubscriptionGroupMemberUseCases struct {
+	ListSubscriptionGroupMembers func(context.Context, *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+}
+
+// ProductUseCases — cross-domain product reads.
+type ProductUseCases struct {
+	ProductPlan ProductPlanUseCases
+}
+
+// ProductPlanUseCases — bare list (ground truth: 43 rows, one call is
+// complete under the adapter's 100-row default).
+type ProductPlanUseCases struct {
+	ListProductPlans func(context.Context, *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error)
 }
 
 // EntityUseCases — cross-domain entity reads for the drawer search pickers.
@@ -484,6 +544,13 @@ type EntityClientUseCases struct {
 
 type EntityStaffUseCases struct {
 	ListStaffs func(context.Context, *staffpb.ListStaffsRequest) (*staffpb.ListStaffsResponse, error)
+	// GetStaffListPageData — the User-hydrating list read (LEFT JOIN "user" in
+	// the postgres adapter). ListStaffs above is a bare table scan that never
+	// populates Staff.User (confirmed against the adapter source) — any caller
+	// needing a display NAME (not just id/user_id) must use this one. Used by
+	// the job list's template-grain delivery summary (education tier) to
+	// hydrate the deliverer column.
+	GetStaffListPageData func(context.Context, *staffpb.GetStaffListPageDataRequest) (*staffpb.GetStaffListPageDataResponse, error)
 }
 
 // ServiceUseCases — service-driven dashboards + engine identity bridge. The

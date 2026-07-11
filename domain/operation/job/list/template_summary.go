@@ -30,6 +30,7 @@ import (
 	"log"
 	"sort"
 	"strconv"
+	"strings"
 
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
 	"github.com/erniealice/pyeza-golang/route"
@@ -146,7 +147,7 @@ func buildTemplateSummaryRows(ctx context.Context, deps *ListViewDeps, status st
 			TemplateID:    s.GetJobTemplateId(),
 			TemplateName:  s.GetJobTemplateName(),
 			GroupName:     s.GetSubscriptionGroupName(),
-			DelivererName: s.GetStaffName(),
+			DelivererName: joinDelivererNames(s.GetDeliverers()),
 			ItemCount:     int(s.GetJobCount()),
 			ScheduleName:  s.GetPriceScheduleName(),
 		})
@@ -159,4 +160,22 @@ func buildTemplateSummaryRows(ctx context.Context, deps *ListViewDeps, status st
 		return rows[i].TemplateName < rows[j].TemplateName
 	})
 	return rows
+}
+
+// joinDelivererNames renders a template's deliverer column. A template can have
+// MORE THAN ONE deliverer (a merged deliverable delivered by several staff — e.g.
+// a Section's two rotation-strand Teachers); their names render comma-joined
+// ("A. Purisima, D. Cabornay"). The names are sorted for a STABLE display order
+// even when a non-postgres provider returns the deliverers unordered (the postgres
+// adapter already emits them in staff_name order; sorting here is defensive, the
+// same discipline as the row re-sort above). Blank names are dropped.
+func joinDelivererNames(deliverers []*summarypb.Deliverer) string {
+	names := make([]string, 0, len(deliverers))
+	for _, d := range deliverers {
+		if n := d.GetStaffName(); n != "" {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }

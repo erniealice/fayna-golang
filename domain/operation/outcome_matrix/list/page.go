@@ -414,6 +414,7 @@ func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string,
 				JobTaskID:       cell.GetJobTaskId(),
 				CriteriaID:      criteriaIDFromColumnKey(colKey),
 				Value:           cellValue(cell),
+				TextValue:       cellSecondaryText(cell),
 				Editable:        cell.GetEditable(),
 				ReadOnly:        readOnly,
 				ReadOnlyTooltip: readOnlyTooltip,
@@ -520,6 +521,22 @@ func cellValue(c *matrixpb.OutcomeCell) string {
 		return "false"
 	}
 	return ""
+}
+
+// cellSecondaryText returns the recorded text_value ONLY when it did not
+// already win cellValue()'s priority order (s7pre gap 5: "text ratings/
+// text_value invisible" — every criterion seeded in education1 is
+// NUMERIC_SCORE, so cellValue() always picks NumericValue and the
+// coexisting descriptor text was silently dropped, even though the espyna
+// adapter already forwards it on OutcomeCell.TextValue). For a genuinely
+// text-typed criterion, TextValue IS Value already — returning "" here
+// avoids rendering the same string twice. Read-only display only; write
+// semantics (record.go) are unaffected — this is a pure display concern.
+func cellSecondaryText(c *matrixpb.OutcomeCell) string {
+	if c.NumericValue == nil || c.TextValue == nil {
+		return ""
+	}
+	return c.GetTextValue()
 }
 
 // criteriaIDFromColumnKey extracts the outcome_criteria_id from a

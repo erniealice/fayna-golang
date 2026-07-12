@@ -244,6 +244,11 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	deps.ListJobs = u.Operation.Job.ListJobs
 	deps.ListSubscriptionGroupMembers = u.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers
 	deps.ListSubscriptionGroups = u.Subscription.SubscriptionGroup.ListSubscriptionGroups
+
+	// Row-attribute hydration backing deps.Options (set by the unit from the
+	// app's EngineBlock option). Nil-safe end to end.
+	deps.ListClientAttributes = u.Entity.ClientAttribute.ListClientAttributes
+	deps.ResolveAttributeIDByCode = u.Entity.ClientAttribute.ResolveAttributeIDByCode
 }
 
 // ---------------------------------------------------------------------------

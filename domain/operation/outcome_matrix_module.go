@@ -11,6 +11,7 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
+	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
@@ -50,6 +51,16 @@ type OutcomeMatrixModuleDeps struct {
 	ListJobs                     func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
 	ListSubscriptionGroups       func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
+
+	// Options — app-configured row presentation (sort/description/group_by
+	// through "client_attributes.<code>" references). Zero value → flat
+	// roster, rendering unchanged.
+	Options outcomematrixpkg.Options
+
+	// Row-attribute hydration backing Options. Both optional/nil-safe: nil or
+	// a failed lookup disables the attribute-driven behaviors, never the page.
+	ListClientAttributes     func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
+	ResolveAttributeIDByCode func(ctx context.Context, code string) (string, error)
 }
 
 // OutcomeMatrixModule holds the constructed outcome matrix views.
@@ -71,6 +82,9 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		ListJobs:                     deps.ListJobs,
 		ListSubscriptionGroupMembers: deps.ListSubscriptionGroupMembers,
 		ListSubscriptionGroups:       deps.ListSubscriptionGroups,
+		Options:                      deps.Options,
+		ListClientAttributes:         deps.ListClientAttributes,
+		ResolveAttributeIDByCode:     deps.ResolveAttributeIDByCode,
 	})
 
 	recordView := outcomematrixaction.NewRecordAction(&outcomematrixaction.Deps{

@@ -556,8 +556,10 @@ func TaskOutcomeUnit(uc *UseCases, infra *Infra) compose.Unit {
 // task_outcome) — the cross-vertical replacement for the education-specific
 // grade_sheet. Read + batch-save only (no CRUD sub-entity). All auth/scope/IDOR
 // gates live in the espyna read use case + the record action; the closures here
-// are nil-safe (empty-state / fail-closed) on non-postgres builds.
-func OutcomeMatrixUnit(uc *UseCases, _ *Infra) compose.Unit {
+// are nil-safe (empty-state / fail-closed) on non-postgres builds. options is
+// the app's row-presentation config (EngineBlock's view option block); the
+// zero value renders the flat roster unchanged.
+func OutcomeMatrixUnit(uc *UseCases, _ *Infra, options outcome_matrix.Options) compose.Unit {
 	u := outcome_matrix.Describe()
 	u.Mount = func(mc *compose.MountContext) error {
 		r := u.Routes.(*outcome_matrix.Routes)
@@ -567,6 +569,7 @@ func OutcomeMatrixUnit(uc *UseCases, _ *Infra) compose.Unit {
 			Routes:       *r,
 			Labels:       *l,
 			CommonLabels: mc.Common,
+			Options:      options,
 		}
 		wireOutcomeMatrixDeps(deps, uc)
 		operation.NewOutcomeMatrixModule(deps).RegisterRoutes(mc.Routes)
@@ -751,8 +754,15 @@ func PerformanceUnit(uc *UseCases, _ *Infra) compose.Unit {
 }
 
 // AllUnits returns the complete curated unit list for the fayna/operation +
-// fulfillment domains, in the same registration order as Block().
-func AllUnits(uc *UseCases, infra *Infra) []compose.Unit {
+// fulfillment domains, in the same registration order as Block(). Optional
+// EngineOptions (the consuming app's view option block, forwarded verbatim
+// by EngineBlock) configure individual units — today the outcome-matrix row
+// presentation.
+func AllUnits(uc *UseCases, infra *Infra, opts ...EngineOption) []compose.Unit {
+	cfg := engineConfig{}
+	for _, o := range opts {
+		o(&cfg)
+	}
 	return []compose.Unit{
 		JobUnit(uc, infra),
 		JobTemplateUnit(uc, infra),
@@ -775,7 +785,7 @@ func AllUnits(uc *UseCases, infra *Infra) []compose.Unit {
 		JobOutcomeLineUnit(uc, infra),
 		ReportingCheckpointUnit(uc, infra),
 		TaskOutcomeUnit(uc, infra),
-		OutcomeMatrixUnit(uc, infra),
+		OutcomeMatrixUnit(uc, infra, cfg.outcomeMatrixOptions),
 		OutcomeSummaryUnit(uc, infra),
 		FulfillmentUnit(uc, infra),
 		// Performance-Evaluation (20260604). evaluation_template_item must be

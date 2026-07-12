@@ -90,6 +90,22 @@ var legacyAllow = map[string]string{
 	// `outcome_summary` entity in proto). Kept until the view is either renamed to
 	// a domain-view (operationoutcomesummary) or split per esqyma entity.
 	"domain/operation/outcome_summary": "aggregate of job_/phase_outcome_summary, not a 1:1 esqyma entity — EXPIRES 2026-07-15 (capstone: rename to a domain-view or split per esqyma entity)",
+	// R2′ residual: deliverygroup is a thin leaf resolver (subscription_id ->
+	// subscription_group -> price_schedule name chain), shared by job/list and
+	// outcome_matrix/list to avoid an import cycle through package operation. Not
+	// an esqyma entity of any domain. Kept until renamed to a domain-view
+	// (operationdeliverygroup) or folded under shared/.
+	"domain/operation/deliverygroup": "shared subscription_group/price_schedule name resolver, not a 1:1 esqyma entity — EXPIRES 2026-07-15 (capstone: rename to a domain-view or fold under shared/)",
+	// R2′ residual: outcome_matrix is a compose-v2 Unit (generic matrix admin
+	// panel bound to uc.Service.OutcomeMatrix) with no dedicated esqyma entity —
+	// it aggregates task_outcome/outcome_criteria/staff, not a 1:1 proto entity.
+	// Under concurrent edit (20260710-staff-class-list); excused rather than
+	// renamed to avoid colliding with that work.
+	"domain/operation/outcome_matrix": "compose-v2 generic matrix panel aggregating task_outcome/outcome_criteria, not a 1:1 esqyma entity — EXPIRES 2026-07-15 (capstone: rename to a domain-view or split per esqyma entity)",
+	// R2′ residual: performance is a compose-v2 Unit (Performance admin panel,
+	// Surface 6) gated on evaluation:dashboard — a dashboard view over the
+	// evaluation/evaluation_cycle entities, not itself an esqyma entity.
+	"domain/operation/performance": "evaluation dashboard panel (Surface 6), not a 1:1 esqyma entity — EXPIRES 2026-07-15 (capstone: rename to a domain-view, e.g. operationperformance)",
 }
 var charterViews = []string{} // crossCutting only — unused here
 // subContexts: NAVIGATION-ONLY folders chartered directly under a single domain

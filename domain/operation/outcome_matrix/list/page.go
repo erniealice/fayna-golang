@@ -3,6 +3,7 @@ package list
 import (
 	"context"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
+	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	outcomecriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
@@ -77,6 +79,18 @@ type PageViewDeps struct {
 	ListJobs                     func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
 	ListSubscriptionGroups       func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
+
+	// Options — app-configured row presentation (sort/description/group_by
+	// through "client_attributes.<code>" references). Zero value → flat
+	// roster, rendering unchanged.
+	Options outcome_matrix.Options
+
+	// Row-attribute hydration backing Options (attribute.code → attribute.id,
+	// then the roster's client_attribute values). Both optional/nil-safe: nil
+	// or a failed lookup disables the attribute-driven behaviors, never the
+	// page (the grid falls back to the flat roster).
+	ListClientAttributes     func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
+	ResolveAttributeIDByCode func(ctx context.Context, code string) (string, error)
 }
 
 // PageData holds the data for the outcome matrix page. The Grid field is named
@@ -289,11 +303,148 @@ func buildGrid(
 	// page-data pattern used for the job list's deliverer column
 	// (job/list/template_summary.go fetchAllStaff), except Client carries its
 	// own `name` column directly (no join needed — see clientDisplayName).
-	clientNames := fetchClientNames(ctx, deps, distinctClientIDs(resp.GetRows()))
+	rosterIDs := distinctClientIDs(resp.GetRows())
+	clientNames := fetchClientNames(ctx, deps, rosterIDs)
+
+	// Row-attribute hydration for the configured Options (one fetch per
+	// distinct referenced code; nothing configured → no fetch, nil map).
+	attrValues := fetchClientAttributeValues(ctx, deps, rosterIDs)
 
 	cfg.Columns = buildColumns(resp.GetPhases())
 	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames)
+	applyRowOptions(cfg, deps.Options, attrValues)
 	return cfg
+}
+
+// fetchClientAttributeValues resolves each Options-referenced attribute code
+// to its attribute id, then loads the roster clients' values for it —
+// code → (client_id → value). Chunked like fetchClientNames. Nil-safe on
+// every dependency; a failed code lookup logs and skips that code.
+func fetchClientAttributeValues(ctx context.Context, deps *PageViewDeps, clientIDs []string) map[string]map[string]string {
+	codes := deps.Options.AttributeCodes()
+	if len(codes) == 0 || deps.ListClientAttributes == nil || deps.ResolveAttributeIDByCode == nil || len(clientIDs) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]string, len(codes))
+	for _, code := range codes {
+		attrID, err := deps.ResolveAttributeIDByCode(ctx, code)
+		if err != nil || attrID == "" {
+			log.Printf("outcome matrix: attribute code %q did not resolve (options ignored for it): %v", code, err)
+			continue
+		}
+		vals := map[string]string{}
+		for start := 0; start < len(clientIDs); start += clientNamePageLimit {
+			end := start + clientNamePageLimit
+			if end > len(clientIDs) {
+				end = len(clientIDs)
+			}
+			resp, err := deps.ListClientAttributes(ctx, &clientattributepb.ListClientAttributesRequest{
+				Filters: &commonpb.FilterRequest{
+					Filters: []*commonpb.TypedFilter{
+						{
+							Field: "attribute_id",
+							FilterType: &commonpb.TypedFilter_StringFilter{
+								StringFilter: &commonpb.StringFilter{Value: attrID, Operator: commonpb.StringOperator_STRING_EQUALS},
+							},
+						},
+						{
+							Field: "client_id",
+							FilterType: &commonpb.TypedFilter_ListFilter{
+								ListFilter: &commonpb.ListFilter{Values: clientIDs[start:end], Operator: commonpb.ListOperator_LIST_IN},
+							},
+						},
+					},
+				},
+			})
+			if err != nil {
+				log.Printf("outcome matrix: list client attributes for code %q: %v", code, err)
+				continue
+			}
+			for _, ca := range resp.GetData() {
+				if cid, v := ca.GetClientId(), strings.TrimSpace(ca.GetValue()); cid != "" && v != "" {
+					vals[cid] = v
+				}
+			}
+		}
+		out[code] = vals
+	}
+	return out
+}
+
+// applyRowOptions applies the configured sort / description / group_by row
+// presentation to the built grid rows. Row identity and cells are untouched —
+// only order, Description, and GroupLabel markers change. Sorting is stable
+// so the adapter's roster order is preserved among equals.
+func applyRowOptions(cfg *types.CellGridConfig, opts outcome_matrix.Options, attrValues map[string]map[string]string) {
+	valueFor := func(field, clientID string) (string, bool) {
+		code, ok := outcome_matrix.ClientAttributeCode(field)
+		if !ok {
+			return "", false
+		}
+		vals, ok := attrValues[code]
+		if !ok {
+			return "", false
+		}
+		return vals[clientID], true
+	}
+
+	if _, ok := valueFor(opts.RowDescriptionField, ""); ok {
+		for i := range cfg.Rows {
+			desc, _ := valueFor(opts.RowDescriptionField, cfg.Rows[i].ID)
+			cfg.Rows[i].Description = desc
+		}
+	}
+
+	byAttr := func(field string) func(a, b types.CellGridRow) int {
+		return func(a, b types.CellGridRow) int {
+			av, _ := valueFor(field, a.ID)
+			bv, _ := valueFor(field, b.ID)
+			// rows without a value sort last
+			if av == "" && bv != "" {
+				return 1
+			}
+			if av != "" && bv == "" {
+				return -1
+			}
+			if c := strings.Compare(strings.ToLower(av), strings.ToLower(bv)); c != 0 {
+				return c
+			}
+			return strings.Compare(strings.ToLower(a.Label), strings.ToLower(b.Label))
+		}
+	}
+
+	if _, ok := valueFor(opts.RowSortField, ""); ok {
+		slices.SortStableFunc(cfg.Rows, byAttr(opts.RowSortField))
+	}
+
+	if _, ok := valueFor(opts.RowGroupByField, ""); ok {
+		// Partition into bands: stable-sort by the group value (no-value band
+		// last), then mark each band's first row with its GroupLabel.
+		slices.SortStableFunc(cfg.Rows, func(a, b types.CellGridRow) int {
+			av, _ := valueFor(opts.RowGroupByField, a.ID)
+			bv, _ := valueFor(opts.RowGroupByField, b.ID)
+			if av == "" && bv != "" {
+				return 1
+			}
+			if av != "" && bv == "" {
+				return -1
+			}
+			return strings.Compare(strings.ToLower(av), strings.ToLower(bv))
+		})
+		prev := ""
+		started := false
+		for i := range cfg.Rows {
+			v, _ := valueFor(opts.RowGroupByField, cfg.Rows[i].ID)
+			if !started || v != prev {
+				label := v
+				if label == "" {
+					label = "—"
+				}
+				cfg.Rows[i].GroupLabel = label
+				prev, started = v, true
+			}
+		}
+	}
 }
 
 // distinctClientIDs collects the roster's DISTINCT client ids in row order.

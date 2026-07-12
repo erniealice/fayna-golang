@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
+	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
 	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
@@ -550,13 +551,23 @@ type ProductPlanUseCases struct {
 // EntityUseCases — cross-domain entity reads for the drawer search pickers.
 // Optional: nil → the auto-complete drawer falls back to flat-filter mode.
 type EntityUseCases struct {
-	Client EntityClientUseCases
-	Staff  EntityStaffUseCases
+	Client          EntityClientUseCases
+	ClientAttribute EntityClientAttributeUseCases
+	Staff           EntityStaffUseCases
 }
 
 type EntityClientUseCases struct {
 	SearchClientsByName func(context.Context, *clientpb.SearchClientsByNameRequest) (*clientpb.SearchClientsByNameResponse, error)
 	ListClients         func(context.Context, *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+}
+
+// EntityClientAttributeUseCases — the generic entity-attribute reads backing
+// the outcome-matrix row-presentation options ("client_attributes.<code>"
+// field references): the code→id resolver plus the per-client value list.
+// Optional/nil-safe — nil disables the attribute-driven behaviors only.
+type EntityClientAttributeUseCases struct {
+	ListClientAttributes     func(context.Context, *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
+	ResolveAttributeIDByCode func(ctx context.Context, code string) (string, error)
 }
 
 type EntityStaffUseCases struct {

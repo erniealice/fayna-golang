@@ -8,6 +8,7 @@ import (
 
 	fulfillmentdashboardview "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
 	jobdashboardview "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
+	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 
 	"github.com/erniealice/espyna-golang/consumer"
 	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
@@ -19,9 +20,25 @@ import (
 	jobdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/job"
 )
 
+// EngineOption configures the engine block from the consuming app (the app's
+// view option block). Options are forwarded verbatim to AllUnits.
+type EngineOption func(*engineConfig)
+
+// engineConfig collects the per-unit view options an app may set.
+type engineConfig struct {
+	outcomeMatrixOptions outcome_matrix.Options
+}
+
+// WithOutcomeMatrixOptions sets the outcome-matrix row-presentation options
+// (sort / description / group_by through "client_attributes.<code>" field
+// references). See outcome_matrix.Options.
+func WithOutcomeMatrixOptions(o outcome_matrix.Options) EngineOption {
+	return func(c *engineConfig) { c.outcomeMatrixOptions = o }
+}
+
 // faynaEngineBlock returns a pyeza.AppOption that registers all fayna
 // operation + fulfillment domain modules via the compose engine.
-func EngineBlock() consumerapp.AppOption {
+func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 	return func(ctx *consumerapp.AppContext) error {
 		uc, err := consumerapp.RequireUseCases(ctx, "faynaEngineBlock")
 		if err != nil {
@@ -93,7 +110,7 @@ func EngineBlock() consumerapp.AppOption {
 			infra.DB = db
 		}
 
-		units := AllUnits(adapted, infra)
+		units := AllUnits(adapted, infra, opts...)
 		return consumerapp.AssembleEngineBlock("fayna", units, ctx)
 	}
 }
@@ -318,10 +335,19 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Entity.Client.SearchClientsByName = uc.Entity.Client.SearchClientsByName.Execute
 			result.Entity.Client.ListClients = uc.Entity.Client.ListClients.Execute
 		}
+		if uc.Entity.ClientAttribute != nil && uc.Entity.ClientAttribute.ListClientAttributes != nil {
+			result.Entity.ClientAttribute.ListClientAttributes = uc.Entity.ClientAttribute.ListClientAttributes.Execute
+		}
 		if uc.Entity.Staff != nil {
 			result.Entity.Staff.ListStaffs = uc.Entity.Staff.ListStaffs.Execute
 			result.Entity.Staff.GetStaffListPageData = uc.Entity.Staff.GetStaffListPageData.Execute
 		}
+	}
+
+	// The attribute code→id resolver behind the outcome-matrix row options
+	// ("client_attributes.<code>"). Lives on espyna's Common aggregate.
+	if uc.Common != nil && uc.Common.Attribute != nil {
+		result.Entity.ClientAttribute.ResolveAttributeIDByCode = uc.Common.Attribute.ReadAttributeByCode
 	}
 
 	// -- Service/operation OutcomeMatrix (generic grading grid) ------------------

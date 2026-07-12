@@ -621,7 +621,7 @@ func TestNewTransitionAction_MissingID(t *testing.T) {
 	// No SetPathValue — empty ID.
 	viewCtx := &view.ViewContext{Request: req}
 
-	result := v.Handle(ctxWithPerms("fulfillment:update"), viewCtx)
+	result := v.Handle(ctxWithPerms("fulfillment:transition"), viewCtx)
 
 	if result.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("StatusCode = %d, want %d", result.StatusCode, http.StatusUnprocessableEntity)
@@ -649,7 +649,7 @@ func TestNewTransitionAction_MissingEvent(t *testing.T) {
 	req.SetPathValue("id", "ff-1")
 	viewCtx := &view.ViewContext{Request: req}
 
-	result := v.Handle(ctxWithPerms("fulfillment:update"), viewCtx)
+	result := v.Handle(ctxWithPerms("fulfillment:transition"), viewCtx)
 
 	if result.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("StatusCode = %d, want %d", result.StatusCode, http.StatusUnprocessableEntity)
@@ -680,7 +680,7 @@ func TestNewTransitionAction_InvalidEvent(t *testing.T) {
 	req.SetPathValue("id", "ff-1")
 	viewCtx := &view.ViewContext{Request: req}
 
-	result := v.Handle(ctxWithPerms("fulfillment:update"), viewCtx)
+	result := v.Handle(ctxWithPerms("fulfillment:transition"), viewCtx)
 
 	if result.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("StatusCode = %d, want %d", result.StatusCode, http.StatusUnprocessableEntity)
@@ -717,7 +717,7 @@ func TestNewTransitionAction_Success(t *testing.T) {
 	req.SetPathValue("id", "ff-1")
 	viewCtx := &view.ViewContext{Request: req}
 
-	result := v.Handle(ctxWithPerms("fulfillment:update"), viewCtx)
+	result := v.Handle(ctxWithPerms("fulfillment:transition"), viewCtx)
 
 	if captured == nil {
 		t.Fatal("TransitionStatus was not called")
@@ -759,7 +759,7 @@ func TestNewTransitionAction_SpecialCharsInEvent(t *testing.T) {
 	req.SetPathValue("id", "ff-1")
 	viewCtx := &view.ViewContext{Request: req}
 
-	_ = v.Handle(ctxWithPerms("fulfillment:update"), viewCtx)
+	_ = v.Handle(ctxWithPerms("fulfillment:transition"), viewCtx)
 
 	// Handler passes through the event string without sanitization.
 	if capturedEvent != `<script>alert('xss')</script>` {

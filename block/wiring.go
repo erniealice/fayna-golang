@@ -271,6 +271,8 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListPriceSchedules = u.Subscription.PriceSchedule.ListPriceSchedules
 	deps.ListSubscriptionGroups = u.Subscription.SubscriptionGroup.ListSubscriptionGroups
 	deps.ListSubscriptionGroupMembers = u.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers
+	deps.ListSubscriptionGroupWorkspaceUsers = u.Subscription.SubscriptionGroupWorkspaceUser.ListSubscriptionGroupWorkspaceUsers
+	deps.ListWorkspaceUsers = u.Entity.WorkspaceUser.ListWorkspaceUsers
 	deps.ListJobs = u.Operation.Job.ListJobs
 	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
 	deps.ListClients = u.Entity.Client.ListClients

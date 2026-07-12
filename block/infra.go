@@ -12,12 +12,12 @@ import (
 // handlers, and cross-package URL patterns. Built once by service-admin
 // and passed into each catalog binder.
 type Infra struct {
-	UploadFile       func(context.Context, string, string, []byte, string) error
-	ListAttachments  func(context.Context, string, string) (*attachmentpb.ListAttachmentsResponse, error)
-	CreateAttachment func(context.Context, *attachmentpb.CreateAttachmentRequest) (*attachmentpb.CreateAttachmentResponse, error)
-	DeleteAttachment func(context.Context, *attachmentpb.DeleteAttachmentRequest) (*attachmentpb.DeleteAttachmentResponse, error)
-	NewAttachmentID  func() string
-	RefChecker       ports.Checker
-	DB               listSimpler
+	UploadFile            func(context.Context, string, string, []byte, string) error
+	ListAttachments       func(context.Context, string, string) (*attachmentpb.ListAttachmentsResponse, error)
+	CreateAttachment      func(context.Context, *attachmentpb.CreateAttachmentRequest) (*attachmentpb.CreateAttachmentResponse, error)
+	DeleteAttachment      func(context.Context, *attachmentpb.DeleteAttachmentRequest) (*attachmentpb.DeleteAttachmentResponse, error)
+	NewAttachmentID       func() string
+	RefChecker            ports.Checker
+	DB                    listSimpler
 	SubscriptionDetailURL string
 }

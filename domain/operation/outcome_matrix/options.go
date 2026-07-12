@@ -23,6 +23,12 @@ type Options struct {
 	// referenced attribute value (bands ordered ascending by value, the
 	// no-value band last; rows keep the sort order within a band).
 	RowGroupByField string
+	// RowGroupValueOrder pins the band order to these attribute values
+	// (case-insensitive; listed values lead in list order). Values not listed
+	// follow in ascending value order; the no-value band stays last. Empty =
+	// ascending value order (the pre-existing fallback). Mirrors
+	// outcome_summary.RowOptions.GroupValueOrder — one grammar.
+	RowGroupValueOrder []string
 }
 
 // ClientAttributeFieldPrefix is the reference-form prefix for the entity
@@ -46,6 +52,19 @@ func (o Options) RowDirection() string {
 		return "desc"
 	}
 	return "asc"
+}
+
+// RowGroupValueRank returns the configured position of a band value within
+// RowGroupValueOrder (case-insensitive, trimmed) and whether the value was
+// listed. Unlisted values report ok=false and sort after every listed one.
+func (o Options) RowGroupValueRank(value string) (int, bool) {
+	v := strings.ToLower(strings.TrimSpace(value))
+	for i, want := range o.RowGroupValueOrder {
+		if strings.ToLower(strings.TrimSpace(want)) == v {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // AttributeCodes returns the distinct client-attribute codes referenced by

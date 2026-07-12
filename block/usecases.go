@@ -32,6 +32,7 @@ import (
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
+	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	fulfillmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/fulfillment"
 	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"
 	activitylaborpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_labor"
@@ -66,6 +67,7 @@ import (
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 	subscriptionseatpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_seat"
 	activitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/workflow/activity"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
@@ -501,11 +503,20 @@ type FulfillmentUseCases struct {
 // deliverer (staff), group member → delivery group, group → group name +
 // nested schedule (price_schedule) name.
 type SubscriptionUseCases struct {
-	Subscription            SubscriptionSubscriptionUseCases
-	SubscriptionSeat        SubscriptionSeatUseCases
-	SubscriptionGroup       SubscriptionGroupUseCases
-	SubscriptionGroupMember SubscriptionGroupMemberUseCases
-	PriceSchedule           PriceScheduleUseCases
+	Subscription                   SubscriptionSubscriptionUseCases
+	SubscriptionSeat               SubscriptionSeatUseCases
+	SubscriptionGroup              SubscriptionGroupUseCases
+	SubscriptionGroupMember        SubscriptionGroupMemberUseCases
+	SubscriptionGroupWorkspaceUser SubscriptionGroupWorkspaceUserUseCases
+	PriceSchedule                  PriceScheduleUseCases
+}
+
+// SubscriptionGroupWorkspaceUserUseCases — bare list of a group's servicing
+// grants (the *_workspace_user ACCESS family). Backs the report-cards section
+// header caption (grant-holder names). Optional/nil-safe: nil → the caption
+// falls back to the lyngua'd detail-link label.
+type SubscriptionGroupWorkspaceUserUseCases struct {
+	ListSubscriptionGroupWorkspaceUsers func(context.Context, *subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest) (*subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersResponse, error)
 }
 
 // PriceScheduleUseCases — bare list (ground truth: 2 rows on education1, both
@@ -564,6 +575,15 @@ type EntityUseCases struct {
 	Client          EntityClientUseCases
 	ClientAttribute EntityClientAttributeUseCases
 	Staff           EntityStaffUseCases
+	WorkspaceUser   EntityWorkspaceUserUseCases
+}
+
+// EntityWorkspaceUserUseCases — the User-hydrating workspace-member list
+// (LEFT JOIN "user" in the postgres adapter; the request's filters are NOT
+// applied — it returns every active member of the session workspace, so
+// callers build an id→name map from one call). Optional/nil-safe.
+type EntityWorkspaceUserUseCases struct {
+	ListWorkspaceUsers func(context.Context, *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
 }
 
 type EntityClientUseCases struct {

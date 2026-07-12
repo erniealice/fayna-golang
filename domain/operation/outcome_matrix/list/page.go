@@ -312,7 +312,7 @@ func buildGrid(
 
 	cfg.Columns = buildColumns(resp.GetPhases())
 	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames)
-	applyRowOptions(cfg, deps.Options, attrValues)
+	applyRowOptions(cfg, deps.Options, attrValues, clientNames)
 	return cfg
 }
 
@@ -373,9 +373,11 @@ func fetchClientAttributeValues(ctx context.Context, deps *PageViewDeps, clientI
 
 // applyRowOptions applies the configured sort / description / group_by row
 // presentation to the built grid rows. Row identity and cells are untouched —
-// only order, Description, and GroupLabel markers change. Sorting is stable
-// so the adapter's roster order is preserved among equals.
-func applyRowOptions(cfg *types.CellGridConfig, opts outcome_matrix.Options, attrValues map[string]map[string]string) {
+// only order, Label (banded class-list form), Description, and GroupLabel
+// markers change. Sorting is stable so the adapter's roster order is
+// preserved among equals. With zero-valued options nothing here runs — the
+// flat grid renders exactly as built (the backward-compat contract).
+func applyRowOptions(cfg *types.CellGridConfig, opts outcome_matrix.Options, attrValues map[string]map[string]string, clientNames map[string]clientName) {
 	valueFor := func(field, clientID string) (string, bool) {
 		code, ok := outcome_matrix.ClientAttributeCode(field)
 		if !ok {
@@ -386,6 +388,19 @@ func applyRowOptions(cfg *types.CellGridConfig, opts outcome_matrix.Options, att
 			return "", false
 		}
 		return vals[clientID], true
+	}
+
+	_, banded := valueFor(opts.RowGroupByField, "")
+
+	// Banded presentation implies the class-list name form "{last}, {first}"
+	// (prod report-card parity; the outcome_summary section grid does the
+	// same). Relabel BEFORE sorting so label tie-breaks order by last name.
+	if banded {
+		for i := range cfg.Rows {
+			if name := clientNames[cfg.Rows[i].ID].listName(); name != "" {
+				cfg.Rows[i].Label = name
+			}
+		}
 	}
 
 	if _, ok := valueFor(opts.RowDescriptionField, ""); ok {
@@ -422,9 +437,11 @@ func applyRowOptions(cfg *types.CellGridConfig, opts outcome_matrix.Options, att
 		slices.SortStableFunc(cfg.Rows, cmp)
 	}
 
-	if _, ok := valueFor(opts.RowGroupByField, ""); ok {
-		// Partition into bands: stable-sort by the group value (no-value band
-		// last), then mark each band's first row with its GroupLabel.
+	if banded {
+		// Partition into bands: stable-sort by the group value — configured
+		// RowGroupValueOrder first (listed values lead, in list order), then
+		// value-asc, no-value band last — and mark each band's first row with
+		// its GroupLabel.
 		slices.SortStableFunc(cfg.Rows, func(a, b types.CellGridRow) int {
 			av, _ := valueFor(opts.RowGroupByField, a.ID)
 			bv, _ := valueFor(opts.RowGroupByField, b.ID)
@@ -433,6 +450,17 @@ func applyRowOptions(cfg *types.CellGridConfig, opts outcome_matrix.Options, att
 			}
 			if av != "" && bv == "" {
 				return -1
+			}
+			ra, aListed := opts.RowGroupValueRank(av)
+			rb, bListed := opts.RowGroupValueRank(bv)
+			if aListed != bListed {
+				if aListed {
+					return -1
+				}
+				return 1
+			}
+			if aListed && bListed && ra != rb {
+				return ra - rb
 			}
 			return strings.Compare(strings.ToLower(av), strings.ToLower(bv))
 		})
@@ -448,6 +476,13 @@ func applyRowOptions(cfg *types.CellGridConfig, opts outcome_matrix.Options, att
 				cfg.Rows[i].GroupLabel = label
 				prev, started = v, true
 			}
+		}
+
+		// Sequence numbers, CONTINUOUS across bands (prod's class-list
+		// numbering: male 1..N, female N+1..M), applied after banding so
+		// they reflect the final render order.
+		for i := range cfg.Rows {
+			cfg.Rows[i].Label = strconv.Itoa(i+1) + " " + cfg.Rows[i].Label
 		}
 	}
 }
@@ -471,8 +506,8 @@ func distinctClientIDs(rows []*matrixpb.OutcomeRow) []string {
 // job/list/template_summary.go's fetchSubscriptionGroupIDs). Optional/
 // nil-safe: deps.ListClients == nil -> empty map -> every row falls back to
 // short(clientID) in rowLabel, i.e. today's (bugged) behavior.
-func fetchClientNames(ctx context.Context, deps *PageViewDeps, clientIDs []string) map[string]string {
-	out := map[string]string{}
+func fetchClientNames(ctx context.Context, deps *PageViewDeps, clientIDs []string) map[string]clientName {
+	out := map[string]clientName{}
 	if deps.ListClients == nil || len(clientIDs) == 0 {
 		return out
 	}
@@ -497,12 +532,39 @@ func fetchClientNames(ctx context.Context, deps *PageViewDeps, clientIDs []strin
 			continue
 		}
 		for _, c := range resp.GetData() {
-			if id := c.GetId(); id != "" {
-				out[id] = clientDisplayName(c)
+			id := c.GetId()
+			if id == "" {
+				continue
 			}
+			last := strings.TrimSpace(c.GetLastName())
+			first := strings.TrimSpace(c.GetFirstName())
+			if u := c.GetUser(); u != nil {
+				if last == "" {
+					last = strings.TrimSpace(u.GetLastName())
+				}
+				if first == "" {
+					first = strings.TrimSpace(u.GetFirstName())
+				}
+			}
+			out[id] = clientName{display: clientDisplayName(c), last: last, first: first}
 		}
 	}
 	return out
+}
+
+// clientName carries the roster-name parts: display is the flat fallback;
+// last/first feed the banded "Last, First" class-list form (either may be
+// empty — e.g. organization clients — in which case display is used).
+type clientName struct {
+	display, last, first string
+}
+
+// listName renders "{last}, {first}" when both parts exist, else display.
+func (n clientName) listName() string {
+	if n.last != "" && n.first != "" {
+		return n.last + ", " + n.first
+	}
+	return n.display
 }
 
 // clientDisplayName mirrors the established fayna client-name pattern
@@ -551,7 +613,7 @@ func buildColumns(phases []*matrixpb.PhaseColumn) []types.CellGridLevel1 {
 }
 
 // buildRows maps the proto rows into CellGridRows with the read-only gate applied.
-func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string, clientNames map[string]string) []types.CellGridRow {
+func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string, clientNames map[string]clientName) []types.CellGridRow {
 	out := make([]types.CellGridRow, 0, len(rows))
 	for _, r := range rows {
 		clientID := r.GetClientId()
@@ -654,8 +716,8 @@ func criterionLabel(cr *matrixpb.CriterionColumn) string {
 // no longer consulted here (the pre-fix bug: this function trusted it and
 // always got the id back). Falls back to a truncated id when the roster
 // fetch found no match (deps.ListClients nil, or the client row missing).
-func rowLabel(r *matrixpb.OutcomeRow, clientNames map[string]string) string {
-	if name := clientNames[r.GetClientId()]; name != "" {
+func rowLabel(r *matrixpb.OutcomeRow, clientNames map[string]clientName) string {
+	if name := clientNames[r.GetClientId()].display; name != "" {
 		return name
 	}
 	return short(r.GetClientId())

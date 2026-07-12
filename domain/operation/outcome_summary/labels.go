@@ -28,6 +28,7 @@ type LandingLabels struct {
 	MembersColumn   string `json:"members_column"`
 	TemplatesColumn string `json:"templates_column"`
 	ViewAction      string `json:"view_action"`
+	DownloadAction  string `json:"download_action"`
 	TabsAriaLabel   string `json:"tabs_aria_label"`
 	InactiveSuffix  string `json:"inactive_suffix"`
 }
@@ -38,6 +39,8 @@ type SectionLabels struct {
 	Title             string `json:"title"`
 	ClientColumn      string `json:"client_column"`
 	RatingEmpty       string `json:"rating_empty"`
+	DownloadAction    string `json:"download_action"`
+	DetailLink        string `json:"detail_link"`
 	NotComputedBanner string `json:"not_computed_banner"`
 }
 
@@ -143,6 +146,7 @@ func DefaultLabels() Labels {
 			MembersColumn:   "Members",
 			TemplatesColumn: "Items",
 			ViewAction:      "View outcomes",
+			DownloadAction:  "Download outcomes (CSV)",
 			TabsAriaLabel:   "Schedules",
 			InactiveSuffix:  "(inactive)",
 		},
@@ -150,6 +154,8 @@ func DefaultLabels() Labels {
 			Title:             "Group outcomes",
 			ClientColumn:      "Client",
 			RatingEmpty:       "—",
+			DownloadAction:    "Download outcomes (CSV)",
+			DetailLink:        "View group",
 			NotComputedBanner: "Final outcomes have not been computed yet.",
 		},
 	}

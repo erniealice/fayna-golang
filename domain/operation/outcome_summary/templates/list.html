@@ -14,8 +14,17 @@
 {{define "outcome-summary-landing-content"}}
 <div class="page-content page-content--table">
     {{if .TabItems}}
-    {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "sub" "ID" "report-cards-tabs" "Label" .TabsAria)}}
-    {{end}}
+    {{/* "default" = the app-canonical pill-tab strip (the clients list-page
+         precedent). The default variant's link tabs carry
+         aria-controls="tabContent"; the section table below IS the panel each
+         AY tab reveals, so give it the matching tabpanel region (resolves the
+         reference + is semantically honest). */}}
+    {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "report-cards-tabs" "Label" .TabsAria)}}
+    <div id="tabContent" role="tabpanel"{{if .ActiveTab}} aria-labelledby="tab-{{.ActiveTab}}"{{end}}>
+        {{template "table-card" .Table}}
+    </div>
+    {{else}}
     {{template "table-card" .Table}}
+    {{end}}
 </div>
 {{end}}

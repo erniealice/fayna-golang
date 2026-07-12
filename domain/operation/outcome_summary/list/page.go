@@ -16,11 +16,46 @@ import (
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
+	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
+	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
+
+// listIn builds a LIST_IN TypedFilter (shared shape with the section view).
+func listIn(field string, values []string) *commonpb.TypedFilter {
+	return &commonpb.TypedFilter{
+		Field: field,
+		FilterType: &commonpb.TypedFilter_ListFilter{
+			ListFilter: &commonpb.ListFilter{Values: values, Operator: commonpb.ListOperator_LIST_IN},
+		},
+	}
+}
+
+// maxLandingPages bounds the historical-count offset loop independently of the
+// adapter's short-final-page termination (defense against an adapter that
+// ignores OFFSET). 100 × 100 = 10k rows, far above any real section.
+const maxLandingPages = 100
+
+// boolEq builds a BooleanFilter TypedFilter.
+func boolEq(field string, v bool) *commonpb.TypedFilter {
+	return &commonpb.TypedFilter{
+		Field:      field,
+		FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: v}},
+	}
+}
+
+// stringEq builds a STRING_EQUALS TypedFilter.
+func stringEq(field, value string) *commonpb.TypedFilter {
+	return &commonpb.TypedFilter{
+		Field: field,
+		FilterType: &commonpb.TypedFilter_StringFilter{
+			StringFilter: &commonpb.StringFilter{Value: value, Operator: commonpb.StringOperator_STRING_EQUALS},
+		},
+	}
+}
 
 // ListViewDeps holds view dependencies.
 type ListViewDeps struct {
@@ -40,6 +75,13 @@ type ListViewDeps struct {
 	ListPriceSchedules       func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
 	ListSubscriptionGroups   func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
+
+	// Historical-count fallback deps: the grouped ListJobTemplateSummaries
+	// aggregate binds active rows only, so a historical (inactive) schedule's
+	// sections come back with no counts — these two reads fill them in for
+	// the rendered tab. Optional/nil-safe (missing → counts stay blank).
+	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+	ListJobs                     func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 }
 
 // PageData holds the data for the outcome summary list page (flat or landing).
@@ -162,20 +204,19 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 		selected = defaultSchedule(schedules)
 	}
 
-	// 3. subscription_groups (active) — workspace-scoped at the adapter.
-	var groups []*subscriptiongrouppb.SubscriptionGroup
-	if deps.ListSubscriptionGroups != nil {
-		resp, err := deps.ListSubscriptionGroups(ctx, &subscriptiongrouppb.ListSubscriptionGroupsRequest{})
-		if err != nil {
-			log.Printf("report cards landing: list subscription groups: %v", err)
-		} else {
-			groups = resp.GetData()
-		}
-	}
+	// 3. subscription_groups, ACTIVE + INACTIVE — workspace-scoped at the
+	//    adapter. Historical schedules (Q-TAB-1's inactive tabs) hold only
+	//    inactive groups, so the active-only default would render their tab
+	//    with count 0 and an empty table; the same two-call merge as
+	//    listAllSchedules keeps the historical view correct.
+	groups := listAllGroups(ctx, deps)
 
 	// 4. counts via ONE grouped read (no N+1): subjects = distinct templates per
-	//    section, students = the section's largest per-subject cohort.
+	//    section, students = the section's largest per-subject cohort. The
+	//    aggregate covers ACTIVE rows only, so historical sections then fill
+	//    their counts from direct member/job reads (selected tab only).
 	subjectCount, studentCount := sectionCounts(ctx, deps)
+	fillHistoricalCounts(ctx, deps, groups, selected, subjectCount, studentCount)
 
 	// 5. tabs (one per schedule; Count = active sections under it).
 	tabs := buildTabs(schedules, groups, selected, l, deps.Routes)
@@ -191,6 +232,7 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 		ShowSort:             true,
 		ShowColumns:          true,
 		ShowDensity:          true,
+		ShowExport:           true,
 		ShowEntries:          true,
 		ShowActions:          true,
 		DefaultSortColumn:    "section",
@@ -251,6 +293,34 @@ func listAllSchedules(ctx context.Context, deps *ListViewDeps) []*priceschedulep
 		},
 	}); err != nil {
 		log.Printf("report cards landing: list inactive price schedules: %v", err)
+	} else {
+		out = append(out, resp.GetData()...)
+	}
+	return out
+}
+
+// listAllGroups returns every subscription_group (active + inactive) so
+// historical schedules' sections stay visible. Same default-active +
+// explicit-inactive merge as listAllSchedules. Nil-safe → empty slice.
+func listAllGroups(ctx context.Context, deps *ListViewDeps) []*subscriptiongrouppb.SubscriptionGroup {
+	if deps.ListSubscriptionGroups == nil {
+		return nil
+	}
+	out := make([]*subscriptiongrouppb.SubscriptionGroup, 0, 16)
+	if resp, err := deps.ListSubscriptionGroups(ctx, &subscriptiongrouppb.ListSubscriptionGroupsRequest{}); err != nil {
+		log.Printf("report cards landing: list active subscription groups: %v", err)
+	} else {
+		out = append(out, resp.GetData()...)
+	}
+	if resp, err := deps.ListSubscriptionGroups(ctx, &subscriptiongrouppb.ListSubscriptionGroupsRequest{
+		Filters: &commonpb.FilterRequest{
+			Filters: []*commonpb.TypedFilter{{
+				Field:      "active",
+				FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: false}},
+			}},
+		},
+	}); err != nil {
+		log.Printf("report cards landing: list inactive subscription groups: %v", err)
 	} else {
 		out = append(out, resp.GetData()...)
 	}
@@ -355,7 +425,132 @@ func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string
 	return
 }
 
-// buildTabs builds one TabItem per schedule; Count = active sections under it;
+// fillHistoricalCounts fills Students/Subjects counts for the selected tab's
+// INACTIVE sections (their rows are invisible to the active-bound
+// ListJobTemplateSummaries aggregate): students = distinct member clients
+// (active + inactive members — the frozen roster), subjects = distinct
+// job_templates over the members' jobs (active + inactive). Bulk reads, no
+// N+1: one member read (+inactive merge) and chunked job reads across the
+// tab's groups. Nil-safe; missing closures leave counts blank.
+func fillHistoricalCounts(
+	ctx context.Context,
+	deps *ListViewDeps,
+	groups []*subscriptiongrouppb.SubscriptionGroup,
+	selected string,
+	subjectCount, studentCount map[string]int,
+) {
+	if deps.ListSubscriptionGroupMembers == nil {
+		return
+	}
+	var groupIDs []string
+	for _, g := range groups {
+		if g.GetActive() || (selected != "" && g.GetPriceScheduleId() != selected) {
+			continue
+		}
+		if studentCount[g.GetId()] == 0 || subjectCount[g.GetId()] == 0 {
+			groupIDs = append(groupIDs, g.GetId())
+		}
+	}
+	if len(groupIDs) == 0 {
+		return
+	}
+
+	// members (both liveness states — the listAllSchedules merge pattern).
+	// One call PER GROUP so each result set stays under the adapter's default
+	// list cap (a bulk multi-group read truncates and undercounts).
+	subToGroup := map[string]string{}               // subscription_id -> group_id
+	clientsPerGroup := map[string]map[string]bool{} // group_id -> distinct clients
+	for _, gid := range groupIDs {
+		requests := []*subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
+			{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", gid)}}},
+			{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
+				stringEq("subscription_group_id", gid),
+				boolEq("active", false),
+			}}},
+		}
+		for _, req := range requests {
+			resp, err := deps.ListSubscriptionGroupMembers(ctx, req)
+			if err != nil {
+				log.Printf("report cards landing: historical member counts: %v", err)
+				continue
+			}
+			for _, m := range resp.GetData() {
+				sid, cid := m.GetSubscriptionId(), m.GetClientId()
+				if sid == "" || cid == "" {
+					continue
+				}
+				subToGroup[sid] = gid
+				if clientsPerGroup[gid] == nil {
+					clientsPerGroup[gid] = map[string]bool{}
+				}
+				clientsPerGroup[gid][cid] = true
+			}
+		}
+	}
+	for gid, clients := range clientsPerGroup {
+		if studentCount[gid] == 0 {
+			studentCount[gid] = len(clients)
+		}
+	}
+
+	// subjects: distinct templates over the members' jobs (both liveness
+	// states), chunked by origin_id PER GROUP (one section's job set is the
+	// scale the section grid already reads in one call).
+	if deps.ListJobs == nil || len(subToGroup) == 0 {
+		return
+	}
+	subsPerGroup := map[string][]string{}
+	for sid, gid := range subToGroup {
+		subsPerGroup[gid] = append(subsPerGroup[gid], sid)
+	}
+	const chunk = 100
+	for gid, subIDs := range subsPerGroup {
+		tmpls := map[string]bool{}
+		for start := 0; start < len(subIDs); start += chunk {
+			end := start + chunk
+			if end > len(subIDs) {
+				end = len(subIDs)
+			}
+			jobReqs := []*jobpb.ListJobsRequest{
+				{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("origin_id", subIDs[start:end])}}},
+				{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
+					listIn("origin_id", subIDs[start:end]),
+					boolEq("active", false),
+				}}},
+			}
+			for _, req := range jobReqs {
+				// Page explicitly — a section's job set exceeds the adapters'
+				// default row caps (the fetchSectionJobs lesson). maxPages
+				// bounds the loop even if the adapter ignored OFFSET.
+				for page := int32(1); page <= maxLandingPages; page++ {
+					req.Pagination = &commonpb.PaginationRequest{
+						Limit:  int32(chunk),
+						Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
+					}
+					resp, err := deps.ListJobs(ctx, req)
+					if err != nil {
+						log.Printf("report cards landing: historical subject counts (page %d): %v", page, err)
+						break
+					}
+					for _, j := range resp.GetData() {
+						if tid := j.GetJobTemplateId(); tid != "" {
+							tmpls[tid] = true
+						}
+					}
+					if len(resp.GetData()) < chunk {
+						break
+					}
+				}
+			}
+		}
+		if subjectCount[gid] == 0 {
+			subjectCount[gid] = len(tmpls)
+		}
+	}
+}
+
+// buildTabs builds one TabItem per schedule; Count = its sections (active or
+// not — a historical schedule's sections are all inactive but still count);
 // the tab whose id == selected is marked active. Href carries ?ps=<id>.
 func buildTabs(
 	schedules []*priceschedulepb.PriceSchedule,
@@ -366,9 +561,7 @@ func buildTabs(
 ) []pyeza.TabItem {
 	counts := map[string]int{}
 	for _, g := range groups {
-		if g.GetActive() {
-			counts[g.GetPriceScheduleId()]++
-		}
+		counts[g.GetPriceScheduleId()]++
 	}
 	tabs := make([]pyeza.TabItem, 0, len(schedules))
 	for _, s := range schedules {
@@ -386,8 +579,9 @@ func buildTabs(
 	return tabs
 }
 
-// buildSectionRows builds the section table rows for the selected schedule,
-// active only, name ASC. Each row links (view action) into the per-section grid.
+// buildSectionRows builds the section table rows for the selected schedule
+// (inactive groups included — the historical view), name ASC. Each row links
+// (view action) into the per-section grid.
 func buildSectionRows(
 	groups []*subscriptiongrouppb.SubscriptionGroup,
 	selected string,
@@ -397,9 +591,6 @@ func buildSectionRows(
 ) []types.TableRow {
 	var filtered []*subscriptiongrouppb.SubscriptionGroup
 	for _, g := range groups {
-		if !g.GetActive() {
-			continue
-		}
 		if selected != "" && g.GetPriceScheduleId() != selected {
 			continue
 		}
@@ -431,6 +622,16 @@ func buildSectionRows(
 					Label:  l.Landing.ViewAction,
 					Href:   route.ResolveURL(routes.SectionURL, "id", gid),
 					TestID: "rc-view-" + short(gid),
+				},
+				{
+					// The download JS appends ?id=<row id> (this section's own
+					// id) — the export handler ignores it and serves the full
+					// section grid.
+					Type:   "download",
+					Label:  l.Landing.DownloadAction,
+					Action: "download",
+					URL:    route.ResolveURL(routes.SectionExportURL, "id", gid),
+					TestID: "rc-download-" + short(gid),
 				},
 			},
 		})

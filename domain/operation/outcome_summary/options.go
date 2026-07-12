@@ -47,9 +47,14 @@ type ListOptions struct {
 // SortField orders rows within a band (a client-column ref, e.g. "last_name");
 // SortDirection is "asc"|"desc" (default asc).
 type RowOptions struct {
-	GroupByField  string
-	SortField     string
-	SortDirection string
+	GroupByField string
+	// GroupValueOrder pins the band order to these attribute values
+	// (case-insensitive; listed values lead in list order). Values not listed
+	// follow in ascending value order; the no-value band stays last. Empty =
+	// ascending value order (the fail-safe default).
+	GroupValueOrder []string
+	SortField       string
+	SortDirection   string
 }
 
 // Entity reference constants (the implemented values).
@@ -127,6 +132,19 @@ func (l ListOptions) SubscriptionGroups() bool {
 
 // Direction returns the normalized row sort direction ("asc"|"desc").
 func (r RowOptions) Direction() string { return normalizeDirection(r.SortDirection) }
+
+// GroupValueRank returns the configured position of a band value within
+// GroupValueOrder (case-insensitive, trimmed) and whether the value was
+// listed. Unlisted values report ok=false and sort after every listed one.
+func (r RowOptions) GroupValueRank(value string) (int, bool) {
+	v := strings.ToLower(strings.TrimSpace(value))
+	for i, want := range r.GroupValueOrder {
+		if strings.ToLower(strings.TrimSpace(want)) == v {
+			return i, true
+		}
+	}
+	return 0, false
+}
 
 // AttributeCodes returns the distinct client-attribute codes referenced by the
 // Row options, in first-use order (group_by, sort). SortField is normally a

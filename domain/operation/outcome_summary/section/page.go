@@ -33,17 +33,26 @@ import (
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
+	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 )
 
 // pageLimit chunks ListFilter(IN) id sets so each call's result set stays under
 // the adapter's default cap (the fetchClientNames pattern).
 const pageLimit = 100
+
+// maxPages bounds every offset page-loop independently of the adapter's own
+// termination (which relies on a short final page). A section's job set is
+// ≤ roster×subjects (≈300–500); this ceiling (100 pages × 100 rows = 10k) is
+// far above any real section yet guarantees the loop halts even if a
+// misbehaving adapter ignored OFFSET and returned a full page forever.
+const maxPages = 100
 
 // Deps holds the section-grid view dependencies. All list closures are
 // workspace-bound at the espyna adapter; the view composes no client_id/
@@ -66,6 +75,13 @@ type Deps struct {
 	ListJobOutcomeSummarys       func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
 	ListClientAttributes         func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
 	ResolveAttributeIDByCode     func(ctx context.Context, code string) (string, error)
+
+	// Header-caption deps: the group's servicing grants
+	// (subscription_group_workspace_user) + the User-hydrating workspace-member
+	// list that resolves their display names. Optional/nil-safe: missing →
+	// the caption falls back to the lyngua'd detail-link label.
+	ListSubscriptionGroupWorkspaceUsers func(ctx context.Context, req *subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest) (*subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersResponse, error)
+	ListWorkspaceUsers                  func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
 }
 
 // PageData is the section-grid page data.
@@ -79,9 +95,20 @@ type PageData struct {
 
 // student is one row's resolved identity.
 type student struct {
-	clientID string
-	name     string
-	lastName string
+	clientID  string
+	name      string
+	lastName  string
+	firstName string
+}
+
+// listName renders the class-list name form "{last_name}, {first_name}"
+// (prod's report-card roster format), falling back to the plain display name
+// when either part is missing.
+func (s student) listName() string {
+	if s.lastName != "" && s.firstName != "" {
+		return s.lastName + ", " + s.firstName
+	}
+	return s.name
 }
 
 // NewView creates the per-section report-card grid view.
@@ -97,109 +124,219 @@ func NewView(deps *Deps) view.View {
 			return view.Forbidden("job_outcome_summary:list")
 		}
 
-		// EXISTS gate: the group must belong to the session workspace. The
-		// ListSubscriptionGroups adapter is workspace-scoped, so a foreign or
-		// missing id returns no rows → fail-closed (no leak).
-		group := fetchSection(ctx, deps, sectionID)
+		group, table := buildSectionTable(ctx, deps, sectionID)
 		if group == nil {
 			return view.Forbidden("job_outcome_summary:list")
 		}
-
-		l := deps.Labels
-
-		// members(section) → subscription_id → client_id.
-		subToClient := fetchMembers(ctx, deps, sectionID)
-
-		// jobs(origin_id IN subs, active, SUBSCRIPTION) — staff-narrowed at the
-		// adapter. Rows + columns are derived from THIS set (Q-SEC-7).
-		jobs := fetchSectionJobs(ctx, deps, keysOf(subToClient))
-
-		// Build the (client, template) → job map + distinct sets.
-		type cell struct{ jobID string }
-		cellJob := map[string]string{} // clientID+"\x00"+templateID -> jobID
-		clientIDs := []string{}
-		clientSeen := map[string]bool{}
-		templateIDs := []string{}
-		tmplSeen := map[string]bool{}
-		jobIDs := []string{}
-		for _, j := range jobs {
-			jobID := j.GetId()
-			tid := j.GetJobTemplateId()
-			clientID := subToClient[j.GetOriginId()]
-			if clientID == "" {
-				clientID = j.GetClientId()
-			}
-			if clientID == "" || tid == "" || jobID == "" {
-				continue
-			}
-			if !clientSeen[clientID] {
-				clientSeen[clientID] = true
-				clientIDs = append(clientIDs, clientID)
-			}
-			if !tmplSeen[tid] {
-				tmplSeen[tid] = true
-				templateIDs = append(templateIDs, tid)
-			}
-			cellJob[clientID+"\x00"+tid] = jobID
-			jobIDs = append(jobIDs, jobID)
+		grantHolders := fetchGrantHolderNames(ctx, deps, sectionID)
+		if table == nil {
+			// Empty-state: no computed summaries for this section → banner, not
+			// a blank grid (D.4 do-not-ship-blank).
+			return okPage(viewCtx, deps, group, grantHolders, nil, deps.Labels.Section.NotComputedBanner)
 		}
-
-		// summaries(job_id IN jobs) → jobID → scaled label.
-		labelByJob := fetchSummaryLabels(ctx, deps, jobIDs, l)
-
-		// Empty-state: no computed summaries for this section → banner, not a
-		// blank grid (D.4 do-not-ship-blank).
-		if len(labelByJob) == 0 {
-			return okPage(viewCtx, deps, group, nil, l.Section.NotComputedBanner)
-		}
-
-		// client display names + last_name (for the row sort).
-		students := fetchStudents(ctx, deps, clientIDs)
-
-		// gender (or configured) attribute values for bands.
-		attrValues := fetchAttributeValues(ctx, deps, clientIDs)
-
-		// template names (columns), name ASC.
-		tmplNames := fetchTemplateNames(ctx, deps, templateIDs)
-		columns := buildColumns(templateIDs, tmplNames, l)
-
-		table := &types.TableConfig{
-			ID:          "report-cards-grid",
-			Columns:     columns,
-			ShowSearch:  true,
-			ShowColumns: true,
-			ShowDensity: true,
-			Labels:      deps.TableLabels,
-			Caption:     l.Section.Title,
-			FixedLayout: false,
-			EmptyState: types.TableEmptyState{
-				Title:   l.Empty.Title,
-				Message: l.Section.NotComputedBanner,
-			},
-		}
-
-		rows := buildRows(students, orderedColumnIDs(columns), cellJob, labelByJob, deps.Routes, l)
-		applyRowPresentation(table, rows, students, attrValues, deps.Options)
-		types.ApplyColumnStyles(table.Columns, allRows(table))
-
-		return okPage(viewCtx, deps, group, table, "")
+		return okPage(viewCtx, deps, group, grantHolders, table, "")
 	})
 }
 
-// okPage assembles the PageData (grid or empty-state banner).
-func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, table *types.TableConfig, banner string) view.ViewResult {
+// fetchGrantHolderNames resolves the group's OWNER servicing-grant holders
+// (subscription_group_workspace_user rows with is_owner — the group's
+// lead(s); co-owners possible) to display names, name-ASC. Non-owner grants
+// are deliberately excluded from the caption. The name hop rides the
+// User-hydrating workspace-member list (one call — it returns the whole
+// workspace's members, so build a map). Nil-safe: missing closures, no owner
+// grants, or unresolvable names → nil (caption falls back to the lyngua'd
+// detail-link label).
+func fetchGrantHolderNames(ctx context.Context, deps *Deps, sectionID string) []string {
+	if deps.ListSubscriptionGroupWorkspaceUsers == nil || deps.ListWorkspaceUsers == nil {
+		return nil
+	}
+	resp, err := deps.ListSubscriptionGroupWorkspaceUsers(ctx, &subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest{
+		Filters: &commonpb.FilterRequest{
+			Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", sectionID)},
+		},
+	})
+	if err != nil {
+		log.Printf("report cards section: list group workspace users: %v", err)
+		return nil
+	}
+	owners := map[string]bool{} // workspace_user_id of is_owner grants
+	for _, g := range resp.GetData() {
+		if g.GetActive() && g.GetIsOwner() && g.GetWorkspaceUserId() != "" {
+			owners[g.GetWorkspaceUserId()] = true
+		}
+	}
+	if len(owners) == 0 {
+		return nil
+	}
+	wuResp, err := deps.ListWorkspaceUsers(ctx, &workspaceuserpb.ListWorkspaceUsersRequest{})
+	if err != nil {
+		log.Printf("report cards section: list workspace users: %v", err)
+		return nil
+	}
+	var names []string
+	for _, wu := range wuResp.GetData() {
+		if !owners[wu.GetId()] {
+			continue
+		}
+		if u := wu.GetUser(); u != nil {
+			if name := strings.TrimSpace(u.GetFirstName() + " " + u.GetLastName()); name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// buildSectionTable assembles the per-section grid: the workspace-gated group
+// plus a fully-ordered TableConfig (bands + rows + cells). Shared by the HTML
+// view and the CSV export handler so both render the identical grid.
+// Returns (nil, nil) when the group fails the workspace EXISTS gate and
+// (group, nil) when the section has no computed summaries yet.
+func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subscriptiongrouppb.SubscriptionGroup, *types.TableConfig) {
+	// EXISTS gate: the group must belong to the session workspace. The
+	// ListSubscriptionGroups adapter is workspace-scoped, so a foreign or
+	// missing id returns no rows → fail-closed (no leak).
+	group := fetchSection(ctx, deps, sectionID)
+	if group == nil {
+		return nil, nil
+	}
+
 	l := deps.Labels
+
+	// Historical mode: an inactive group is a FROZEN past section — its
+	// members (and possibly jobs) are inactive rows, so the liveness filters
+	// below relax to render the roster as it stood.
+	historical := !group.GetActive()
+
+	// members(section) → subscription_id → client_id.
+	subToClient := fetchMembers(ctx, deps, sectionID, historical)
+
+	// jobs(origin_id IN subs, active, SUBSCRIPTION) — staff-narrowed at the
+	// adapter. Rows + columns are derived from THIS set (Q-SEC-7).
+	jobs := fetchSectionJobs(ctx, deps, keysOf(subToClient), historical)
+
+	// Build the (client, template) → job map + distinct sets.
+	cellJob := map[string]string{} // clientID+"\x00"+templateID -> jobID
+	clientIDs := []string{}
+	clientSeen := map[string]bool{}
+	templateIDs := []string{}
+	tmplSeen := map[string]bool{}
+	jobIDs := []string{}
+	for _, j := range jobs {
+		jobID := j.GetId()
+		tid := j.GetJobTemplateId()
+		clientID := subToClient[j.GetOriginId()]
+		if clientID == "" {
+			clientID = j.GetClientId()
+		}
+		if clientID == "" || tid == "" || jobID == "" {
+			continue
+		}
+		if !clientSeen[clientID] {
+			clientSeen[clientID] = true
+			clientIDs = append(clientIDs, clientID)
+		}
+		if !tmplSeen[tid] {
+			tmplSeen[tid] = true
+			templateIDs = append(templateIDs, tid)
+		}
+		cellJob[clientID+"\x00"+tid] = jobID
+		jobIDs = append(jobIDs, jobID)
+	}
+
+	// summaries(job_id IN jobs) → jobID → scaled label.
+	labelByJob := fetchSummaryLabels(ctx, deps, jobIDs, l)
+	if len(labelByJob) == 0 {
+		return group, nil
+	}
+
+	// client display names + last_name (for the row sort).
+	students := fetchStudents(ctx, deps, clientIDs)
+
+	// gender (or configured) attribute values for bands.
+	attrValues := fetchAttributeValues(ctx, deps, clientIDs)
+
+	// template names (columns), name ASC.
+	tmplNames := fetchTemplateNames(ctx, deps, templateIDs, historical)
+	columns := buildColumns(templateIDs, tmplNames, l)
+
+	table := &types.TableConfig{
+		ID:          "report-cards-grid",
+		Columns:     columns,
+		ShowSearch:  true,
+		ShowColumns: true,
+		ShowDensity: true,
+		ShowExport:  true,
+		ShowEntries: true,
+		ShowActions: true,
+		Labels:      deps.TableLabels,
+		Caption:     l.Section.Title,
+		FixedLayout: false,
+		EmptyState: types.TableEmptyState{
+			Title:   l.Empty.Title,
+			Message: l.Section.NotComputedBanner,
+		},
+	}
+
+	rows := buildRows(students, orderedColumnIDs(columns), cellJob, labelByJob, sectionID, deps.Routes, l)
+	applyRowPresentation(table, rows, students, attrValues, deps.Options)
+	numberRows(table)
+	types.ApplyColumnStyles(table.Columns, allRows(table))
+	return group, table
+}
+
+// numberRows prefixes each student cell with its sequence number in final
+// presentation order — CONTINUOUS across bands (prod's class-list numbering:
+// male 1..N, female N+1..M), applied after banding/sorting so the numbers
+// reflect what renders. The CSV export shares the cell value, so exports
+// carry the same "{n} {last}, {first}" text.
+func numberRows(table *types.TableConfig) {
+	n := 0
+	number := func(rows []types.TableRow) {
+		for i := range rows {
+			n++
+			if len(rows[i].Cells) > 0 {
+				rows[i].Cells[0].Value = strconv.Itoa(n) + " " + rows[i].Cells[0].Value
+			}
+		}
+	}
+	if len(table.Groups) > 0 {
+		for gi := range table.Groups {
+			number(table.Groups[gi].Rows)
+		}
+		return
+	}
+	number(table.Rows)
+}
+
+// okPage assembles the PageData (grid or empty-state banner). Header shape:
+// breadcrumb "<list title> > <group name>" (crumb links back to the landing)
+// with a caption below linking to the listed group's own detail page
+// (GroupDetailURL — /sections/detail/{id} on education). The caption text is
+// the group's servicing-grant holder names (comma-separated — a group can
+// carry several subscription_group_workspace_user rows), falling back to the
+// lyngua'd DetailLink label when no grants resolve.
+func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, grantHolders []string, table *types.TableConfig, banner string) view.ViewResult {
+	l := deps.Labels
+	caption := strings.Join(grantHolders, ", ")
+	if caption == "" {
+		caption = l.Section.DetailLink
+	}
 	pd := &PageData{
 		PageData: types.PageData{
-			CacheVersion:   viewCtx.CacheVersion,
-			Title:          l.Section.Title,
-			CurrentPath:    viewCtx.CurrentPath,
-			ActiveNav:      deps.Routes.ActiveNav,
-			ActiveSubNav:   "report-cards",
-			HeaderTitle:    l.Section.Title,
-			HeaderSubtitle: group.GetName(),
-			HeaderIcon:     "icon-award",
-			CommonLabels:   deps.CommonLabels,
+			CacheVersion:        viewCtx.CacheVersion,
+			Title:               l.Section.Title,
+			CurrentPath:         viewCtx.CurrentPath,
+			ActiveNav:           deps.Routes.ActiveNav,
+			ActiveSubNav:        "report-cards",
+			HeaderBreadcrumb:    l.Section.Title,
+			HeaderBreadcrumbURL: deps.Routes.ListURL,
+			HeaderTitle:         group.GetName(),
+			HeaderSubtitle:      caption,
+			HeaderSubtitleURL:   route.ResolveURL(deps.Routes.GroupDetailURL, "id", group.GetId()),
+			HeaderIcon:          "icon-award",
+			CommonLabels:        deps.CommonLabels,
 		},
 		ContentTemplate: "outcome-summary-section-content",
 		Table:           table,
@@ -210,77 +347,130 @@ func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.Su
 }
 
 // fetchSection returns the section (workspace-scoped EXISTS gate) or nil.
+// Historical (inactive) groups resolve too — the generic List defaults to
+// active=true, so a second explicit active=false read covers them (the
+// listAllSchedules pattern). The workspace scope applies to both reads.
 func fetchSection(ctx context.Context, deps *Deps, sectionID string) *subscriptiongrouppb.SubscriptionGroup {
 	if deps.ListSubscriptionGroups == nil {
 		return nil
 	}
-	resp, err := deps.ListSubscriptionGroups(ctx, &subscriptiongrouppb.ListSubscriptionGroupsRequest{
-		Filters: &commonpb.FilterRequest{
-			Filters: []*commonpb.TypedFilter{stringEq("id", sectionID)},
-		},
-	})
-	if err != nil {
-		log.Printf("report cards section: list subscription group by id: %v", err)
-		return nil
+	requests := []*subscriptiongrouppb.ListSubscriptionGroupsRequest{
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", sectionID)}}},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
+			stringEq("id", sectionID),
+			{Field: "active", FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: false}}},
+		}}},
 	}
-	for _, g := range resp.GetData() {
-		if g.GetId() == sectionID {
-			return g
+	for _, req := range requests {
+		resp, err := deps.ListSubscriptionGroups(ctx, req)
+		if err != nil {
+			log.Printf("report cards section: list subscription group by id: %v", err)
+			continue
+		}
+		for _, g := range resp.GetData() {
+			if g.GetId() == sectionID {
+				return g
+			}
 		}
 	}
 	return nil
 }
 
-// fetchMembers returns subscription_id → client_id for the active members.
-func fetchMembers(ctx context.Context, deps *Deps, sectionID string) map[string]string {
+// fetchMembers returns subscription_id → client_id for the section's members
+// (active only — or the frozen full roster in historical mode). The generic
+// List defaults to active=true rows, so historical mode adds an explicit
+// active=false read (the listAllSchedules merge pattern).
+func fetchMembers(ctx context.Context, deps *Deps, sectionID string, historical bool) map[string]string {
 	out := map[string]string{}
 	if deps.ListSubscriptionGroupMembers == nil {
 		return out
 	}
-	resp, err := deps.ListSubscriptionGroupMembers(ctx, &subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
-		Filters: &commonpb.FilterRequest{
-			Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", sectionID)},
-		},
-	})
-	if err != nil {
-		log.Printf("report cards section: list members: %v", err)
-		return out
+	requests := []*subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", sectionID)}}},
 	}
-	for _, m := range resp.GetData() {
-		if !m.GetActive() {
+	if historical {
+		requests = append(requests, &subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
+				stringEq("subscription_group_id", sectionID),
+				{Field: "active", FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: false}}},
+			}},
+		})
+	}
+	for _, req := range requests {
+		resp, err := deps.ListSubscriptionGroupMembers(ctx, req)
+		if err != nil {
+			log.Printf("report cards section: list members: %v", err)
 			continue
 		}
-		if sid, cid := m.GetSubscriptionId(), m.GetClientId(); sid != "" && cid != "" {
-			out[sid] = cid
+		for _, m := range resp.GetData() {
+			if !historical && !m.GetActive() {
+				continue
+			}
+			if sid, cid := m.GetSubscriptionId(), m.GetClientId(); sid != "" && cid != "" {
+				out[sid] = cid
+			}
 		}
 	}
 	return out
 }
 
 // fetchSectionJobs returns the section's active subscription-origin jobs
-// (staff-narrowed at the adapter), chunked by origin_id.
-func fetchSectionJobs(ctx context.Context, deps *Deps, subIDs []string) []*jobpb.Job {
+// (staff-narrowed at the adapter), chunked by origin_id. Historical mode also
+// accepts inactive jobs (a frozen past section's jobs may be retired) via an
+// extra explicit active=false read per chunk.
+//
+// Every read PAGES explicitly (Limit 100 + offset pages) until exhausted: a
+// section's job set (roster × subjects ≈ 300) far exceeds the adapters'
+// default row caps, and an uncapped single call silently truncates — the
+// grid then renders the missing cells as "—" with no error.
+func fetchSectionJobs(ctx context.Context, deps *Deps, subIDs []string, historical bool) []*jobpb.Job {
 	var out []*jobpb.Job
 	if deps.ListJobs == nil || len(subIDs) == 0 {
 		return out
 	}
+	seen := map[string]bool{}
 	for start := 0; start < len(subIDs); start += pageLimit {
 		end := start + pageLimit
 		if end > len(subIDs) {
 			end = len(subIDs)
 		}
-		resp, err := deps.ListJobs(ctx, &jobpb.ListJobsRequest{
-			Filters: &commonpb.FilterRequest{
-				Filters: []*commonpb.TypedFilter{listIn("origin_id", subIDs[start:end])},
-			},
-		})
-		if err != nil {
-			log.Printf("report cards section: list jobs: %v", err)
-			continue
+		filterSets := [][]*commonpb.TypedFilter{
+			{listIn("origin_id", subIDs[start:end])},
 		}
-		for _, j := range resp.GetData() {
-			if j.GetActive() && j.GetOriginType() == enums.OriginType_ORIGIN_TYPE_SUBSCRIPTION {
-				out = append(out, j)
+		if historical {
+			filterSets = append(filterSets, []*commonpb.TypedFilter{
+				listIn("origin_id", subIDs[start:end]),
+				{Field: "active", FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: false}}},
+			})
+		}
+		for _, filters := range filterSets {
+			for page := int32(1); page <= maxPages; page++ {
+				resp, err := deps.ListJobs(ctx, &jobpb.ListJobsRequest{
+					Filters: &commonpb.FilterRequest{Filters: filters},
+					Pagination: &commonpb.PaginationRequest{
+						Limit:  int32(pageLimit),
+						Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
+					},
+				})
+				if err != nil {
+					log.Printf("report cards section: list jobs (page %d): %v", page, err)
+					break
+				}
+				for _, j := range resp.GetData() {
+					if seen[j.GetId()] {
+						continue
+					}
+					seen[j.GetId()] = true
+					if !historical && !j.GetActive() {
+						continue
+					}
+					if j.GetOriginType() == enums.OriginType_ORIGIN_TYPE_SUBSCRIPTION {
+						out = append(out, j)
+					}
+				}
+				if len(resp.GetData()) < pageLimit {
+					break
+				}
 			}
 		}
 	}
@@ -351,7 +541,7 @@ func fetchStudents(ctx context.Context, deps *Deps, clientIDs []string) map[stri
 			if id == "" {
 				continue
 			}
-			out[id] = student{clientID: id, name: clientDisplayName(c), lastName: clientLastName(c)}
+			out[id] = student{clientID: id, name: clientDisplayName(c), lastName: clientLastName(c), firstName: clientFirstName(c)}
 		}
 	}
 	return out
@@ -401,8 +591,10 @@ func fetchAttributeValues(ctx context.Context, deps *Deps, clientIDs []string) m
 	return out
 }
 
-// fetchTemplateNames resolves job_template_id → name, chunked.
-func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string) map[string]string {
+// fetchTemplateNames resolves job_template_id → name, chunked. Historical
+// mode also reads inactive templates (a frozen year's subjects are retired
+// from active curricula) — without it the columns fall back to raw ids.
+func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string, historical bool) map[string]string {
 	out := map[string]string{}
 	if deps.ListJobTemplates == nil || len(templateIDs) == 0 {
 		return out
@@ -412,18 +604,27 @@ func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string) m
 		if end > len(templateIDs) {
 			end = len(templateIDs)
 		}
-		resp, err := deps.ListJobTemplates(ctx, &jobtemplatepb.ListJobTemplatesRequest{
-			Filters: &commonpb.FilterRequest{
-				Filters: []*commonpb.TypedFilter{listIn("id", templateIDs[start:end])},
-			},
-		})
-		if err != nil {
-			log.Printf("report cards section: list job templates: %v", err)
-			continue
+		filterSets := [][]*commonpb.TypedFilter{
+			{listIn("id", templateIDs[start:end])},
 		}
-		for _, t := range resp.GetData() {
-			if id := t.GetId(); id != "" {
-				out[id] = t.GetName()
+		if historical {
+			filterSets = append(filterSets, []*commonpb.TypedFilter{
+				listIn("id", templateIDs[start:end]),
+				{Field: "active", FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: false}}},
+			})
+		}
+		for _, filters := range filterSets {
+			resp, err := deps.ListJobTemplates(ctx, &jobtemplatepb.ListJobTemplatesRequest{
+				Filters: &commonpb.FilterRequest{Filters: filters},
+			})
+			if err != nil {
+				log.Printf("report cards section: list job templates: %v", err)
+				continue
+			}
+			for _, t := range resp.GetData() {
+				if id := t.GetId(); id != "" {
+					out[id] = t.GetName()
+				}
 			}
 		}
 	}
@@ -443,7 +644,9 @@ func buildColumns(templateIDs []string, names map[string]string, l outcome_summa
 		return a < b
 	})
 	cols := make([]types.TableColumn, 0, len(ordered)+1)
-	cols = append(cols, types.TableColumn{Key: "student", Label: l.Section.ClientColumn, MinWidth: "11.25rem"})
+	// NoSort: header sorting operates on a single tbody; the banded grid's
+	// order is server-composed (Options.Row), so the control would be inert.
+	cols = append(cols, types.TableColumn{Key: "student", Label: l.Section.ClientColumn, MinWidth: "11.25rem", NoSort: true})
 	for _, tid := range ordered {
 		cols = append(cols, types.TableColumn{Key: "tmpl-" + tid, Label: colName(names, tid), MinWidth: "6.25rem", Align: "center", NoSort: true})
 	}
@@ -463,11 +666,15 @@ func orderedColumnIDs(cols []types.TableColumn) []string {
 }
 
 // buildRows builds one row per student: student-name cell + a rating cell per
-// subject column (linking to the per-job summary; "—" when no summary).
+// subject column (linking to the per-job summary; "—" when no summary) + a
+// per-row CSV download action (the export endpoint narrowed to the row's
+// client via the download JS's ?id= suffix). CSVValue carries the raw rating
+// so both the client-side table export and the server CSV emit clean text.
 func buildRows(
 	students map[string]student,
 	templateIDs []string,
 	cellJob, labelByJob map[string]string,
+	sectionID string,
 	routes outcome_summary.Routes,
 	l outcome_summary.Labels,
 ) []types.TableRow {
@@ -475,27 +682,37 @@ func buildRows(
 	if empty == "" {
 		empty = "—"
 	}
+	exportURL := route.ResolveURL(routes.SectionExportURL, "id", sectionID)
 	rows := make([]types.TableRow, 0, len(students))
 	for clientID, st := range students {
 		cells := make([]types.TableCell, 0, len(templateIDs)+1)
-		cells = append(cells, types.TableCell{Value: st.name})
+		cells = append(cells, types.TableCell{Value: st.listName()})
 		for _, tid := range templateIDs {
-			testid := "rc-cell-" + short(clientID) + "-" + short(tid)
+			testid := html.EscapeString("rc-cell-" + short(clientID) + "-" + short(tid))
 			jobID := cellJob[clientID+"\x00"+tid]
 			label := labelByJob[jobID]
 			if jobID != "" && label != "" {
 				url := route.ResolveURL(routes.JobSummaryURL, "id", jobID)
 				anchor := `<a href="` + html.EscapeString(url) + `" class="table-link" data-testid="` + testid + `" hx-push-url="true">` + html.EscapeString(label) + `</a>`
-				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(anchor)})
+				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(anchor), CSVValue: label})
 			} else {
 				span := `<span class="rc-cell-empty" data-testid="` + testid + `">` + html.EscapeString(empty) + `</span>`
-				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(span)})
+				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(span), CSVValue: empty})
 			}
 		}
 		rows = append(rows, types.TableRow{
 			ID:        clientID,
 			DataAttrs: map[string]string{"testid": "rc-row-" + short(clientID)},
 			Cells:     cells,
+			Actions: []types.TableAction{
+				{
+					Type:   "download",
+					Label:  l.Section.DownloadAction,
+					Action: "download",
+					URL:    exportURL,
+					TestID: "rc-download-" + short(clientID),
+				},
+			},
 		})
 	}
 	return rows
@@ -503,8 +720,9 @@ func buildRows(
 
 // applyRowPresentation applies the configured sort + gender bands. When a
 // group-by attribute is configured the rows are partitioned into
-// TableRowGroup bands (value-ascending, no-value band last — the documented
-// fallback ordering); otherwise the flat rows are sorted in place.
+// TableRowGroup bands — ordered by Row.GroupValueOrder when set (listed
+// values lead, in list order), then value-ascending, no-value band last —
+// otherwise the flat rows are sorted in place.
 func applyRowPresentation(
 	table *types.TableConfig,
 	rows []types.TableRow,
@@ -540,6 +758,14 @@ func applyRowPresentation(
 		a, b := order[i], order[j]
 		if (a == "") != (b == "") {
 			return b == "" // no-value band last
+		}
+		ra, aListed := opts.Row.GroupValueRank(a)
+		rb, bListed := opts.Row.GroupValueRank(b)
+		if aListed != bListed {
+			return aListed // configured values lead
+		}
+		if aListed && bListed && ra != rb {
+			return ra < rb
 		}
 		return strings.ToLower(a) < strings.ToLower(b)
 	})
@@ -668,6 +894,19 @@ func clientLastName(c *clientpb.Client) string {
 	if u := c.GetUser(); u != nil {
 		if ln := strings.TrimSpace(u.GetLastName()); ln != "" {
 			return ln
+		}
+	}
+	return ""
+}
+
+// clientFirstName mirrors clientLastName for the first-name column.
+func clientFirstName(c *clientpb.Client) string {
+	if fn := strings.TrimSpace(c.GetFirstName()); fn != "" {
+		return fn
+	}
+	if u := c.GetUser(); u != nil {
+		if fn := strings.TrimSpace(u.GetFirstName()); fn != "" {
+			return fn
 		}
 	}
 	return ""

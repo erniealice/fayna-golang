@@ -332,6 +332,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		if uc.Subscription.SubscriptionGroupMember != nil {
 			result.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers = uc.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers.Execute
 		}
+		if uc.Subscription.SubscriptionGroupWorkspaceUser != nil {
+			result.Subscription.SubscriptionGroupWorkspaceUser.ListSubscriptionGroupWorkspaceUsers = uc.Subscription.SubscriptionGroupWorkspaceUser.ListSubscriptionGroupWorkspaceUsers.Execute
+		}
 		// PriceSchedule list backs the report-cards view-1 tabstrip (one tab per
 		// price_schedule row, incl. inactive — Q-TAB-1). Optional/nil-safe.
 		if uc.Subscription.PriceSchedule != nil {
@@ -357,6 +360,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		if uc.Entity.Staff != nil {
 			result.Entity.Staff.ListStaffs = uc.Entity.Staff.ListStaffs.Execute
 			result.Entity.Staff.GetStaffListPageData = uc.Entity.Staff.GetStaffListPageData.Execute
+		}
+		if uc.Entity.WorkspaceUser != nil {
+			result.Entity.WorkspaceUser.ListWorkspaceUsers = uc.Entity.WorkspaceUser.ListWorkspaceUsers.Execute
 		}
 	}
 

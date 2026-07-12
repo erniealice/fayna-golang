@@ -82,6 +82,9 @@ func testLabels() job.Labels {
 		Errors: job.ErrorLabels{
 			PermissionDenied: "permission denied",
 			NotFound:         "not found",
+			IDRequired:       "ID is required",
+			NoIDs:            "No IDs provided",
+			StatusRequired:   "Status is required",
 		},
 	}
 }

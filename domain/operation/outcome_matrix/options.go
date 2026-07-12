@@ -10,8 +10,12 @@ import "strings"
 // reference is ignored fail-safe — the grid renders exactly as without it.
 type Options struct {
 	// RowSortField orders the roster rows by the referenced attribute value
-	// (ascending, rows without a value last), then by row label.
+	// (rows without a value last), then by row label.
 	RowSortField string
+	// RowSortDirection is "asc"|"desc" (default "" == "asc"). Added for grammar
+	// symmetry with outcome_summary.Options; the empty default preserves the
+	// current ascending behavior exactly (see applyRowOptions).
+	RowSortDirection string
 	// RowDescriptionField renders the referenced attribute value as the
 	// secondary line under each row's label.
 	RowDescriptionField string
@@ -33,6 +37,15 @@ func ClientAttributeCode(field string) (code string, ok bool) {
 		return "", false
 	}
 	return rest, true
+}
+
+// RowDirection returns the normalized row sort direction ("asc"|"desc"). The
+// empty default is "asc" — identical to the pre-symmetry behavior.
+func (o Options) RowDirection() string {
+	if strings.EqualFold(strings.TrimSpace(o.RowSortDirection), "desc") {
+		return "desc"
+	}
+	return "asc"
 }
 
 // AttributeCodes returns the distinct client-attribute codes referenced by

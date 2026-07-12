@@ -9,6 +9,7 @@ import (
 	fulfillmentdashboardview "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
 	jobdashboardview "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
 	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	"github.com/erniealice/espyna-golang/consumer"
 	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
@@ -26,7 +27,8 @@ type EngineOption func(*engineConfig)
 
 // engineConfig collects the per-unit view options an app may set.
 type engineConfig struct {
-	outcomeMatrixOptions outcome_matrix.Options
+	outcomeMatrixOptions  outcome_matrix.Options
+	outcomeSummaryOptions outcome_summary.Options
 }
 
 // WithOutcomeMatrixOptions sets the outcome-matrix row-presentation options
@@ -34,6 +36,15 @@ type engineConfig struct {
 // references). See outcome_matrix.Options.
 func WithOutcomeMatrixOptions(o outcome_matrix.Options) EngineOption {
 	return func(c *engineConfig) { c.outcomeMatrixOptions = o }
+}
+
+// WithOutcomeSummaryOptions sets the outcome-summary presentation options for
+// the report-cards surfaces: the view-1 tabstrip (Tab), what view-1 lists
+// (List), and view-2 row bands/sort (Row). See outcome_summary.Options. The
+// zero value renders the current flat job_outcome_summary list unchanged
+// (backward-compatible for consumers that do not set it).
+func WithOutcomeSummaryOptions(o outcome_summary.Options) EngineOption {
+	return func(c *engineConfig) { c.outcomeSummaryOptions = o }
 }
 
 // faynaEngineBlock returns a pyeza.AppOption that registers all fayna
@@ -320,6 +331,11 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		}
 		if uc.Subscription.SubscriptionGroupMember != nil {
 			result.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers = uc.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers.Execute
+		}
+		// PriceSchedule list backs the report-cards view-1 tabstrip (one tab per
+		// price_schedule row, incl. inactive — Q-TAB-1). Optional/nil-safe.
+		if uc.Subscription.PriceSchedule != nil {
+			result.Subscription.PriceSchedule.ListPriceSchedules = uc.Subscription.PriceSchedule.ListPriceSchedules.Execute
 		}
 	}
 

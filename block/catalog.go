@@ -578,7 +578,13 @@ func OutcomeMatrixUnit(uc *UseCases, _ *Infra, options outcome_matrix.Options) c
 	return u
 }
 
-func OutcomeSummaryUnit(uc *UseCases, _ *Infra) compose.Unit {
+// OutcomeSummaryUnit registers the report-cards surfaces (the fayna
+// outcome_summary unit): view-1 list (flat job summaries by default; a tabbed
+// subscription_group section list when options.List.Entity resolves) and view-2
+// per-section grid (client × job_template year-final ratings). options is the
+// app's presentation config (EngineBlock's view option block); the zero value
+// renders the current flat list unchanged (backward-compatible).
+func OutcomeSummaryUnit(uc *UseCases, _ *Infra, options outcome_summary.Options) compose.Unit {
 	u := outcome_summary.Describe()
 	u.Mount = func(mc *compose.MountContext) error {
 		r := u.Routes.(*outcome_summary.Routes)
@@ -588,6 +594,8 @@ func OutcomeSummaryUnit(uc *UseCases, _ *Infra) compose.Unit {
 			Routes:       *r,
 			Labels:       *l,
 			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+			Options:      options,
 		}
 		wireOutcomeSummaryDeps(deps, uc)
 		operation.NewOutcomeSummaryModule(deps).RegisterRoutes(mc.Routes)
@@ -786,7 +794,7 @@ func AllUnits(uc *UseCases, infra *Infra, opts ...EngineOption) []compose.Unit {
 		ReportingCheckpointUnit(uc, infra),
 		TaskOutcomeUnit(uc, infra),
 		OutcomeMatrixUnit(uc, infra, cfg.outcomeMatrixOptions),
-		OutcomeSummaryUnit(uc, infra),
+		OutcomeSummaryUnit(uc, infra, cfg.outcomeSummaryOptions),
 		FulfillmentUnit(uc, infra),
 		// Performance-Evaluation (20260604). evaluation_template_item must be
 		// registered (it has no Nav) so the template unit's RoutesOf lookup

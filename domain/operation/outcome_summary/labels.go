@@ -7,12 +7,38 @@ package outcome_summary
 
 // OutcomeSummaryLabels holds all translatable strings for the outcome summary module.
 type Labels struct {
-	Page    PageLabels   `json:"page"`
-	Buttons ButtonLabels `json:"buttons"`
-	Columns ColumnLabels `json:"columns"`
-	Empty   EmptyLabels  `json:"empty"`
-	Detail  DetailLabels `json:"detail"`
-	Errors  ErrorLabels  `json:"errors"`
+	Page    PageLabels    `json:"page"`
+	Buttons ButtonLabels  `json:"buttons"`
+	Columns ColumnLabels  `json:"columns"`
+	Empty   EmptyLabels   `json:"empty"`
+	Detail  DetailLabels  `json:"detail"`
+	Errors  ErrorLabels   `json:"errors"`
+	Landing LandingLabels `json:"landing"`
+	Section SectionLabels `json:"section"`
+}
+
+// LandingLabels holds the view-1 (report-cards landing) strings. Every field
+// carries a snake_case json tag matching the lyngua keys — without it a
+// per-tier override silently falls back to the compiled default (the
+// CellGridLabels lesson, 2026-07-12).
+type LandingLabels struct {
+	Title           string `json:"title"`
+	Subtitle        string `json:"subtitle"`
+	GroupColumn     string `json:"group_column"`
+	MembersColumn   string `json:"members_column"`
+	TemplatesColumn string `json:"templates_column"`
+	ViewAction      string `json:"view_action"`
+	TabsAriaLabel   string `json:"tabs_aria_label"`
+	InactiveSuffix  string `json:"inactive_suffix"`
+}
+
+// SectionLabels holds the view-2 (per-section report-card grid) strings. Same
+// snake_case-json-tag rule as LandingLabels.
+type SectionLabels struct {
+	Title             string `json:"title"`
+	ClientColumn      string `json:"client_column"`
+	RatingEmpty       string `json:"rating_empty"`
+	NotComputedBanner string `json:"not_computed_banner"`
 }
 
 type ColumnLabels struct {
@@ -109,6 +135,22 @@ func DefaultLabels() Labels {
 		Errors: ErrorLabels{
 			NotFound:         "Outcome summary not found",
 			PermissionDenied: "You do not have permission to perform this action",
+		},
+		Landing: LandingLabels{
+			Title:           "Outcome Reports",
+			Subtitle:        "Groups by schedule",
+			GroupColumn:     "Group",
+			MembersColumn:   "Members",
+			TemplatesColumn: "Items",
+			ViewAction:      "View outcomes",
+			TabsAriaLabel:   "Schedules",
+			InactiveSuffix:  "(inactive)",
+		},
+		Section: SectionLabels{
+			Title:             "Group outcomes",
+			ClientColumn:      "Client",
+			RatingEmpty:       "—",
+			NotComputedBanner: "Final outcomes have not been computed yet.",
 		},
 	}
 }

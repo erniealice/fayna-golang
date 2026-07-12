@@ -263,6 +263,20 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	pos := &u.Operation.PhaseOutcomeSummary
 	deps.GetPhaseOutcomeSummaryByJobPhase = pos.GetByJobPhase
 	deps.ListPhaseOutcomeSummarysByJob = pos.ListByJob
+
+	// Report-cards navigation deps (view-1 landing tabbed section list + view-2
+	// per-section grid). All reused from already-wired top-level closures — no
+	// new espyna surface. Nil-safe end to end (a nil closure degrades the
+	// affected surface to empty/flat, never panics).
+	deps.ListPriceSchedules = u.Subscription.PriceSchedule.ListPriceSchedules
+	deps.ListSubscriptionGroups = u.Subscription.SubscriptionGroup.ListSubscriptionGroups
+	deps.ListSubscriptionGroupMembers = u.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers
+	deps.ListJobs = u.Operation.Job.ListJobs
+	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
+	deps.ListClients = u.Entity.Client.ListClients
+	deps.ListClientAttributes = u.Entity.ClientAttribute.ListClientAttributes
+	deps.ResolveAttributeIDByCode = u.Entity.ClientAttribute.ResolveAttributeIDByCode
+	deps.ListJobTemplateSummaries = u.Operation.JobTemplateSummary.ListJobTemplateSummaries
 }
 
 // ---------------------------------------------------------------------------

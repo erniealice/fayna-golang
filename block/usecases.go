@@ -62,6 +62,7 @@ import (
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
+	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
@@ -504,6 +505,15 @@ type SubscriptionUseCases struct {
 	SubscriptionSeat        SubscriptionSeatUseCases
 	SubscriptionGroup       SubscriptionGroupUseCases
 	SubscriptionGroupMember SubscriptionGroupMemberUseCases
+	PriceSchedule           PriceScheduleUseCases
+}
+
+// PriceScheduleUseCases — bare list (ground truth: 2 rows on education1, both
+// Academic Years; one call is complete under the adapter's default cap). Backs
+// the report-cards view-1 tabstrip (one tab per price_schedule, incl. inactive
+// — Q-TAB-1). Optional/nil-safe: nil → no tabs (view-1 renders the flat list).
+type PriceScheduleUseCases struct {
+	ListPriceSchedules func(context.Context, *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
 }
 
 type SubscriptionSubscriptionUseCases struct {

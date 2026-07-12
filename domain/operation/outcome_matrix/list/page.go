@@ -414,7 +414,12 @@ func applyRowOptions(cfg *types.CellGridConfig, opts outcome_matrix.Options, att
 	}
 
 	if _, ok := valueFor(opts.RowSortField, ""); ok {
-		slices.SortStableFunc(cfg.Rows, byAttr(opts.RowSortField))
+		cmp := byAttr(opts.RowSortField)
+		if opts.RowDirection() == "desc" {
+			asc := cmp
+			cmp = func(a, b types.CellGridRow) int { return -asc(a, b) }
+		}
+		slices.SortStableFunc(cfg.Rows, cmp)
 	}
 
 	if _, ok := valueFor(opts.RowGroupByField, ""); ok {

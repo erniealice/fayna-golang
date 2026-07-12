@@ -1,0 +1,15 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "outcome-summary-section"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — per-section report-card grid (view-2) */}}
+{{define "outcome-summary-section-content"}}
+<div class="page-content page-content--table">
+    {{if .NotComputed}}
+    {{template "alert" (dict "State" "info" "Variant" "subtle" "Message" .Banner)}}
+    {{else}}
+    {{template "table-card" .Table}}
+    {{end}}
+</div>
+{{end}}

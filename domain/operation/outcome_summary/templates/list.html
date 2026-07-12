@@ -3,9 +3,19 @@
 {{template "app-shell" .}}
 {{end}}
 
-{{/* Content-only partial — for HTMX navigation */}}
+{{/* Content-only partial — for HTMX navigation (flat job-summary list) */}}
 {{define "outcome-summary-list-content"}}
 <div class="page-content page-content--table">
+    {{template "table-card" .Table}}
+</div>
+{{end}}
+
+{{/* Content-only partial — report-cards landing (tabbed section list, view-1) */}}
+{{define "outcome-summary-landing-content"}}
+<div class="page-content page-content--table">
+    {{if .TabItems}}
+    {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "sub" "ID" "report-cards-tabs" "Label" .TabsAria)}}
+    {{end}}
     {{template "table-card" .Table}}
 </div>
 {{end}}

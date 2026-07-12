@@ -7,9 +7,13 @@ package outcome_summary
 
 // Outcome Summary routes (report cards)
 const (
-	ListURL  = "/outcomes/summaries"
-	JobURL   = "/jobs/detail/{id}/summary"
-	PhaseURL = "/jobs/detail/{id}/phase/{phase_id}/summary"
+	ListURL = "/outcomes/summaries"
+	JobURL  = "/jobs/detail/{id}/summary"
+	// SectionURL is the per-section report-card grid (view-2): {id} is a
+	// subscription_group id. Generic default here; the education tier overrides
+	// it to /report-cards/section/{id} via education/route.json.
+	SectionURL = "/outcomes/summaries/section/{id}"
+	PhaseURL   = "/jobs/detail/{id}/phase/{phase_id}/summary"
 )
 
 // Routes holds all route paths for outcome summary (report card) views.
@@ -24,6 +28,7 @@ type Routes struct {
 
 	ListURL         string `json:"list_url"`
 	JobSummaryURL   string `json:"job_summary_url"`
+	SectionURL      string `json:"section_url"`
 	PhaseSummaryURL string `json:"phase_summary_url"`
 }
 
@@ -37,6 +42,7 @@ func DefaultRoutes() Routes {
 
 		ListURL:         ListURL,
 		JobSummaryURL:   JobURL,
+		SectionURL:      SectionURL,
 		PhaseSummaryURL: PhaseURL,
 	}
 }
@@ -45,8 +51,9 @@ func DefaultRoutes() Routes {
 // outcome summary routes.
 func (r Routes) RouteMap() map[string]string {
 	return map[string]string{
-		"outcome_summary.list":  r.ListURL,
-		"outcome_summary.job":   r.JobSummaryURL,
-		"outcome_summary.phase": r.PhaseSummaryURL,
+		"outcome_summary.list":    r.ListURL,
+		"outcome_summary.job":     r.JobSummaryURL,
+		"outcome_summary.section": r.SectionURL,
+		"outcome_summary.phase":   r.PhaseSummaryURL,
 	}
 }

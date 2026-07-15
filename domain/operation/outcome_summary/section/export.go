@@ -72,9 +72,22 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`.csv"`)
 
+		// The frozen per-row action column ("rc-actions") is a UI download
+		// button, not report data — exclude it (header + each row's cell) from
+		// the CSV. Cell index aligns with column index (name, rc-actions, …).
+		skipCol := map[int]bool{}
+		for i, c := range table.Columns {
+			if c.Key == "rc-actions" {
+				skipCol[i] = true
+			}
+		}
+
 		cw := csv.NewWriter(w)
 		header := make([]string, 0, len(table.Columns))
-		for _, c := range table.Columns {
+		for i, c := range table.Columns {
+			if skipCol[i] {
+				continue
+			}
 			header = append(header, csvSafe(c.Label))
 		}
 		if err := cw.Write(header); err != nil {
@@ -84,7 +97,10 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 		record := make([]string, 0, len(table.Columns))
 		for _, row := range rows {
 			record = record[:0]
-			for _, cell := range row.Cells {
+			for i, cell := range row.Cells {
+				if skipCol[i] {
+					continue
+				}
 				record = append(record, csvSafe(types.CellCSV(cell)))
 			}
 			if err := cw.Write(record); err != nil {

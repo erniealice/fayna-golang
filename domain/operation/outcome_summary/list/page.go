@@ -258,7 +258,13 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 			HeaderIcon:     "icon-award",
 			CommonLabels:   deps.CommonLabels,
 		},
-		ContentTemplate: "outcome-summary-landing-content",
+		// Must equal {result.Template}-content ("outcome-summary-list-content")
+		// so the full-page app-shell render and the boosted-nav partial render
+		// resolve the SAME template. outcome-summary-list-content dispatches to
+		// outcome-summary-landing-content when TabItems is set (the tabstrip);
+		// pointing straight at the landing template here would desync the two
+		// render paths again (the vanishing-tabs bug).
+		ContentTemplate: "outcome-summary-list-content",
 		Table:           tableConfig,
 		Landing:         true,
 		TabItems:        tabs,

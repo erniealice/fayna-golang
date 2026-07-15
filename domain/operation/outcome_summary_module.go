@@ -6,10 +6,12 @@ import (
 	"net/http"
 
 	outcomesummarypkg "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	documentview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/document"
 	jobsummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/job_summary"
 	summarylist "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/list"
 	phasesummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/phase_summary"
 	sectionview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/section"
+	studentcard "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/student_card"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
@@ -19,9 +21,14 @@ import (
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	joblinepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_line"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
+	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
+	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
@@ -45,6 +52,26 @@ type OutcomeSummaryModuleDeps struct {
 	GetJobOutcomeSummaryByJob func(ctx context.Context, req *jobsumpb.GetJobOutcomeSummaryByJobRequest) (*jobsumpb.GetJobOutcomeSummaryByJobResponse, error)
 	ListJobOutcomeSummarys    func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
 
+	// Report-card document (.docx) download deps. ListJobOutcomeLines backs the
+	// per-criterion transcript fetch (G2); GenerateDoc is the injected fycha
+	// doctemplate closure (nil-safe — the download route fails closed with 503).
+	ListJobOutcomeLines func(ctx context.Context, req *joblinepb.ListJobOutcomeLinesRequest) (*joblinepb.ListJobOutcomeLinesResponse, error)
+	// Per-criterion (crit_a..crit_d + criteria_total) transcript path: task_outcome
+	// reached through job_task, A/B/C/D ordered via template_task_criteria. All
+	// optional/nil-safe.
+	ListJobTasks              func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
+	ListTaskOutcomes          func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
+	ListTemplateTaskCriterias func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
+	GenerateDoc               func(templateData []byte, data map[string]any) ([]byte, error)
+	// ResolveTemplateBytes resolves the operator-uploaded, AY-scoped report-card
+	// template binding for a card's price_schedule (binding resolver ∘ storage
+	// download). Returns (nil, nil) → the document handler falls back to the
+	// embedded template. Optional/nil-safe (no download regression).
+	ResolveTemplateBytes func(ctx context.Context, priceScheduleID string) ([]byte, error)
+	// ReportCardSchoolName is the generic document header (lyngua-sourced; blank
+	// falls back to the landing title).
+	ReportCardSchoolName string
+
 	// Phase outcome summary operations
 	GetPhaseOutcomeSummaryByJobPhase func(ctx context.Context, req *phasesumpb.GetPhaseOutcomeSummaryByJobPhaseRequest) (*phasesumpb.GetPhaseOutcomeSummaryByJobPhaseResponse, error)
 	ListPhaseOutcomeSummarysByJob    func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
@@ -58,6 +85,7 @@ type OutcomeSummaryModuleDeps struct {
 	ListSubscriptionGroupWorkspaceUsers func(ctx context.Context, req *subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest) (*subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersResponse, error)
 	ListWorkspaceUsers                  func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
 	ListJobs                            func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	ListJobPhases                       func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
 	ListJobTemplates                    func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
 	ListClients                         func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
 	ListClientAttributes                func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
@@ -70,11 +98,15 @@ type OutcomeSummaryModule struct {
 	routes       outcomesummarypkg.Routes
 	List         view.View
 	Section      view.View
+	StudentCard  view.View
 	JobSummary   view.View
 	PhaseSummary view.View
 	// SectionExport is the section-grid CSV download (a raw handler — the
 	// registrar wraps it with the same RBAC context injection as views).
 	SectionExport http.HandlerFunc
+	// StudentDocument is the per-student report-card .docx download (a raw
+	// handler wrapped like SectionExport). Nil when GenerateDoc is not wired.
+	StudentDocument http.HandlerFunc
 }
 
 // NewOutcomeSummaryModule creates a new outcome summary module with all views wired.
@@ -111,8 +143,23 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			ListSubscriptionGroupMembers: deps.ListSubscriptionGroupMembers,
 			ListJobs:                     deps.ListJobs,
 		}),
-		Section:       sectionview.NewView(sectionDeps),
-		SectionExport: sectionview.NewExportHandler(sectionDeps),
+		Section:         sectionview.NewView(sectionDeps),
+		SectionExport:   sectionview.NewExportHandler(sectionDeps),
+		StudentDocument: newStudentDocumentHandler(deps),
+		StudentCard: studentcard.NewView(&studentcard.Deps{
+			Routes:                        deps.Routes,
+			Labels:                        deps.Labels,
+			CommonLabels:                  deps.CommonLabels,
+			TableLabels:                   deps.TableLabels,
+			ListSubscriptionGroups:        deps.ListSubscriptionGroups,
+			ListSubscriptionGroupMembers:  deps.ListSubscriptionGroupMembers,
+			ListJobs:                      deps.ListJobs,
+			ListJobTemplates:              deps.ListJobTemplates,
+			ListClients:                   deps.ListClients,
+			ListJobOutcomeSummarys:        deps.ListJobOutcomeSummarys,
+			ListPhaseOutcomeSummarysByJob: deps.ListPhaseOutcomeSummarysByJob,
+			ListJobPhases:                 deps.ListJobPhases,
+		}),
 		JobSummary: jobsummary.NewView(&jobsummary.Deps{
 			Routes:                    deps.Routes,
 			Labels:                    deps.Labels,
@@ -128,11 +175,43 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 	}
 }
 
+// newStudentDocumentHandler builds the per-student report-card .docx download
+// handler from the module deps. Returns nil when GenerateDoc is not wired (the
+// app did not inject the fycha doctemplate closure) — RegisterRoutes then skips
+// the route rather than registering a handler that would always 503.
+func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc {
+	if deps.GenerateDoc == nil {
+		return nil
+	}
+	return documentview.NewDownloadHandler(&documentview.Deps{
+		Labels:                        deps.Labels,
+		CommonLabels:                  deps.CommonLabels,
+		SchoolName:                    deps.ReportCardSchoolName,
+		GenerateDoc:                   deps.GenerateDoc,
+		ResolveTemplateBytes:          deps.ResolveTemplateBytes,
+		ListSubscriptionGroups:        deps.ListSubscriptionGroups,
+		ListSubscriptionGroupMembers:  deps.ListSubscriptionGroupMembers,
+		ListJobs:                      deps.ListJobs,
+		ListJobTemplates:              deps.ListJobTemplates,
+		ListClients:                   deps.ListClients,
+		ListJobOutcomeSummarys:        deps.ListJobOutcomeSummarys,
+		ListPhaseOutcomeSummarysByJob: deps.ListPhaseOutcomeSummarysByJob,
+		ListJobPhases:                 deps.ListJobPhases,
+		ListJobOutcomeLines:           deps.ListJobOutcomeLines,
+		ListJobTasks:                  deps.ListJobTasks,
+		ListTaskOutcomes:              deps.ListTaskOutcomes,
+		ListTemplateTaskCriterias:     deps.ListTemplateTaskCriterias,
+	})
+}
+
 // RegisterRoutes registers all outcome summary routes.
 func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 	r.GET(m.routes.ListURL, m.List)
 	if m.Section != nil && m.routes.SectionURL != "" {
 		r.GET(m.routes.SectionURL, m.Section)
+	}
+	if m.StudentCard != nil && m.routes.StudentURL != "" {
+		r.GET(m.routes.StudentURL, m.StudentCard)
 	}
 	if m.SectionExport != nil && m.routes.SectionExportURL != "" {
 		// Raw (non-view) route — the registrar's HandleFunc path wraps it with
@@ -144,6 +223,19 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 			rr.HandleFunc("GET", m.routes.SectionExportURL, m.SectionExport)
 		} else {
 			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.SectionExportURL)
+		}
+	}
+	if m.StudentDocument != nil && m.routes.StudentDocumentURL != "" {
+		// Raw (non-view) route — the registrar's HandleFunc path wraps it with
+		// the ViewAdapter's RBAC context injection (WrapHandler), exactly like
+		// SectionExport, so the handler's view.GetUserPermissions gate observes
+		// real permissions.
+		if rr, ok := r.(interface {
+			HandleFunc(method, path string, handler http.HandlerFunc, middlewares ...string)
+		}); ok {
+			rr.HandleFunc("GET", m.routes.StudentDocumentURL, m.StudentDocument)
+		} else {
+			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.StudentDocumentURL)
 		}
 	}
 	r.GET(m.routes.JobSummaryURL, m.JobSummary)

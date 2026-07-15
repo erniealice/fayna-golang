@@ -3,9 +3,20 @@
 {{template "app-shell" .}}
 {{end}}
 
-{{/* Content-only partial — for HTMX navigation */}}
+{{/* Content-only partial — for HTMX navigation. When TabItems is set (the
+     "/classes" job_category tab-split, school-admin education tier) render the
+     pill-tab strip above the table; the table below IS the panel each category
+     tab reveals. With no TabItems (service-admin, zero-valued options) render
+     the flat table unchanged — the backward-compat contract. */}}
 {{define "job-list-content"}}
 <div class="page-content page-content--table">
+    {{if .TabItems}}
+    {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "job-category-tabs" "Label" .TabsAria)}}
+    <div id="tabContent" role="tabpanel"{{if .ActiveTab}} aria-labelledby="tab-{{.ActiveTab}}"{{end}}>
+        {{template "table-card" .Table}}
+    </div>
+    {{else}}
     {{template "table-card" .Table}}
+    {{end}}
 </div>
 {{end}}

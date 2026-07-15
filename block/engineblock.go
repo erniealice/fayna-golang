@@ -7,6 +7,7 @@ import (
 	"time"
 
 	fulfillmentdashboardview "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
+	job "github.com/erniealice/fayna-golang/domain/operation/job"
 	jobdashboardview "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
 	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
@@ -29,6 +30,7 @@ type EngineOption func(*engineConfig)
 type engineConfig struct {
 	outcomeMatrixOptions  outcome_matrix.Options
 	outcomeSummaryOptions outcome_summary.Options
+	jobListOptions        job.Options
 }
 
 // WithOutcomeMatrixOptions sets the outcome-matrix row-presentation options
@@ -45,6 +47,14 @@ func WithOutcomeMatrixOptions(o outcome_matrix.Options) EngineOption {
 // (backward-compatible for consumers that do not set it).
 func WithOutcomeSummaryOptions(o outcome_summary.Options) EngineOption {
 	return func(c *engineConfig) { c.outcomeSummaryOptions = o }
+}
+
+// WithJobListOptions sets the job list ("/classes") presentation options: the
+// job_category tabstrip (Tab). See job.Options. The zero value renders the
+// current flat job list unchanged (backward-compatible for consumers — e.g.
+// service-admin — that do not set it).
+func WithJobListOptions(o job.Options) EngineOption {
+	return func(c *engineConfig) { c.jobListOptions = o }
 }
 
 // faynaEngineBlock returns a pyeza.AppOption that registers all fayna
@@ -120,6 +130,8 @@ func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 		if db, ok := ctx.DB.(ListSimpler); ok {
 			infra.DB = db
 		}
+		infra.GenerateDoc, _ = ctx.GenerateDoc.(func([]byte, map[string]any) ([]byte, error))
+		infra.ResolveTemplateBytes, _ = ctx.ResolveTemplateBytes.(func(context.Context, string) ([]byte, error))
 
 		units := AllUnits(adapted, infra, opts...)
 		return consumerapp.AssembleEngineBlock("fayna", units, ctx)
@@ -191,6 +203,17 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.JobTemplate.DeleteJobTemplate = op.JobTemplate.DeleteJobTemplate.Execute
 			result.Operation.JobTemplate.GetJobTemplateListPageData = op.JobTemplate.GetJobTemplateListPageData.Execute
 			result.Operation.JobTemplate.ListJobTemplates = op.JobTemplate.ListJobTemplates.Execute
+		}
+
+		// JobCategory — the "/classes" tab-split reads ListJobCategories (one tab
+		// per category). Optional/nil-safe: a nil aggregate leaves the closures
+		// nil → the list renders flat.
+		if op.JobCategory != nil {
+			result.Operation.JobCategory.CreateJobCategory = op.JobCategory.CreateJobCategory.Execute
+			result.Operation.JobCategory.ReadJobCategory = op.JobCategory.ReadJobCategory.Execute
+			result.Operation.JobCategory.UpdateJobCategory = op.JobCategory.UpdateJobCategory.Execute
+			result.Operation.JobCategory.DeleteJobCategory = op.JobCategory.DeleteJobCategory.Execute
+			result.Operation.JobCategory.ListJobCategories = op.JobCategory.ListJobCategories.Execute
 		}
 
 		if op.JobTemplatePhase != nil {

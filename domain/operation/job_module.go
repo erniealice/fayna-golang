@@ -13,6 +13,7 @@ import (
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobsettlementpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_settlement"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
@@ -74,6 +75,16 @@ type JobModuleDeps struct {
 	// each summary row links to.
 	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 	MatrixDetailURL          string
+
+	// JobListOptions drives the "/classes" job_category tab-split (school-admin
+	// education tier). Zero value → flat list (service-admin backward-compat).
+	JobListOptions jobpkg.Options
+
+	// Tab-split deps (job_category tabstrip). Optional/nil-safe. ListJobCategories
+	// supplies the tab rows; ListJobTemplates builds the job_template→job_category
+	// map the education-tier (template-grain) filter needs.
+	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
+	ListJobTemplates  func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
 
 	// Job phase operations (list only — CRUD is now owned by the job_phase module)
 	ListJobPhases func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
@@ -208,6 +219,10 @@ func NewJobModule(deps *JobModuleDeps) *JobModule {
 			// Template-grain delivery summary (education tier) — one server-side call.
 			ListJobTemplateSummaries: deps.ListJobTemplateSummaries,
 			MatrixDetailURL:          deps.MatrixDetailURL,
+			// "/classes" job_category tab-split.
+			Options:           deps.JobListOptions,
+			ListJobCategories: deps.ListJobCategories,
+			ListJobTemplates:  deps.ListJobTemplates,
 		}),
 		Detail:           jobdetail.NewView(detailDeps),
 		TabAction:        jobdetail.NewTabAction(detailDeps),

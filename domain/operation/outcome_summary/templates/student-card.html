@@ -1,0 +1,18 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "outcome-summary-student"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — per-student report-card grid (view-3). The adapter
+     derives this name as {result.Template}-content, so it is what an
+     HX-Target:main-content boosted swap renders (and the app-shell renders it
+     via .ContentTemplate on a full load). */}}
+{{define "outcome-summary-student-content"}}
+<div class="page-content page-content--table">
+    {{if .NotComputed}}
+    {{template "alert" (dict "State" "info" "Variant" "subtle" "Message" .Banner)}}
+    {{else}}
+    {{template "table-card" .Table}}
+    {{end}}
+</div>
+{{end}}

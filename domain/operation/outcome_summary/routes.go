@@ -17,6 +17,15 @@ const (
 	// download ({id} = subscription_group id; optional ?id=<client id> narrows
 	// to one row). Education overrides it to /report-cards/section/{id}/export.
 	SectionExportURL = "/outcomes/summaries/section/{id}/export"
+	// StudentURL is the per-student report card (view-3): {id} = subscription_group
+	// id, {client_id} = the student's client id. The generic "client" path noun is
+	// lyngua-fied to "student" on education
+	// (/report-cards/section/{id}/student/{client_id}).
+	StudentURL = "/outcomes/summaries/section/{id}/client/{client_id}"
+	// StudentDocumentURL streams the per-student report card as a .docx download
+	// ({id} = subscription_group id, {client_id} = the student's client id).
+	// Education overrides it to /report-cards/section/{id}/student/{client_id}/document.
+	StudentDocumentURL = "/outcomes/summaries/section/{id}/client/{client_id}/document"
 	// GroupDetailURL is the listed entity's own detail page (the
 	// subscription_group detail — centymo's mount), used by the section view's
 	// header caption link. Kept as a Routes field so the per-tier route.json
@@ -36,12 +45,14 @@ type Routes struct {
 	// Job/phase summary pages highlight "jobs" while the list page highlights "report-cards".
 	ListActiveSubNav string `json:"list_active_sub_nav"`
 
-	ListURL          string `json:"list_url"`
-	JobSummaryURL    string `json:"job_summary_url"`
-	SectionURL       string `json:"section_url"`
-	SectionExportURL string `json:"section_export_url"`
-	GroupDetailURL   string `json:"group_detail_url"`
-	PhaseSummaryURL  string `json:"phase_summary_url"`
+	ListURL            string `json:"list_url"`
+	JobSummaryURL      string `json:"job_summary_url"`
+	SectionURL         string `json:"section_url"`
+	SectionExportURL   string `json:"section_export_url"`
+	StudentURL         string `json:"student_url"`
+	StudentDocumentURL string `json:"student_document_url"`
+	GroupDetailURL     string `json:"group_detail_url"`
+	PhaseSummaryURL    string `json:"phase_summary_url"`
 }
 
 // DefaultRoutes returns a Routes populated from
@@ -52,12 +63,14 @@ func DefaultRoutes() Routes {
 		ActiveSubNav:     "jobs",
 		ListActiveSubNav: "report-cards",
 
-		ListURL:          ListURL,
-		JobSummaryURL:    JobURL,
-		SectionURL:       SectionURL,
-		SectionExportURL: SectionExportURL,
-		GroupDetailURL:   GroupDetailURL,
-		PhaseSummaryURL:  PhaseURL,
+		ListURL:            ListURL,
+		JobSummaryURL:      JobURL,
+		SectionURL:         SectionURL,
+		SectionExportURL:   SectionExportURL,
+		StudentURL:         StudentURL,
+		StudentDocumentURL: StudentDocumentURL,
+		GroupDetailURL:     GroupDetailURL,
+		PhaseSummaryURL:    PhaseURL,
 	}
 }
 
@@ -65,11 +78,13 @@ func DefaultRoutes() Routes {
 // outcome summary routes.
 func (r Routes) RouteMap() map[string]string {
 	return map[string]string{
-		"outcome_summary.list":           r.ListURL,
-		"outcome_summary.job":            r.JobSummaryURL,
-		"outcome_summary.section":        r.SectionURL,
-		"outcome_summary.section_export": r.SectionExportURL,
-		"outcome_summary.group_detail":   r.GroupDetailURL,
-		"outcome_summary.phase":          r.PhaseSummaryURL,
+		"outcome_summary.list":             r.ListURL,
+		"outcome_summary.job":              r.JobSummaryURL,
+		"outcome_summary.section":          r.SectionURL,
+		"outcome_summary.section_export":   r.SectionExportURL,
+		"outcome_summary.student":          r.StudentURL,
+		"outcome_summary.student_document": r.StudentDocumentURL,
+		"outcome_summary.group_detail":     r.GroupDetailURL,
+		"outcome_summary.phase":            r.PhaseSummaryURL,
 	}
 }

@@ -47,6 +47,12 @@ type templateSummaryRow struct {
 	DelivererName string
 	ItemCount     int
 	ScheduleName  string
+
+	// hideItemCount blanks the item-count cell instead of rendering ItemCount.
+	// Set only on template-grain rows (a job_category the delivery aggregate
+	// doesn't cover) where the count is genuinely unknown — an aggregate row
+	// leaves this false, so its cell is byte-for-byte unchanged.
+	hideItemCount bool
 }
 
 // buildDeliverySummaryTable builds the template-grain TableConfig for the
@@ -54,14 +60,80 @@ type templateSummaryRow struct {
 // building, labels, links (outcome-matrix per row), and empty state are
 // unchanged from the pre-S6 view-side compose; only the data-assembly layer
 // moved server-side.
-func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status string, perms *types.UserPermissions) (*types.TableConfig, error) {
+func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status string, _ *types.UserPermissions) (*types.TableConfig, error) {
 	rows := buildTemplateSummaryRows(ctx, deps, status)
+	return templateSummaryTableConfig(deps, rows), nil
+}
 
+// buildDeliverySummaryTableTabbed is the tab-split education path. It reconciles
+// two data sources so EVERY job_category tab is populated:
+//
+//   - Delivery-summary aggregate (buildTemplateSummaryRows): one row per
+//     (template × section) with delivery columns. This is the ONLY source for a
+//     job_category the aggregate reaches (Academic) — its count and rows are the
+//     aggregate's, byte-for-byte unchanged from before the tab-split.
+//   - Active job_templates by category (activeTemplatesByCategory): the fallback
+//     for a job_category the aggregate NEVER reaches. Deportment templates are
+//     JOB_STATUS_COMPLETED conduct records with no active subscription_seat /
+//     product_plan match, so they fall out of the aggregate's inner joins; without
+//     this fallback their tabs render empty (the W4 gap). They surface at template
+//     grain instead (templateGrainRows).
+//
+// A category is aggregate-backed iff it has >=1 aggregate row; that discriminator
+// keeps Academic on the aggregate (110 rows) and routes the deportment categories
+// (0 aggregate rows) to their active templates. Counts follow the same split:
+// aggregate row count for aggregate-backed categories, active-template count
+// otherwise.
+func buildDeliverySummaryTableTabbed(ctx context.Context, deps *ListViewDeps, status, selected string) (*types.TableConfig, map[string]int, error) {
+	allRows := buildTemplateSummaryRows(ctx, deps, status)
+	catToTemplates, templateToCat := activeTemplatesByCategory(ctx, deps)
+
+	// aggCounts: aggregate summary rows per category (Academic's tab count/rows).
+	aggCounts := map[string]int{}
+	for _, r := range allRows {
+		aggCounts[templateToCat[r.TemplateID]]++
+	}
+
+	// Per-tab counts: active-template count by default, overridden by the
+	// aggregate row count for any category the aggregate reaches.
+	counts := map[string]int{}
+	for cat, tmpls := range catToTemplates {
+		counts[cat] = len(tmpls)
+	}
+	for cat, n := range aggCounts {
+		counts[cat] = n
+	}
+
+	// Render the selected tab. Aggregate-backed (or the no-selection default) →
+	// the delivery summary filtered to the category (Academic path unchanged). A
+	// category the aggregate never reaches → its active templates at template
+	// grain.
+	if selected == "" || aggCounts[selected] > 0 {
+		filtered := make([]templateSummaryRow, 0, len(allRows))
+		for _, r := range allRows {
+			if selected == "" || templateToCat[r.TemplateID] == selected {
+				filtered = append(filtered, r)
+			}
+		}
+		return templateSummaryTableConfig(deps, filtered), counts, nil
+	}
+	return templateSummaryTableConfig(deps, templateGrainRows(catToTemplates[selected])), counts, nil
+}
+
+// templateSummaryTableConfig builds the template-grain TableConfig from an
+// already-fetched (and possibly category-filtered) summary-row slice.
+func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow) *types.TableConfig {
 	l := deps.Labels
 	columns := templateSummaryColumns(l)
 	tableRows := make([]types.TableRow, 0, len(rows))
 	for _, r := range rows {
 		matrixURL := route.ResolveURL(deps.MatrixDetailURL, "id", r.TemplateID)
+		// Aggregate rows show their DISTINCT-job count; template-grain rows (a
+		// category the aggregate doesn't cover) have no count and render blank.
+		itemValue := strconv.Itoa(r.ItemCount)
+		if r.hideItemCount {
+			itemValue = ""
+		}
 		tableRows = append(tableRows, types.TableRow{
 			ID:   r.TemplateID,
 			Href: matrixURL,
@@ -69,7 +141,7 @@ func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status s
 				{Type: "text", Value: r.TemplateName},
 				{Type: "text", Value: r.GroupName},
 				{Type: "text", Value: r.DelivererName},
-				{Type: "number", Value: strconv.Itoa(r.ItemCount)},
+				{Type: "number", Value: itemValue},
 				{Type: "text", Value: r.ScheduleName},
 			},
 			DataAttrs: map[string]string{
@@ -104,7 +176,7 @@ func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status s
 		},
 	}
 	types.ApplyTableSettings(tableConfig)
-	return tableConfig, nil
+	return tableConfig
 }
 
 // templateSummaryColumns declares the template-grain columns. Go defaults

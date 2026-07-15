@@ -17,6 +17,8 @@ import (
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
 
@@ -48,6 +50,20 @@ type ListViewDeps struct {
 	// id=job_template_id) each summary row links to.
 	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 	MatrixDetailURL          string
+
+	// Options — app-configured presentation. When Options.Tab.Enabled() is true
+	// the list renders a job_category tabstrip above the table (the "/classes"
+	// tab-split); with zero-valued options (service-admin) it renders exactly
+	// today's flat list — the backward-compat contract.
+	Options job.Options
+
+	// Tab-split deps (job_category tabstrip). All optional/nil-safe — a nil
+	// closure degrades to the flat list (no tabs). ListJobCategories supplies
+	// the tab rows; ListJobTemplates builds the job_template→job_category map the
+	// education-tier (template-grain) filter needs (the flat path filters on the
+	// job.job_category_id denorm directly — no template join).
+	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
+	ListJobTemplates  func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
 }
 
 // PageData holds the data for the job list page.
@@ -55,12 +71,23 @@ type PageData struct {
 	types.PageData
 	ContentTemplate string
 	Table           *types.TableConfig
+
+	// Tab-split extras (job_category tabstrip). Zero on the flat path.
+	TabItems  []pyeza.TabItem
+	ActiveTab string
+	TabsAria  string
 }
 
 // NewView creates the job list view. BusinessType "education" swaps the
 // content to the template-grain delivery summary (buildDeliverySummaryTable,
 // template_summary.go); every other tier keeps the classic per-job table
 // (buildJobTable, below) — 20260710 staff-class-list plan, O3.
+//
+// When the app configures Options.Tab.GroupByField = "job_category"
+// (school-admin), the list renders a job_category tabstrip above the table (the
+// "/classes" tab-split, mirroring report-cards). With zero-valued options
+// (service-admin) it renders the flat list unchanged — the backward-compat
+// contract.
 func NewView(deps *ListViewDeps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
@@ -74,47 +101,108 @@ func NewView(deps *ListViewDeps) view.View {
 			status = "active"
 		}
 
-		l := deps.Labels
-		var tableConfig *types.TableConfig
-		var err error
-		if deps.BusinessType == businessTypeEducation {
-			tableConfig, err = buildDeliverySummaryTable(ctx, deps, status, perms)
-		} else {
-			tableConfig, err = buildJobTable(ctx, deps, status, perms)
+		if deps.Options.Tab.Enabled() {
+			return renderTabbed(ctx, deps, viewCtx, status, perms)
 		}
-		if err != nil {
-			log.Printf("Failed to list jobs: %v", err)
-			return view.Error(fmt.Errorf("failed to load jobs: %w", err))
-		}
-
-		pageData := &PageData{
-			PageData: types.PageData{
-				CacheVersion:   viewCtx.CacheVersion,
-				Title:          statusPageTitle(l, status),
-				CurrentPath:    viewCtx.CurrentPath,
-				ActiveNav:      deps.Routes.ActiveNav,
-				ActiveSubNav:   jobSubNav(status),
-				HeaderTitle:    statusPageTitle(l, status),
-				HeaderSubtitle: statusPageCaption(l, status),
-				HeaderIcon:     "icon-briefcase",
-				CommonLabels:   deps.CommonLabels,
-			},
-			ContentTemplate: "job-list-content",
-			Table:           tableConfig,
-		}
-
-		// KB help content
-		if viewCtx.Translations != nil {
-			if provider, ok := viewCtx.Translations.(*lynguaV1.TranslationProvider); ok {
-				if kb, _ := provider.LoadKBIfExists(viewCtx.Lang, viewCtx.BusinessType, "job"); kb != nil {
-					pageData.HasHelp = true
-					pageData.HelpContent = kb.Body
-				}
-			}
-		}
-
-		return view.OK("job-list", pageData)
+		return renderFlat(ctx, deps, viewCtx, status, perms)
 	})
+}
+
+// renderFlat renders the job list without a tabstrip (today's behavior — the
+// service-admin backward-compat path and the education list before the split).
+func renderFlat(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewContext, status string, perms *types.UserPermissions) view.ViewResult {
+	var tableConfig *types.TableConfig
+	var err error
+	if deps.BusinessType == businessTypeEducation {
+		tableConfig, err = buildDeliverySummaryTable(ctx, deps, status, perms)
+	} else {
+		tableConfig, err = buildJobTable(ctx, deps, status, perms)
+	}
+	if err != nil {
+		log.Printf("Failed to list jobs: %v", err)
+		return view.Error(fmt.Errorf("failed to load jobs: %w", err))
+	}
+
+	pageData := newJobListPageData(deps, viewCtx, status, tableConfig)
+	applyJobKBHelp(pageData, viewCtx)
+	return view.OK("job-list", pageData)
+}
+
+// renderTabbed renders the job list with a job_category tabstrip (the "/classes"
+// tab-split). Tabs come from ListJobCategories (active + inactive, ordered by
+// sort_order NULLS-LAST → name); ?jc=<id> selects the active tab; the selected
+// category filters the table. On the education tier the filter uses a
+// job_template→job_category map over the template-grain delivery summary; on the
+// flat tier it filters jobs by the job.job_category_id denorm (single-table, no
+// template join). Nil-safe: no categories → an empty tabstrip and the unfiltered
+// table (never an error).
+func renderTabbed(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewContext, status string, perms *types.UserPermissions) view.ViewResult {
+	l := deps.Labels
+
+	cats := listAllJobCategories(ctx, deps)
+	sortJobCategories(cats, deps.Options.Tab)
+
+	selected := strings.TrimSpace(viewCtx.Request.URL.Query().Get("jc"))
+	if selected == "" {
+		selected = defaultCategory(cats)
+	}
+
+	var tableConfig *types.TableConfig
+	var counts map[string]int
+	var err error
+	if deps.BusinessType == businessTypeEducation {
+		tableConfig, counts, err = buildDeliverySummaryTableTabbed(ctx, deps, status, selected)
+	} else {
+		tableConfig, counts, err = buildJobTableTabbed(ctx, deps, status, selected, perms)
+	}
+	if err != nil {
+		log.Printf("Failed to list jobs: %v", err)
+		return view.Error(fmt.Errorf("failed to load jobs: %w", err))
+	}
+
+	pageData := newJobListPageData(deps, viewCtx, status, tableConfig)
+	// Resolve the {status} segment so a tab click preserves the current status
+	// (the ListURL pattern is "/courses/list/{status}").
+	listURL := route.ResolveURL(deps.Routes.ListURL, "status", status)
+	pageData.TabItems = buildJobCategoryTabs(cats, counts, selected, listURL)
+	pageData.ActiveTab = tabKey(selected)
+	pageData.TabsAria = l.Page.ClassTabsAria
+	applyJobKBHelp(pageData, viewCtx)
+	return view.OK("job-list", pageData)
+}
+
+// newJobListPageData builds the shared PageData shell (title/header/nav) for both
+// the flat and tabbed render paths.
+func newJobListPageData(deps *ListViewDeps, viewCtx *view.ViewContext, status string, tableConfig *types.TableConfig) *PageData {
+	l := deps.Labels
+	return &PageData{
+		PageData: types.PageData{
+			CacheVersion:   viewCtx.CacheVersion,
+			Title:          statusPageTitle(l, status),
+			CurrentPath:    viewCtx.CurrentPath,
+			ActiveNav:      deps.Routes.ActiveNav,
+			ActiveSubNav:   jobSubNav(status),
+			HeaderTitle:    statusPageTitle(l, status),
+			HeaderSubtitle: statusPageCaption(l, status),
+			HeaderIcon:     "icon-briefcase",
+			CommonLabels:   deps.CommonLabels,
+		},
+		ContentTemplate: "job-list-content",
+		Table:           tableConfig,
+	}
+}
+
+// applyJobKBHelp attaches the job KB help content when present.
+func applyJobKBHelp(pageData *PageData, viewCtx *view.ViewContext) {
+	if viewCtx.Translations == nil {
+		return
+	}
+	if provider, ok := viewCtx.Translations.(*lynguaV1.TranslationProvider); ok {
+		if kb, _ := provider.LoadKBIfExists(viewCtx.Lang, viewCtx.BusinessType, "job"); kb != nil {
+			pageData.HasHelp = true
+			pageData.HelpContent = kb.Body
+		}
+	}
 }
 
 // jobListPageLimit is the page size used by fetchScopedJobs' loop — the
@@ -183,7 +271,32 @@ func buildJobTable(ctx context.Context, deps *ListViewDeps, status string, perms
 	if err != nil {
 		return nil, err
 	}
+	return jobTableConfig(ctx, deps, jobs, perms), nil
+}
 
+// buildJobTableTabbed is the tabbed per-job path (a non-education app that opts
+// into the tab-split). Counts group the whole scoped set by the job.job_category_id
+// denorm (single-table — no job→job_template join); the selected category filters
+// the rendered rows.
+func buildJobTableTabbed(ctx context.Context, deps *ListViewDeps, status, selected string, perms *types.UserPermissions) (*types.TableConfig, map[string]int, error) {
+	jobs, err := fetchScopedJobs(ctx, deps, status)
+	if err != nil {
+		return nil, nil, err
+	}
+	counts := map[string]int{}
+	filtered := make([]*jobpb.Job, 0, len(jobs))
+	for _, j := range jobs {
+		counts[j.GetJobCategoryId()]++
+		if selected == "" || j.GetJobCategoryId() == selected {
+			filtered = append(filtered, j)
+		}
+	}
+	return jobTableConfig(ctx, deps, filtered, perms), counts, nil
+}
+
+// jobTableConfig builds the classic per-job TableConfig from an already-fetched
+// (and possibly category-filtered) job slice.
+func jobTableConfig(ctx context.Context, deps *ListViewDeps, jobs []*jobpb.Job, perms *types.UserPermissions) *types.TableConfig {
 	// Collect IDs and check which are in use (referenced by dependent tables).
 	var inUseIDs map[string]bool
 	if deps.GetInUseIDs != nil {
@@ -243,7 +356,7 @@ func buildJobTable(ctx context.Context, deps *ListViewDeps, status string, perms
 		},
 	}
 	types.ApplyTableSettings(tableConfig)
-	return tableConfig, nil
+	return tableConfig
 }
 
 func jobColumns(l job.Labels) []types.TableColumn {

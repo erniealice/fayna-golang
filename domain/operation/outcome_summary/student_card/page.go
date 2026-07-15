@@ -1,0 +1,592 @@
+// Package student_card renders view-3 of the report-cards surface: one
+// student's per-subject transcript within a section. Rows = the student's
+// subjects (jobs, subject-name order); columns are GROUPED by grading phase —
+// Semester 1 [Progress | Final], Semester 2 [Progress | Final], plus the Year
+// Final. Each Final cell is the semester's grade (phase_outcome_summary
+// scaled_label, the IB 1-7 band label); Year Final is the job_outcome_summary
+// grade. Progress columns render blank ("—") — education1 stores only the two
+// semester composites, no progress-period rating.
+//
+// Security (mirrors the section grid): the section id is EXISTS-gated against
+// the session workspace (the workspace-aware ListSubscriptionGroups returns a
+// foreign group as no-rows → fail-closed), AND the client must be an active (or
+// frozen-historical) MEMBER of that section — a foreign client id, or a client
+// from another section, resolves to no subscription → fail-closed. This closes
+// the IDOR axis. Every read is workspace-bound at the espyna adapter; the job
+// set is staff-narrowed.
+package student_card
+
+import (
+	"context"
+	"log"
+	"sort"
+	"strconv"
+	"strings"
+
+	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+
+	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/pyeza-golang/route"
+	"github.com/erniealice/pyeza-golang/types"
+	"github.com/erniealice/pyeza-golang/view"
+
+	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
+	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
+	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
+	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
+	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
+	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+)
+
+// pageLimit / maxPages: the job set here is ONE student's subjects (≤ ~15), far
+// below the adapter default cap — but page the job read explicitly anyway (the
+// fetchSectionJobs lesson: an uncapped read silently truncates), bounded so the
+// loop always halts.
+const pageLimit = 100
+const maxPages = 100
+
+// Deps holds the student-card view dependencies. All list closures are
+// workspace-bound at the espyna adapter; the view composes no client_id/
+// workspace filter of its own beyond the section + membership gates.
+type Deps struct {
+	Routes       outcome_summary.Routes
+	Labels       outcome_summary.Labels
+	CommonLabels pyeza.CommonLabels
+	TableLabels  types.TableLabels
+
+	ListSubscriptionGroups        func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
+	ListSubscriptionGroupMembers  func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+	ListJobs                      func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	ListJobTemplates              func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+	ListClients                   func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+	ListJobOutcomeSummarys        func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
+	ListPhaseOutcomeSummarysByJob func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
+	ListJobPhases                 func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+}
+
+// PageData is the student-card page data.
+type PageData struct {
+	types.PageData
+	ContentTemplate string
+	Table           *types.TableConfig
+	NotComputed     bool
+	Banner          string
+}
+
+// NewView creates the per-student report-card view.
+func NewView(deps *Deps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job_outcome_summary", "list") {
+			return view.Forbidden("job_outcome_summary:list")
+		}
+
+		sectionID := strings.TrimSpace(viewCtx.Request.PathValue("id"))
+		clientID := strings.TrimSpace(viewCtx.Request.PathValue("client_id"))
+		if sectionID == "" || clientID == "" {
+			return view.Forbidden("job_outcome_summary:list")
+		}
+
+		group := fetchSection(ctx, deps, sectionID)
+		if group == nil {
+			return view.Forbidden("job_outcome_summary:list")
+		}
+		historical := !group.GetActive()
+
+		// IDOR gate: the client must belong to THIS section (its subscription in
+		// the group's member set). No membership → fail-closed.
+		subID := memberSubscription(ctx, deps, sectionID, clientID, historical)
+		if subID == "" {
+			return view.Forbidden("job_outcome_summary:list")
+		}
+
+		name := studentName(ctx, deps, clientID)
+		table := buildTable(ctx, deps, subID, historical)
+		return okPage(viewCtx, deps, group, name, table)
+	})
+}
+
+// fetchSection returns the section (workspace-scoped EXISTS gate) or nil. The
+// generic List defaults to active=true, so a second explicit active=false read
+// covers a frozen (inactive) historical section.
+func fetchSection(ctx context.Context, deps *Deps, sectionID string) *subscriptiongrouppb.SubscriptionGroup {
+	if deps.ListSubscriptionGroups == nil {
+		return nil
+	}
+	requests := []*subscriptiongrouppb.ListSubscriptionGroupsRequest{
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", sectionID)}}},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
+			stringEq("id", sectionID),
+			boolEq("active", false),
+		}}},
+	}
+	for _, req := range requests {
+		resp, err := deps.ListSubscriptionGroups(ctx, req)
+		if err != nil {
+			log.Printf("student card: list subscription group by id: %v", err)
+			continue
+		}
+		for _, g := range resp.GetData() {
+			if g.GetId() == sectionID {
+				return g
+			}
+		}
+	}
+	return nil
+}
+
+// memberSubscription returns the client's subscription_id within this section
+// (active members, or the frozen full roster in historical mode), or "" when the
+// client is not a member — the IDOR fail-closed signal.
+func memberSubscription(ctx context.Context, deps *Deps, sectionID, clientID string, historical bool) string {
+	if deps.ListSubscriptionGroupMembers == nil {
+		return ""
+	}
+	requests := []*subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", sectionID)}}},
+	}
+	if historical {
+		requests = append(requests, &subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
+				stringEq("subscription_group_id", sectionID),
+				boolEq("active", false),
+			}},
+		})
+	}
+	for _, req := range requests {
+		resp, err := deps.ListSubscriptionGroupMembers(ctx, req)
+		if err != nil {
+			log.Printf("student card: list members: %v", err)
+			continue
+		}
+		for _, m := range resp.GetData() {
+			if !historical && !m.GetActive() {
+				continue
+			}
+			if m.GetClientId() == clientID && m.GetSubscriptionId() != "" {
+				return m.GetSubscriptionId()
+			}
+		}
+	}
+	return ""
+}
+
+// buildTable assembles the student's subject × phase grid. Returns nil when the
+// student has no jobs or no computed grades yet (→ empty-state banner).
+func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) *types.TableConfig {
+	l := deps.Labels
+
+	jobs := fetchJobs(ctx, deps, subID, historical)
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	jobTemplate := map[string]string{} // job_id -> template_id
+	jobIDs := make([]string, 0, len(jobs))
+	templateIDs := []string{}
+	tmplSeen := map[string]bool{}
+	for _, j := range jobs {
+		jid, tid := j.GetId(), j.GetJobTemplateId()
+		if jid == "" || tid == "" {
+			continue
+		}
+		jobTemplate[jid] = tid
+		jobIDs = append(jobIDs, jid)
+		if !tmplSeen[tid] {
+			tmplSeen[tid] = true
+			templateIDs = append(templateIDs, tid)
+		}
+	}
+
+	tmplNames := fetchTemplateNames(ctx, deps, templateIDs, historical)
+	phaseOrder := fetchPhaseOrders(ctx, deps, jobIDs)             // job_phase_id -> phase_order
+	semByJob := fetchSemesterLabels(ctx, deps, jobIDs, phaseOrder) // job_id -> {order -> label}
+	yearByJob := fetchYearLabels(ctx, deps, jobIDs)               // job_id -> year-final label
+
+	if len(semByJob) == 0 && len(yearByJob) == 0 {
+		return nil
+	}
+
+	empty := l.Section.RatingEmpty
+	if empty == "" {
+		empty = "—"
+	}
+
+	// One row per subject (job), subject-name ASC (prod's canonical order).
+	type entry struct{ jobID, name string }
+	entries := make([]entry, 0, len(jobIDs))
+	for _, jid := range jobIDs {
+		entries = append(entries, entry{jid, colName(tmplNames, jobTemplate[jid])})
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		a, b := strings.ToLower(entries[i].name), strings.ToLower(entries[j].name)
+		if a == b {
+			return entries[i].jobID < entries[j].jobID
+		}
+		return a < b
+	})
+
+	rows := make([]types.TableRow, 0, len(entries))
+	for _, e := range entries {
+		sem := semByJob[e.jobID]
+		cells := []types.TableCell{
+			{Value: e.name},
+			ratingCell("", empty),          // Sem 1 Progress — no data
+			ratingCell(sem[1], empty),      // Sem 1 Final
+			ratingCell("", empty),          // Sem 2 Progress — no data
+			ratingCell(sem[2], empty),      // Sem 2 Final
+			ratingCell(yearByJob[e.jobID], empty), // Year Final
+		}
+		rows = append(rows, types.TableRow{
+			ID:        e.jobID,
+			DataAttrs: map[string]string{"testid": "rc-subject-" + short(e.jobID)},
+			Cells:     cells,
+		})
+	}
+
+	return &types.TableConfig{
+		ID:              "report-cards-student",
+		ColumnGroups:    buildColumnGroups(l),
+		Rows:            rows,
+		NameColumnLabel: l.Student.SubjectColumn,
+		ShowSearch:      true,
+		ShowColumns:     true,
+		ShowDensity:     true,
+		ShowExport:      true,
+		ShowEntries:     true,
+		Labels:          deps.TableLabels,
+		Caption:         l.Student.Title,
+		EmptyState: types.TableEmptyState{
+			Title:   l.Empty.Title,
+			Message: l.Section.NotComputedBanner,
+		},
+	}
+}
+
+// buildColumnGroups builds the nested semester headers: Semester 1 [Progress |
+// Final] · Semester 2 [Progress | Final] · Year [Final]. The Subject column is
+// the auto-generated first column (NameColumnLabel); NoSort because the grouped
+// grid is server-composed.
+func buildColumnGroups(l outcome_summary.Labels) []types.ColumnGroup {
+	prog := l.Student.ProgressColumn
+	fin := l.Student.FinalColumn
+	return []types.ColumnGroup{
+		{Label: l.Student.Semester1, Columns: []types.TableColumn{
+			{Key: "s1p", Label: prog, Align: "center", NoSort: true, MinWidth: "5rem"},
+			{Key: "s1f", Label: fin, Align: "center", NoSort: true, MinWidth: "5rem"},
+		}},
+		{Label: l.Student.Semester2, Columns: []types.TableColumn{
+			{Key: "s2p", Label: prog, Align: "center", NoSort: true, MinWidth: "5rem"},
+			{Key: "s2f", Label: fin, Align: "center", NoSort: true, MinWidth: "5rem"},
+		}},
+		{Label: l.Student.YearColumn, Columns: []types.TableColumn{
+			{Key: "yf", Label: fin, Align: "center", NoSort: true, MinWidth: "5rem"},
+		}},
+	}
+}
+
+// fetchJobs returns the student's subscription-origin subject jobs
+// (staff-narrowed at the adapter), paged explicitly. Historical mode also
+// accepts inactive jobs.
+func fetchJobs(ctx context.Context, deps *Deps, subID string, historical bool) []*jobpb.Job {
+	var out []*jobpb.Job
+	if deps.ListJobs == nil || subID == "" {
+		return out
+	}
+	seen := map[string]bool{}
+	filterSets := [][]*commonpb.TypedFilter{
+		{stringEq("origin_id", subID)},
+	}
+	if historical {
+		filterSets = append(filterSets, []*commonpb.TypedFilter{
+			stringEq("origin_id", subID),
+			boolEq("active", false),
+		})
+	}
+	for _, filters := range filterSets {
+		for page := int32(1); page <= maxPages; page++ {
+			resp, err := deps.ListJobs(ctx, &jobpb.ListJobsRequest{
+				Filters: &commonpb.FilterRequest{Filters: filters},
+				Pagination: &commonpb.PaginationRequest{
+					Limit:  int32(pageLimit),
+					Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
+				},
+			})
+			if err != nil {
+				log.Printf("student card: list jobs (page %d): %v", page, err)
+				break
+			}
+			for _, j := range resp.GetData() {
+				if seen[j.GetId()] {
+					continue
+				}
+				seen[j.GetId()] = true
+				if !historical && !j.GetActive() {
+					continue
+				}
+				if j.GetOriginType() == enums.OriginType_ORIGIN_TYPE_SUBSCRIPTION {
+					out = append(out, j)
+				}
+			}
+			if len(resp.GetData()) < pageLimit {
+				break
+			}
+		}
+	}
+	return out
+}
+
+// fetchTemplateNames resolves job_template_id -> name, chunked; historical mode
+// also reads inactive templates (frozen-year subjects).
+func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string, historical bool) map[string]string {
+	out := map[string]string{}
+	if deps.ListJobTemplates == nil || len(templateIDs) == 0 {
+		return out
+	}
+	for start := 0; start < len(templateIDs); start += pageLimit {
+		end := start + pageLimit
+		if end > len(templateIDs) {
+			end = len(templateIDs)
+		}
+		filterSets := [][]*commonpb.TypedFilter{
+			{listIn("id", templateIDs[start:end])},
+		}
+		if historical {
+			filterSets = append(filterSets, []*commonpb.TypedFilter{
+				listIn("id", templateIDs[start:end]),
+				boolEq("active", false),
+			})
+		}
+		for _, filters := range filterSets {
+			resp, err := deps.ListJobTemplates(ctx, &jobtemplatepb.ListJobTemplatesRequest{
+				Filters: &commonpb.FilterRequest{Filters: filters},
+			})
+			if err != nil {
+				log.Printf("student card: list job templates: %v", err)
+				continue
+			}
+			for _, t := range resp.GetData() {
+				if id := t.GetId(); id != "" {
+					out[id] = t.GetName()
+				}
+			}
+		}
+	}
+	return out
+}
+
+// fetchPhaseOrders maps job_phase_id -> phase_order for the student's jobs, so
+// each phase_outcome_summary can be placed in its semester column (1 -> Sem 1,
+// 2 -> Sem 2). job_phase rows are per-job (their ids are unique), but the ORDER
+// is the stable cross-job alignment key.
+func fetchPhaseOrders(ctx context.Context, deps *Deps, jobIDs []string) map[string]int32 {
+	out := map[string]int32{}
+	if deps.ListJobPhases == nil || len(jobIDs) == 0 {
+		return out
+	}
+	for start := 0; start < len(jobIDs); start += pageLimit {
+		end := start + pageLimit
+		if end > len(jobIDs) {
+			end = len(jobIDs)
+		}
+		resp, err := deps.ListJobPhases(ctx, &jobphasepb.ListJobPhasesRequest{
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("job_id", jobIDs[start:end])}},
+		})
+		if err != nil {
+			log.Printf("student card: list job phases: %v", err)
+			continue
+		}
+		for _, p := range resp.GetData() {
+			if id := p.GetId(); id != "" {
+				out[id] = p.GetPhaseOrder()
+			}
+		}
+	}
+	return out
+}
+
+// fetchSemesterLabels returns job_id -> (phase_order -> semester grade). Reads
+// each job's phase summaries (ListByJob now projects scaled_label). Falls back
+// to a formatted scaled_score when the label is empty.
+func fetchSemesterLabels(ctx context.Context, deps *Deps, jobIDs []string, phaseOrder map[string]int32) map[string]map[int32]string {
+	out := map[string]map[int32]string{}
+	if deps.ListPhaseOutcomeSummarysByJob == nil {
+		return out
+	}
+	for _, jid := range jobIDs {
+		resp, err := deps.ListPhaseOutcomeSummarysByJob(ctx, &phasesumpb.ListPhaseOutcomeSummarysByJobRequest{JobId: jid})
+		if err != nil {
+			log.Printf("student card: list phase summaries by job: %v", err)
+			continue
+		}
+		for _, s := range resp.GetPhaseOutcomeSummarys() {
+			if !s.GetActive() {
+				continue
+			}
+			ord := phaseOrder[s.GetJobPhaseId()]
+			if ord == 0 {
+				continue
+			}
+			label := strings.TrimSpace(s.GetScaledLabel())
+			if label == "" && s.ScaledScore != nil {
+				label = strconv.FormatFloat(s.GetScaledScore(), 'f', -1, 64)
+			}
+			if label == "" {
+				continue
+			}
+			if out[jid] == nil {
+				out[jid] = map[int32]string{}
+			}
+			out[jid][ord] = label
+		}
+	}
+	return out
+}
+
+// fetchYearLabels returns job_id -> year-final grade (job_outcome_summary
+// scaled_label, falling back to scaled_score), chunked by job_id.
+func fetchYearLabels(ctx context.Context, deps *Deps, jobIDs []string) map[string]string {
+	out := map[string]string{}
+	if deps.ListJobOutcomeSummarys == nil || len(jobIDs) == 0 {
+		return out
+	}
+	for start := 0; start < len(jobIDs); start += pageLimit {
+		end := start + pageLimit
+		if end > len(jobIDs) {
+			end = len(jobIDs)
+		}
+		resp, err := deps.ListJobOutcomeSummarys(ctx, &jobsumpb.ListJobOutcomeSummarysRequest{
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("job_id", jobIDs[start:end])}},
+		})
+		if err != nil {
+			log.Printf("student card: list job outcome summaries: %v", err)
+			continue
+		}
+		for _, s := range resp.GetData() {
+			if !s.GetActive() || s.GetJobId() == "" {
+				continue
+			}
+			if lbl := strings.TrimSpace(s.GetScaledLabel()); lbl != "" {
+				out[s.GetJobId()] = lbl
+			} else if s.ScaledScore != nil {
+				out[s.GetJobId()] = strconv.FormatFloat(s.GetScaledScore(), 'f', -1, 64)
+			}
+		}
+	}
+	return out
+}
+
+// studentName resolves the client's display name (class-list form
+// "Last, First" when both parts resolve).
+func studentName(ctx context.Context, deps *Deps, clientID string) string {
+	if deps.ListClients == nil || clientID == "" {
+		return clientID
+	}
+	resp, err := deps.ListClients(ctx, &clientpb.ListClientsRequest{
+		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", clientID)}},
+	})
+	if err != nil {
+		log.Printf("student card: list client: %v", err)
+		return clientID
+	}
+	for _, c := range resp.GetData() {
+		if c.GetId() != clientID {
+			continue
+		}
+		last := strings.TrimSpace(c.GetLastName())
+		first := strings.TrimSpace(c.GetFirstName())
+		if last != "" && first != "" {
+			return last + ", " + first
+		}
+		if n := strings.TrimSpace(c.GetName()); n != "" {
+			return n
+		}
+		if u := c.GetUser(); u != nil {
+			if n := strings.TrimSpace(u.GetLastName() + ", " + u.GetFirstName()); n != ", " {
+				return n
+			}
+		}
+	}
+	return clientID
+}
+
+// okPage assembles the PageData. Header: breadcrumb = the section name (links
+// back to the section grid), title = the student name, caption = the student
+// subtitle label. Mirrors the section view's okPage header shape.
+func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, name string, table *types.TableConfig) view.ViewResult {
+	l := deps.Labels
+	pd := &PageData{
+		PageData: types.PageData{
+			CacheVersion:        viewCtx.CacheVersion,
+			Title:               name,
+			CurrentPath:         viewCtx.CurrentPath,
+			ActiveNav:           deps.Routes.ActiveNav,
+			ActiveSubNav:        "report-cards",
+			HeaderBreadcrumb:    group.GetName(),
+			HeaderBreadcrumbURL: route.ResolveURL(deps.Routes.SectionURL, "id", group.GetId()),
+			HeaderTitle:         name,
+			HeaderSubtitle:      l.Student.Subtitle,
+			HeaderIcon:          "icon-award",
+			CommonLabels:        deps.CommonLabels,
+		},
+		ContentTemplate: "outcome-summary-student-content",
+		Table:           table,
+		NotComputed:     table == nil,
+		Banner:          l.Section.NotComputedBanner,
+	}
+	return view.OK("outcome-summary-student", pd)
+}
+
+// --- small helpers -------------------------------------------------------
+
+func ratingCell(label, empty string) types.TableCell {
+	if strings.TrimSpace(label) == "" {
+		return types.TableCell{Value: empty, Align: "center"}
+	}
+	return types.TableCell{Value: label, Align: "center"}
+}
+
+func stringEq(field, value string) *commonpb.TypedFilter {
+	return &commonpb.TypedFilter{
+		Field: field,
+		FilterType: &commonpb.TypedFilter_StringFilter{
+			StringFilter: &commonpb.StringFilter{Value: value, Operator: commonpb.StringOperator_STRING_EQUALS},
+		},
+	}
+}
+
+func boolEq(field string, v bool) *commonpb.TypedFilter {
+	return &commonpb.TypedFilter{
+		Field:      field,
+		FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: v}},
+	}
+}
+
+func listIn(field string, values []string) *commonpb.TypedFilter {
+	return &commonpb.TypedFilter{
+		Field: field,
+		FilterType: &commonpb.TypedFilter_ListFilter{
+			ListFilter: &commonpb.ListFilter{Values: values, Operator: commonpb.ListOperator_LIST_IN},
+		},
+	}
+}
+
+func colName(names map[string]string, id string) string {
+	if n := strings.TrimSpace(names[id]); n != "" {
+		return n
+	}
+	return id
+}
+
+// short returns the uuidv7 random tail for a stable, collision-resistant testid
+// suffix (see the section view's short() note).
+func short(id string) string {
+	if len(id) > 8 {
+		return id[len(id)-8:]
+	}
+	return id
+}

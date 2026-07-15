@@ -3,11 +3,24 @@
 {{template "app-shell" .}}
 {{end}}
 
-{{/* Content-only partial — for HTMX navigation (flat job-summary list) */}}
+{{/* Content-only partial rendered on boosted navigation. The view adapter
+     derives this name as {result.Template}-content (result.Template is
+     "outcome-summary-list"), so THIS template — not .ContentTemplate — is what
+     an HX-Target:main-content swap renders. It must therefore reproduce the
+     same branch the full-page app-shell render picks via .ContentTemplate: the
+     tabbed landing when TabItems is set (report-cards, education tier), else the
+     flat job-summary list (service-admin, zero-valued Options). Before this
+     dispatch it rendered only the flat table, so the AY tabstrip vanished on
+     every in-app navigation and returned only on a hard refresh (which renders
+     .ContentTemplate = the landing template directly). */}}
 {{define "outcome-summary-list-content"}}
+{{if .TabItems}}
+{{template "outcome-summary-landing-content" .}}
+{{else}}
 <div class="page-content page-content--table">
     {{template "table-card" .Table}}
 </div>
+{{end}}
 {{end}}
 
 {{/* Content-only partial — report-cards landing (tabbed section list, view-1) */}}

@@ -54,6 +54,16 @@ const pageLimit = 100
 // misbehaving adapter ignored OFFSET and returned a full page forever.
 const maxPages = 100
 
+// downloadIcon is the inline SVG for the per-row CSV download button. The
+// section grid renders the download as the frozen SECOND column (an HTML cell),
+// not a trailing actions cell, so it needs the icon markup inline (mirrors
+// pyeza's icon-download) rather than via a {{template}} call.
+const downloadIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
+
+// viewIcon is the inline SVG (mirrors pyeza's icon-eye) for the per-row "view
+// student card" action rendered in the frozen actions column.
+const viewIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>`
+
 // Deps holds the section-grid view dependencies. All list closures are
 // workspace-bound at the espyna adapter; the view composes no client_id/
 // workspace filter of its own.
@@ -269,7 +279,12 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 		ShowDensity: true,
 		ShowExport:  true,
 		ShowEntries: true,
-		ShowActions: true,
+		// The per-row download is now the frozen SECOND column, not a trailing
+		// actions cell — so no trailing actions column.
+		ShowActions: false,
+		// Freeze the first two columns (student + download) while the subject
+		// columns scroll horizontally (pyeza generic, ID-agnostic).
+		TableClass:  "data-table-freeze2",
 		Labels:      deps.TableLabels,
 		Caption:     l.Section.Title,
 		FixedLayout: false,
@@ -643,10 +658,18 @@ func buildColumns(templateIDs []string, names map[string]string, l outcome_summa
 		}
 		return a < b
 	})
-	cols := make([]types.TableColumn, 0, len(ordered)+1)
+	cols := make([]types.TableColumn, 0, len(ordered)+2)
 	// NoSort: header sorting operates on a single tbody; the banded grid's
 	// order is server-composed (Options.Row), so the control would be inert.
-	cols = append(cols, types.TableColumn{Key: "student", Label: l.Section.ClientColumn, MinWidth: "11.25rem", NoSort: true})
+	// The student column is the first FROZEN column (TableClass
+	// "data-table-freeze2", set in buildSectionTable). Its width must equal the
+	// CSS --freeze2-c2 default (14rem) so the second frozen column's sticky left
+	// offset lines up.
+	cols = append(cols, types.TableColumn{Key: "student", Label: l.Section.ClientColumn, Width: "14rem", MinWidth: "14rem", NoSort: true})
+	// Second frozen column: the per-row actions (view student card + CSV
+	// download). Blank header mirrors the prod report card's action column.
+	// Excluded from the CSV export by key (export.go skips "rc-actions").
+	cols = append(cols, types.TableColumn{Key: "rc-actions", Label: "", Width: "5rem", MinWidth: "5rem", Align: "center", NoSort: true})
 	for _, tid := range ordered {
 		cols = append(cols, types.TableColumn{Key: "tmpl-" + tid, Label: colName(names, tid), MinWidth: "6.25rem", Align: "center", NoSort: true})
 	}
@@ -685,8 +708,17 @@ func buildRows(
 	exportURL := route.ResolveURL(routes.SectionExportURL, "id", sectionID)
 	rows := make([]types.TableRow, 0, len(students))
 	for clientID, st := range students {
-		cells := make([]types.TableCell, 0, len(templateIDs)+1)
+		cells := make([]types.TableCell, 0, len(templateIDs)+2)
 		cells = append(cells, types.TableCell{Value: st.listName()})
+		// Frozen 2nd column: per-row actions — VIEW this student's report card
+		// (boosted nav → view-3), then DOWNLOAD the CSV. The view link is a
+		// normal boosted anchor (hx-push-url); the download is hx-boost="false" +
+		// download so the boosted body doesn't AJAX-swap the attachment response
+		// (?id=<client> narrows the export to this row).
+		studentURL := route.ResolveURL(routes.StudentURL, "id", sectionID, "client_id", clientID)
+		viewAnchor := `<a href="` + html.EscapeString(studentURL) + `" class="action-btn view" title="` + html.EscapeString(l.Student.ViewAction) + `" aria-label="` + html.EscapeString(l.Student.ViewAction) + `" data-testid="rc-view-` + short(clientID) + `" hx-push-url="true">` + viewIcon + `</a>`
+		dlAnchor := `<a href="` + html.EscapeString(exportURL+"?id="+clientID) + `" class="action-btn download" title="` + html.EscapeString(l.Section.DownloadAction) + `" aria-label="` + html.EscapeString(l.Section.DownloadAction) + `" data-testid="rc-download-` + short(clientID) + `" hx-boost="false" download>` + downloadIcon + `</a>`
+		cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(`<div class="action-buttons">` + viewAnchor + dlAnchor + `</div>`)})
 		for _, tid := range templateIDs {
 			testid := html.EscapeString("rc-cell-" + short(clientID) + "-" + short(tid))
 			jobID := cellJob[clientID+"\x00"+tid]
@@ -704,15 +736,6 @@ func buildRows(
 			ID:        clientID,
 			DataAttrs: map[string]string{"testid": "rc-row-" + short(clientID)},
 			Cells:     cells,
-			Actions: []types.TableAction{
-				{
-					Type:   "download",
-					Label:  l.Section.DownloadAction,
-					Action: "download",
-					URL:    exportURL,
-					TestID: "rc-download-" + short(clientID),
-				},
-			},
 		})
 	}
 	return rows

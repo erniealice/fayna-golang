@@ -15,6 +15,22 @@ type Labels struct {
 	Errors  ErrorLabels   `json:"errors"`
 	Landing LandingLabels `json:"landing"`
 	Section SectionLabels `json:"section"`
+	Student StudentLabels `json:"student"`
+}
+
+// StudentLabels holds the view-3 (per-student report card) strings. Same
+// snake_case-json-tag rule as LandingLabels/SectionLabels — a per-tier override
+// silently falls back to the compiled default without the tag.
+type StudentLabels struct {
+	Title          string `json:"title"`
+	Subtitle       string `json:"subtitle"`
+	SubjectColumn  string `json:"subject_column"`
+	Semester1      string `json:"semester_1"`
+	Semester2      string `json:"semester_2"`
+	YearColumn     string `json:"year_column"`
+	ProgressColumn string `json:"progress_column"`
+	FinalColumn    string `json:"final_column"`
+	ViewAction     string `json:"view_action"`
 }
 
 // LandingLabels holds the view-1 (report-cards landing) strings. Every field
@@ -157,6 +173,17 @@ func DefaultLabels() Labels {
 			DownloadAction:    "Download outcomes (CSV)",
 			DetailLink:        "View group",
 			NotComputedBanner: "Final outcomes have not been computed yet.",
+		},
+		Student: StudentLabels{
+			Title:          "Client outcomes",
+			Subtitle:       "Outcomes by grading period",
+			SubjectColumn:  "Item",
+			Semester1:      "Period 1",
+			Semester2:      "Period 2",
+			YearColumn:     "Overall",
+			ProgressColumn: "Progress",
+			FinalColumn:    "Final",
+			ViewAction:     "View outcomes",
 		},
 	}
 }

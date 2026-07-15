@@ -66,6 +66,9 @@ type PageLabels struct {
 	CaptionReleased  string `json:"caption_released"`
 	HeadingOnHold    string `json:"heading_on_hold"`
 	CaptionOnHold    string `json:"caption_on_hold"`
+	// ClassTabsAria is the aria-label for the job_category tabstrip on the list
+	// page (the "/classes" tab-split). Education overrides it via lyngua.
+	ClassTabsAria string `json:"class_tabs_aria"`
 }
 
 type ButtonLabels struct {
@@ -236,6 +239,7 @@ func DefaultLabels() Labels {
 			CaptionCompleted: "Review jobs that have been completed",
 			HeadingClosed:    "Closed Jobs",
 			CaptionClosed:    "View archived or closed jobs",
+			ClassTabsAria:    "Job categories",
 		},
 		Buttons: ButtonLabels{
 			AddJob: "Add Job",

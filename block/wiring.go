@@ -56,6 +56,12 @@ func wireJobDeps(deps *operation.JobModuleDeps, u *UseCases) {
 	// seats + group/plan/staff lookups) is now ONE server-side GROUP-BY read;
 	// nil-safe (a nil closure renders the education-tier list empty).
 	deps.ListJobTemplateSummaries = u.Operation.JobTemplateSummary.ListJobTemplateSummaries
+
+	// "/classes" job_category tab-split (20260714). ListJobCategories supplies
+	// the tab rows; ListJobTemplates builds the job_template→job_category map the
+	// education-tier filter needs. Both nil-safe → flat list when absent.
+	deps.ListJobCategories = u.Operation.JobCategory.ListJobCategories
+	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
 }
 
 // ---------------------------------------------------------------------------
@@ -274,11 +280,23 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListSubscriptionGroupWorkspaceUsers = u.Subscription.SubscriptionGroupWorkspaceUser.ListSubscriptionGroupWorkspaceUsers
 	deps.ListWorkspaceUsers = u.Entity.WorkspaceUser.ListWorkspaceUsers
 	deps.ListJobs = u.Operation.Job.ListJobs
+	// view-3 per-student card: maps each phase_outcome_summary to its Sem 1 / Sem 2
+	// column via job_phase.phase_order.
+	deps.ListJobPhases = u.Operation.JobPhase.ListJobPhases
 	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
 	deps.ListClients = u.Entity.Client.ListClients
 	deps.ListClientAttributes = u.Entity.ClientAttribute.ListClientAttributes
 	deps.ResolveAttributeIDByCode = u.Entity.ClientAttribute.ResolveAttributeIDByCode
 	deps.ListJobTemplateSummaries = u.Operation.JobTemplateSummary.ListJobTemplateSummaries
+	// Report-card document download: the per-criterion transcript fetch. The
+	// authoritative per-criterion marks live on task_outcome, reached through
+	// job_task and A/B/C/D-ordered via template_task_criteria.sequence_order.
+	// job_outcome_line is retained for a potential per-subject fallback.
+	// Optional/nil-safe — a nil closure leaves the criterion columns blank.
+	deps.ListJobOutcomeLines = u.Operation.JobOutcomeLine.ListJobOutcomeLines
+	deps.ListJobTasks = u.Operation.JobTask.ListJobTasks
+	deps.ListTaskOutcomes = u.Operation.TaskOutcome.ListTaskOutcomes
+	deps.ListTemplateTaskCriterias = u.Operation.TemplateTaskCriteria.ListTemplateTaskCriterias
 }
 
 // ---------------------------------------------------------------------------

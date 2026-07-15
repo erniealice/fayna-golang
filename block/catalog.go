@@ -38,7 +38,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/template_task_criteria"
 )
 
-func JobUnit(uc *UseCases, infra *Infra) compose.Unit {
+func JobUnit(uc *UseCases, infra *Infra, options job.Options) compose.Unit {
 	u := job.Describe()
 	u.Mount = func(mc *compose.MountContext) error {
 		r := u.Routes.(*job.Routes)
@@ -60,6 +60,9 @@ func JobUnit(uc *UseCases, infra *Infra) compose.Unit {
 			// BusinessType branches the List view to the template-grain
 			// delivery summary for "education" (20260710 staff-class-list).
 			BusinessType: mc.BusinessType,
+			// JobListOptions drives the "/classes" job_category tab-split
+			// (school-admin); zero value → flat list (service-admin).
+			JobListOptions: options,
 		}
 		if jaRoutes, ok := compose.RoutesOf[*job_activity.Routes](mc, "operation.job_activity"); ok {
 			deps.JobActivityRoutes = *jaRoutes
@@ -584,7 +587,7 @@ func OutcomeMatrixUnit(uc *UseCases, _ *Infra, options outcome_matrix.Options) c
 // per-section grid (client × job_template year-final ratings). options is the
 // app's presentation config (EngineBlock's view option block); the zero value
 // renders the current flat list unchanged (backward-compatible).
-func OutcomeSummaryUnit(uc *UseCases, _ *Infra, options outcome_summary.Options) compose.Unit {
+func OutcomeSummaryUnit(uc *UseCases, infra *Infra, options outcome_summary.Options) compose.Unit {
 	u := outcome_summary.Describe()
 	u.Mount = func(mc *compose.MountContext) error {
 		r := u.Routes.(*outcome_summary.Routes)
@@ -596,6 +599,10 @@ func OutcomeSummaryUnit(uc *UseCases, _ *Infra, options outcome_summary.Options)
 			CommonLabels: mc.Common,
 			TableLabels:  mc.Table,
 			Options:      options,
+		}
+		if infra != nil {
+			deps.GenerateDoc = infra.GenerateDoc
+			deps.ResolveTemplateBytes = infra.ResolveTemplateBytes
 		}
 		wireOutcomeSummaryDeps(deps, uc)
 		operation.NewOutcomeSummaryModule(deps).RegisterRoutes(mc.Routes)
@@ -772,7 +779,7 @@ func AllUnits(uc *UseCases, infra *Infra, opts ...EngineOption) []compose.Unit {
 		o(&cfg)
 	}
 	return []compose.Unit{
-		JobUnit(uc, infra),
+		JobUnit(uc, infra, cfg.jobListOptions),
 		JobTemplateUnit(uc, infra),
 		JobTemplatePhaseUnit(uc, infra),
 		JobTemplateTaskUnit(uc, infra),

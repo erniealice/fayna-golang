@@ -44,6 +44,7 @@ import (
 	evaltemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template"
 	evaltemplateitempb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template_item"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
 	joboutcomelinepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_line"
 	joboutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
@@ -126,6 +127,10 @@ type OperationUseCases struct {
 	JobTask          JobTaskUseCases
 	JobActivity      JobActivityUseCases
 	JobTemplate      JobTemplateUseCases
+	// JobCategory — per-workspace job taxonomy reference entity (20260714). Its
+	// ListJobCategories backs the job list's "/classes" tab-split (one tab per
+	// category). OPTIONAL / nil-able — a nil closure degrades the list to flat.
+	JobCategory JobCategoryUseCases
 	JobTemplatePhase JobTemplatePhaseUseCases
 	JobTemplateTask  JobTemplateTaskUseCases
 	OutcomeCriteria  OutcomeCriteriaUseCases
@@ -232,6 +237,16 @@ type JobTemplateUseCases struct {
 	// job list's template-grain delivery summary (education tier) to page
 	// through every job_template referenced by the scoped job set.
 	ListJobTemplates func(context.Context, *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+}
+
+// JobCategoryUseCases — JobCategory CRUD + list. ListJobCategories backs the
+// job list's "/classes" tab-split (one tab per category, ordered by sort_order).
+type JobCategoryUseCases struct {
+	CreateJobCategory func(context.Context, *jobcategorypb.CreateJobCategoryRequest) (*jobcategorypb.CreateJobCategoryResponse, error)
+	ReadJobCategory   func(context.Context, *jobcategorypb.ReadJobCategoryRequest) (*jobcategorypb.ReadJobCategoryResponse, error)
+	UpdateJobCategory func(context.Context, *jobcategorypb.UpdateJobCategoryRequest) (*jobcategorypb.UpdateJobCategoryResponse, error)
+	DeleteJobCategory func(context.Context, *jobcategorypb.DeleteJobCategoryRequest) (*jobcategorypb.DeleteJobCategoryResponse, error)
+	ListJobCategories func(context.Context, *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
 }
 
 // JobTemplatePhaseUseCases — JobTemplatePhase CRUD + ListByJobTemplate.

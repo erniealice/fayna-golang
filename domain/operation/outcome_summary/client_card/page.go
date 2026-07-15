@@ -37,8 +37,10 @@ import (
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
+	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 )
@@ -74,6 +76,13 @@ type Deps struct {
 	ListJobOutcomeSummarys        func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
 	ListPhaseOutcomeSummarysByJob func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
 	ListJobPhases                 func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+
+	// Non-enrolled-placeholder evidence walk (job_phase → job_task →
+	// task_outcome). ListJobPhases (above) is reused. Optional/nil-safe: when
+	// ListJobTasks or ListTaskOutcomes is nil the evidence map is empty and no
+	// grade cell is blanked (the flat surface stays byte-identical).
+	ListJobTasks     func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
+	ListTaskOutcomes func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
 }
 
 // PageData is the student-card page data.
@@ -228,6 +237,14 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 		return nil
 	}
 
+	// Non-enrolled-placeholder evidence (job_phase → job_task → task_outcome):
+	// an untaken-elective scaffold rides in with an all-zero task set and bands
+	// floored to "1"; its grade cells must render BLANK (matching prod), not the
+	// floor. A genuinely enrolled subject — even one scored a real 0/1 — carries
+	// a positive task mark and is kept. Nil-safe: unwired closures → empty map →
+	// nothing blanked.
+	evByJob := outcome_summary.FetchJobMarkEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
+
 	empty := l.Section.RatingEmpty
 	if empty == "" {
 		empty = "—"
@@ -250,13 +267,25 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 	rows := make([]types.TableRow, 0, len(entries))
 	for _, e := range entries {
 		sem := semByJob[e.jobID]
+		s1f := ratingCell(sem[1], empty)            // Sem 1 Final
+		s2f := ratingCell(sem[2], empty)            // Sem 2 Final
+		yf := ratingCell(yearByJob[e.jobID], empty) // Year Final
+		// Blank the grade cells of a non-enrolled placeholder subject (an
+		// untaken-elective all-zero scaffold whose bands floored to "1"): render
+		// "" (matching prod/MMIS), NOT the floor and NOT the "—" no-data marker.
+		// The subject-name cell stays so the row set is stable. A genuinely
+		// enrolled subject — even one scored a real 0/1 — has a positive task
+		// mark and keeps its grades.
+		if outcome_summary.IsNonEnrolledCell(evByJob[e.jobID], yearByJob[e.jobID], sem[1], sem[2]) {
+			s1f, s2f, yf = blankCell(), blankCell(), blankCell()
+		}
 		cells := []types.TableCell{
 			{Value: e.name},
-			ratingCell("", empty),                 // Sem 1 Progress — no data
-			ratingCell(sem[1], empty),             // Sem 1 Final
-			ratingCell("", empty),                 // Sem 2 Progress — no data
-			ratingCell(sem[2], empty),             // Sem 2 Final
-			ratingCell(yearByJob[e.jobID], empty), // Year Final
+			ratingCell("", empty), // Sem 1 Progress — no data
+			s1f,
+			ratingCell("", empty), // Sem 2 Progress — no data
+			s2f,
+			yf,
 		}
 		rows = append(rows, types.TableRow{
 			ID:        e.jobID,
@@ -565,6 +594,13 @@ func ratingCell(label, empty string) types.TableCell {
 		return types.TableCell{Value: empty, Align: "center"}
 	}
 	return types.TableCell{Value: label, Align: "center"}
+}
+
+// blankCell is a truly-empty grade cell ("" — not the "—" no-data marker) for a
+// non-enrolled placeholder subject. Distinct from ratingCell("", empty), which
+// renders "—".
+func blankCell() types.TableCell {
+	return types.TableCell{Value: "", Align: "center"}
 }
 
 func stringEq(field, value string) *commonpb.TypedFilter {

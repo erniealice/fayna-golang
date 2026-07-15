@@ -38,7 +38,10 @@ import (
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
@@ -99,6 +102,14 @@ type Deps struct {
 	ListJobOutcomeSummarys       func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
 	ListClientAttributes         func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
 	ResolveAttributeIDByCode     func(ctx context.Context, code string) (string, error)
+
+	// Non-enrolled-placeholder evidence walk (job_phase → job_task →
+	// task_outcome). Optional/nil-safe: when any is nil (a tier that never wired
+	// the walk, e.g. service-admin) FetchJobMarkEvidence yields empty evidence and
+	// no cell is blanked — the flat surface is byte-identical.
+	ListJobPhases    func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	ListJobTasks     func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
+	ListTaskOutcomes func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
 
 	// Header-caption deps: the group's servicing grants
 	// (subscription_group_workspace_user) + the User-hydrating workspace-member
@@ -284,6 +295,14 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 		return group, nil
 	}
 
+	// Non-enrolled-placeholder evidence: one bulk job_phase → job_task →
+	// task_outcome walk keyed by the section's jobs. An untaken-elective
+	// scaffold rides in with an all-zero task set and a floored ("1") year-final;
+	// its cell must render BLANK (matching prod), not the floor. A genuinely
+	// enrolled subject — even one scored a real 0/1 — carries a positive task
+	// mark and is kept. Nil-safe: unwired closures → empty map → nothing blanked.
+	evByJob := outcome_summary.FetchJobMarkEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
+
 	// client display names + last_name (for the row sort).
 	students := fetchStudents(ctx, deps, clientIDs)
 
@@ -317,7 +336,7 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 		},
 	}
 
-	rows := buildRows(students, orderedColumnIDs(columns), cellJob, labelByJob, sectionID, deps.Routes, l)
+	rows := buildRows(students, orderedColumnIDs(columns), cellJob, labelByJob, evByJob, sectionID, deps.Routes, l)
 	applyRowPresentation(table, rows, students, attrValues, deps.Options)
 	numberRows(table)
 	types.ApplyColumnStyles(table.Columns, allRows(table))
@@ -720,6 +739,7 @@ func buildRows(
 	students map[string]student,
 	templateIDs []string,
 	cellJob, labelByJob map[string]string,
+	evByJob map[string]outcome_summary.EnrollmentEvidence,
 	sectionID string,
 	routes outcome_summary.Routes,
 	l outcome_summary.Labels,
@@ -746,11 +766,19 @@ func buildRows(
 			testid := html.EscapeString("rc-cell-" + short(clientID) + "-" + short(tid))
 			jobID := cellJob[clientID+"\x00"+tid]
 			label := labelByJob[jobID]
-			if jobID != "" && label != "" {
+			switch {
+			case jobID != "" && label != "" && outcome_summary.IsNonEnrolledCell(evByJob[jobID], label):
+				// Non-enrolled placeholder (untaken-elective all-zero scaffold
+				// whose year-final floored to "1"): render the cell truly BLANK
+				// ("" — matching prod/MMIS), NOT the floor and NOT the "—" no-data
+				// marker. Empty Value/CSVValue → the CSV column is blank too.
+				span := `<span class="rc-cell-empty" data-testid="` + testid + `"></span>`
+				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(span)})
+			case jobID != "" && label != "":
 				url := route.ResolveURL(routes.JobSummaryURL, "id", jobID)
 				anchor := `<a href="` + html.EscapeString(url) + `" class="table-link" data-testid="` + testid + `" hx-push-url="true">` + html.EscapeString(label) + `</a>`
 				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(anchor), CSVValue: label})
-			} else {
+			default:
 				span := `<span class="rc-cell-empty" data-testid="` + testid + `">` + html.EscapeString(empty) + `</span>`
 				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(span), CSVValue: empty})
 			}

@@ -718,27 +718,20 @@ func listTemplateTaskCriteriasSafe(ctx context.Context, d *Deps, req *ttcpb.List
 // mark somewhere, a real (>1) stored final, or — for historical imports — no
 // task_outcome but a real year-final (hasMarks=false + a summary present).
 func isNonEnrolledPlaceholder(row subjectRow, hasMarks bool) bool {
-	if numGreaterThan(row.CritA, 0) || numGreaterThan(row.CritB, 0) ||
-		numGreaterThan(row.CritC, 0) || numGreaterThan(row.CritD, 0) ||
-		numGreaterThan(row.Total, 0) {
-		return false // real per-criterion marks → enrolled
+	// Delegate to the shared enrollment predicate so the grid/card surfaces and
+	// the DOCX apply ONE definition of "non-enrolled placeholder". HasPositiveMark
+	// is derived from this row's already-fetched per-criterion marks (the DOCX
+	// fetches marks per-criterion via fetchCriteriaByJob rather than the generic
+	// existence walk, so it computes the positive-mark signal here from the row).
+	ev := outcome_summary.EnrollmentEvidence{
+		HasMarks: hasMarks,
+		HasPositiveMark: outcome_summary.NumGreaterThan(row.CritA, 0) ||
+			outcome_summary.NumGreaterThan(row.CritB, 0) ||
+			outcome_summary.NumGreaterThan(row.CritC, 0) ||
+			outcome_summary.NumGreaterThan(row.CritD, 0) ||
+			outcome_summary.NumGreaterThan(row.Total, 0),
 	}
-	if numGreaterThan(row.YearFinal, 1) ||
-		numGreaterThan(row.Sem1Band, 1) || numGreaterThan(row.Sem2Band, 1) {
-		return false // a real (non-floor) stored final/band → keep
-	}
-	hasSummary := strings.TrimSpace(row.YearFinal) != "" ||
-		strings.TrimSpace(row.Sem1Band) != "" || strings.TrimSpace(row.Sem2Band) != ""
-	// All-zero scaffold (hasMarks) or fully-blank (no summary) → placeholder.
-	// No task_outcome BUT a summary present → historical real subject → keep.
-	return hasMarks || !hasSummary
-}
-
-// numGreaterThan reports whether s parses as a number strictly greater than n.
-// Non-numeric or blank values are treated as not-greater (false).
-func numGreaterThan(s string, n float64) bool {
-	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
-	return err == nil && f > n
+	return outcome_summary.IsNonEnrolledCell(ev, row.YearFinal, row.Sem1Band, row.Sem2Band)
 }
 
 // --- small helpers --------------------------------------------------------

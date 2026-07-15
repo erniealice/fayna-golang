@@ -158,6 +158,11 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		ListSubscriptionGroupWorkspaceUsers: deps.ListSubscriptionGroupWorkspaceUsers,
 		ListWorkspaceUsers:                  deps.ListWorkspaceUsers,
 		ListJobCategories:                   deps.ListJobCategories,
+		// Non-enrolled-placeholder evidence walk (blanks untaken-elective floor
+		// cells on the grid + CSV). Already injected for the DOCX handler.
+		ListJobPhases:    deps.ListJobPhases,
+		ListJobTasks:     deps.ListJobTasks,
+		ListTaskOutcomes: deps.ListTaskOutcomes,
 	}
 	return &OutcomeSummaryModule{
 		routes: deps.Routes,
@@ -192,6 +197,10 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			ListJobOutcomeSummarys:        deps.ListJobOutcomeSummarys,
 			ListPhaseOutcomeSummarysByJob: deps.ListPhaseOutcomeSummarysByJob,
 			ListJobPhases:                 deps.ListJobPhases,
+			// Non-enrolled-placeholder evidence walk (blanks untaken-elective
+			// floor grade cells). Already injected for the DOCX handler.
+			ListJobTasks:     deps.ListJobTasks,
+			ListTaskOutcomes: deps.ListTaskOutcomes,
 		}),
 		TemplateSettings: templatesettings.NewListView(templateSettingsDeps(deps)),
 		TemplateUpload:   templatesettings.NewUploadAction(templateSettingsDeps(deps)),

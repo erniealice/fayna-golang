@@ -83,6 +83,81 @@ func TestCSVSafe(t *testing.T) {
 	}
 }
 
+// TestBuildRows_PhantomBlank_RealShown pins the phantom-blank invariant on the
+// section grid cell render: an untaken-elective all-zero scaffold whose
+// year-final floored to "1" renders a truly BLANK cell (empty HTML + empty CSV,
+// NOT the floor and NOT the "—" no-data marker); a genuinely-enrolled subject
+// scored a real 1 or 0 (positive mark evidence) KEEPS its rating link; a
+// subject with no summary at all still renders "—". NEVER blank a real grade.
+func TestBuildRows_PhantomBlank_RealShown(t *testing.T) {
+	students := map[string]student{
+		"stu1": {clientID: "stu1", name: "Doe, Jane", lastName: "Doe", firstName: "Jane"},
+	}
+	// Columns: phantom, real-1, real-0, no-data (no job).
+	templateIDs := []string{"tP", "tR1", "tR0", "tE"}
+	cellJob := map[string]string{
+		"stu1\x00tP":  "jobP",
+		"stu1\x00tR1": "jobR1",
+		"stu1\x00tR0": "jobR0",
+		// tE: no cellJob entry → no-data cell.
+	}
+	labelByJob := map[string]string{
+		"jobP":  "1", // floored phantom
+		"jobR1": "1", // real 1
+		"jobR0": "0", // real 0
+	}
+	evByJob := map[string]outcome_summary.EnrollmentEvidence{
+		"jobP":  {HasMarks: true, HasPositiveMark: false}, // all-zero scaffold → phantom
+		"jobR1": {HasMarks: true, HasPositiveMark: true},  // enrolled → keep
+		"jobR0": {HasMarks: true, HasPositiveMark: true},  // enrolled → keep
+	}
+
+	rows := buildRows(students, templateIDs, cellJob, labelByJob, evByJob, "sec1", outcome_summary.Routes{}, outcome_summary.Labels{})
+	if len(rows) != 1 {
+		t.Fatalf("want 1 row, got %d", len(rows))
+	}
+	cells := rows[0].Cells
+	// cells: [0]=name, [1]=actions, [2]=phantom, [3]=real1, [4]=real0, [5]=no-data.
+	if len(cells) != 6 {
+		t.Fatalf("want 6 cells (name+actions+4 subjects), got %d", len(cells))
+	}
+
+	phantom, real1, real0, nodata := cells[2], cells[3], cells[4], cells[5]
+
+	// Phantom: BLANK — empty CSV, and no rating anchor/label in the HTML.
+	if csv := types.CellCSV(phantom); csv != "" {
+		t.Errorf("phantom CSV = %q, want \"\" (blank)", csv)
+	}
+	ph := string(phantom.HTML)
+	if strings.Contains(ph, "table-link") || strings.Contains(ph, ">1<") {
+		t.Errorf("phantom cell must not render the floored rating, got HTML %q", ph)
+	}
+	if !strings.Contains(ph, "rc-cell-empty") {
+		t.Errorf("phantom cell should carry the rc-cell-empty class, got HTML %q", ph)
+	}
+
+	// Real 1: SHOWN — CSV "1" and a rating link with the label.
+	if csv := types.CellCSV(real1); csv != "1" {
+		t.Errorf("real-1 CSV = %q, want \"1\" (a real grade must never blank)", csv)
+	}
+	if !strings.Contains(string(real1.HTML), "table-link") || !strings.Contains(string(real1.HTML), ">1<") {
+		t.Errorf("real-1 cell must render its rating link, got HTML %q", string(real1.HTML))
+	}
+
+	// Real 0: SHOWN — CSV "0" and a rating link.
+	if csv := types.CellCSV(real0); csv != "0" {
+		t.Errorf("real-0 CSV = %q, want \"0\" (a real grade must never blank)", csv)
+	}
+	if !strings.Contains(string(real0.HTML), ">0<") {
+		t.Errorf("real-0 cell must render its rating, got HTML %q", string(real0.HTML))
+	}
+
+	// No-data cell: the "—" marker (distinct from a phantom's true blank).
+	if csv := types.CellCSV(nodata); csv != "—" {
+		t.Errorf("no-data CSV = %q, want the \"—\" marker", csv)
+	}
+}
+
 // TestNumberRows_Flat pins numbering on the ungrouped (no bands) path.
 func TestNumberRows_Flat(t *testing.T) {
 	table := &types.TableConfig{Rows: []types.TableRow{row("a", "Xi"), row("b", "Yo")}}

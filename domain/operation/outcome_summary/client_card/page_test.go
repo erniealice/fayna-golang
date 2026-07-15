@@ -4,9 +4,22 @@ import (
 	"context"
 	"testing"
 
+	"github.com/erniealice/pyeza-golang/types"
+
+	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
+	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
+	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 )
+
+func sptr(s string) *string   { return &s }
+func fptr(v float64) *float64 { return &v }
 
 // M4 (audit T5): the two IDOR gates on the per-student report card —
 // fetchSection (workspace EXISTS gate) + memberSubscription (section-membership
@@ -83,5 +96,141 @@ func TestMemberSubscription_HistoricalAccepted(t *testing.T) {
 	)}
 	if sub := memberSubscription(context.Background(), deps, "sec-1", "target", true); sub != "sub-1" {
 		t.Fatalf("historical mode must accept the frozen inactive member, got %q", sub)
+	}
+}
+
+// --- buildTable phantom-blank invariant --------------------------------------
+
+func jobsFn(jobs ...*jobpb.Job) func(context.Context, *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error) {
+	return func(context.Context, *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error) {
+		return &jobpb.ListJobsResponse{Data: jobs}, nil
+	}
+}
+
+func templatesFn(tmpls ...*jobtemplatepb.JobTemplate) func(context.Context, *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error) {
+	return func(context.Context, *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error) {
+		return &jobtemplatepb.ListJobTemplatesResponse{Data: tmpls}, nil
+	}
+}
+
+func jobPhasesFn(phases ...*jobphasepb.JobPhase) func(context.Context, *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error) {
+	return func(context.Context, *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error) {
+		return &jobphasepb.ListJobPhasesResponse{Data: phases}, nil
+	}
+}
+
+func phaseSummariesByJobFn(byJob map[string][]*phasesumpb.PhaseOutcomeSummary) func(context.Context, *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error) {
+	return func(_ context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error) {
+		return &phasesumpb.ListPhaseOutcomeSummarysByJobResponse{PhaseOutcomeSummarys: byJob[req.GetJobId()]}, nil
+	}
+}
+
+func yearSummariesFn(sums ...*jobsumpb.JobOutcomeSummary) func(context.Context, *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error) {
+	return func(context.Context, *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error) {
+		return &jobsumpb.ListJobOutcomeSummarysResponse{Data: sums}, nil
+	}
+}
+
+func jobTasksFn(tasks ...*jobtaskpb.JobTask) func(context.Context, *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error) {
+	return func(context.Context, *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error) {
+		return &jobtaskpb.ListJobTasksResponse{Data: tasks}, nil
+	}
+}
+
+func taskOutcomesFn(outcomes ...*taskoutcomepb.TaskOutcome) func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error) {
+	return func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error) {
+		return &taskoutcomepb.ListTaskOutcomesResponse{Data: outcomes}, nil
+	}
+}
+
+// findRow returns the row whose subject-name cell equals name.
+func findRow(t *testing.T, table *types.TableConfig, name string) types.TableRow {
+	t.Helper()
+	for _, r := range table.Rows {
+		if len(r.Cells) > 0 && r.Cells[0].Value == name {
+			return r
+		}
+	}
+	t.Fatalf("row %q not found", name)
+	return types.TableRow{}
+}
+
+// TestBuildTable_PhantomBlank_RealShown pins the phantom-blank invariant on the
+// per-student client card. Cells per row: [0]=subject, [1]=S1 progress, [2]=S1
+// final, [3]=S2 progress, [4]=S2 final, [5]=year final.
+//
+//   - Korean is an untaken-elective all-zero scaffold (all task marks 0, bands
+//     floored to "1") → its S1/S2/Year grade cells render BLANK "".
+//   - English is genuinely enrolled with a real year-final of "1" (a positive
+//     task mark) → its rating "1" is KEPT (a real grade must never blank).
+//   - Math is genuinely enrolled with a real "0" (positive task mark) → KEPT.
+func TestBuildTable_PhantomBlank_RealShown(t *testing.T) {
+	jobR := &jobpb.Job{Id: "jobR", JobTemplateId: sptr("tEng"), OriginId: sptr("sub1"), OriginType: enums.OriginType_ORIGIN_TYPE_SUBSCRIPTION, Active: true}
+	jobP := &jobpb.Job{Id: "jobP", JobTemplateId: sptr("tKor"), OriginId: sptr("sub1"), OriginType: enums.OriginType_ORIGIN_TYPE_SUBSCRIPTION, Active: true}
+	jobM := &jobpb.Job{Id: "jobM", JobTemplateId: sptr("tMath"), OriginId: sptr("sub1"), OriginType: enums.OriginType_ORIGIN_TYPE_SUBSCRIPTION, Active: true}
+
+	deps := &Deps{
+		ListJobs: jobsFn(jobR, jobP, jobM),
+		ListJobTemplates: templatesFn(
+			&jobtemplatepb.JobTemplate{Id: "tEng", Name: "English"},
+			&jobtemplatepb.JobTemplate{Id: "tKor", Name: "Korean"},
+			&jobtemplatepb.JobTemplate{Id: "tMath", Name: "Math"},
+		),
+		ListJobPhases: jobPhasesFn(
+			&jobphasepb.JobPhase{Id: "phR1", JobId: "jobR", PhaseOrder: 1, Active: true},
+			&jobphasepb.JobPhase{Id: "phP1", JobId: "jobP", PhaseOrder: 1, Active: true},
+			&jobphasepb.JobPhase{Id: "phP2", JobId: "jobP", PhaseOrder: 2, Active: true},
+			&jobphasepb.JobPhase{Id: "phM1", JobId: "jobM", PhaseOrder: 1, Active: true},
+		),
+		ListPhaseOutcomeSummarysByJob: phaseSummariesByJobFn(map[string][]*phasesumpb.PhaseOutcomeSummary{
+			"jobR": {{JobPhaseId: "phR1", ScaledLabel: sptr("1"), Active: true}},
+			"jobP": {{JobPhaseId: "phP1", ScaledLabel: sptr("1"), Active: true}, {JobPhaseId: "phP2", ScaledLabel: sptr("1"), Active: true}},
+			"jobM": {{JobPhaseId: "phM1", ScaledLabel: sptr("0"), Active: true}},
+		}),
+		ListJobOutcomeSummarys: yearSummariesFn(
+			&jobsumpb.JobOutcomeSummary{JobId: "jobR", ScaledLabel: sptr("1"), Active: true},
+			&jobsumpb.JobOutcomeSummary{JobId: "jobP", ScaledLabel: sptr("1"), Active: true},
+			&jobsumpb.JobOutcomeSummary{JobId: "jobM", ScaledLabel: sptr("0"), Active: true},
+		),
+		ListJobTasks: jobTasksFn(
+			&jobtaskpb.JobTask{Id: "tkR", JobPhaseId: "phR1", Active: true},
+			&jobtaskpb.JobTask{Id: "tkP1", JobPhaseId: "phP1", Active: true},
+			&jobtaskpb.JobTask{Id: "tkP2", JobPhaseId: "phP2", Active: true},
+			&jobtaskpb.JobTask{Id: "tkM", JobPhaseId: "phM1", Active: true},
+		),
+		ListTaskOutcomes: taskOutcomesFn(
+			&taskoutcomepb.TaskOutcome{JobTaskId: "tkR", NumericValue: fptr(6), Active: true},  // real
+			&taskoutcomepb.TaskOutcome{JobTaskId: "tkP1", NumericValue: fptr(0), Active: true}, // scaffold
+			&taskoutcomepb.TaskOutcome{JobTaskId: "tkP2", NumericValue: fptr(0), Active: true}, // scaffold
+			&taskoutcomepb.TaskOutcome{JobTaskId: "tkM", NumericValue: fptr(3), Active: true},  // real
+		),
+	}
+
+	table := buildTable(context.Background(), deps, "sub1", false)
+	if table == nil {
+		t.Fatal("buildTable returned nil")
+	}
+	if len(table.Rows) != 3 {
+		t.Fatalf("want 3 subject rows, got %d", len(table.Rows))
+	}
+
+	// English (real 1): S1 final + Year final KEEP "1".
+	eng := findRow(t, table, "English")
+	if eng.Cells[2].Value != "1" || eng.Cells[5].Value != "1" {
+		t.Errorf("English (real 1) must show its rating: S1final=%q yearfinal=%q, want \"1\"/\"1\"", eng.Cells[2].Value, eng.Cells[5].Value)
+	}
+
+	// Math (real 0): S1 final + Year final KEEP "0".
+	math := findRow(t, table, "Math")
+	if math.Cells[2].Value != "0" || math.Cells[5].Value != "0" {
+		t.Errorf("Math (real 0) must show its rating: S1final=%q yearfinal=%q, want \"0\"/\"0\"", math.Cells[2].Value, math.Cells[5].Value)
+	}
+
+	// Korean (phantom): all three grade cells BLANK "" (not "1", not "—").
+	kor := findRow(t, table, "Korean")
+	for _, i := range []int{2, 4, 5} {
+		if kor.Cells[i].Value != "" {
+			t.Errorf("Korean (phantom) cell[%d] = %q, want \"\" (blank)", i, kor.Cells[i].Value)
+		}
 	}
 }

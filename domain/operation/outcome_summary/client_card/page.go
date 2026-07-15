@@ -1,4 +1,4 @@
-// Package student_card renders view-3 of the report-cards surface: one
+// Package client_card renders view-3 of the report-cards surface: one
 // student's per-subject transcript within a section. Rows = the student's
 // subjects (jobs, subject-name order); columns are GROUPED by grading phase —
 // Semester 1 [Progress | Final], Semester 2 [Progress | Final], plus the Year
@@ -14,7 +14,7 @@
 // from another section, resolves to no subscription → fail-closed. This closes
 // the IDOR axis. Every read is workspace-bound at the espyna adapter; the job
 // set is staff-narrowed.
-package student_card
+package client_card
 
 import (
 	"context"
@@ -34,8 +34,9 @@ import (
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
-	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
@@ -57,6 +58,13 @@ type Deps struct {
 	Labels       outcome_summary.Labels
 	CommonLabels pyeza.CommonLabels
 	TableLabels  types.TableLabels
+
+	// CategoryFilter (a job_category code, e.g. "academic") + ListJobCategories
+	// gate the subject set to that category — same-origin deportment jobs are
+	// dropped (gate H2). Empty code or nil closure → no filter. Resolved once per
+	// request via outcome_summary.ResolveCategoryID.
+	CategoryFilter    string
+	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
 
 	ListSubscriptionGroups        func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListSubscriptionGroupMembers  func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
@@ -185,11 +193,18 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 		return nil
 	}
 
+	// H2: keep only the configured category's subjects (academic), dropping
+	// same-origin deportment jobs. catID "" (no filter) keeps every job.
+	catID := outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.CategoryFilter)
+
 	jobTemplate := map[string]string{} // job_id -> template_id
 	jobIDs := make([]string, 0, len(jobs))
 	templateIDs := []string{}
 	tmplSeen := map[string]bool{}
 	for _, j := range jobs {
+		if !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+			continue
+		}
 		jid, tid := j.GetId(), j.GetJobTemplateId()
 		if jid == "" || tid == "" {
 			continue
@@ -203,9 +218,9 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 	}
 
 	tmplNames := fetchTemplateNames(ctx, deps, templateIDs, historical)
-	phaseOrder := fetchPhaseOrders(ctx, deps, jobIDs)             // job_phase_id -> phase_order
+	phaseOrder := fetchPhaseOrders(ctx, deps, jobIDs)              // job_phase_id -> phase_order
 	semByJob := fetchSemesterLabels(ctx, deps, jobIDs, phaseOrder) // job_id -> {order -> label}
-	yearByJob := fetchYearLabels(ctx, deps, jobIDs)               // job_id -> year-final label
+	yearByJob := fetchYearLabels(ctx, deps, jobIDs)                // job_id -> year-final label
 
 	if len(semByJob) == 0 && len(yearByJob) == 0 {
 		return nil
@@ -235,10 +250,10 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 		sem := semByJob[e.jobID]
 		cells := []types.TableCell{
 			{Value: e.name},
-			ratingCell("", empty),          // Sem 1 Progress — no data
-			ratingCell(sem[1], empty),      // Sem 1 Final
-			ratingCell("", empty),          // Sem 2 Progress — no data
-			ratingCell(sem[2], empty),      // Sem 2 Final
+			ratingCell("", empty),                 // Sem 1 Progress — no data
+			ratingCell(sem[1], empty),             // Sem 1 Final
+			ratingCell("", empty),                 // Sem 2 Progress — no data
+			ratingCell(sem[2], empty),             // Sem 2 Final
 			ratingCell(yearByJob[e.jobID], empty), // Year Final
 		}
 		rows = append(rows, types.TableRow{
@@ -275,11 +290,11 @@ func buildColumnGroups(l outcome_summary.Labels) []types.ColumnGroup {
 	prog := l.Student.ProgressColumn
 	fin := l.Student.FinalColumn
 	return []types.ColumnGroup{
-		{Label: l.Student.Semester1, Columns: []types.TableColumn{
+		{Label: l.Student.Period1, Columns: []types.TableColumn{
 			{Key: "s1p", Label: prog, Align: "center", NoSort: true, MinWidth: "5rem"},
 			{Key: "s1f", Label: fin, Align: "center", NoSort: true, MinWidth: "5rem"},
 		}},
-		{Label: l.Student.Semester2, Columns: []types.TableColumn{
+		{Label: l.Student.Period2, Columns: []types.TableColumn{
 			{Key: "s2p", Label: prog, Align: "center", NoSort: true, MinWidth: "5rem"},
 			{Key: "s2f", Label: fin, Align: "center", NoSort: true, MinWidth: "5rem"},
 		}},

@@ -199,8 +199,11 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	//    is a generic price_schedule field — this reconciles Q-TAB-1's "first by
 	//    sort_order" with plan §3.2's "(active AY)" so the current period leads by
 	//    default while inactive periods remain reachable via ?ps=.
+	//    Validate ?ps= against the fetched set: an empty, stale, foreign, or
+	//    tampered id falls back to the default so the tablist never references a
+	//    non-existent tab (dangling aria state).
 	selected := strings.TrimSpace(viewCtx.Request.URL.Query().Get("ps"))
-	if selected == "" {
+	if selected == "" || !scheduleExists(schedules, selected) {
 		selected = defaultSchedule(schedules)
 	}
 
@@ -369,6 +372,17 @@ func sortSchedules(schedules []*priceschedulepb.PriceSchedule, opts outcome_summ
 		}
 		return an < bn
 	})
+}
+
+// scheduleExists reports whether id matches a fetched price_schedule — the guard
+// that keeps a stale/foreign/tampered ?ps= from selecting a non-existent tab.
+func scheduleExists(schedules []*priceschedulepb.PriceSchedule, id string) bool {
+	for _, s := range schedules {
+		if s.GetId() == id {
+			return true
+		}
+	}
+	return false
 }
 
 // defaultSchedule returns the id of the first ACTIVE schedule in the (already

@@ -23,6 +23,16 @@ type Options struct {
 	List ListOptions
 	// Row configures view-2's row presentation (group bands + sort).
 	Row RowOptions
+	// CategoryFilter, when set to a job_category CODE (e.g. "academic"),
+	// restricts every grade surface (view-2 section grid, view-3 client card,
+	// report-card document) to jobs of that category — dropping same-origin jobs
+	// of another category (e.g. deportment) that would otherwise render as
+	// academic subjects (gate H2). The code is resolved to its id once per
+	// request via ResolveCategoryID; jobs are then kept by KeepJobInCategory
+	// (matching id OR NULL). Empty = no filter (today's behavior; service-admin,
+	// which sets no options, is unaffected). Generic — the vertical code value is
+	// supplied by the consuming app (school-admin sets "academic").
+	CategoryFilter string
 }
 
 // TabOptions — view-1 tabstrip. GroupByField names the entity whose rows each

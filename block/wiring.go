@@ -276,6 +276,11 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	// affected surface to empty/flat, never panics).
 	deps.ListPriceSchedules = u.Subscription.PriceSchedule.ListPriceSchedules
 	deps.ListSubscriptionGroups = u.Subscription.SubscriptionGroup.ListSubscriptionGroups
+	// H2 category filter: resolve Options.CategoryFilter (a job_category code,
+	// e.g. "academic") to its id once per request so the three grade surfaces
+	// drop same-origin deportment jobs. Reuses the same closure the "/classes"
+	// tab-split already consumes. Nil-safe → no filter (service-admin unaffected).
+	deps.ListJobCategories = u.Operation.JobCategory.ListJobCategories
 	deps.ListSubscriptionGroupMembers = u.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers
 	deps.ListSubscriptionGroupWorkspaceUsers = u.Subscription.SubscriptionGroupWorkspaceUser.ListSubscriptionGroupWorkspaceUsers
 	deps.ListWorkspaceUsers = u.Entity.WorkspaceUser.ListWorkspaceUsers

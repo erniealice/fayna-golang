@@ -6,12 +6,12 @@ import (
 	"net/http"
 
 	outcomesummarypkg "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	clientcard "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/client_card"
 	documentview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/document"
 	jobsummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/job_summary"
 	summarylist "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/list"
 	phasesummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/phase_summary"
 	sectionview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/section"
-	studentcard "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/student_card"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
@@ -21,6 +21,7 @@ import (
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	joblinepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_line"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
@@ -68,9 +69,10 @@ type OutcomeSummaryModuleDeps struct {
 	// download). Returns (nil, nil) → the document handler falls back to the
 	// embedded template. Optional/nil-safe (no download regression).
 	ResolveTemplateBytes func(ctx context.Context, priceScheduleID string) ([]byte, error)
-	// ReportCardSchoolName is the generic document header (lyngua-sourced; blank
-	// falls back to the landing title).
-	ReportCardSchoolName string
+	// DocumentHeaderName is the generic report-card document header (lyngua-sourced;
+	// blank falls back to the landing title). Generic — no vertical vocabulary in
+	// code (the rendered "school name" wording lives in a lyngua value).
+	DocumentHeaderName string
 
 	// Phase outcome summary operations
 	GetPhaseOutcomeSummaryByJobPhase func(ctx context.Context, req *phasesumpb.GetPhaseOutcomeSummaryByJobPhaseRequest) (*phasesumpb.GetPhaseOutcomeSummaryByJobPhaseResponse, error)
@@ -91,6 +93,12 @@ type OutcomeSummaryModuleDeps struct {
 	ListClientAttributes                func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
 	ResolveAttributeIDByCode            func(ctx context.Context, code string) (string, error)
 	ListJobTemplateSummaries            func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
+
+	// ListJobCategories resolves Options.CategoryFilter (a job_category code, e.g.
+	// "academic") to its id so the section grid, client card, and report-card
+	// document drop same-origin deportment jobs (gate H2). Optional/nil-safe —
+	// a nil closure (or empty CategoryFilter) applies no filter.
+	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
 }
 
 // OutcomeSummaryModule holds all constructed outcome summary views.
@@ -98,7 +106,7 @@ type OutcomeSummaryModule struct {
 	routes       outcomesummarypkg.Routes
 	List         view.View
 	Section      view.View
-	StudentCard  view.View
+	ClientCard   view.View
 	JobSummary   view.View
 	PhaseSummary view.View
 	// SectionExport is the section-grid CSV download (a raw handler — the
@@ -127,6 +135,7 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		ResolveAttributeIDByCode:            deps.ResolveAttributeIDByCode,
 		ListSubscriptionGroupWorkspaceUsers: deps.ListSubscriptionGroupWorkspaceUsers,
 		ListWorkspaceUsers:                  deps.ListWorkspaceUsers,
+		ListJobCategories:                   deps.ListJobCategories,
 	}
 	return &OutcomeSummaryModule{
 		routes: deps.Routes,
@@ -146,11 +155,13 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		Section:         sectionview.NewView(sectionDeps),
 		SectionExport:   sectionview.NewExportHandler(sectionDeps),
 		StudentDocument: newStudentDocumentHandler(deps),
-		StudentCard: studentcard.NewView(&studentcard.Deps{
+		ClientCard: clientcard.NewView(&clientcard.Deps{
 			Routes:                        deps.Routes,
 			Labels:                        deps.Labels,
 			CommonLabels:                  deps.CommonLabels,
 			TableLabels:                   deps.TableLabels,
+			CategoryFilter:                deps.Options.CategoryFilter,
+			ListJobCategories:             deps.ListJobCategories,
 			ListSubscriptionGroups:        deps.ListSubscriptionGroups,
 			ListSubscriptionGroupMembers:  deps.ListSubscriptionGroupMembers,
 			ListJobs:                      deps.ListJobs,
@@ -186,7 +197,9 @@ func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc 
 	return documentview.NewDownloadHandler(&documentview.Deps{
 		Labels:                        deps.Labels,
 		CommonLabels:                  deps.CommonLabels,
-		SchoolName:                    deps.ReportCardSchoolName,
+		DocumentHeaderName:            deps.DocumentHeaderName,
+		CategoryFilter:                deps.Options.CategoryFilter,
+		ListJobCategories:             deps.ListJobCategories,
 		GenerateDoc:                   deps.GenerateDoc,
 		ResolveTemplateBytes:          deps.ResolveTemplateBytes,
 		ListSubscriptionGroups:        deps.ListSubscriptionGroups,
@@ -210,8 +223,8 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 	if m.Section != nil && m.routes.SectionURL != "" {
 		r.GET(m.routes.SectionURL, m.Section)
 	}
-	if m.StudentCard != nil && m.routes.StudentURL != "" {
-		r.GET(m.routes.StudentURL, m.StudentCard)
+	if m.ClientCard != nil && m.routes.ClientCardURL != "" {
+		r.GET(m.routes.ClientCardURL, m.ClientCard)
 	}
 	if m.SectionExport != nil && m.routes.SectionExportURL != "" {
 		// Raw (non-view) route — the registrar's HandleFunc path wraps it with
@@ -225,7 +238,7 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.SectionExportURL)
 		}
 	}
-	if m.StudentDocument != nil && m.routes.StudentDocumentURL != "" {
+	if m.StudentDocument != nil && m.routes.ClientDocumentURL != "" {
 		// Raw (non-view) route — the registrar's HandleFunc path wraps it with
 		// the ViewAdapter's RBAC context injection (WrapHandler), exactly like
 		// SectionExport, so the handler's view.GetUserPermissions gate observes
@@ -233,9 +246,9 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 		if rr, ok := r.(interface {
 			HandleFunc(method, path string, handler http.HandlerFunc, middlewares ...string)
 		}); ok {
-			rr.HandleFunc("GET", m.routes.StudentDocumentURL, m.StudentDocument)
+			rr.HandleFunc("GET", m.routes.ClientDocumentURL, m.StudentDocument)
 		} else {
-			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.StudentDocumentURL)
+			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.ClientDocumentURL)
 		}
 	}
 	r.GET(m.routes.JobSummaryURL, m.JobSummary)

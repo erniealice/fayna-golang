@@ -22,6 +22,7 @@ import (
 
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	joblinepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_line"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
@@ -43,9 +44,16 @@ type Deps struct {
 	Labels       outcome_summary.Labels
 	CommonLabels pyeza.CommonLabels
 
-	// SchoolName is the generic document header (sourced from a lyngua label by
-	// the module wiring — no education vocabulary in code).
-	SchoolName string
+	// DocumentHeaderName is the generic document header (sourced from a lyngua
+	// label by the module wiring — no education vocabulary in code).
+	DocumentHeaderName string
+
+	// CategoryFilter (a job_category code, e.g. "academic") + ListJobCategories
+	// gate the subject set to that category — same-origin deportment jobs are
+	// dropped (gate H2). Empty code or nil closure → no filter. Resolved once per
+	// request via outcome_summary.ResolveCategoryID.
+	CategoryFilter    string
+	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
 
 	// GenerateDoc wraps fycha DocumentService.ProcessBytes (template bytes + data
 	// map → processed .docx). Injected by the app container via the block Infra.
@@ -118,8 +126,8 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			return
 		}
 
-		if rc.SchoolName == "" {
-			rc.SchoolName = firstNonEmpty(d.Labels.Landing.Title, "Report Card")
+		if rc.DocumentHeaderName == "" {
+			rc.DocumentHeaderName = firstNonEmpty(d.Labels.Landing.Title, "Report Card")
 		}
 		rc.PrintedBy = firstNonEmpty(consumer.GetUserIDFromContext(ctx), "system")
 		rc.PrintedAt = time.Now().Format("2006-01-02 15:04")
@@ -146,7 +154,7 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			return
 		}
 
-		filename := "report-card-" + slug(rc.SectionName) + "-" + slug(rc.StudentName) + ".docx"
+		filename := "report-card-" + slug(rc.SectionName) + "-" + slug(rc.ClientName) + ".docx"
 		w.Header().Set("Content-Type", docxContentType)
 		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 		if _, err := w.Write(docBytes); err != nil {

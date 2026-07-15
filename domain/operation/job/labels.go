@@ -66,9 +66,10 @@ type PageLabels struct {
 	CaptionReleased  string `json:"caption_released"`
 	HeadingOnHold    string `json:"heading_on_hold"`
 	CaptionOnHold    string `json:"caption_on_hold"`
-	// ClassTabsAria is the aria-label for the job_category tabstrip on the list
-	// page (the "/classes" tab-split). Education overrides it via lyngua.
-	ClassTabsAria string `json:"class_tabs_aria"`
+	// JobCategoryTabsAria is the aria-label for the job_category tabstrip on the
+	// list page (the "/classes" tab-split). Education overrides it via lyngua
+	// (rendered "Class categories"); generic Go default is "Job categories".
+	JobCategoryTabsAria string `json:"job_category_tabs_aria"`
 }
 
 type ButtonLabels struct {
@@ -229,17 +230,17 @@ type BulkActionLabels struct {
 func DefaultLabels() Labels {
 	return Labels{
 		Page: PageLabels{
-			Heading:          "Jobs",
-			Caption:          "Manage operational jobs",
-			HeadingDraft:     "Draft Jobs",
-			CaptionDraft:     "Review jobs that are still being prepared",
-			HeadingActive:    "Active Jobs",
-			CaptionActive:    "Track work currently in progress",
-			HeadingCompleted: "Completed Jobs",
-			CaptionCompleted: "Review jobs that have been completed",
-			HeadingClosed:    "Closed Jobs",
-			CaptionClosed:    "View archived or closed jobs",
-			ClassTabsAria:    "Job categories",
+			Heading:             "Jobs",
+			Caption:             "Manage operational jobs",
+			HeadingDraft:        "Draft Jobs",
+			CaptionDraft:        "Review jobs that are still being prepared",
+			HeadingActive:       "Active Jobs",
+			CaptionActive:       "Track work currently in progress",
+			HeadingCompleted:    "Completed Jobs",
+			CaptionCompleted:    "Review jobs that have been completed",
+			HeadingClosed:       "Closed Jobs",
+			CaptionClosed:       "View archived or closed jobs",
+			JobCategoryTabsAria: "Job categories",
 		},
 		Buttons: ButtonLabels{
 			AddJob: "Add Job",

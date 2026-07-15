@@ -110,6 +110,17 @@ func categoryOrder(c *jobcategorypb.JobCategory) (int32, bool) {
 	return 0, false
 }
 
+// categoryExists reports whether id matches a fetched job_category — the guard
+// that keeps a stale/foreign/tampered ?jc= from selecting a non-existent tab.
+func categoryExists(cats []*jobcategorypb.JobCategory, id string) bool {
+	for _, c := range cats {
+		if c.GetId() == id {
+			return true
+		}
+	}
+	return false
+}
+
 // defaultCategory returns the id of the first ACTIVE category in the (already
 // sorted) slice, falling back to the first category, or "" when empty.
 func defaultCategory(cats []*jobcategorypb.JobCategory) string {

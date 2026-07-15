@@ -36,6 +36,7 @@ import (
 	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
@@ -73,9 +74,15 @@ type Deps struct {
 	CommonLabels pyeza.CommonLabels
 	TableLabels  types.TableLabels
 
-	// Options — app-configured row presentation (bands + sort). Zero value →
-	// flat rows (no bands), name sort.
+	// Options — app-configured row presentation (bands + sort) + CategoryFilter
+	// (a job_category code, e.g. "academic"). Zero value → flat rows (no bands),
+	// name sort, and no category filter.
 	Options outcome_summary.Options
+
+	// ListJobCategories resolves Options.CategoryFilter to its id so same-origin
+	// deportment jobs are dropped from the academic grid (gate H2). Optional/
+	// nil-safe (nil closure or empty code → no filter).
+	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
 
 	ListSubscriptionGroups       func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
@@ -226,6 +233,11 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 	// adapter. Rows + columns are derived from THIS set (Q-SEC-7).
 	jobs := fetchSectionJobs(ctx, deps, keysOf(subToClient), historical)
 
+	// H2: keep only the configured category's subjects (academic), dropping
+	// same-origin deportment jobs that would otherwise render as columns. catID
+	// "" (no filter) keeps every job.
+	catID := outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.Options.CategoryFilter)
+
 	// Build the (client, template) → job map + distinct sets.
 	cellJob := map[string]string{} // clientID+"\x00"+templateID -> jobID
 	clientIDs := []string{}
@@ -234,6 +246,9 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 	tmplSeen := map[string]bool{}
 	jobIDs := []string{}
 	for _, j := range jobs {
+		if !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+			continue
+		}
 		jobID := j.GetId()
 		tid := j.GetJobTemplateId()
 		clientID := subToClient[j.GetOriginId()]
@@ -715,7 +730,7 @@ func buildRows(
 		// normal boosted anchor (hx-push-url); the download is hx-boost="false" +
 		// download so the boosted body doesn't AJAX-swap the attachment response
 		// (?id=<client> narrows the export to this row).
-		studentURL := route.ResolveURL(routes.StudentURL, "id", sectionID, "client_id", clientID)
+		studentURL := route.ResolveURL(routes.ClientCardURL, "id", sectionID, "client_id", clientID)
 		viewAnchor := `<a href="` + html.EscapeString(studentURL) + `" class="action-btn view" title="` + html.EscapeString(l.Student.ViewAction) + `" aria-label="` + html.EscapeString(l.Student.ViewAction) + `" data-testid="rc-view-` + short(clientID) + `" hx-push-url="true">` + viewIcon + `</a>`
 		dlAnchor := `<a href="` + html.EscapeString(exportURL+"?id="+clientID) + `" class="action-btn download" title="` + html.EscapeString(l.Section.DownloadAction) + `" aria-label="` + html.EscapeString(l.Section.DownloadAction) + `" data-testid="rc-download-` + short(clientID) + `" hx-boost="false" download>` + downloadIcon + `</a>`
 		cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(`<div class="action-buttons">` + viewAnchor + dlAnchor + `</div>`)})

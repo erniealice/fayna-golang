@@ -142,8 +142,11 @@ func renderTabbed(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCon
 	cats := listAllJobCategories(ctx, deps)
 	sortJobCategories(cats, deps.Options.Tab)
 
+	// ?jc= selects the active tab. Validate it against the fetched set: an empty,
+	// stale, foreign, or tampered id falls back to the default category so the
+	// tablist never references a non-existent tab (dangling aria state).
 	selected := strings.TrimSpace(viewCtx.Request.URL.Query().Get("jc"))
-	if selected == "" {
+	if selected == "" || !categoryExists(cats, selected) {
 		selected = defaultCategory(cats)
 	}
 
@@ -166,7 +169,7 @@ func renderTabbed(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCon
 	listURL := route.ResolveURL(deps.Routes.ListURL, "status", status)
 	pageData.TabItems = buildJobCategoryTabs(cats, counts, selected, listURL)
 	pageData.ActiveTab = tabKey(selected)
-	pageData.TabsAria = l.Page.ClassTabsAria
+	pageData.TabsAria = l.Page.JobCategoryTabsAria
 	applyJobKBHelp(pageData, viewCtx)
 	return view.OK("job-list", pageData)
 }

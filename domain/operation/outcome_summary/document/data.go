@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
@@ -42,17 +44,20 @@ type subjectRow struct {
 	YearFinal string // job_outcome_summary.scaled_label — STORED, never recomputed
 }
 
-// reportCard is one student's assembled card (meta + ordered subjects).
+// reportCard is one client's assembled card (meta + ordered subjects). Generic
+// field identifiers; the vertical rendered wording lives in lyngua values and in
+// the .docx template's placeholder keys (school_name/academic_year/… — the
+// operator template contract, unchanged).
 type reportCard struct {
-	SchoolName   string
-	AcademicYear string
-	StudentName  string
-	GradeLevel   string
-	SectionName  string
-	LRN          string
-	PrintedBy    string
-	PrintedAt    string
-	Subjects     []subjectRow
+	DocumentHeaderName string
+	SchedulePeriod     string
+	ClientName         string
+	GroupLevel         string
+	SectionName        string
+	LRN                string
+	PrintedBy          string
+	PrintedAt          string
+	Subjects           []subjectRow
 	// PriceScheduleID is the section's AY anchor (subscription_group.price_schedule_id),
 	// threaded to the report-card template-binding resolver. Empty → the resolver
 	// returns the workspace-wide fallback binding (or none → embedded template).
@@ -79,10 +84,10 @@ func buildReportCardData(rc reportCard) map[string]any {
 		})
 	}
 	return map[string]any{
-		"school_name":   orBlank(rc.SchoolName),
-		"academic_year": orBlank(rc.AcademicYear),
-		"student_name":  orBlank(rc.StudentName),
-		"grade_level":   orBlank(rc.GradeLevel),
+		"school_name":   orBlank(rc.DocumentHeaderName),
+		"academic_year": orBlank(rc.SchedulePeriod),
+		"student_name":  orBlank(rc.ClientName),
+		"grade_level":   orBlank(rc.GroupLevel),
 		"section_name":  orBlank(rc.SectionName),
 		"lrn":           orDash(rc.LRN),
 		"printed_by":    orBlank(rc.PrintedBy),
@@ -91,8 +96,8 @@ func buildReportCardData(rc reportCard) map[string]any {
 	}
 }
 
-// collectCard assembles one student's report card by mirroring the view-3
-// student_card fetch (section EXISTS gate → membership IDOR gate → jobs →
+// collectCard assembles one client's report card by mirroring the view-3
+// client_card fetch (section EXISTS gate → membership IDOR gate → jobs →
 // phase/year summaries) and ADDING the job_outcome_line per-criterion fetch.
 // Returns (nil,false) on any gate failure (fail-closed; the handler maps to
 // 403/404 without leaking which check failed).
@@ -109,11 +114,17 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	}
 
 	jobs := fetchJobs(ctx, d, subID, historical)
+	// H2: keep only the configured category's subjects (academic), dropping
+	// same-origin deportment jobs. catID "" (no filter) keeps every job.
+	catID := outcome_summary.ResolveCategoryID(ctx, d.ListJobCategories, d.CategoryFilter)
 	jobTemplate := map[string]string{}
 	jobIDs := make([]string, 0, len(jobs))
 	templateIDs := []string{}
 	tmplSeen := map[string]bool{}
 	for _, j := range jobs {
+		if !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+			continue
+		}
 		jid, tid := j.GetId(), j.GetJobTemplateId()
 		if jid == "" || tid == "" {
 			continue
@@ -192,19 +203,19 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	name, ay := sectionParts(group.GetName())
 	grade, section := gradeSection(name)
 	rc := &reportCard{
-		SchoolName:      strings.TrimSpace(d.SchoolName),
-		AcademicYear:    ay,
-		StudentName:     studentName(ctx, d, clientID),
-		GradeLevel:      grade,
-		SectionName:     section,
-		LRN:             "",
-		Subjects:        rows,
-		PriceScheduleID: group.GetPriceScheduleId(),
+		DocumentHeaderName: strings.TrimSpace(d.DocumentHeaderName),
+		SchedulePeriod:     ay,
+		ClientName:         studentName(ctx, d, clientID),
+		GroupLevel:         grade,
+		SectionName:        section,
+		LRN:                "",
+		Subjects:           rows,
+		PriceScheduleID:    group.GetPriceScheduleId(),
 	}
 	return rc, true
 }
 
-// --- fetch helpers (mirror student_card) ----------------------------------
+// --- fetch helpers (mirror client_card) ----------------------------------
 
 func fetchSection(ctx context.Context, d *Deps, sectionID string) *subscriptiongrouppb.SubscriptionGroup {
 	if d.ListSubscriptionGroups == nil {
@@ -512,7 +523,7 @@ func fetchCriteriaByJob(ctx context.Context, d *Deps, jobByPhase map[string]stri
 
 	// task_outcome: MAX numeric_value per (job, criterion). Also remember which
 	// template_task each (job, criterion) came from, for the sequence lookup.
-	critMax := map[string]map[string]float64{}      // jobID → criteriaVersionID → MAX
+	critMax := map[string]map[string]float64{}        // jobID → criteriaVersionID → MAX
 	jobCritTmplTask := map[string]map[string]string{} // jobID → criteriaVersionID → templateTaskID
 	tmplTaskSet := map[string]bool{}
 	for start := 0; start < len(taskIDs); start += pageLimit {

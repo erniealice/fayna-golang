@@ -36,20 +36,28 @@ const (
 
 	// TemplateSettingsURL is the standalone report-card template management page
 	// (TB3): list of AY→document_template bindings + upload/publish/delete. A
-	// dedicated settings surface (D3), NOT a tab on the landing. Education
-	// overrides it to /report-cards/templates via education/route.json.
+	// dedicated settings surface (D3), NOT a tab on the landing. GET only — no
+	// mutation, so it stays outside /action/. Education overrides it to
+	// /report-cards/templates via education/route.json.
 	TemplateSettingsURL = "/outcomes/summaries/templates"
+	// The three template MUTATIONS live under /action/* so they inherit the CSRF
+	// validator + signed workspace-form guard (both default-scoped to /action/ in
+	// espyna's middleware chain). Registering them elsewhere silently bypasses
+	// both guards (B4 codex finding #1). Education keeps its /report-cards/templates
+	// display vocabulary UNDER the /action/ prefix (see education/route.json).
+	//
 	// TemplateUploadURL is the upload drawer (GET = form, POST = create a DRAFT
-	// binding + its document_template artifact). Education → /report-cards/templates/upload.
-	TemplateUploadURL = "/outcomes/summaries/templates/upload"
+	// binding + its document_template artifact). Education →
+	// /action/report-cards/templates/upload.
+	TemplateUploadURL = "/action/outcome-summary/templates/upload"
 	// TemplatePublishURL publishes a DRAFT binding (id in ?id= query, appended by
 	// the table row-action JS) via the controlled publish transaction. Flat (no
 	// path param) so it composes with the generic "activate" row action.
-	// Education → /report-cards/templates/publish.
-	TemplatePublishURL = "/outcomes/summaries/templates/publish"
+	// Education → /action/report-cards/templates/publish.
+	TemplatePublishURL = "/action/outcome-summary/templates/publish"
 	// TemplateDeleteURL deletes a binding (POST, id in form). Education →
-	// /report-cards/templates/delete.
-	TemplateDeleteURL = "/outcomes/summaries/templates/delete"
+	// /action/report-cards/templates/delete.
+	TemplateDeleteURL = "/action/outcome-summary/templates/delete"
 )
 
 // Routes holds all route paths for outcome summary (report card) views.

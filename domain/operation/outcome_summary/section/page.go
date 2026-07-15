@@ -242,8 +242,9 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 
 	// H2: keep only the configured category's subjects (academic), dropping
 	// same-origin deportment jobs that would otherwise render as columns. catID
-	// "" (no filter) keeps every job.
-	catID := outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.Options.CategoryFilter)
+	// "" with catOK=true (no filter) keeps every job; catOK=false (a configured
+	// filter that could not be resolved) fails CLOSED — the grid drops every job.
+	catID, catOK := outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.Options.CategoryFilter)
 
 	// Build the (client, template) → job map + distinct sets.
 	cellJob := map[string]string{} // clientID+"\x00"+templateID -> jobID
@@ -253,7 +254,7 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 	tmplSeen := map[string]bool{}
 	jobIDs := []string{}
 	for _, j := range jobs {
-		if !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+		if !catOK || !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
 			continue
 		}
 		jobID := j.GetId()

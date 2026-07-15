@@ -194,15 +194,17 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 	}
 
 	// H2: keep only the configured category's subjects (academic), dropping
-	// same-origin deportment jobs. catID "" (no filter) keeps every job.
-	catID := outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.CategoryFilter)
+	// same-origin deportment jobs. catID "" with catOK=true (no filter) keeps
+	// every job; catOK=false (a configured filter that could not be resolved)
+	// fails CLOSED — the card drops every job.
+	catID, catOK := outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.CategoryFilter)
 
 	jobTemplate := map[string]string{} // job_id -> template_id
 	jobIDs := make([]string, 0, len(jobs))
 	templateIDs := []string{}
 	tmplSeen := map[string]bool{}
 	for _, j := range jobs {
-		if !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+		if !catOK || !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
 			continue
 		}
 		jid, tid := j.GetId(), j.GetJobTemplateId()

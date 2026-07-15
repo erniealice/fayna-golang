@@ -115,14 +115,16 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 
 	jobs := fetchJobs(ctx, d, subID, historical)
 	// H2: keep only the configured category's subjects (academic), dropping
-	// same-origin deportment jobs. catID "" (no filter) keeps every job.
-	catID := outcome_summary.ResolveCategoryID(ctx, d.ListJobCategories, d.CategoryFilter)
+	// same-origin deportment jobs. catID "" with catOK=true (no filter) keeps
+	// every job; catOK=false (a configured filter that could not be resolved)
+	// fails CLOSED — the document drops every job (empty transcript, not a leak).
+	catID, catOK := outcome_summary.ResolveCategoryID(ctx, d.ListJobCategories, d.CategoryFilter)
 	jobTemplate := map[string]string{}
 	jobIDs := make([]string, 0, len(jobs))
 	templateIDs := []string{}
 	tmplSeen := map[string]bool{}
 	for _, j := range jobs {
-		if !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+		if !catOK || !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
 			continue
 		}
 		jid, tid := j.GetId(), j.GetJobTemplateId()

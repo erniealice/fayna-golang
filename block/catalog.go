@@ -18,6 +18,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/evaluation_template_item"
 	"github.com/erniealice/fayna-golang/domain/operation/job"
 	"github.com/erniealice/fayna-golang/domain/operation/job_activity"
+	"github.com/erniealice/fayna-golang/domain/operation/job_category"
 	"github.com/erniealice/fayna-golang/domain/operation/job_outcome_line"
 	"github.com/erniealice/fayna-golang/domain/operation/job_phase"
 	"github.com/erniealice/fayna-golang/domain/operation/job_task"
@@ -86,6 +87,29 @@ func JobUnit(uc *UseCases, infra *Infra, options job.Options) compose.Unit {
 		locationSearchFn := newJobLocationSearchHandler(infra.DB)
 		compose.HandleFunc(mc.Routes, "GET", r.ClientSearchURL, clientSearchFn)
 		compose.HandleFunc(mc.Routes, "GET", r.LocationSearchURL, locationSearchFn)
+		return nil
+	}
+	return u
+}
+
+// JobCategoryUnit registers the per-workspace job taxonomy CRUD module (P7a):
+// list / detail / drawer (add / edit / delete / bulk-delete). The CRUD closures
+// are OPTIONAL / nil-able (buildFaynaUseCases populates uc.Operation.JobCategory);
+// a missing closure degrades the list to empty-state rather than refusing boot.
+func JobCategoryUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := job_category.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*job_category.Routes)
+		l := u.Labels.(*job_category.Labels)
+
+		deps := &operation.JobCategoryModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireJobCategoryDeps(deps, uc)
+		operation.NewJobCategoryModule(deps).RegisterRoutes(mc.Routes)
 		return nil
 	}
 	return u
@@ -603,6 +627,10 @@ func OutcomeSummaryUnit(uc *UseCases, infra *Infra, options outcome_summary.Opti
 		if infra != nil {
 			deps.GenerateDoc = infra.GenerateDoc
 			deps.ResolveTemplateBytes = infra.ResolveTemplateBytes
+			// TB3 template settings artifact closures.
+			deps.UploadTemplate = infra.UploadTemplate
+			deps.ListDocumentTemplates = infra.ListDocTemplates
+			deps.CreateDocumentTemplate = infra.CreateDocTemplate
 		}
 		wireOutcomeSummaryDeps(deps, uc)
 		operation.NewOutcomeSummaryModule(deps).RegisterRoutes(mc.Routes)
@@ -780,6 +808,7 @@ func AllUnits(uc *UseCases, infra *Infra, opts ...EngineOption) []compose.Unit {
 	}
 	return []compose.Unit{
 		JobUnit(uc, infra, cfg.jobListOptions),
+		JobCategoryUnit(uc, infra),
 		JobTemplateUnit(uc, infra),
 		JobTemplatePhaseUnit(uc, infra),
 		JobTemplateTaskUnit(uc, infra),

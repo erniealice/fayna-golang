@@ -44,6 +44,13 @@ import (
 	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 )
 
+// actionsColumnKey is the column Key of the frozen per-row action cell (view
+// student card + CSV download). It is a UI control, not report data, so the CSV
+// export skips it (header + each row's cell). Declared once here (T8) and shared
+// by buildColumns + the export handler so a rename can never desync the two —
+// a mismatch would leak raw HTML action anchors into every CSV row.
+const actionsColumnKey = "rc-actions"
+
 // pageLimit chunks ListFilter(IN) id sets so each call's result set stays under
 // the adapter's default cap (the fetchClientNames pattern).
 const pageLimit = 100
@@ -684,7 +691,7 @@ func buildColumns(templateIDs []string, names map[string]string, l outcome_summa
 	// Second frozen column: the per-row actions (view student card + CSV
 	// download). Blank header mirrors the prod report card's action column.
 	// Excluded from the CSV export by key (export.go skips "rc-actions").
-	cols = append(cols, types.TableColumn{Key: "rc-actions", Label: "", Width: "5rem", MinWidth: "5rem", Align: "center", NoSort: true})
+	cols = append(cols, types.TableColumn{Key: actionsColumnKey, Label: "", Width: "5rem", MinWidth: "5rem", Align: "center", NoSort: true})
 	for _, tid := range ordered {
 		cols = append(cols, types.TableColumn{Key: "tmpl-" + tid, Label: colName(names, tid), MinWidth: "6.25rem", Align: "center", NoSort: true})
 	}

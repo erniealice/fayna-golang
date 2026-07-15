@@ -1,0 +1,58 @@
+{{/* Job category add/edit drawer — loaded into #sheetContent via HTMX.
+     Data: form.Data (.FormAction, .WorkspaceID, .IsEdit, .ID, .Name, .Code,
+     .SortOrder, .Active, .Labels, .CommonLabels). */}}
+{{define "job-category-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .IsEdit}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+
+    <div class="sheet-body">
+        {{template "form-section" (dict "Title" .Labels.Form.SectionIdentity)}}
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.Form.Name
+                "Value" .Name
+                "Required" true
+                "Placeholder" .Labels.Form.NamePlaceholder
+                "Info" .Labels.Form.NameInfo
+            )}}
+        </div>
+
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "code"
+                "Label" .Labels.Form.Code
+                "Value" .Code
+                "Placeholder" .Labels.Form.CodePlaceholder
+                "Info" .Labels.Form.CodeInfo
+            )}}
+            {{template "form-group" (dict
+                "Type" "number"
+                "Name" "sort_order"
+                "Label" .Labels.Form.SortOrder
+                "Value" .SortOrder
+                "Placeholder" .Labels.Form.SortOrderPlaceholder
+                "Info" .Labels.Form.SortOrderInfo
+            )}}
+        </div>
+
+        {{if .IsEdit}}
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="active">
+                    <input type="checkbox" id="active" name="active" value="true"{{if .Active}} checked{{end}}>
+                    {{.Labels.Form.Active}}
+                </label>
+                <p class="form-hint">{{.Labels.Form.ActiveInfo}}</p>
+            </div>
+        </div>
+        {{end}}
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

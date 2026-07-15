@@ -1,0 +1,70 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "outcome-summary-template-settings"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — report-card template settings list (TB3). The view
+     adapter derives this name as {result.Template}-content, so it must match
+     .ContentTemplate. */}}
+{{define "outcome-summary-template-settings-content"}}
+<div class="page-content page-content--table">
+    {{template "table-card" .Table}}
+</div>
+{{end}}
+
+{{/* Upload drawer — loaded into #sheetContent via HTMX. Data: .FormAction,
+     .WorkspaceID, .Labels (TemplateSettingsLabels), .CommonLabels,
+     .ScheduleOptions ([]SelectOption), .AcceptTypes. */}}
+{{define "outcome-summary-template-upload-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-encoding="multipart/form-data" data-hx-on="sheet-response">
+    {{actionForm .FormAction .WorkspaceID}}
+
+    <div class="sheet-body">
+        {{template "form-section" (dict "Title" .Labels.UploadTitle)}}
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.NameLabel
+                "Required" true
+                "Placeholder" .Labels.NameLabel
+            )}}
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="price_schedule_id">{{.Labels.ScheduleLabel}}</label>
+                <select class="form-input" id="price_schedule_id" name="price_schedule_id">
+                    {{range .ScheduleOptions}}
+                    <option value="{{.Value}}">{{.Label}}</option>
+                    {{end}}
+                </select>
+                <p class="form-hint">{{.Labels.ScheduleHint}}</p>
+            </div>
+        </div>
+
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type" "date"
+                "Name" "validity_start"
+                "Label" .Labels.ValidityStartLabel
+            )}}
+            {{template "form-group" (dict
+                "Type" "date"
+                "Name" "validity_end"
+                "Label" .Labels.ValidityEndLabel
+            )}}
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="template_file">{{.Labels.FileLabel}} <span class="form-required" aria-hidden="true">*</span></label>
+                <input type="file" class="form-input" id="template_file" name="template_file" accept="{{.AcceptTypes}}" required>
+            </div>
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" false)}}
+</form>
+{{end}}

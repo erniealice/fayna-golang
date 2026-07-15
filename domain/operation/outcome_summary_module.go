@@ -12,11 +12,13 @@ import (
 	summarylist "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/list"
 	phasesummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/phase_summary"
 	sectionview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/section"
+	templatesettings "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/template_settings"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
@@ -24,6 +26,7 @@ import (
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	joblinepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_line"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
@@ -99,6 +102,19 @@ type OutcomeSummaryModuleDeps struct {
 	// document drop same-origin deportment jobs (gate H2). Optional/nil-safe —
 	// a nil closure (or empty CategoryFilter) applies no filter.
 	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
+
+	// Report-card template settings (TB3). The document_template artifact +
+	// storage closures come from the app AppContext; the binding lifecycle
+	// closures come from the espyna binding use cases via the block seam. All
+	// optional/nil-safe — a nil write closure degrades the settings surface to a
+	// "not configured" error (never a panic). The list page still renders.
+	UploadTemplate         func(ctx context.Context, bucket, key string, content []byte, contentType string) error
+	ListDocumentTemplates  func(ctx context.Context, req *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error)
+	CreateDocumentTemplate func(ctx context.Context, req *documenttemplatepb.CreateDocumentTemplateRequest) (*documenttemplatepb.CreateDocumentTemplateResponse, error)
+	ListTemplateBindings   func(ctx context.Context, req *bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest) (*bindingpb.ListJobOutcomeSummaryDocumentTemplatesResponse, error)
+	CreateTemplateBinding  func(ctx context.Context, req *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error)
+	DeleteTemplateBinding  func(ctx context.Context, req *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error)
+	PublishTemplateBinding func(ctx context.Context, req *bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse, error)
 }
 
 // OutcomeSummaryModule holds all constructed outcome summary views.
@@ -115,6 +131,12 @@ type OutcomeSummaryModule struct {
 	// StudentDocument is the per-student report-card .docx download (a raw
 	// handler wrapped like SectionExport). Nil when GenerateDoc is not wired.
 	StudentDocument http.HandlerFunc
+
+	// Report-card template settings surface (TB3).
+	TemplateSettings view.View
+	TemplateUpload   view.View
+	TemplatePublish  view.View
+	TemplateDelete   view.View
 }
 
 // NewOutcomeSummaryModule creates a new outcome summary module with all views wired.
@@ -171,6 +193,10 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			ListPhaseOutcomeSummarysByJob: deps.ListPhaseOutcomeSummarysByJob,
 			ListJobPhases:                 deps.ListJobPhases,
 		}),
+		TemplateSettings: templatesettings.NewListView(templateSettingsDeps(deps)),
+		TemplateUpload:   templatesettings.NewUploadAction(templateSettingsDeps(deps)),
+		TemplatePublish:  templatesettings.NewPublishAction(templateSettingsDeps(deps)),
+		TemplateDelete:   templatesettings.NewDeleteAction(templateSettingsDeps(deps)),
 		JobSummary: jobsummary.NewView(&jobsummary.Deps{
 			Routes:                    deps.Routes,
 			Labels:                    deps.Labels,
@@ -183,6 +209,25 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			CommonLabels:                     deps.CommonLabels,
 			GetPhaseOutcomeSummaryByJobPhase: deps.GetPhaseOutcomeSummaryByJobPhase,
 		}),
+	}
+}
+
+// templateSettingsDeps maps the module deps onto the template-settings view
+// deps (TB3). All closures are optional/nil-safe.
+func templateSettingsDeps(deps *OutcomeSummaryModuleDeps) *templatesettings.Deps {
+	return &templatesettings.Deps{
+		Routes:                 deps.Routes,
+		Labels:                 deps.Labels,
+		CommonLabels:           deps.CommonLabels,
+		TableLabels:            deps.TableLabels,
+		ListPriceSchedules:     deps.ListPriceSchedules,
+		UploadTemplate:         deps.UploadTemplate,
+		ListDocumentTemplates:  deps.ListDocumentTemplates,
+		CreateDocumentTemplate: deps.CreateDocumentTemplate,
+		ListTemplateBindings:   deps.ListTemplateBindings,
+		CreateTemplateBinding:  deps.CreateTemplateBinding,
+		DeleteTemplateBinding:  deps.DeleteTemplateBinding,
+		PublishTemplateBinding: deps.PublishTemplateBinding,
 	}
 }
 
@@ -253,4 +298,21 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 	}
 	r.GET(m.routes.JobSummaryURL, m.JobSummary)
 	r.GET(m.routes.PhaseSummaryURL, m.PhaseSummary)
+
+	// Report-card template settings (TB3): list page + upload drawer (GET form /
+	// POST create) + publish (POST) + delete (POST). Gated inside each view
+	// (list → :list, mutations → :update).
+	if m.TemplateSettings != nil && m.routes.TemplateSettingsURL != "" {
+		r.GET(m.routes.TemplateSettingsURL, m.TemplateSettings)
+	}
+	if m.TemplateUpload != nil && m.routes.TemplateUploadURL != "" {
+		r.GET(m.routes.TemplateUploadURL, m.TemplateUpload)
+		r.POST(m.routes.TemplateUploadURL, m.TemplateUpload)
+	}
+	if m.TemplatePublish != nil && m.routes.TemplatePublishURL != "" {
+		r.POST(m.routes.TemplatePublishURL, m.TemplatePublish)
+	}
+	if m.TemplateDelete != nil && m.routes.TemplateDeleteURL != "" {
+		r.POST(m.routes.TemplateDeleteURL, m.TemplateDelete)
+	}
 }

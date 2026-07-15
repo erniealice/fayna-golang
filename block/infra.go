@@ -5,6 +5,7 @@ import (
 
 	"github.com/erniealice/espyna-golang/ports"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
+	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 )
 
 // Infra carries the subset of AppContext that view modules need beyond
@@ -33,4 +34,12 @@ type Infra struct {
 	// unavailable → the document unit falls back to its embedded template (no
 	// download regression). Nil when the app did not wire the resolver.
 	ResolveTemplateBytes func(ctx context.Context, priceScheduleID string) ([]byte, error)
+
+	// Report-card template settings (TB3) artifact closures, sourced from the app
+	// AppContext (ctx.UploadTemplate / ctx.ListDocTemplates / ctx.CreateDocTemplate,
+	// same as GenerateDoc/ResolveTemplateBytes). All optional/nil-safe — a nil
+	// closure degrades the upload path to "not configured".
+	UploadTemplate    func(ctx context.Context, bucket, key string, content []byte, contentType string) error
+	ListDocTemplates  func(ctx context.Context, req *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error)
+	CreateDocTemplate func(ctx context.Context, req *documenttemplatepb.CreateDocumentTemplateRequest) (*documenttemplatepb.CreateDocumentTemplateResponse, error)
 }

@@ -1,0 +1,12 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-category-list"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial. The view adapter derives this name as
+     {result.Template}-content, so it must match .ContentTemplate. */}}
+{{define "job-category-list-content"}}
+<div class="page-content page-content--table">
+    {{template "table-card" .Table}}
+</div>
+{{end}}

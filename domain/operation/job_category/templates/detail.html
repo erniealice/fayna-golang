@@ -1,0 +1,40 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-category-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — job category info card. */}}
+{{define "job-category-detail-content"}}
+<div class="page-content">
+    <div class="card">
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-row">
+                    <dt class="detail-label">{{.Labels.Columns.Name}}</dt>
+                    <dd class="detail-value">{{.Name}}</dd>
+                </div>
+                <div class="detail-row">
+                    <dt class="detail-label">{{.Labels.Columns.Code}}</dt>
+                    <dd class="detail-value">{{.Code}}</dd>
+                </div>
+                <div class="detail-row">
+                    <dt class="detail-label">{{.Labels.Columns.SortOrder}}</dt>
+                    <dd class="detail-value">{{.SortOrder}}</dd>
+                </div>
+                <div class="detail-row">
+                    <dt class="detail-label">{{.Labels.Columns.Status}}</dt>
+                    <dd class="detail-value">{{.StatusLabel}}</dd>
+                </div>
+                <div class="detail-row">
+                    <dt class="detail-label">{{.Labels.Detail.DateCreated}}</dt>
+                    <dd class="detail-value">{{.DateCreated}}</dd>
+                </div>
+                <div class="detail-row">
+                    <dt class="detail-label">{{.Labels.Detail.DateModified}}</dt>
+                    <dd class="detail-value">{{.DateModified}}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+{{end}}

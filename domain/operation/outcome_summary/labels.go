@@ -16,6 +16,47 @@ type Labels struct {
 	Landing LandingLabels `json:"landing"`
 	Section SectionLabels `json:"section"`
 	Student PeriodLabels  `json:"student"`
+	// TemplateSettings holds the TB3 report-card template management surface
+	// strings. Same snake_case-json-tag rule as LandingLabels — a missing tag
+	// silently falls back to the compiled default.
+	TemplateSettings TemplateSettingsLabels `json:"template_settings"`
+}
+
+// TemplateSettingsLabels holds the report-card template settings page strings
+// (list + upload drawer + publish/delete). Generic identifiers; the vertical
+// wording ("Report Card Template") lives only in lyngua values.
+type TemplateSettingsLabels struct {
+	Title          string `json:"title"`
+	Subtitle       string `json:"subtitle"`
+	NameColumn     string `json:"name_column"`
+	ScheduleColumn string `json:"schedule_column"`
+	VersionColumn  string `json:"version_column"`
+	StatusColumn   string `json:"status_column"`
+	ValidityColumn string `json:"validity_column"`
+	UploadAction   string `json:"upload_action"`
+	PublishAction  string `json:"publish_action"`
+	DeleteAction   string `json:"delete_action"`
+	EmptyTitle     string `json:"empty_title"`
+	EmptyMessage   string `json:"empty_message"`
+	// Upload drawer.
+	UploadTitle        string `json:"upload_title"`
+	NameLabel          string `json:"name_label"`
+	ScheduleLabel      string `json:"schedule_label"`
+	ScheduleHint       string `json:"schedule_hint"`
+	ScheduleFallback   string `json:"schedule_fallback"`
+	ValidityStartLabel string `json:"validity_start_label"`
+	ValidityEndLabel   string `json:"validity_end_label"`
+	FileLabel          string `json:"file_label"`
+	// Status badges (VersionStatus enum).
+	StatusDraft      string `json:"status_draft"`
+	StatusPublished  string `json:"status_published"`
+	StatusDeprecated string `json:"status_deprecated"`
+	// Confirms + errors.
+	PublishConfirm string `json:"publish_confirm"`
+	DeleteConfirm  string `json:"delete_confirm"`
+	NotConfigured  string `json:"not_configured"`
+	InvalidFile    string `json:"invalid_file"`
+	UploadFailed   string `json:"upload_failed"`
 }
 
 // PeriodLabels holds the view-3 (per-client report card) strings, grouped by
@@ -186,6 +227,36 @@ func DefaultLabels() Labels {
 			ProgressColumn: "Progress",
 			FinalColumn:    "Final",
 			ViewAction:     "View outcomes",
+		},
+		TemplateSettings: TemplateSettingsLabels{
+			Title:              "Outcome Report Templates",
+			Subtitle:           "Upload and publish the document template used to render outcome reports per schedule",
+			NameColumn:         "Template",
+			ScheduleColumn:     "Schedule",
+			VersionColumn:      "Version",
+			StatusColumn:       "Status",
+			ValidityColumn:     "Valid",
+			UploadAction:       "Upload Template",
+			PublishAction:      "Publish",
+			DeleteAction:       "Delete",
+			EmptyTitle:         "No templates",
+			EmptyMessage:       "Upload a document template to render outcome reports.",
+			UploadTitle:        "Upload Template",
+			NameLabel:          "Template Name",
+			ScheduleLabel:      "Schedule",
+			ScheduleHint:       "Leave blank to use this template for every schedule (workspace default).",
+			ScheduleFallback:   "Workspace default",
+			ValidityStartLabel: "Valid From",
+			ValidityEndLabel:   "Valid Until",
+			FileLabel:          "Template File (.docx)",
+			StatusDraft:        "Draft",
+			StatusPublished:    "Published",
+			StatusDeprecated:   "Deprecated",
+			PublishConfirm:     "Publish this template? The previously published template for this schedule will be superseded.",
+			DeleteConfirm:      "Delete this template binding? This cannot be undone.",
+			NotConfigured:      "Template management is not configured.",
+			InvalidFile:        "Only .docx files are accepted.",
+			UploadFailed:       "Failed to upload template.",
 		},
 	}
 }

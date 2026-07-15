@@ -17,6 +17,20 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 )
 
+// exportSkipColumns returns the set of column indices the CSV export omits — the
+// frozen per-row action column (actionsColumnKey), matched by Key so a header
+// rename can never leak raw HTML action anchors into the CSV. Shared with the
+// grid builder's actionsColumnKey (T8).
+func exportSkipColumns(columns []types.TableColumn) map[int]bool {
+	skip := map[int]bool{}
+	for i, c := range columns {
+		if c.Key == actionsColumnKey {
+			skip[i] = true
+		}
+	}
+	return skip
+}
+
 // NewExportHandler creates the section-grid CSV download handler.
 func NewExportHandler(deps *Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -75,12 +89,7 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 		// The frozen per-row action column ("rc-actions") is a UI download
 		// button, not report data — exclude it (header + each row's cell) from
 		// the CSV. Cell index aligns with column index (name, rc-actions, …).
-		skipCol := map[int]bool{}
-		for i, c := range table.Columns {
-			if c.Key == "rc-actions" {
-				skipCol[i] = true
-			}
-		}
+		skipCol := exportSkipColumns(table.Columns)
 
 		cw := csv.NewWriter(w)
 		header := make([]string, 0, len(table.Columns))

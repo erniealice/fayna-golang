@@ -44,10 +44,11 @@ import (
 	evaltemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template"
 	evaltemplateitempb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template_item"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
-	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	joboutcomelinepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_line"
 	joboutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
@@ -122,19 +123,24 @@ type UseCases struct {
 // OperationUseCases mirrors espyna's Operation aggregate sub-groups. Field
 // names match the proto entity nesting (Job, JobPhase, JobTask, ...).
 type OperationUseCases struct {
-	Job              JobUseCases
-	JobPhase         JobPhaseUseCases
-	JobTask          JobTaskUseCases
-	JobActivity      JobActivityUseCases
-	JobTemplate      JobTemplateUseCases
+	Job         JobUseCases
+	JobPhase    JobPhaseUseCases
+	JobTask     JobTaskUseCases
+	JobActivity JobActivityUseCases
+	JobTemplate JobTemplateUseCases
 	// JobCategory — per-workspace job taxonomy reference entity (20260714). Its
 	// ListJobCategories backs the job list's "/classes" tab-split (one tab per
 	// category). OPTIONAL / nil-able — a nil closure degrades the list to flat.
 	JobCategory JobCategoryUseCases
-	JobTemplatePhase JobTemplatePhaseUseCases
-	JobTemplateTask  JobTemplateTaskUseCases
-	OutcomeCriteria  OutcomeCriteriaUseCases
-	TaskOutcome      TaskOutcomeUseCases
+	// JobOutcomeSummaryDocumentTemplate — report-card template binding (20260714).
+	// Backs the TB3 template settings page (list/upload/publish/delete) via the
+	// espyna binding CRUD + publish use cases. OPTIONAL / nil-able — a nil closure
+	// degrades the settings surface to empty/"not configured".
+	JobOutcomeSummaryDocumentTemplate JobOutcomeSummaryDocumentTemplateUseCases
+	JobTemplatePhase                  JobTemplatePhaseUseCases
+	JobTemplateTask                   JobTemplateTaskUseCases
+	OutcomeCriteria                   OutcomeCriteriaUseCases
+	TaskOutcome                       TaskOutcomeUseCases
 	// OutcomeMatrix — the generic principal-scoped grading grid (read) + the
 	// acting-staff resolver its read-only + IDOR gates depend on. Sourced from
 	// espyna's SERVICE aggregate (service/operation/outcome_matrix), surfaced
@@ -247,6 +253,17 @@ type JobCategoryUseCases struct {
 	UpdateJobCategory func(context.Context, *jobcategorypb.UpdateJobCategoryRequest) (*jobcategorypb.UpdateJobCategoryResponse, error)
 	DeleteJobCategory func(context.Context, *jobcategorypb.DeleteJobCategoryRequest) (*jobcategorypb.DeleteJobCategoryResponse, error)
 	ListJobCategories func(context.Context, *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
+}
+
+// JobOutcomeSummaryDocumentTemplateUseCases — report-card template binding
+// lifecycle (list/create/delete + the controlled publish transaction). Backs
+// the TB3 template settings page. OPTIONAL / nil-able (NOT in RequireFor): a nil
+// closure degrades the settings surface to "not configured".
+type JobOutcomeSummaryDocumentTemplateUseCases struct {
+	ListJobOutcomeSummaryDocumentTemplates   func(context.Context, *bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest) (*bindingpb.ListJobOutcomeSummaryDocumentTemplatesResponse, error)
+	CreateJobOutcomeSummaryDocumentTemplate  func(context.Context, *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error)
+	DeleteJobOutcomeSummaryDocumentTemplate  func(context.Context, *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error)
+	PublishJobOutcomeSummaryDocumentTemplate func(context.Context, *bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse, error)
 }
 
 // JobTemplatePhaseUseCases — JobTemplatePhase CRUD + ListByJobTemplate.

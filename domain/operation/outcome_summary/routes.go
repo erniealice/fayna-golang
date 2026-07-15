@@ -33,6 +33,23 @@ const (
 	// every other route here; the default mirrors centymo's generic constant.
 	GroupDetailURL = "/subscription-groups/detail/{id}"
 	PhaseURL       = "/jobs/detail/{id}/phase/{phase_id}/summary"
+
+	// TemplateSettingsURL is the standalone report-card template management page
+	// (TB3): list of AY→document_template bindings + upload/publish/delete. A
+	// dedicated settings surface (D3), NOT a tab on the landing. Education
+	// overrides it to /report-cards/templates via education/route.json.
+	TemplateSettingsURL = "/outcomes/summaries/templates"
+	// TemplateUploadURL is the upload drawer (GET = form, POST = create a DRAFT
+	// binding + its document_template artifact). Education → /report-cards/templates/upload.
+	TemplateUploadURL = "/outcomes/summaries/templates/upload"
+	// TemplatePublishURL publishes a DRAFT binding (id in ?id= query, appended by
+	// the table row-action JS) via the controlled publish transaction. Flat (no
+	// path param) so it composes with the generic "activate" row action.
+	// Education → /report-cards/templates/publish.
+	TemplatePublishURL = "/outcomes/summaries/templates/publish"
+	// TemplateDeleteURL deletes a binding (POST, id in form). Education →
+	// /report-cards/templates/delete.
+	TemplateDeleteURL = "/outcomes/summaries/templates/delete"
 )
 
 // Routes holds all route paths for outcome summary (report card) views.
@@ -53,6 +70,12 @@ type Routes struct {
 	ClientDocumentURL string `json:"client_document_url"`
 	GroupDetailURL    string `json:"group_detail_url"`
 	PhaseSummaryURL   string `json:"phase_summary_url"`
+
+	// Report-card template settings (TB3 management surface).
+	TemplateSettingsURL string `json:"template_settings_url"`
+	TemplateUploadURL   string `json:"template_upload_url"`
+	TemplatePublishURL  string `json:"template_publish_url"`
+	TemplateDeleteURL   string `json:"template_delete_url"`
 }
 
 // DefaultRoutes returns a Routes populated from
@@ -71,6 +94,11 @@ func DefaultRoutes() Routes {
 		ClientDocumentURL: ClientDocumentURL,
 		GroupDetailURL:    GroupDetailURL,
 		PhaseSummaryURL:   PhaseURL,
+
+		TemplateSettingsURL: TemplateSettingsURL,
+		TemplateUploadURL:   TemplateUploadURL,
+		TemplatePublishURL:  TemplatePublishURL,
+		TemplateDeleteURL:   TemplateDeleteURL,
 	}
 }
 
@@ -86,5 +114,10 @@ func (r Routes) RouteMap() map[string]string {
 		"outcome_summary.client_document": r.ClientDocumentURL,
 		"outcome_summary.group_detail":    r.GroupDetailURL,
 		"outcome_summary.phase":           r.PhaseSummaryURL,
+
+		"outcome_summary.template_settings": r.TemplateSettingsURL,
+		"outcome_summary.template_upload":   r.TemplateUploadURL,
+		"outcome_summary.template_publish":  r.TemplatePublishURL,
+		"outcome_summary.template_delete":   r.TemplateDeleteURL,
 	}
 }

@@ -17,6 +17,7 @@ import (
 	espynaports "github.com/erniealice/espyna-golang/ports"
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
+	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	fulfillmentdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/fulfillment"
 	jobdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/job"
@@ -132,6 +133,10 @@ func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 		}
 		infra.GenerateDoc, _ = ctx.GenerateDoc.(func([]byte, map[string]any) ([]byte, error))
 		infra.ResolveTemplateBytes, _ = ctx.ResolveTemplateBytes.(func(context.Context, string) ([]byte, error))
+		// TB3 template settings artifact closures (upload + document_template CRUD).
+		infra.UploadTemplate, _ = ctx.UploadTemplate.(func(context.Context, string, string, []byte, string) error)
+		infra.ListDocTemplates, _ = ctx.ListDocTemplates.(func(context.Context, *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error))
+		infra.CreateDocTemplate, _ = ctx.CreateDocTemplate.(func(context.Context, *documenttemplatepb.CreateDocumentTemplateRequest) (*documenttemplatepb.CreateDocumentTemplateResponse, error))
 
 		units := AllUnits(adapted, infra, opts...)
 		return consumerapp.AssembleEngineBlock("fayna", units, ctx)
@@ -214,6 +219,17 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.JobCategory.UpdateJobCategory = op.JobCategory.UpdateJobCategory.Execute
 			result.Operation.JobCategory.DeleteJobCategory = op.JobCategory.DeleteJobCategory.Execute
 			result.Operation.JobCategory.ListJobCategories = op.JobCategory.ListJobCategories.Execute
+		}
+
+		// JobOutcomeSummaryDocumentTemplate — report-card template binding (TB3).
+		// Backs the template settings page (list/upload/publish/delete). Optional/
+		// nil-safe: a nil aggregate leaves the closures nil → "not configured".
+		if op.JobOutcomeSummaryDocumentTemplate != nil {
+			b := op.JobOutcomeSummaryDocumentTemplate
+			result.Operation.JobOutcomeSummaryDocumentTemplate.ListJobOutcomeSummaryDocumentTemplates = b.ListJobOutcomeSummaryDocumentTemplates.Execute
+			result.Operation.JobOutcomeSummaryDocumentTemplate.CreateJobOutcomeSummaryDocumentTemplate = b.CreateJobOutcomeSummaryDocumentTemplate.Execute
+			result.Operation.JobOutcomeSummaryDocumentTemplate.DeleteJobOutcomeSummaryDocumentTemplate = b.DeleteJobOutcomeSummaryDocumentTemplate.Execute
+			result.Operation.JobOutcomeSummaryDocumentTemplate.PublishJobOutcomeSummaryDocumentTemplate = b.PublishJobOutcomeSummaryDocumentTemplate.Execute
 		}
 
 		if op.JobTemplatePhase != nil {

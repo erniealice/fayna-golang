@@ -91,3 +91,32 @@ func TestNumberRows_Flat(t *testing.T) {
 		t.Errorf("flat numbering wrong: %q, %q", table.Rows[0].Cells[0].Value, table.Rows[1].Cells[0].Value)
 	}
 }
+
+// TestActionsColumnSkipContract (T8) pins the cross-function contract between the
+// grid builder (buildColumns emits the frozen actionsColumnKey column) and the
+// CSV export (exportSkipColumns must skip exactly that column and no data
+// column). A rename of the shared const keeps both in lock-step; a divergence
+// would leak raw HTML action anchors into every exported row.
+func TestActionsColumnSkipContract(t *testing.T) {
+	cols := buildColumns([]string{"t1", "t2"}, map[string]string{"t1": "Math", "t2": "Science"}, outcome_summary.Labels{})
+
+	idx, count := -1, 0
+	for i, c := range cols {
+		if c.Key == actionsColumnKey {
+			idx, count = i, count+1
+		}
+	}
+	if count != 1 {
+		t.Fatalf("buildColumns must emit exactly one %q column, got %d", actionsColumnKey, count)
+	}
+
+	skip := exportSkipColumns(cols)
+	if len(skip) != 1 || !skip[idx] {
+		t.Fatalf("exportSkipColumns must skip exactly the actions column (index %d), got %v", idx, skip)
+	}
+	for i := range cols {
+		if skip[i] && cols[i].Key != actionsColumnKey {
+			t.Fatalf("export skipped a data column %q (index %d) — the contract leaked", cols[i].Key, i)
+		}
+	}
+}

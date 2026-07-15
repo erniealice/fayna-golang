@@ -131,6 +131,15 @@ func wireOutcomeCriteriaDeps(deps *operation.OutcomeCriteriaModuleDeps, u *UseCa
 	deps.ListOutcomeCriterias = oc.ListOutcomeCriterias
 }
 
+func wireJobCategoryDeps(deps *operation.JobCategoryModuleDeps, u *UseCases) {
+	jc := &u.Operation.JobCategory
+	deps.CreateJobCategory = jc.CreateJobCategory
+	deps.ReadJobCategory = jc.ReadJobCategory
+	deps.UpdateJobCategory = jc.UpdateJobCategory
+	deps.DeleteJobCategory = jc.DeleteJobCategory
+	deps.ListJobCategories = jc.ListJobCategories
+}
+
 // ---------------------------------------------------------------------------
 // Education grading module wiring (20260616 v1)
 // ---------------------------------------------------------------------------
@@ -302,6 +311,15 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListJobTasks = u.Operation.JobTask.ListJobTasks
 	deps.ListTaskOutcomes = u.Operation.TaskOutcome.ListTaskOutcomes
 	deps.ListTemplateTaskCriterias = u.Operation.TemplateTaskCriteria.ListTemplateTaskCriterias
+
+	// TB3 template settings — the report-card template binding lifecycle
+	// (list/create/delete/publish). Nil-safe: a nil aggregate leaves the settings
+	// surface at "not configured".
+	binding := &u.Operation.JobOutcomeSummaryDocumentTemplate
+	deps.ListTemplateBindings = binding.ListJobOutcomeSummaryDocumentTemplates
+	deps.CreateTemplateBinding = binding.CreateJobOutcomeSummaryDocumentTemplate
+	deps.DeleteTemplateBinding = binding.DeleteJobOutcomeSummaryDocumentTemplate
+	deps.PublishTemplateBinding = binding.PublishJobOutcomeSummaryDocumentTemplate
 }
 
 // ---------------------------------------------------------------------------

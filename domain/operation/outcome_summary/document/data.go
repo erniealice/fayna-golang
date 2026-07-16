@@ -62,6 +62,11 @@ type reportCard struct {
 	// threaded to the report-card template-binding resolver. Empty → the resolver
 	// returns the workspace-wide fallback binding (or none → embedded template).
 	PriceScheduleID string
+	// FormationGroups are the Formation-page (DOCX v2) category blocks — the
+	// non-academic outcome categories (subject/homeroom deportment) with each
+	// strand's frozen authoritative average. Empty when no category filter is
+	// configured or the student has no deportment data. See formation.go.
+	FormationGroups []formationGroup
 }
 
 // buildReportCardData mirrors buildInvoiceData: it flattens the assembled card
@@ -84,15 +89,16 @@ func buildReportCardData(rc reportCard) map[string]any {
 		})
 	}
 	return map[string]any{
-		"school_name":   orBlank(rc.DocumentHeaderName),
-		"academic_year": orBlank(rc.SchedulePeriod),
-		"student_name":  orBlank(rc.ClientName),
-		"grade_level":   orBlank(rc.GroupLevel),
-		"section_name":  orBlank(rc.SectionName),
-		"lrn":           orDash(rc.LRN),
-		"printed_by":    orBlank(rc.PrintedBy),
-		"printed_at":    orBlank(rc.PrintedAt),
-		"subjects":      subjects,
+		"school_name":      orBlank(rc.DocumentHeaderName),
+		"academic_year":    orBlank(rc.SchedulePeriod),
+		"student_name":     orBlank(rc.ClientName),
+		"grade_level":      orBlank(rc.GroupLevel),
+		"section_name":     orBlank(rc.SectionName),
+		"lrn":              orDash(rc.LRN),
+		"printed_by":       orBlank(rc.PrintedBy),
+		"printed_at":       orBlank(rc.PrintedAt),
+		"subjects":         subjects,
+		"formation_groups": formationData(rc.FormationGroups),
 	}
 }
 
@@ -123,8 +129,21 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	jobIDs := make([]string, 0, len(jobs))
 	templateIDs := []string{}
 	tmplSeen := map[string]bool{}
+	// deportJobs are the NON-academic categorized jobs (the deportment complement)
+	// that feed the Formation page (DOCX v2). They ride the same enrollment
+	// subscription as the academic jobs; the academic loop drops them, the
+	// Formation builder keeps them. Only populated when a real category filter is
+	// configured (KeepJobInCategory returns true for every job when catID=="", so
+	// the !Keep branch never fires on the unfiltered service-admin tier).
+	var deportJobs []*jobpb.Job
 	for _, j := range jobs {
-		if !catOK || !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+		if !catOK {
+			continue
+		}
+		if !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+			if jc := j.GetJobCategoryId(); jc != "" && jc != catID {
+				deportJobs = append(deportJobs, j)
+			}
 			continue
 		}
 		jid, tid := j.GetId(), j.GetJobTemplateId()
@@ -202,6 +221,11 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		rows = append(rows, row)
 	}
 
+	// Formation page (DOCX v2): the deportment-category tables. Additive to the
+	// academic subject transcript; empty when the tier has no category filter or the
+	// student has no deportment data.
+	formationGroups := collectFormationGroups(ctx, d, deportJobs, historical)
+
 	name, ay := sectionParts(group.GetName())
 	grade, section := gradeSection(name)
 	rc := &reportCard{
@@ -213,6 +237,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		LRN:                "",
 		Subjects:           rows,
 		PriceScheduleID:    group.GetPriceScheduleId(),
+		FormationGroups:    formationGroups,
 	}
 	return rc, true
 }

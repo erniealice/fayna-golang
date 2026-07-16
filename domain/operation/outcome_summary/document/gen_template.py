@@ -69,11 +69,21 @@ def cell(runs, *, width=None, shade=None, align=None):
     return "<w:tc>%s%s</w:tc>" % (tcpr_xml, para(runs, align=align or "center"))
 
 
+def cell_paras(paragraphs, *, width=None):
+    """A table cell holding multiple <w:p> paragraphs (top-aligned)."""
+    tcpr = []
+    if width:
+        tcpr.append('<w:tcW w:w="%d" w:type="dxa"/>' % width)
+    tcpr.append('<w:vAlign w:val="top"/>')
+    tcpr_xml = "<w:tcPr>%s</w:tcPr>" % "".join(tcpr)
+    return "<w:tc>%s%s</w:tc>" % (tcpr_xml, "".join(paragraphs))
+
+
 def row(cells):
     return "<w:tr>%s</w:tr>" % "".join(cells)
 
 
-def table(rows, *, grid=None):
+def table(rows, *, grid=None, bordered=True):
     borders = (
         "<w:tblBorders>"
         '<w:top w:val="single" w:sz="4" w:space="0" w:color="808080"/>'
@@ -83,7 +93,7 @@ def table(rows, *, grid=None):
         '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="808080"/>'
         '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="808080"/>'
         "</w:tblBorders>"
-    )
+    ) if bordered else ""
     tblpr = (
         "<w:tblPr>"
         '<w:tblW w:w="5000" w:type="pct"/>'
@@ -181,6 +191,91 @@ body_parts.append(para([run(
 body_parts.append(para([run("MYP Grade Boundaries", bold=True, color=RED, size=22)],
                        spacing_after=80))
 body_parts.append(boundaries_table)
+
+# ---- FORMATION page (STUDENT FORMATION) -----------------------------------
+# Mirrors the MMIS report card's Formation page. The deportment tables are
+# DATA-DRIVEN via a body-level loop over job_category groups
+# ({{#formation_groups}} wrapping a per-group {{#rows}} table-loop — the engine's
+# documented 2-level nesting). The grade-descriptor legend + certificate of
+# transfer are static MMIS content (the operator template contract, exactly like
+# the cover text). Rendered on its own page. The Go builder (collectFormationGroups)
+# emits one group per non-academic category, titled by the category NAME, each row a
+# strand + its frozen authoritative average.
+PAGE_BREAK = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+
+# Per-group rating table: header row + {{#rows}} template row + {{/rows}} marker.
+FGRID = [7000, 2500]
+f_header = row([
+    cell([run("Subject", bold=True, color=RED, size=16)], width=FGRID[0], shade="F2F2F2", align="left"),
+    cell([run("Rating", bold=True, color=RED, size=16)], width=FGRID[1], shade="F2F2F2"),
+])
+f_loop_start = row([cell([run("{{#rows}}")], width=sum(FGRID))])
+f_tmpl = row([
+    cell([run("{{row_subject}}")], width=FGRID[0], align="left"),
+    cell([run("{{row_average}}", bold=True)], width=FGRID[1]),
+])
+f_loop_end = row([cell([run("{{/rows}}")], width=sum(FGRID))])
+formation_table = table([f_header, f_loop_start, f_tmpl, f_loop_end], grid=FGRID)
+
+# Grade descriptors legend (static — the "rating scale presentation").
+DESCRIPTORS = [
+    ("90% - 100%", "Outstanding (O)"),
+    ("85% - 89%", "Very Satisfactory (VS)"),
+    ("80% - 84%", "Satisfactory (S)"),
+    ("75% - 79%", "Fairly Satisfactory (FS)"),
+    ("74% and below", "Did not meet expectations (NM)"),
+]
+dh = [cell([run(h, bold=True, color=RED, size=16)], shade="F2F2F2", align="left")
+      for h in ["Grade Boundary", "Descriptors"]]
+drows = [row(dh)]
+for boundary, descriptor in DESCRIPTORS:
+    drows.append(row([
+        cell([run(boundary)], width=3000, align="left"),
+        cell([run(descriptor)], width=6000, align="left"),
+    ]))
+descriptors_table = table(drows, grid=[3000, 6000])
+
+# Certificate of transfer (static; signature lines left blank for the school).
+SIG = "________________________________"
+
+
+def cert_column(heading, admit_label):
+    return cell_paras([
+        para([run(heading, bold=True)], spacing_after=80),
+        para([run(admit_label + ": " + SIG)], spacing_after=40),
+        para([run("Date: " + SIG)], spacing_after=200),
+        para([run(SIG)]),
+        para([run("School Principal")]),
+    ], width=4800)
+
+
+cert_table = table([row([
+    cert_column("Eligible for transfer and admission", "To"),
+    cert_column("Cancellation of Transfer Eligibility", "Has been admitted to"),
+])], grid=[4800, 4800], bordered=False)
+
+body_parts.append(PAGE_BREAK)
+body_parts.append(para([run("STUDENT FORMATION", bold=True, color=RED, size=28)],
+                       spacing_after=120))
+# Body-level loop: one titled rating table per non-academic category. Markers must
+# be standalone paragraphs; the template block is the {{category_title}} heading +
+# the rating table (which carries its own nested {{#rows}} table-loop).
+body_parts.append(para([run("{{#formation_groups}}")]))
+body_parts.append(para([run("{{category_title}}", bold=True, color=RED, size=20)],
+                       spacing_after=40))
+body_parts.append(formation_table)
+body_parts.append(para([run("{{/formation_groups}}")]))
+body_parts.append(para([run("", size=10)], spacing_after=120))
+
+body_parts.append(para([run("Grade Descriptors", bold=True, color=RED, size=20)],
+                       spacing_after=40))
+body_parts.append(descriptors_table)
+body_parts.append(para([run("", size=10)], spacing_after=200))
+
+body_parts.append(para([run("CERTIFICATE OF TRANSFER", bold=True, size=18)],
+                       align="center", spacing_after=120))
+body_parts.append(cert_table)
+body_parts.append(para([run("", size=10)], spacing_after=200))
 
 # FOOTER
 body_parts.append(para([run("", size=14)], spacing_after=200))

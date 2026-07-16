@@ -185,14 +185,43 @@ func renderFlat(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewConte
 func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewContext) view.ViewResult {
 	l := deps.Labels
 
+	// Activeness scope: {scope} ∈ {current, past} restricts the tabbed landing to
+	// price_schedules of ONE activeness band (current = price_schedule.active,
+	// past = inactive) — the generic split behind /list/current vs /list/past. An
+	// empty/unknown scope leaves the landing unfiltered (the ListURL behavior).
+	scope := normalizeScope(viewCtx.Request.PathValue("scope"))
+
 	// 1. price_schedules (ALL rows, incl. inactive — Q-TAB-1), ordered per the
 	//    Tab options (sort_order NULLS LAST, name ASC — Q-SORT-3). The generic
 	//    List defaults to active=true unless an explicit `active` BooleanFilter
 	//    is supplied (core/operations.go), and a single boolean can't match
 	//    both — so fetch active (default) + inactive (explicit active=false)
-	//    and merge, giving the inactive AY its historical-browsing tab.
+	//    and merge, giving the inactive AY its historical-browsing tab. The
+	//    scope filter then narrows the merged set to one activeness band.
 	schedules := listAllSchedules(ctx, deps)
 	sortSchedules(schedules, deps.Options.Tab)
+	schedules = filterSchedulesByScope(schedules, scope)
+
+	// Scope-boundary guard: a SCOPED landing (current|past) whose activeness band
+	// holds NO schedule renders ZERO section rows — never the unfiltered group
+	// set. Without this, an empty scoped slice makes defaultSchedule return ""
+	// (:407) and buildSectionRows' `selected != ""` predicate (:671) falls open,
+	// silently widening /list/past (a workspace with no inactive schedule, or an
+	// inactive-schedule read that failed) to the OPEN AY's sections. Render the
+	// empty landing here and skip every group/count read (nothing to count). The
+	// UNSCOPED landing (scope == "") never reaches this branch and stays fully
+	// unfiltered — the backward-compatible /report-cards behavior is untouched.
+	if scope != "" && len(schedules) == 0 {
+		return renderEmptyScopedLanding(deps, viewCtx, scope)
+	}
+
+	// Tab hrefs stay on the current (possibly scoped) landing so switching AY
+	// tabs preserves the current/past band. Resolve from the route constants,
+	// never the raw request path (which carries the /w/{slug} workspace prefix).
+	baseHref := deps.Routes.ListURL
+	if scope != "" && deps.Routes.ListScopeURL != "" {
+		baseHref = route.ResolveURL(deps.Routes.ListScopeURL, "scope", scope)
+	}
 
 	// 2. selected tab: ?ps= wins; default = the first ACTIVE schedule in sort
 	//    order (falling back to the first schedule when none is active). "Active"
@@ -222,7 +251,7 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	fillHistoricalCounts(ctx, deps, groups, selected, subjectCount, studentCount)
 
 	// 5. tabs (one per schedule; Count = active sections under it).
-	tabs := buildTabs(schedules, groups, selected, l, deps.Routes)
+	tabs := buildTabs(schedules, groups, selected, l, baseHref)
 
 	// 6. section rows for the selected tab, name ASC.
 	rows := buildSectionRows(groups, selected, subjectCount, studentCount, l, deps.Routes)
@@ -255,7 +284,7 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 			Title:          l.Landing.Title,
 			CurrentPath:    viewCtx.CurrentPath,
 			ActiveNav:      deps.Routes.ActiveNav,
-			ActiveSubNav:   "report-cards",
+			ActiveSubNav:   scopeActiveSubNav(scope),
 			HeaderTitle:    l.Landing.Title,
 			HeaderSubtitle: l.Landing.Subtitle,
 			HeaderIcon:     "icon-award",
@@ -273,6 +302,66 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 		TabItems:        tabs,
 		ActiveTab:       tabKey(selected),
 		TabsAria:        l.Landing.TabsAriaLabel,
+	}
+
+	return view.OK("outcome-summary-list", pageData)
+}
+
+// renderEmptyScopedLanding renders the landing for a scoped (current|past)
+// request whose activeness band has NO schedules: zero section rows, the
+// normal empty-state, and NO tabstrip. It performs none of the group/count
+// reads (there is nothing in-band to count), so an empty scoped band stays
+// empty instead of falling open to the unfiltered group set. ContentTemplate
+// stays "outcome-summary-list-content" (the boosted-nav dispatch invariant);
+// with empty TabItems that template renders the section table's empty-state
+// without the tabstrip — identical on the full-page and partial render paths.
+// Only the scoped landing reaches here (guarded on scope != ""); the unscoped
+// landing is unaffected.
+func renderEmptyScopedLanding(deps *ListViewDeps, viewCtx *view.ViewContext, scope string) view.ViewResult {
+	l := deps.Labels
+
+	tableConfig := &types.TableConfig{
+		ID:                   "report-cards-sections",
+		Columns:              landingColumns(l),
+		Rows:                 nil,
+		ShowSearch:           true,
+		ShowSort:             true,
+		ShowColumns:          true,
+		ShowDensity:          true,
+		ShowExport:           true,
+		ShowEntries:          true,
+		ShowActions:          true,
+		DefaultSortColumn:    "section",
+		DefaultSortDirection: "asc",
+		Labels:               deps.TableLabels,
+		Caption:              l.Landing.Title,
+		EmptyState: types.TableEmptyState{
+			Title:   l.Empty.Title,
+			Message: l.Empty.Message,
+		},
+	}
+	types.ApplyColumnStyles(tableConfig.Columns, tableConfig.Rows)
+
+	pageData := &PageData{
+		PageData: types.PageData{
+			CacheVersion:   viewCtx.CacheVersion,
+			Title:          l.Landing.Title,
+			CurrentPath:    viewCtx.CurrentPath,
+			ActiveNav:      deps.Routes.ActiveNav,
+			ActiveSubNav:   scopeActiveSubNav(scope),
+			HeaderTitle:    l.Landing.Title,
+			HeaderSubtitle: l.Landing.Subtitle,
+			HeaderIcon:     "icon-award",
+			CommonLabels:   deps.CommonLabels,
+		},
+		ContentTemplate: "outcome-summary-list-content",
+		Table:           tableConfig,
+		Landing:         true,
+		// No tabs: outcome-summary-list-content keys the tabstrip on TabItems,
+		// so an empty slice renders the section table (empty-state) with no tabs.
+		TabItems:  nil,
+		ActiveTab: "",
+		TabsAria:  l.Landing.TabsAriaLabel,
 	}
 
 	return view.OK("outcome-summary-list", pageData)
@@ -577,7 +666,7 @@ func buildTabs(
 	groups []*subscriptiongrouppb.SubscriptionGroup,
 	selected string,
 	l outcome_summary.Labels,
-	routes outcome_summary.Routes,
+	baseHref string,
 ) []pyeza.TabItem {
 	counts := map[string]int{}
 	for _, g := range groups {
@@ -592,11 +681,54 @@ func buildTabs(
 		tabs = append(tabs, pyeza.TabItem{
 			Key:   tabKey(s.GetId()),
 			Label: label,
-			Href:  routes.ListURL + "?ps=" + s.GetId(),
+			Href:  baseHref + "?ps=" + s.GetId(),
 			Count: counts[s.GetId()],
 		})
 	}
 	return tabs
+}
+
+// normalizeScope canonicalizes the {scope} path segment to "current" | "past" |
+// "" (unknown/empty). The scope is a GENERIC price_schedule.active band, not a
+// vertical concept: "current" selects active schedules, "past" inactive ones.
+func normalizeScope(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "current":
+		return "current"
+	case "past":
+		return "past"
+	default:
+		return ""
+	}
+}
+
+// filterSchedulesByScope narrows the merged price_schedule set to one activeness
+// band. Empty scope returns the input unchanged (the unfiltered landing).
+func filterSchedulesByScope(schedules []*priceschedulepb.PriceSchedule, scope string) []*priceschedulepb.PriceSchedule {
+	if scope == "" {
+		return schedules
+	}
+	want := scope == "current" // current = active; past = inactive
+	out := schedules[:0:0]
+	for _, s := range schedules {
+		if s.GetActive() == want {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// scopeActiveSubNav maps a scope to the sidebar row key it should highlight so
+// the current/past nav item lights up. Empty scope → the base report-cards row.
+func scopeActiveSubNav(scope string) string {
+	switch scope {
+	case "current":
+		return "report-cards-current"
+	case "past":
+		return "report-cards-past"
+	default:
+		return "report-cards"
+	}
 }
 
 // buildSectionRows builds the section table rows for the selected schedule

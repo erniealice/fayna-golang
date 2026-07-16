@@ -274,6 +274,14 @@ func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc 
 // RegisterRoutes registers all outcome summary routes.
 func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 	r.GET(m.routes.ListURL, m.List)
+	// Activeness-scoped landing (/list/{scope}): the SAME list view, which reads
+	// {scope} from the path and filters the price_schedule tabs by activeness
+	// (current/past). Carries the same job_outcome_summary:list gate as ListURL
+	// (the view checks it before any read). Distinct path depth from ListURL, so
+	// no ServeMux collision.
+	if m.routes.ListScopeURL != "" && m.routes.ListScopeURL != m.routes.ListURL {
+		r.GET(m.routes.ListScopeURL, m.List)
+	}
 	if m.Section != nil && m.routes.SectionURL != "" {
 		r.GET(m.routes.SectionURL, m.Section)
 	}

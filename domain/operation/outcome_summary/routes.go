@@ -8,7 +8,14 @@ package outcome_summary
 // Outcome Summary routes (report cards)
 const (
 	ListURL = "/outcomes/summaries"
-	JobURL  = "/jobs/detail/{id}/summary"
+	// ListScopeURL is the activeness-scoped report-cards landing: {scope} ∈
+	// {current, past} filters the price_schedule tabs by the GENERIC
+	// price_schedule.active flag (current = active schedules, past = inactive).
+	// It renders the SAME tabbed section landing as ListURL, restricted to one
+	// activeness band; an empty/unknown scope degrades to the unfiltered landing.
+	// Education overrides it to /report-cards/list/{scope}.
+	ListScopeURL = "/outcomes/summaries/list/{scope}"
+	JobURL       = "/jobs/detail/{id}/summary"
 	// SectionURL is the per-section report-card grid (view-2): {id} is a
 	// subscription_group id. Generic default here; the education tier overrides
 	// it to /report-cards/section/{id} via education/route.json.
@@ -71,6 +78,7 @@ type Routes struct {
 	ListActiveSubNav string `json:"list_active_sub_nav"`
 
 	ListURL           string `json:"list_url"`
+	ListScopeURL      string `json:"list_scope_url"`
 	JobSummaryURL     string `json:"job_summary_url"`
 	SectionURL        string `json:"section_url"`
 	SectionExportURL  string `json:"section_export_url"`
@@ -95,6 +103,7 @@ func DefaultRoutes() Routes {
 		ListActiveSubNav: "report-cards",
 
 		ListURL:           ListURL,
+		ListScopeURL:      ListScopeURL,
 		JobSummaryURL:     JobURL,
 		SectionURL:        SectionURL,
 		SectionExportURL:  SectionExportURL,
@@ -115,6 +124,7 @@ func DefaultRoutes() Routes {
 func (r Routes) RouteMap() map[string]string {
 	return map[string]string{
 		"outcome_summary.list":            r.ListURL,
+		"outcome_summary.list_scope":      r.ListScopeURL,
 		"outcome_summary.job":             r.JobSummaryURL,
 		"outcome_summary.section":         r.SectionURL,
 		"outcome_summary.section_export":  r.SectionExportURL,

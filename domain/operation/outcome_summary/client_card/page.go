@@ -242,8 +242,13 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 	// floored to "1"; its grade cells must render BLANK (matching prod), not the
 	// floor. A genuinely enrolled subject — even one scored a real 0/1 — carries
 	// a positive task mark and is kept. Nil-safe: unwired closures → empty map →
-	// nothing blanked.
-	evByJob := outcome_summary.FetchJobMarkEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
+	// nothing blanked. Fail-closed: on a read error keep every grade (blank
+	// nothing) rather than risk blanking a real one from incomplete evidence.
+	evByJob, err := outcome_summary.FetchJobMarkEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
+	if err != nil {
+		log.Printf("outcome summary client card: enrollment evidence unavailable, keeping all grades: %v", err)
+		evByJob = nil
+	}
 
 	empty := l.Section.RatingEmpty
 	if empty == "" {

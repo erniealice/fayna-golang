@@ -301,7 +301,13 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 	// its cell must render BLANK (matching prod), not the floor. A genuinely
 	// enrolled subject — even one scored a real 0/1 — carries a positive task
 	// mark and is kept. Nil-safe: unwired closures → empty map → nothing blanked.
-	evByJob := outcome_summary.FetchJobMarkEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
+	// Fail-closed: on a read error the evidence is incomplete, so we keep every
+	// grade (blank nothing) rather than risk blanking a real one.
+	evByJob, err := outcome_summary.FetchJobMarkEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
+	if err != nil {
+		log.Printf("outcome summary section: enrollment evidence unavailable, keeping all grades: %v", err)
+		evByJob = nil
+	}
 
 	// client display names + last_name (for the row sort).
 	students := fetchStudents(ctx, deps, clientIDs)

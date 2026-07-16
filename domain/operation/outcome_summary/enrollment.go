@@ -2,7 +2,7 @@ package outcome_summary
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -46,19 +46,39 @@ type EnrollmentEvidence struct {
 // per-criterion fetchCriteriaByJob: every walk pages explicitly and chunks its
 // IN-filter so a large section's evidence is never silently truncated.
 //
+// PRINCIPAL PREREQUISITE (report cards are admin/registrar-only today): the
+// task walk uses listJobTasks, which staff-narrows to tasks assigned to the
+// acting principal when that principal is a workspace STAFF member. For a
+// non-staff principal (admin/registrar — the only ones the Layer-3
+// job_outcome_summary:list gate currently admits) the walk sees every task, so
+// the evidence is authoritative. If report-card access is EVER granted to staff
+// (the deferred teacher-access decision), a teacher viewing a multi-teacher job
+// would see only their own tasks and could blank a co-teacher's genuine mark —
+// so before lifting that gate, this evidence read MUST switch to a
+// non-staff-scoped aggregate over the already-authorized job ids.
+//
 // Fully nil-safe: any nil closure (a tier that never wired the walk, e.g.
 // service-admin's flat surfaces) or an empty jobIDs yields an empty map, so
 // IsNonEnrolledCell then keeps every cell (no behavior change off-education).
+//
+// FAIL-CLOSED evidence contract: a suppression decision must rest on COMPLETE
+// evidence, so any list-read error aborts the whole walk and returns (nil, err)
+// — never a truncated map. Callers MUST treat a non-nil error as "evidence
+// unavailable → blank nothing, keep every displayed grade": partial evidence
+// (e.g. a page of all-zero marks read before the page carrying the positive
+// mark errored) would otherwise blank a genuinely-earned "0"/"1" on an official
+// document. Keeping a phantom "1" is a cosmetic miss; blanking a real grade is a
+// data error — so we always fail toward keeping the grade.
 func FetchJobMarkEvidence(
 	ctx context.Context,
 	listJobPhases func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error),
 	listJobTasks func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error),
 	listTaskOutcomes func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error),
 	jobIDs []string,
-) map[string]EnrollmentEvidence {
+) (map[string]EnrollmentEvidence, error) {
 	out := map[string]EnrollmentEvidence{}
 	if listJobPhases == nil || listJobTasks == nil || listTaskOutcomes == nil || len(jobIDs) == 0 {
-		return out
+		return out, nil
 	}
 
 	// 1. job_phase → owning job. (phase_id -> job_id)
@@ -74,10 +94,11 @@ func FetchJobMarkEvidence(
 			resp, err := listJobPhases(ctx, &jobphasepb.ListJobPhasesRequest{
 				Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{markEvidenceListIn("job_id", chunk)}},
 				Pagination: markEvidencePage(page),
+				Sort:       markEvidenceSortByID(),
 			})
 			if err != nil {
-				log.Printf("outcome summary: mark evidence list job phases (page %d): %v", page, err)
-				break
+				// Fail-closed: incomplete evidence must not drive suppression.
+				return nil, fmt.Errorf("outcome summary: mark evidence list job phases (page %d): %w", page, err)
 			}
 			data := resp.GetData()
 			for _, p := range data {
@@ -97,7 +118,7 @@ func FetchJobMarkEvidence(
 		}
 	}
 	if len(phaseIDs) == 0 {
-		return out
+		return out, nil
 	}
 
 	// 2. job_task → owning job (via phase). (task_id -> job_id)
@@ -113,10 +134,11 @@ func FetchJobMarkEvidence(
 			resp, err := listJobTasks(ctx, &jobtaskpb.ListJobTasksRequest{
 				Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{markEvidenceListIn("job_phase_id", chunk)}},
 				Pagination: markEvidencePage(page),
+				Sort:       markEvidenceSortByID(),
 			})
 			if err != nil {
-				log.Printf("outcome summary: mark evidence list job tasks (page %d): %v", page, err)
-				break
+				// Fail-closed: incomplete evidence must not drive suppression.
+				return nil, fmt.Errorf("outcome summary: mark evidence list job tasks (page %d): %w", page, err)
 			}
 			data := resp.GetData()
 			for _, tk := range data {
@@ -137,7 +159,7 @@ func FetchJobMarkEvidence(
 		}
 	}
 	if len(taskIDs) == 0 {
-		return out
+		return out, nil
 	}
 
 	// 3. task_outcome → per-job evidence (any numeric mark; any positive mark).
@@ -151,10 +173,11 @@ func FetchJobMarkEvidence(
 			resp, err := listTaskOutcomes(ctx, &taskoutcomepb.ListTaskOutcomesRequest{
 				Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{markEvidenceListIn("job_task_id", chunk)}},
 				Pagination: markEvidencePage(page),
+				Sort:       markEvidenceSortByID(),
 			})
 			if err != nil {
-				log.Printf("outcome summary: mark evidence list task outcomes (page %d): %v", page, err)
-				break
+				// Fail-closed: incomplete evidence must not drive suppression.
+				return nil, fmt.Errorf("outcome summary: mark evidence list task outcomes (page %d): %w", page, err)
 			}
 			data := resp.GetData()
 			for _, t := range data {
@@ -177,7 +200,7 @@ func FetchJobMarkEvidence(
 			}
 		}
 	}
-	return out
+	return out, nil
 }
 
 // IsNonEnrolledCell reports whether a rendered grade cell (or subject row) is a
@@ -241,5 +264,21 @@ func markEvidencePage(page int32) *commonpb.PaginationRequest {
 	return &commonpb.PaginationRequest{
 		Limit:  int32(markEvidencePageLimit),
 		Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
+	}
+}
+
+// markEvidenceSortByID sorts each paged list by the primary key (id ASC), a
+// UNIQUE column, so OFFSET pagination is deterministic across pages. Without it
+// the base adapter falls back to `ORDER BY date_created DESC`; education1's
+// bulk-seed stamps every phase/task/outcome row of a section with an IDENTICAL
+// date_created, and OFFSET paging over a fully-tied sort key returns an
+// overlapping/gapped subset per page — silently dropping whole jobs' mark rows,
+// which flips a taken job to HasMarks=false and leaves its phantom cell showing
+// "1" (an under-blank). A unique id-sort makes every row land on exactly one
+// page. The base List REPLACES the default order with this Sort; existence-only
+// walks don't care about row order, only that no row is dropped or duplicated.
+func markEvidenceSortByID() *commonpb.SortRequest {
+	return &commonpb.SortRequest{
+		Fields: []*commonpb.SortField{{Field: "id"}}, // Direction zero-value = ASC
 	}
 }

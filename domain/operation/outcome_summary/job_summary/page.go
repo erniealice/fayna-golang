@@ -95,6 +95,11 @@ func overallDeterminationVariant(d enums.OverallDetermination) string {
 // NewView creates the job outcome summary view.
 func NewView(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job_outcome_summary", "list") {
+			return view.Forbidden("job_outcome_summary:list")
+		}
+
 		id := viewCtx.Request.PathValue("id")
 
 		resp, err := deps.GetJobOutcomeSummaryByJob(ctx, &jobsumpb.GetJobOutcomeSummaryByJobRequest{

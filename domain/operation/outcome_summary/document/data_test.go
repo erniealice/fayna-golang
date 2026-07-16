@@ -75,3 +75,78 @@ func TestMemberSubscription_HistoricalAccepted(t *testing.T) {
 		t.Fatalf("historical mode must accept the frozen inactive member, got %q", sub)
 	}
 }
+
+// TestIsNonEnrolledPlaceholder is the backlogged B1 unit test (GOAL.md B1 row /
+// progress.md "B1 unit test"): the DOCX-layer row→evidence adaptation that
+// wraps the shared outcome_summary.IsNonEnrolledCell predicate. It pins the
+// row-level contract collectCard relies on at data.go:199 — a subject the
+// student never took (an all-zero active scaffold, e.g. the untaken half of
+// an English/Filipino-style language pair) is suppressed, while a REAL zero
+// for an enrolled subject (a positive per-criterion mark somewhere, or a real
+// >1 stored band) is protected and still renders. NEVER blank a real grade.
+func TestIsNonEnrolledPlaceholder(t *testing.T) {
+	cases := []struct {
+		name     string
+		row      subjectRow
+		hasMarks bool
+		want     bool // true = placeholder (suppressed from the DOCX)
+	}{
+		{
+			name: "non-enrolled untaken elective all-zero scaffold suppressed",
+			row: subjectRow{
+				Name: "Korean", CritA: "0", CritB: "0", CritC: "0", CritD: "0",
+				Total: "0", YearFinal: "1", // transmute-of-zero floor, not evidence
+			},
+			hasMarks: true,
+			want:     true,
+		},
+		{
+			name: "enrolled subject real zero protected by a positive criterion mark",
+			row: subjectRow{
+				Name: "Mathematics", CritA: "0", CritB: "0", CritC: "0", CritD: "5",
+				Total: "5", YearFinal: "0",
+			},
+			hasMarks: true,
+			want:     false,
+		},
+		{
+			name: "enrolled subject all-zero criteria kept by a real non-floor semester band",
+			row: subjectRow{
+				Name: "Partial", CritA: "0", CritB: "0", CritC: "0", CritD: "0",
+				Total: "0", Sem1Band: "6",
+			},
+			hasMarks: true,
+			want:     false,
+		},
+		{
+			name: "normal graded row rendered",
+			row: subjectRow{
+				Name: "Science", CritA: "6", CritB: "7", CritC: "5", CritD: "6",
+				Total: "24", Sem1Band: "6", Sem2Band: "7", YearFinal: "7",
+			},
+			hasMarks: true,
+			want:     false,
+		},
+		{
+			name: "historical import no task_outcome but a real stored year-final kept",
+			row: subjectRow{
+				Name: "History", YearFinal: "6",
+			},
+			hasMarks: false,
+			want:     false,
+		},
+		{
+			name:     "fully blank row with no summary at all suppressed",
+			row:      subjectRow{Name: "Blank"},
+			hasMarks: false,
+			want:     true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isNonEnrolledPlaceholder(c.row, c.hasMarks); got != c.want {
+				t.Fatalf("isNonEnrolledPlaceholder(%+v, hasMarks=%v) = %v, want %v", c.row, c.hasMarks, got, c.want)
+			}
+		})
+	}
+}

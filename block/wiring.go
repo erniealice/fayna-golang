@@ -248,6 +248,11 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	deps.UpdateTaskOutcome = to.UpdateTaskOutcome
 	deps.ReadTaskOutcome = to.ReadTaskOutcome
 
+	// NOTE: deps.ComputePhaseOutcome / deps.ComputeJobOutcome (inline grade
+	// recompute, W2) are NOT sourced here — they come from the app AppContext via
+	// infra (the GenerateDoc precedent), set on the deps by OutcomeMatrixUnit's
+	// Mount. This wiring helper only sources use-case closures off *UseCases.
+
 	// Roster display-name hydration (the same closure the job drawer's client
 	// search picker already uses — already wired in engineblock.go, no new
 	// espyna surface needed here).

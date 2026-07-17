@@ -76,6 +76,13 @@ func DefaultLabels() Labels {
 				ErrorBanner:    "Save failed — please try again.",
 				ReadOnlyMarker: "(read only)",
 				EmptyGrid:      "No rows to display.",
+				// W2 grade-sheet edit-mode (AutoSave) per-cell + notice strings.
+				CellSaving:  "Saving…",
+				CellSaved:   "Saved",
+				CellError:   "Save failed",
+				RatingStale: "Rating not yet recomputed",
+				UnsavedWarn: "You have unsaved changes",
+				RetryButton: "Retry unsaved",
 			},
 			CriterionColumn: "Criterion",
 			ScoreColumn:     "Score",

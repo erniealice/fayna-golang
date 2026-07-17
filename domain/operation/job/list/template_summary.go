@@ -94,11 +94,26 @@ func buildDeliverySummaryTableTabbed(ctx context.Context, deps *ListViewDeps, st
 		aggCounts[templateToCat[r.TemplateID]]++
 	}
 
+	// isActiveScope: does this URL status actually query ACTIVE jobs? Gate on the
+	// NORMALIZED status (jobStatusFilterValue), not the raw segment — an unknown/
+	// malformed segment normalizes to ACTIVE for the query, so it must also take
+	// the active-template path here (else a bogus URL would fetch active aggregates
+	// yet suppress the active fallback — codex red-team LOW #8).
+	isActiveScope := jobStatusFilterValue(status) == jobStatusFilterValue("active")
+
 	// Per-tab counts: active-template count by default, overridden by the
 	// aggregate row count for any category the aggregate reaches.
+	//
+	// The active-template seed is only valid on the active scope — activeTemplatesByCategory
+	// returns ACTIVE templates, so seeding it on a non-active status (e.g. "completed") would
+	// badge a tab with an active-template count that its rows (below) no longer render. On a
+	// non-active scope the count is the aggregate's alone (0 when the aggregate is empty there),
+	// so the badge matches the empty state. Keeps /active byte-unchanged.
 	counts := map[string]int{}
-	for cat, tmpls := range catToTemplates {
-		counts[cat] = len(tmpls)
+	if isActiveScope {
+		for cat, tmpls := range catToTemplates {
+			counts[cat] = len(tmpls)
+		}
 	}
 	for cat, n := range aggCounts {
 		counts[cat] = n
@@ -108,7 +123,16 @@ func buildDeliverySummaryTableTabbed(ctx context.Context, deps *ListViewDeps, st
 	// the delivery summary filtered to the category (Academic path unchanged). A
 	// category the aggregate never reaches → its active templates at template
 	// grain.
-	if selected == "" || aggCounts[selected] > 0 {
+	//
+	// The template-grain fallback's data source (activeTemplatesByCategory) is ACTIVE templates,
+	// so it is ONLY valid on the active scope. On a non-active status (e.g. "completed") an
+	// aggregate-eligible category (Academic) returns 0 aggregate rows — but its active templates
+	// must NOT be dumped under a "completed" filter (the blank-Teacher/Students/AY bug). Route any
+	// non-active scope through the aggregate path so an empty result renders the empty state, not
+	// active templates. Gated on the NORMALIZED status (isActiveScope) so a malformed URL segment
+	// is consistent with the jobs actually queried. (education1: active & COMPLETED are disjoint —
+	// completed classes are frozen historical imports; docs/plan/20260717-completed-courses-backfill/.)
+	if selected == "" || aggCounts[selected] > 0 || !isActiveScope {
 		filtered := make([]templateSummaryRow, 0, len(allRows))
 		for _, r := range allRows {
 			if selected == "" || templateToCat[r.TemplateID] == selected {

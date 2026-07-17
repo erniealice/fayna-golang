@@ -30,4 +30,17 @@ type Deps struct {
 
 	// ResolveStaff maps the acting session user → staff_id ("" == fail-closed).
 	ResolveStaff func(ctx context.Context) (string, error)
+
+	// ComputePhaseOutcome / ComputeJobOutcome are the inline grade-recompute
+	// closures (Q-GSE-5) called after a successful ACADEMIC cell write in
+	// save_mode=cell. Both keyed off the SERVER-DERIVED job_phase_id / job_id
+	// from the re-derived matrix (never a POST value). Both optional/nil-safe: a
+	// nil closure → the cell still saves, reported ratingFresh:false (grade
+	// persisted, rating stale). Return contract:
+	//   (true,  nil) → recomputed        → ratingFresh (true)
+	//   (false, nil) → frozen/authoritative skip → ratingFresh (true), rating
+	//                  not stale (the authoritative grade stands)
+	//   (false, err) → compute failed    → ratingFresh:false (stale, retryable)
+	ComputePhaseOutcome func(ctx context.Context, jobPhaseID string) (bool, error)
+	ComputeJobOutcome   func(ctx context.Context, jobID string) (bool, error)
 }

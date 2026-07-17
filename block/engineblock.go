@@ -132,6 +132,14 @@ func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 			infra.DB = db
 		}
 		infra.GenerateDoc, _ = ctx.GenerateDoc.(func([]byte, map[string]any) ([]byte, error))
+		// Report-card PDF (W5, ?format=pdf). A SECOND injected closure asserted with
+		// the exact bare signature (GenerateDoc precedent) so no fayna→fycha/espyna
+		// dependency is introduced; nil-safe when unwired (the pdf format 503s).
+		infra.GeneratePDF, _ = ctx.GeneratePDF.(func([]byte, map[string]any) ([]byte, error))
+		// Inline grade recompute (W2). Asserted as bare signatures (GenerateDoc
+		// precedent) so no espyna dependency; nil-safe when unwired.
+		infra.ComputePhaseOutcome, _ = ctx.ComputePhaseOutcome.(func(context.Context, string) (bool, error))
+		infra.ComputeJobOutcome, _ = ctx.ComputeJobOutcome.(func(context.Context, string) (bool, error))
 		infra.ResolveTemplateBytes, _ = ctx.ResolveTemplateBytes.(func(context.Context, string) ([]byte, error))
 		// TB3 template settings artifact closures (upload + document_template CRUD).
 		infra.UploadTemplate, _ = ctx.UploadTemplate.(func(context.Context, string, string, []byte, string) error)

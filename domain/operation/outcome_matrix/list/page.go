@@ -91,6 +91,13 @@ type PageViewDeps struct {
 	// page (the grid falls back to the flat roster).
 	ListClientAttributes     func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
 	ResolveAttributeIDByCode func(ctx context.Context, code string) (string, error)
+
+	// Header-breadcrumb back-link to the job list (the matrix's parent
+	// surface): tier-resolved route pattern ("{status}" placeholder intact)
+	// and active-status heading. Optional: empty values render the header's
+	// title-only crumb, exactly as before.
+	JobListURL   string
+	JobListLabel string
 }
 
 // PageData holds the data for the outcome matrix page. The Grid field is named
@@ -182,18 +189,28 @@ func NewView(deps *PageViewDeps) view.View {
 			scopeActive = "all"
 		}
 
+		// Breadcrumb crumb ("Active Classes › <subject>" on education): the
+		// job list's active-status page is the matrix's parent surface. Both
+		// fields are optional — empty leaves the title-only crumb.
+		breadcrumbURL := ""
+		if deps.JobListURL != "" {
+			breadcrumbURL = route.ResolveURL(deps.JobListURL, "status", "active")
+		}
+
 		pageData := &PageData{
 			PageData: types.PageData{
-				CacheVersion:    viewCtx.CacheVersion,
-				Title:           headerTitle,
-				ContentTemplate: "outcome-matrix-content",
-				CurrentPath:     viewCtx.CurrentPath,
-				ActiveNav:       deps.Routes.ActiveNav,
-				ActiveSubNav:    deps.Routes.ActiveSubNav,
-				HeaderTitle:     headerTitle,
-				HeaderSubtitle:  groupName,
-				HeaderIcon:      "icon-grid",
-				CommonLabels:    deps.CommonLabels,
+				CacheVersion:        viewCtx.CacheVersion,
+				Title:               headerTitle,
+				ContentTemplate:     "outcome-matrix-content",
+				CurrentPath:         viewCtx.CurrentPath,
+				ActiveNav:           deps.Routes.ActiveNav,
+				ActiveSubNav:        deps.Routes.ActiveSubNav,
+				HeaderBreadcrumb:    deps.JobListLabel,
+				HeaderBreadcrumbURL: breadcrumbURL,
+				HeaderTitle:         headerTitle,
+				HeaderSubtitle:      groupName,
+				HeaderIcon:          "icon-grid",
+				CommonLabels:        deps.CommonLabels,
 			},
 			Grid:         grid,
 			Labels:       l,
@@ -268,6 +285,17 @@ func buildGrid(
 		scopeStr = "all"
 	}
 
+	// AutoSave (W2 grade-sheet edit mode) turns on the per-cell micro-batch
+	// client. Enable it whenever the grid is save-enabled — the record action
+	// accepts an update-only OR create-only save, so either grant qualifies (the
+	// inverse of the SaveDisabled create-gate, widened to include update). A
+	// read-only viewer (neither grant) gets the plain grid with no editors.
+	canSave := perms.Can("task_outcome", "create") || perms.Can("task_outcome", "update")
+	saveMode := "batch"
+	if canSave {
+		saveMode = "cell"
+	}
+
 	cfg := &types.CellGridConfig{
 		ID: "outcome-matrix-grid",
 		// Caption intentionally left unset (round 4 item 2): the page
@@ -279,7 +307,8 @@ func buildGrid(
 		FreezeFirstCol:   true,
 		FreezeHeaderRows: 3,
 		SaveURL:          route.ResolveURL(deps.Routes.RecordURL, "id", templateID),
-		SaveMode:         "batch",
+		SaveMode:         saveMode,
+		AutoSave:         canSave,
 		JobTemplateID:    templateID,
 		Scope:            scopeStr,
 		SaveDisabled:     !perms.Can("task_outcome", "create"),
@@ -313,7 +342,49 @@ func buildGrid(
 	cfg.Columns = buildColumns(resp.GetPhases())
 	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames)
 	applyRowOptions(cfg, deps.Options, attrValues, clientNames)
+	if cfg.AutoSave {
+		// Populate the W2 edit-mode per-cell fields AFTER applyRowOptions has
+		// settled the final display order (RowIndex counts data rows in that
+		// order; the JS keyboard grid-nav reads data-row-index/data-col-index).
+		assignAutoSaveCoords(cfg)
+	}
 	return cfg
+}
+
+// assignAutoSaveCoords populates the W2 AutoSave per-cell fields the edit-mode
+// client needs: RowIndex/ColIndex logical coordinates (keyboard grid-nav),
+// SavedValue (the server baseline the client dirty-checks + reverts to), and a
+// stable InputID/StatusID pair (focus target + aria-live status region). Only
+// called in AutoSave mode so the legacy grid's DOM is byte-unchanged.
+func assignAutoSaveCoords(cfg *types.CellGridConfig) {
+	// Leaf-column index, left-to-right across the whole phase→task→criterion tree.
+	colIndex := make(map[string]int)
+	ci := 0
+	for _, l1 := range cfg.Columns {
+		for _, l2 := range l1.Level2 {
+			for _, l3 := range l2.Level3 {
+				colIndex[l3.ColumnKey] = ci
+				ci++
+			}
+		}
+	}
+	for ri := range cfg.Rows {
+		row := &cfg.Rows[ri]
+		rowSlug := slug(row.ID)
+		for colKey, cell := range row.Cells {
+			c := cell
+			c.RowIndex = ri
+			if idx, ok := colIndex[colKey]; ok {
+				c.ColIndex = idx
+			}
+			// The server baseline the client compares live input against.
+			c.SavedValue = c.Value
+			inputID := "om-in-" + rowSlug + "-" + slug(colKey)
+			c.InputID = inputID
+			c.StatusID = inputID + "-st"
+			row.Cells[colKey] = c
+		}
+	}
 }
 
 // fetchClientAttributeValues resolves each Options-referenced attribute code

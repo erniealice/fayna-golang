@@ -38,6 +38,18 @@ type OutcomeMatrixModuleDeps struct {
 
 	ResolveStaff func(ctx context.Context) (string, error)
 
+	// ComputePhaseOutcome / ComputeJobOutcome are the inline grade-recompute
+	// closures (W2 grade-sheet edit mode, Q-GSE-5). The record action calls them
+	// after a successful ACADEMIC cell write to refresh the affected
+	// phase_outcome_summary then job_outcome_summary, keyed off the
+	// SERVER-DERIVED job_phase_id / job_id from the re-derived matrix (never a
+	// browser value). Both optional/nil-safe: a nil closure → the save still
+	// succeeds with ratingFresh:false (grade persisted, rating stale). Return
+	// contract: (true,nil)=recomputed; (false,nil)=frozen/authoritative skip;
+	// (false,err)=compute failed (stale + retryable).
+	ComputePhaseOutcome func(ctx context.Context, jobPhaseID string) (bool, error)
+	ComputeJobOutcome   func(ctx context.Context, jobID string) (bool, error)
+
 	// ListClients hydrates the roster's display names (the matrix's client_id
 	// rows are otherwise opaque — see list/page.go's PageViewDeps.ListClients
 	// doc comment). Same closure the job drawer's client search picker
@@ -61,6 +73,13 @@ type OutcomeMatrixModuleDeps struct {
 	// a failed lookup disables the attribute-driven behaviors, never the page.
 	ListClientAttributes     func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
 	ResolveAttributeIDByCode func(ctx context.Context, code string) (string, error)
+
+	// Header-breadcrumb back-link to the job list (the matrix's parent
+	// surface). Both come from the job unit's RESOLVED routes/labels at mount
+	// time, so they carry the tier's slug + wording. Optional: empty values
+	// render no breadcrumb (header falls back to the title-only crumb).
+	JobListURL   string // job list route pattern, "{status}" placeholder intact
+	JobListLabel string // the job list's active-status heading
 }
 
 // OutcomeMatrixModule holds the constructed outcome matrix views.
@@ -85,16 +104,20 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		Options:                      deps.Options,
 		ListClientAttributes:         deps.ListClientAttributes,
 		ResolveAttributeIDByCode:     deps.ResolveAttributeIDByCode,
+		JobListURL:                   deps.JobListURL,
+		JobListLabel:                 deps.JobListLabel,
 	})
 
 	recordView := outcomematrixaction.NewRecordAction(&outcomematrixaction.Deps{
-		Routes:            deps.Routes,
-		Labels:            deps.Labels,
-		CreateTaskOutcome: deps.CreateTaskOutcome,
-		UpdateTaskOutcome: deps.UpdateTaskOutcome,
-		ReadTaskOutcome:   deps.ReadTaskOutcome,
-		GetOutcomeMatrix:  deps.GetOutcomeMatrix,
-		ResolveStaff:      deps.ResolveStaff,
+		Routes:              deps.Routes,
+		Labels:              deps.Labels,
+		CreateTaskOutcome:   deps.CreateTaskOutcome,
+		UpdateTaskOutcome:   deps.UpdateTaskOutcome,
+		ReadTaskOutcome:     deps.ReadTaskOutcome,
+		GetOutcomeMatrix:    deps.GetOutcomeMatrix,
+		ResolveStaff:        deps.ResolveStaff,
+		ComputePhaseOutcome: deps.ComputePhaseOutcome,
+		ComputeJobOutcome:   deps.ComputeJobOutcome,
 	})
 
 	return &OutcomeMatrixModule{

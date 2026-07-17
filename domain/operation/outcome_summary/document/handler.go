@@ -9,8 +9,10 @@ package document
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +38,7 @@ import (
 )
 
 const docxContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+const pdfContentType = "application/pdf"
 
 // Deps holds the report-card document handler dependencies. Every list closure
 // is workspace-bound at the espyna adapter (mirroring view-3). GenerateDoc is
@@ -58,6 +61,16 @@ type Deps struct {
 	// GenerateDoc wraps fycha DocumentService.ProcessBytes (template bytes + data
 	// map → processed .docx). Injected by the app container via the block Infra.
 	GenerateDoc func(templateData []byte, data map[string]any) ([]byte, error)
+
+	// GeneratePDF wraps fycha DocumentService.ProcessBytesToPDF (template bytes +
+	// data map → rendered .docx → .pdf via LibreOffice) — a SECOND injected
+	// closure mirroring GenerateDoc. Optional/nil-safe: the route registers on
+	// GenerateDoc alone (DOCX baseline); a ?format=pdf request when this is nil is
+	// a narrower per-format 503, not a 404. On a host without LibreOffice the
+	// closure returns the fycha ErrLibreOfficeUnavailable sentinel (detected here
+	// by its stable message — fayna must NOT import fycha) → 503; any other error
+	// → 500.
+	GeneratePDF func(templateData []byte, data map[string]any) ([]byte, error)
 
 	// ResolveTemplateBytes resolves the applicable published report-card template
 	// binding for this card's price_schedule and returns the bound template's
@@ -108,10 +121,35 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			return
 		}
 
-		if d.GenerateDoc == nil {
-			log.Printf("report card doc: GenerateDoc not wired — refusing to serve")
-			http.Error(w, "report card rendering is not configured", http.StatusServiceUnavailable)
+		// Format selection: empty/"docx" → the existing DOCX behavior (unchanged
+		// default, zero regression — no caller relied on a param before W5); "pdf"
+		// → the injected GeneratePDF closure; anything else → 400.
+		format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
+		if format == "" {
+			format = "docx"
+		}
+		if format != "docx" && format != "pdf" {
+			http.Error(w, `invalid format: must be "docx" or "pdf"`, http.StatusBadRequest)
 			return
+		}
+
+		// Per-format wiring gate. The route only registers when GenerateDoc is
+		// wired (DOCX baseline, module gate). DOCX keeps that same nil check; PDF
+		// additionally needs GeneratePDF — its absence is a narrower, format-
+		// specific 503 (fail-closed), NOT a route-level 404.
+		switch format {
+		case "docx":
+			if d.GenerateDoc == nil {
+				log.Printf("report card doc: GenerateDoc not wired — refusing to serve")
+				http.Error(w, "report card rendering is not configured", http.StatusServiceUnavailable)
+				return
+			}
+		case "pdf":
+			if d.GeneratePDF == nil {
+				log.Printf("report card pdf: GeneratePDF not wired — refusing to serve")
+				http.Error(w, "report card PDF rendering is not configured", http.StatusServiceUnavailable)
+				return
+			}
 		}
 
 		rc, ok := collectCard(ctx, d, sectionID, clientID)
@@ -143,24 +181,164 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			}
 		}
 
-		docBytes, err := d.GenerateDoc(tpl, buildReportCardData(*rc))
-		if err != nil {
-			log.Printf("report card doc: generate: %v", err)
-			http.Error(w, "failed to generate report card", http.StatusInternalServerError)
-			return
-		}
-		if len(docBytes) == 0 {
-			http.Error(w, "failed to generate report card", http.StatusInternalServerError)
-			return
-		}
+		// The SAME data map feeds both formats — PDF conversion happens AFTER the
+		// identical DOCX assembly (fycha renders the DOCX then LibreOffice converts).
+		data := buildReportCardData(*rc)
 
-		filename := "report-card-" + slug(rc.SectionName) + "-" + slug(rc.ClientName) + ".docx"
-		w.Header().Set("Content-Type", docxContentType)
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
-		if _, err := w.Write(docBytes); err != nil {
-			log.Printf("report card doc: write response: %v", err)
+		var (
+			outBytes    []byte
+			contentType string
+			// Content-Disposition is set per-branch below (DOCX keeps its exact
+			// pre-W5 header for zero regression; PDF uses the LOCKED filename with an
+			// RFC-5987 encoding + nosniff).
+			err error
+		)
+		switch format {
+		case "pdf":
+			outBytes, err = d.GeneratePDF(tpl, data)
+			if err != nil {
+				// LibreOffice absent at runtime → 503 (the closure IS wired, the host
+				// simply has no soffice). fayna must NOT import fycha, so the fycha
+				// ErrLibreOfficeUnavailable sentinel is matched by its stable message
+				// rather than errors.Is. Any other error is a genuine 500.
+				if isLibreOfficeUnavailable(err) {
+					log.Printf("report card pdf: LibreOffice unavailable: %v", err)
+					http.Error(w, "report card PDF rendering is unavailable — LibreOffice is not installed", http.StatusServiceUnavailable)
+					return
+				}
+				log.Printf("report card pdf: generate: %v", err)
+				http.Error(w, "failed to generate report card PDF", http.StatusInternalServerError)
+				return
+			}
+			if len(outBytes) == 0 {
+				http.Error(w, "failed to generate report card PDF", http.StatusInternalServerError)
+				return
+			}
+			contentType = pdfContentType
+			// LOCKED filename: "Report Card - {Student} - {AY} - {unixMilli}.pdf"
+			// (decisions.md Q-GSE PDF filename lock). AY derives from the section's
+			// price_schedule period (rc.SchedulePeriod); unixMilli is the current
+			// time in ms. Full conversion completes before any byte is streamed.
+			w.Header().Set("Content-Type", contentType)
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("Content-Disposition", contentDisposition(reportCardPDFFilename(rc)))
+			if _, err := w.Write(outBytes); err != nil {
+				log.Printf("report card pdf: write response: %v", err)
+			}
+		default: // "docx" — unchanged pre-W5 behavior
+			outBytes, err = d.GenerateDoc(tpl, data)
+			if err != nil {
+				log.Printf("report card doc: generate: %v", err)
+				http.Error(w, "failed to generate report card", http.StatusInternalServerError)
+				return
+			}
+			if len(outBytes) == 0 {
+				http.Error(w, "failed to generate report card", http.StatusInternalServerError)
+				return
+			}
+			filename := "report-card-" + slug(rc.SectionName) + "-" + slug(rc.ClientName) + ".docx"
+			w.Header().Set("Content-Type", docxContentType)
+			w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+			if _, err := w.Write(outBytes); err != nil {
+				log.Printf("report card doc: write response: %v", err)
+			}
 		}
 	}
+}
+
+// libreOfficeUnavailable is the STRUCTURAL contract fycha's
+// document.ErrLibreOfficeUnavailable satisfies (its concrete type exposes this
+// method). fayna must NOT import fycha (the PDF path is an injected closure —
+// architecture boundary), so we cannot reference the sentinel VALUE or its type
+// for errors.Is; instead we assert this tiny interface, which needs no import.
+type libreOfficeUnavailable interface {
+	LibreOfficeUnavailable() bool
+}
+
+// isLibreOfficeUnavailable reports whether err is (or wraps) the fycha runtime
+// "soffice binary absent" condition that must map to a 503 rather than a 500.
+//
+// PREFERRED: a structural interface assertion via errors.As — it walks the wrap
+// chain to find any error exposing LibreOfficeUnavailable() bool (which the fycha
+// sentinel does), so a fycha message reword can no longer silently downgrade 503
+// to 500, and an unrelated error that merely mentions LibreOffice is not
+// misclassified.
+//
+// FALLBACK (documented): the stable "LibreOffice is not installed" substring, kept
+// as defense-in-depth for an error that crossed a boundary which dropped the typed
+// wrapper (e.g. serialized across a process). It is intentionally secondary.
+func isLibreOfficeUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	var lou libreOfficeUnavailable
+	if errors.As(err, &lou) && lou.LibreOfficeUnavailable() {
+		return true
+	}
+	return strings.Contains(err.Error(), "LibreOffice is not installed")
+}
+
+// reportCardPDFFilename builds the LOCKED report-card PDF filename
+// "Report Card - {Student} - {AY} - {unixMilli}.pdf" (decisions.md). The raw
+// (possibly non-ASCII, space/comma-bearing) name is sanitized for transport by
+// contentDisposition.
+func reportCardPDFFilename(rc *reportCard) string {
+	student := firstNonEmpty(rc.ClientName, "Student")
+	ay := strings.TrimSpace(rc.SchedulePeriod)
+	name := "Report Card - " + student
+	if ay != "" {
+		name += " - " + ay
+	}
+	name += " - " + strconv.FormatInt(time.Now().UnixMilli(), 10) + ".pdf"
+	return name
+}
+
+// contentDisposition builds an attachment Content-Disposition with BOTH an
+// ASCII-safe filename="" fallback and an RFC-5987 filename*=UTF-8'' form, so
+// names with spaces/commas/non-ASCII (student names) download correctly across
+// browsers without header injection.
+func contentDisposition(name string) string {
+	ascii := asciiFilename(name)
+	return `attachment; filename="` + ascii + `"; filename*=UTF-8''` + encodeRFC5987(name)
+}
+
+// asciiFilename produces a safe quoted-string fallback: printable-ASCII only,
+// with '"' and '\' (the quoted-string escapes) and control chars replaced by '_'.
+func asciiFilename(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if r >= 0x20 && r < 0x7f && r != '"' && r != '\\' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	if out == "" {
+		return "report-card.pdf"
+	}
+	return out
+}
+
+// encodeRFC5987 percent-encodes name as a UTF-8 ext-value per RFC 5987 §3.2
+// (attr-char stays literal; every other byte → %XX).
+func encodeRFC5987(name string) string {
+	const attr = "!#$&+-.^_`|~"
+	var b strings.Builder
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9',
+			strings.IndexByte(attr, c) >= 0:
+			b.WriteByte(c)
+		default:
+			b.WriteByte('%')
+			const hex = "0123456789ABCDEF"
+			b.WriteByte(hex[c>>4])
+			b.WriteByte(hex[c&0x0f])
+		}
+	}
+	return b.String()
 }
 
 func firstNonEmpty(vals ...string) string {

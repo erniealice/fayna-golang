@@ -11,7 +11,7 @@
 {{define "job-list-content"}}
 <div class="page-content page-content--table">
     {{if .TabItems}}
-    {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "job-category-tabs" "Label" .TabsAria)}}
+    {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "job-category-tabs" "Label" .TabsAria "Indicator" "#tabContent")}}
     <div id="tabContent" role="tabpanel"{{if .ActiveTab}} aria-labelledby="tab-{{.ActiveTab}}"{{end}}>
         {{template "table-card" .Table}}
     </div>

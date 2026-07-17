@@ -74,6 +74,11 @@ type PeriodLabels struct {
 	ProgressColumn string `json:"progress_column"`
 	FinalColumn    string `json:"final_column"`
 	ViewAction     string `json:"view_action"`
+	// DownloadAction labels the per-student report-card PDF download link (W5,
+	// ?format=pdf). Siblings LandingLabels/SectionLabels already carry a
+	// DownloadAction (their CSV export); PeriodLabels lacked one. Generic
+	// identifier — the vertical wording lives in the lyngua value.
+	DownloadAction string `json:"download_action"`
 }
 
 // LandingLabels holds the view-1 (report-cards landing) strings. Every field
@@ -227,6 +232,7 @@ func DefaultLabels() Labels {
 			ProgressColumn: "Progress",
 			FinalColumn:    "Final",
 			ViewAction:     "View outcomes",
+			DownloadAction: "Download PDF",
 		},
 		TemplateSettings: TemplateSettingsLabels{
 			Title:              "Outcome Report Templates",

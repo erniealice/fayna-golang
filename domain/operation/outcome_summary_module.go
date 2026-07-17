@@ -67,6 +67,11 @@ type OutcomeSummaryModuleDeps struct {
 	ListTaskOutcomes          func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
 	ListTemplateTaskCriterias func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
 	GenerateDoc               func(templateData []byte, data map[string]any) ([]byte, error)
+	// GeneratePDF is the injected fycha ProcessBytesToPDF closure (DOCX → PDF via
+	// LibreOffice) — a SECOND closure mirroring GenerateDoc. Nil-safe: the
+	// download route still registers on GenerateDoc alone (DOCX baseline); a
+	// ?format=pdf request with GeneratePDF nil is a narrower per-format 503.
+	GeneratePDF func(templateData []byte, data map[string]any) ([]byte, error)
 	// ResolveTemplateBytes resolves the operator-uploaded, AY-scoped report-card
 	// template binding for a card's price_schedule (binding resolver ∘ storage
 	// download). Returns (nil, nil) → the document handler falls back to the
@@ -255,6 +260,7 @@ func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc 
 		CategoryFilter:                deps.Options.CategoryFilter,
 		ListJobCategories:             deps.ListJobCategories,
 		GenerateDoc:                   deps.GenerateDoc,
+		GeneratePDF:                   deps.GeneratePDF,
 		ResolveTemplateBytes:          deps.ResolveTemplateBytes,
 		ListSubscriptionGroups:        deps.ListSubscriptionGroups,
 		ListSubscriptionGroupMembers:  deps.ListSubscriptionGroupMembers,

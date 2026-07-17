@@ -12,6 +12,11 @@
     {{if .NotComputed}}
     {{template "alert" (dict "State" "info" "Variant" "subtle" "Message" .Banner)}}
     {{else}}
+    {{if .DocumentDownloadURL}}
+    <div class="page-content__actions" style="margin-bottom: var(--space-4, 1rem);">
+        <a href="{{.DocumentDownloadURL}}" class="btn btn-secondary btn-sm" download hx-boost="false" data-testid="rc-download-pdf">{{.DownloadLabel}}</a>
+    </div>
+    {{end}}
     {{template "table-card" .Table}}
     {{end}}
 </div>

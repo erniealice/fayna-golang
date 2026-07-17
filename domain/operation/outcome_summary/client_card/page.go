@@ -92,6 +92,13 @@ type PageData struct {
 	Table           *types.TableConfig
 	NotComputed     bool
 	Banner          string
+	// DocumentDownloadURL is the per-student report-card PDF download link
+	// (ClientDocumentURL resolved for this section+client, "?format=pdf"). Empty
+	// when there are no computed grades (NotComputed) — the download endpoint
+	// would 404 — so the affordance only renders alongside the grade table.
+	DocumentDownloadURL string
+	// DownloadLabel is the lyngua-sourced link text for the PDF download.
+	DownloadLabel string
 }
 
 // NewView creates the per-student report-card view.
@@ -123,7 +130,7 @@ func NewView(deps *Deps) view.View {
 
 		name := studentName(ctx, deps, clientID)
 		table := buildTable(ctx, deps, subID, historical)
-		return okPage(viewCtx, deps, group, name, table)
+		return okPage(viewCtx, deps, group, clientID, name, table)
 	})
 }
 
@@ -568,8 +575,21 @@ func studentName(ctx context.Context, deps *Deps, clientID string) string {
 // okPage assembles the PageData. Header: breadcrumb = the section name (links
 // back to the section grid), title = the student name, caption = the student
 // subtitle label. Mirrors the section view's okPage header shape.
-func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, name string, table *types.TableConfig) view.ViewResult {
+func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, clientID, name string, table *types.TableConfig) view.ViewResult {
 	l := deps.Labels
+	// PDF download affordance — only when there are computed grades (a blank card
+	// would 404 at the endpoint). ClientDocumentURL resolved for this section +
+	// client, "?format=pdf" (string-concat query, the SectionExportURL idiom). The
+	// template renders it as a plain download anchor (Content-Disposition handles
+	// the save — no fetch/blob JS).
+	var downloadURL string
+	if table != nil && deps.Routes.ClientDocumentURL != "" {
+		downloadURL = route.ResolveURL(deps.Routes.ClientDocumentURL, "id", group.GetId(), "client_id", clientID) + "?format=pdf"
+	}
+	downloadLabel := l.Student.DownloadAction
+	if strings.TrimSpace(downloadLabel) == "" {
+		downloadLabel = "Download PDF"
+	}
 	pd := &PageData{
 		PageData: types.PageData{
 			CacheVersion:        viewCtx.CacheVersion,
@@ -584,10 +604,12 @@ func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.Su
 			HeaderIcon:          "icon-award",
 			CommonLabels:        deps.CommonLabels,
 		},
-		ContentTemplate: "outcome-summary-student-content",
-		Table:           table,
-		NotComputed:     table == nil,
-		Banner:          l.Section.NotComputedBanner,
+		ContentTemplate:     "outcome-summary-student-content",
+		Table:               table,
+		NotComputed:         table == nil,
+		Banner:              l.Section.NotComputedBanner,
+		DocumentDownloadURL: downloadURL,
+		DownloadLabel:       downloadLabel,
 	}
 	return view.OK("outcome-summary-student", pd)
 }

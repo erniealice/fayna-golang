@@ -586,7 +586,7 @@ func TaskOutcomeUnit(uc *UseCases, infra *Infra) compose.Unit {
 // are nil-safe (empty-state / fail-closed) on non-postgres builds. options is
 // the app's row-presentation config (EngineBlock's view option block); the
 // zero value renders the flat roster unchanged.
-func OutcomeMatrixUnit(uc *UseCases, _ *Infra, options outcome_matrix.Options) compose.Unit {
+func OutcomeMatrixUnit(uc *UseCases, infra *Infra, options outcome_matrix.Options) compose.Unit {
 	u := outcome_matrix.Describe()
 	u.Mount = func(mc *compose.MountContext) error {
 		r := u.Routes.(*outcome_matrix.Routes)
@@ -597,6 +597,23 @@ func OutcomeMatrixUnit(uc *UseCases, _ *Infra, options outcome_matrix.Options) c
 			Labels:       *l,
 			CommonLabels: mc.Common,
 			Options:      options,
+		}
+		// Inline grade recompute (W2, Q-GSE-5) — the record action calls these
+		// after a successful academic cell write. Optional/nil-safe: a nil closure
+		// (unwired app) degrades the save to ratingFresh:false, never a 500.
+		if infra != nil {
+			deps.ComputePhaseOutcome = infra.ComputePhaseOutcome
+			deps.ComputeJobOutcome = infra.ComputeJobOutcome
+		}
+		// Header breadcrumb back-link to the job list (the matrix's parent
+		// surface): the job unit's RESOLVED routes/labels carry the tier's
+		// slug + wording (e.g. "/courses/list/{status}" + "Active Classes"
+		// on education). Optional — a missing job unit renders no crumb.
+		if jRoutes, ok := compose.RoutesOf[*job.Routes](mc, "operation.job"); ok {
+			deps.JobListURL = jRoutes.ListURL
+		}
+		if jLabels, ok := compose.LabelsOf[*job.Labels](mc, "operation.job"); ok {
+			deps.JobListLabel = jLabels.Page.HeadingActive
 		}
 		wireOutcomeMatrixDeps(deps, uc)
 		operation.NewOutcomeMatrixModule(deps).RegisterRoutes(mc.Routes)
@@ -626,6 +643,7 @@ func OutcomeSummaryUnit(uc *UseCases, infra *Infra, options outcome_summary.Opti
 		}
 		if infra != nil {
 			deps.GenerateDoc = infra.GenerateDoc
+			deps.GeneratePDF = infra.GeneratePDF
 			deps.ResolveTemplateBytes = infra.ResolveTemplateBytes
 			// TB3 template settings artifact closures.
 			deps.UploadTemplate = infra.UploadTemplate

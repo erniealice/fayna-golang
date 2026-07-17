@@ -12,15 +12,19 @@ import (
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
+	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
+	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 )
@@ -30,6 +34,15 @@ const (
 	maxPages  = 100
 	dash      = "—"
 )
+
+// criterionRow is one assessment-criterion row of a subject block on the v2
+// (block-layout) template: the lettered display label ("A - Investigating")
+// and the per-period recomputed MAX marks.
+type criterionRow struct {
+	Label string
+	Sem1  string
+	Sem2  string
+}
 
 // subjectRow is one row of the report card (one subject / job).
 type subjectRow struct {
@@ -42,6 +55,14 @@ type subjectRow struct {
 	Sem1Band  string // phase_outcome_summary (phase_order 1) — recompute-equivalent
 	Sem2Band  string // phase_outcome_summary (phase_order 2) — recompute-equivalent
 	YearFinal string // job_outcome_summary.scaled_label — STORED, never recomputed
+
+	// v2 (block-layout) enrichments — additive; the v1 summary-table template
+	// never references these keys.
+	Title       string         // display title (rotation pair merged, e.g. "Arts: Visual Arts / Arts: Music"); falls back to Name
+	TeacherLine string         // "Teacher: X" / "Teachers: X / Y" (label wording from lyngua)
+	Criteria    []criterionRow // ordered criterion rows with per-period marks
+	Sem1Total   string         // Σ of the period-1 per-criterion MAX; "" when no marks
+	Sem2Total   string         // Σ of the period-2 per-criterion MAX; "" when no marks
 }
 
 // reportCard is one client's assembled card (meta + ordered subjects). Generic
@@ -67,6 +88,26 @@ type reportCard struct {
 	// strand's frozen authoritative average. Empty when no category filter is
 	// configured or the student has no deportment data. See formation.go.
 	FormationGroups []formationGroup
+
+	// v2 (block-layout) enrichments — additive root fields; every one renders
+	// blank when its source is unwired/absent (never a placeholder leak).
+	SchedulePeriodSpaced string          // "2025 - 2026" (cover-page variant of SchedulePeriod)
+	GradeSection         string          // "Grade 7 - Nickel" (identity-line variant of GroupLevel+SectionName)
+	Adviser              string          // group-lead staff name (the group-category job's task assignee)
+	ClientReference      string          // client_attributes.<configured code> value (e.g. LRN)
+	PrintedByName        string          // display name of the printing user; falls back to PrintedBy
+	PrintedAtLong        string          // "July 13, 2026 08:13 AM" long-form print timestamp
+	ConductRows          []conductRow    // per-subject conduct table rows (rotation pairs merged)
+	GroupConductSem1     string          // group (homeroom) conduct, period 1
+	GroupConductSem2     string          // group (homeroom) conduct, period 2
+}
+
+// conductRow is one row of the per-subject conduct (deportment) table on the
+// formation page: the merged display title and the per-period values.
+type conductRow struct {
+	Title string
+	Sem1  string
+	Sem2  string
 }
 
 // buildReportCardData mirrors buildInvoiceData: it flattens the assembled card
@@ -76,6 +117,18 @@ type reportCard struct {
 func buildReportCardData(rc reportCard) map[string]any {
 	subjects := make([]any, 0, len(rc.Subjects))
 	for _, s := range rc.Subjects {
+		criteria := make([]any, 0, len(s.Criteria))
+		for _, c := range s.Criteria {
+			criteria = append(criteria, map[string]any{
+				"crit_label": orBlank(c.Label),
+				"crit_sem1":  orBlank(c.Sem1),
+				"crit_sem2":  orBlank(c.Sem2),
+			})
+		}
+		title := orBlank(s.Title)
+		if title == "" {
+			title = orBlank(s.Name)
+		}
 		subjects = append(subjects, map[string]any{
 			"subject_name":   orBlank(s.Name),
 			"crit_a":         orDash(s.CritA),
@@ -86,6 +139,20 @@ func buildReportCardData(rc reportCard) map[string]any {
 			"sem1_band":      orDash(s.Sem1Band),
 			"sem2_band":      orDash(s.Sem2Band),
 			"myp_overall":    orDash(s.YearFinal),
+			// v2 block-layout keys (additive; unreferenced by the v1 template).
+			"subject_title": title,
+			"teacher_line":  orBlank(s.TeacherLine),
+			"criteria":      criteria,
+			"sem1_total":    orBlank(s.Sem1Total),
+			"sem2_total":    orBlank(s.Sem2Total),
+		})
+	}
+	conduct := make([]any, 0, len(rc.ConductRows))
+	for _, r := range rc.ConductRows {
+		conduct = append(conduct, map[string]any{
+			"conduct_title": orBlank(r.Title),
+			"conduct_sem1":  orBlank(r.Sem1),
+			"conduct_sem2":  orBlank(r.Sem2),
 		})
 	}
 	return map[string]any{
@@ -99,6 +166,16 @@ func buildReportCardData(rc reportCard) map[string]any {
 		"printed_at":       orBlank(rc.PrintedAt),
 		"subjects":         subjects,
 		"formation_groups": formationData(rc.FormationGroups),
+		// v2 block-layout root keys (additive).
+		"academic_year_spaced": orBlank(rc.SchedulePeriodSpaced),
+		"grade_section":        orBlank(rc.GradeSection),
+		"adviser":              orBlank(rc.Adviser),
+		"client_reference":     orBlank(rc.ClientReference),
+		"printed_by_name":      orBlank(firstNonEmpty(rc.PrintedByName, rc.PrintedBy)),
+		"printed_at_long":      orBlank(firstNonEmpty(rc.PrintedAtLong, rc.PrintedAt)),
+		"conduct_rows":         conduct,
+		"group_conduct_sem1":   orBlank(rc.GroupConductSem1),
+		"group_conduct_sem2":   orBlank(rc.GroupConductSem2),
 	}
 }
 
@@ -125,6 +202,8 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	// every job; catOK=false (a configured filter that could not be resolved)
 	// fails CLOSED — the document drops every job (empty transcript, not a leak).
 	catID, catOK := outcome_summary.ResolveCategoryID(ctx, d.ListJobCategories, d.CategoryFilter)
+	cats := fetchCategories(ctx, d)
+	groupCatID := categoryIDByCode(cats, d.DocOptions.GroupCategoryFilter)
 	jobTemplate := map[string]string{}
 	jobIDs := make([]string, 0, len(jobs))
 	templateIDs := []string{}
@@ -136,6 +215,11 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	// configured (KeepJobInCategory returns true for every job when catID=="", so
 	// the !Keep branch never fires on the unfiltered service-admin tier).
 	var deportJobs []*jobpb.Job
+	// groupJob is the single job of the configured GROUP category
+	// (DocumentOptions.GroupCategoryFilter, e.g. homeroom): its task assignee is
+	// the document's group lead ("Adviser") and its per-phase summaries the group
+	// conduct row. Nil when unconfigured or absent.
+	var groupJob *jobpb.Job
 	for _, j := range jobs {
 		if !catOK {
 			continue
@@ -143,6 +227,9 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		if !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
 			if jc := j.GetJobCategoryId(); jc != "" && jc != catID {
 				deportJobs = append(deportJobs, j)
+				if groupJob == nil && groupCatID != "" && jc == groupCatID {
+					groupJob = j
+				}
 			}
 			continue
 		}
@@ -159,13 +246,36 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	}
 
 	tmplNames := fetchTemplateNames(ctx, d, templateIDs, historical)
-	phaseOrder, jobByPhase := fetchPhaseOrders(ctx, d, jobIDs)
-	semByJob := fetchSemesterLabels(ctx, d, jobIDs, phaseOrder)
+	// The transcript walk covers the academic jobs plus the group-category job:
+	// the group job contributes no subject row, but its graded tasks carry the
+	// group-lead assignee (the document "Adviser").
+	walkIDs := jobIDs
+	if groupJob != nil && groupJob.GetId() != "" {
+		walkIDs = append(append([]string{}, jobIDs...), groupJob.GetId())
+	}
+	phaseOrder, jobByPhase := fetchPhaseOrders(ctx, d, walkIDs)
+	semByJob := fetchSemesterLabels(ctx, d, walkIDs, phaseOrder)
 	yearByJob := fetchYearLabels(ctx, d, jobIDs)
-	// Per-criterion marks from task_outcome, scoped to THIS card's jobs (fixes
-	// cross-AY accumulation). Keyed by job id, MAX-within-criterion, A/B/C/D
-	// ordered by template_task_criteria.sequence_order.
-	critByJob := fetchCriteriaByJob(ctx, d, jobByPhase)
+	// Per-criterion marks + per-period teacher assignment from task_outcome /
+	// job_task, scoped to THIS card's jobs (fixes cross-AY accumulation). Keyed
+	// by job id; MAX-within-criterion per period; A/B/C/D ordered by
+	// template_task_criteria.sequence_order.
+	transcripts := fetchTranscripts(ctx, d, jobByPhase, phaseOrder)
+
+	// Display enrichment lookups (all optional/nil-safe → blank fields).
+	critNames := fetchCriterionNames(ctx, d, transcripts)
+	staffNames := fetchStaffNames(ctx, d, transcripts)
+
+	// Rotation-pair merge (G1): a canonical subject (e.g. "Arts") whose
+	// conduct-category strands ("Arts: Visual Arts", "Arts: Music") identify the
+	// per-period variants renders under the merged pair title. The conduct table
+	// reuses the same pairing.
+	conduct := fetchConduct(ctx, d, deportJobs, groupJob, historical)
+	academicNames := map[string]bool{}
+	for _, jid := range jobIDs {
+		academicNames[strings.ToLower(cleanSubject(colName(tmplNames, jobTemplate[jid])))] = true
+	}
+	merged := mergeRotationPairs(conduct, academicNames, fetchInactiveSubjectNames(ctx, d, subID))
 
 	// One row per subject (job), subject-name ASC — prod's canonical order.
 	type entry struct{ jobID, name string }
@@ -185,10 +295,11 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	for _, e := range entries {
 		sem := semByJob[e.jobID]
 		display := cleanSubject(e.name)
-		// crit is present in critByJob iff this job had ≥1 numeric task_outcome
-		// (even an all-zero one); hasMarks distinguishes an all-zero scaffold
-		// (present, total="0") from a subject with no task_outcome at all.
-		crit, hasMarks := critByJob[e.jobID]
+		tr := transcripts[e.jobID]
+		// crit is derived from the transcript iff this job had ≥1 numeric
+		// task_outcome (even an all-zero one); hasMarks distinguishes an all-zero
+		// scaffold (present, total="0") from a subject with no task_outcome at all.
+		crit, hasMarks := tr.yearCriteria()
 		row := subjectRow{
 			Name:     display,
 			CritA:    crit.a,
@@ -218,6 +329,10 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		if isNonEnrolledPlaceholder(row, hasMarks) {
 			continue
 		}
+		// v2 block-layout enrichments (blank-safe when sources are unwired).
+		row.Title = merged.titleFor(display)
+		row.TeacherLine = teacherLine(d.Labels.Student, tr, staffNames)
+		row.Criteria, row.Sem1Total, row.Sem2Total = tr.criterionRows(critNames)
 		rows = append(rows, row)
 	}
 
@@ -226,18 +341,44 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	// student has no deportment data.
 	formationGroups := collectFormationGroups(ctx, d, deportJobs, historical)
 
+	// Per-subject conduct rows + group conduct (v2 block layout).
+	conductRows, groupSem1, groupSem2 := buildConductRows(conduct, merged)
+
+	// Group lead ("Adviser") = the modal task assignee on the group-category job.
+	adviser := ""
+	if groupJob != nil {
+		adviser = groupLeadName(transcripts[groupJob.GetId()], staffNames)
+	}
+
 	name, ay := sectionParts(group.GetName())
 	grade, section := gradeSection(name)
+	// Prefer the price_schedule display name for the schedule period (live
+	// format "2025-2026"); the section-name suffix ("2025-26") stays the
+	// fallback.
+	if psPeriod := fetchSchedulePeriod(ctx, d, group.GetPriceScheduleId()); psPeriod != "" {
+		ay = psPeriod
+	}
+	gradeSectionLine := section
+	if grade != "" {
+		gradeSectionLine = grade + " - " + section
+	}
 	rc := &reportCard{
-		DocumentHeaderName: strings.TrimSpace(d.DocumentHeaderName),
-		SchedulePeriod:     ay,
-		ClientName:         studentName(ctx, d, clientID),
-		GroupLevel:         grade,
-		SectionName:        section,
-		LRN:                "",
-		Subjects:           rows,
-		PriceScheduleID:    group.GetPriceScheduleId(),
-		FormationGroups:    formationGroups,
+		DocumentHeaderName:   strings.TrimSpace(d.DocumentHeaderName),
+		SchedulePeriod:       ay,
+		SchedulePeriodSpaced: strings.Replace(ay, "-", " - ", 1),
+		ClientName:           studentName(ctx, d, clientID),
+		GroupLevel:           grade,
+		SectionName:          section,
+		GradeSection:         gradeSectionLine,
+		LRN:                  "",
+		ClientReference:      fetchClientReference(ctx, d, clientID),
+		Adviser:              adviser,
+		Subjects:             rows,
+		PriceScheduleID:      group.GetPriceScheduleId(),
+		FormationGroups:      formationGroups,
+		ConductRows:          conductRows,
+		GroupConductSem1:     groupSem1,
+		GroupConductSem2:     groupSem2,
 	}
 	return rc, true
 }
@@ -480,18 +621,131 @@ type criteria struct {
 	a, b, c, d, total string
 }
 
-// fetchCriteriaByJob loads the per-criterion marks for the card's jobs from
-// task_outcome — the authoritative per-criterion leaf (job_outcome_line on
-// education1 is per-subject only). It walks the grade-sheet join path
-// job_phase → job_task → task_outcome, SCOPED to this card's phases/jobs (so a
-// student's prior-AY / other-section grades never accumulate in), groups by
-// (job, criterion) taking the numeric MAX across the year, orders the criteria
-// A/B/C/D via template_task_criteria.sequence_order (falling back to a stable
-// criteria-id order when that source is unavailable), and sums the MAXes as the
-// /32 total. Keyed by job id. Fully nil-safe — a missing closure yields an empty
-// map and the criterion columns render as dashes.
-func fetchCriteriaByJob(ctx context.Context, d *Deps, jobByPhase map[string]string) map[string]criteria {
-	out := map[string]criteria{}
+// transcript is one job's full graded-leaf walk result: per-period MAX marks
+// per criterion (period = job_phase.phase_order; 0 collects order-less phases
+// so the year collapse never loses a mark), the criterion presentation order,
+// and the per-period task-assignee tally (the teacher signal).
+type transcript struct {
+	marks    map[string]map[int32]float64 // critID → phaseOrder → MAX numeric_value
+	seq      map[string]int32             // critID → template_task_criteria.sequence_order
+	teachers map[int32]map[string]int     // phaseOrder → assignee (staff id) → active-task count
+}
+
+const noSeq = int32(1) << 30
+
+// orderedCrits returns the job's criterion ids in presentation order
+// (sequence_order ASC, id ASC — the grade sheet's A/B/C/D order).
+func (t *transcript) orderedCrits() []string {
+	if t == nil || len(t.marks) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(t.marks))
+	for cid := range t.marks {
+		ids = append(ids, cid)
+	}
+	sort.SliceStable(ids, func(i, j int) bool {
+		si, sj := t.seqOf(ids[i]), t.seqOf(ids[j])
+		if si != sj {
+			return si < sj
+		}
+		return ids[i] < ids[j]
+	})
+	return ids
+}
+
+func (t *transcript) seqOf(cid string) int32 {
+	if t == nil || t.seq == nil {
+		return noSeq
+	}
+	if s, ok := t.seq[cid]; ok {
+		return s
+	}
+	return noSeq
+}
+
+// yearCriteria collapses the per-period marks into the v1 A-D + total shape
+// (MAX across the year per criterion — identical semantics to the original
+// year-collapsed fetch). ok reports whether the job had any numeric mark.
+func (t *transcript) yearCriteria() (criteria, bool) {
+	var c criteria
+	if t == nil || len(t.marks) == 0 {
+		return c, false
+	}
+	ids := t.orderedCrits()
+	slots := []*string{&c.a, &c.b, &c.c, &c.d}
+	sum := 0.0
+	for i, cid := range ids {
+		best := 0.0
+		first := true
+		for _, v := range t.marks[cid] {
+			if first || v > best {
+				best, first = v, false
+			}
+		}
+		sum += best
+		if i < len(slots) {
+			*slots[i] = fmtNum(best)
+		}
+	}
+	c.total = fmtNum(sum)
+	return c, true
+}
+
+// criterionRows builds the v2 block-layout criterion rows ("A - Investigating"
+// + per-period marks) and the per-period criteria totals. A period with no
+// marks stays blank ("").
+func (t *transcript) criterionRows(names map[string]string) ([]criterionRow, string, string) {
+	if t == nil || len(t.marks) == 0 {
+		return nil, "", ""
+	}
+	ids := t.orderedCrits()
+	rows := make([]criterionRow, 0, len(ids))
+	sums := map[int32]float64{}
+	has := map[int32]bool{}
+	for i, cid := range ids {
+		display := strings.TrimSpace(names[cid])
+		if display == "" {
+			display = cid
+		}
+		label := display
+		if i < 26 {
+			label = string(rune('A'+i)) + " - " + display
+		}
+		row := criterionRow{Label: label}
+		if v, ok := t.marks[cid][1]; ok {
+			row.Sem1 = fmtNum(v)
+			sums[1] += v
+			has[1] = true
+		}
+		if v, ok := t.marks[cid][2]; ok {
+			row.Sem2 = fmtNum(v)
+			sums[2] += v
+			has[2] = true
+		}
+		rows = append(rows, row)
+	}
+	sem1, sem2 := "", ""
+	if has[1] {
+		sem1 = fmtNum(sums[1])
+	}
+	if has[2] {
+		sem2 = fmtNum(sums[2])
+	}
+	return rows, sem1, sem2
+}
+
+// fetchTranscripts loads the per-criterion marks AND the per-period task
+// assignees for the card's jobs from job_task / task_outcome — the
+// authoritative per-criterion leaf (job_outcome_line on education1 is
+// per-subject only). It walks the grade-sheet join path job_phase → job_task →
+// task_outcome, SCOPED to this card's phases/jobs (so a student's prior-AY /
+// other-section grades never accumulate in), groups by (job, period, criterion)
+// taking the numeric MAX per period, and resolves the criterion order via
+// template_task_criteria.sequence_order (falling back to a stable criteria-id
+// order when that source is unavailable). Keyed by job id. Fully nil-safe — a
+// missing closure yields an empty map and the criterion columns render blank.
+func fetchTranscripts(ctx context.Context, d *Deps, jobByPhase map[string]string, phaseOrder map[string]int32) map[string]*transcript {
+	out := map[string]*transcript{}
 	if d.ListJobTasks == nil || d.ListTaskOutcomes == nil || len(jobByPhase) == 0 {
 		return out
 	}
@@ -501,9 +755,23 @@ func fetchCriteriaByJob(ctx context.Context, d *Deps, jobByPhase map[string]stri
 		phaseIDs = append(phaseIDs, pid)
 	}
 
-	// job_task: task id → owning job (via phase) + template_task id (for the
-	// sequence_order lookup).
+	byJob := func(jid string) *transcript {
+		t := out[jid]
+		if t == nil {
+			t = &transcript{
+				marks:    map[string]map[int32]float64{},
+				seq:      map[string]int32{},
+				teachers: map[int32]map[string]int{},
+			}
+			out[jid] = t
+		}
+		return t
+	}
+
+	// job_task: task id → owning job (via phase), period (via phase order),
+	// template_task id (for the sequence_order lookup), and assignee tally.
 	taskJob := map[string]string{}
+	taskPeriod := map[string]int32{}
 	taskTmplTask := map[string]string{}
 	taskIDs := make([]string, 0, len(phaseIDs))
 	for start := 0; start < len(phaseIDs); start += pageLimit {
@@ -533,10 +801,19 @@ func fetchCriteriaByJob(ctx context.Context, d *Deps, jobByPhase map[string]stri
 				if _, seen := taskJob[id]; seen {
 					continue
 				}
+				period := phaseOrder[tk.GetJobPhaseId()]
 				taskJob[id] = jid
+				taskPeriod[id] = period
 				taskIDs = append(taskIDs, id)
 				if tt := tk.GetTemplateTaskId(); tt != "" {
 					taskTmplTask[id] = tt
+				}
+				if who := strings.TrimSpace(tk.GetAssignedTo()); who != "" && period > 0 {
+					t := byJob(jid)
+					if t.teachers[period] == nil {
+						t.teachers[period] = map[string]int{}
+					}
+					t.teachers[period][who]++
 				}
 			}
 			if len(data) < pageLimit {
@@ -548,10 +825,10 @@ func fetchCriteriaByJob(ctx context.Context, d *Deps, jobByPhase map[string]stri
 		return out
 	}
 
-	// task_outcome: MAX numeric_value per (job, criterion). Also remember which
-	// template_task each (job, criterion) came from, for the sequence lookup.
-	critMax := map[string]map[string]float64{}        // jobID → criteriaVersionID → MAX
-	jobCritTmplTask := map[string]map[string]string{} // jobID → criteriaVersionID → templateTaskID
+	// task_outcome: MAX numeric_value per (job, period, criterion). Also
+	// remember which template_task each (job, criterion) came from, for the
+	// sequence lookup.
+	jobCritTmplTask := map[string]map[string]string{} // jobID → critID → templateTaskID
 	tmplTaskSet := map[string]bool{}
 	for start := 0; start < len(taskIDs); start += pageLimit {
 		end := start + pageLimit
@@ -582,11 +859,13 @@ func fetchCriteriaByJob(ctx context.Context, d *Deps, jobByPhase map[string]stri
 					continue
 				}
 				v := t.GetNumericValue()
-				if critMax[jid] == nil {
-					critMax[jid] = map[string]float64{}
+				period := taskPeriod[t.GetJobTaskId()]
+				tr := byJob(jid)
+				if tr.marks[cid] == nil {
+					tr.marks[cid] = map[int32]float64{}
 				}
-				if cur, ok := critMax[jid][cid]; !ok || v > cur {
-					critMax[jid][cid] = v
+				if cur, ok := tr.marks[cid][period]; !ok || v > cur {
+					tr.marks[cid][period] = v
 				}
 				if tt := taskTmplTask[t.GetJobTaskId()]; tt != "" {
 					if jobCritTmplTask[jid] == nil {
@@ -603,48 +882,14 @@ func fetchCriteriaByJob(ctx context.Context, d *Deps, jobByPhase map[string]stri
 	}
 
 	seq := fetchCriteriaSequence(ctx, d, tmplTaskSet)
-
-	// Assemble each subject: order its criteria by sequence_order (criteria with
-	// no sequence sort last, tie-broken by id for determinism), slot the first
-	// four into A/B/C/D, and Σ all MAXes as the /32 total.
-	const noSeq = int32(1) << 30
-	for jid, cmax := range critMax {
-		type cv struct {
-			seq int32
-			id  string
-			val float64
-		}
-		items := make([]cv, 0, len(cmax))
-		for cid, val := range cmax {
-			s := noSeq
-			if tt := jobCritTmplTask[jid][cid]; tt != "" {
-				if smap, ok := seq[tt]; ok {
-					if sv, ok := smap[cid]; ok {
-						s = sv
-					}
+	for jid, tr := range out {
+		for cid, tt := range jobCritTmplTask[jid] {
+			if smap, ok := seq[tt]; ok {
+				if sv, ok := smap[cid]; ok {
+					tr.seq[cid] = sv
 				}
 			}
-			items = append(items, cv{s, cid, val})
 		}
-		sort.SliceStable(items, func(i, j int) bool {
-			if items[i].seq != items[j].seq {
-				return items[i].seq < items[j].seq
-			}
-			return items[i].id < items[j].id
-		})
-		var c criteria
-		slots := []*string{&c.a, &c.b, &c.c, &c.d}
-		sum := 0.0
-		for i, it := range items {
-			sum += it.val
-			if i < len(slots) {
-				*slots[i] = fmtNum(it.val)
-			}
-		}
-		if len(items) > 0 {
-			c.total = fmtNum(sum)
-		}
-		out[jid] = c
 	}
 	return out
 }
@@ -723,6 +968,260 @@ func listTemplateTaskCriteriasSafe(ctx context.Context, d *Deps, req *ttcpb.List
 		return nil, false
 	}
 	return r, true
+}
+
+// fetchCriterionNames resolves the display strings for every criterion id in
+// the transcripts via outcome_criteria. The DESCRIPTION is preferred (it
+// carries the operator's exact rendered casing, e.g. "Knowing and
+// understanding"); the NAME is the fallback. Nil-safe — a missing closure
+// yields an empty map and labels fall back to the raw id.
+func fetchCriterionNames(ctx context.Context, d *Deps, transcripts map[string]*transcript) map[string]string {
+	out := map[string]string{}
+	if d.ListOutcomeCriterias == nil {
+		return out
+	}
+	seen := map[string]bool{}
+	ids := []string{}
+	for _, tr := range transcripts {
+		if tr == nil {
+			continue
+		}
+		for cid := range tr.marks {
+			if cid != "" && !seen[cid] {
+				seen[cid] = true
+				ids = append(ids, cid)
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return out
+	}
+	sort.Strings(ids)
+	for start := 0; start < len(ids); start += pageLimit {
+		end := start + pageLimit
+		if end > len(ids) {
+			end = len(ids)
+		}
+		resp, err := d.ListOutcomeCriterias(ctx, &criteriapb.ListOutcomeCriteriasRequest{
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("id", ids[start:end])}},
+		})
+		if err != nil {
+			log.Printf("report card doc: list outcome criteria: %v", err)
+			continue
+		}
+		for _, c := range resp.GetData() {
+			id := c.GetId()
+			if id == "" {
+				continue
+			}
+			if desc := strings.TrimSpace(c.GetDescription()); desc != "" {
+				out[id] = desc
+			} else if name := strings.TrimSpace(c.GetName()); name != "" {
+				out[id] = name
+			}
+		}
+	}
+	return out
+}
+
+// fetchStaffNames resolves the task assignees (staff ids) captured in the
+// transcripts to display names via the User-hydrating staff read
+// (GetStaffListPageData — the bare ListStaffs never populates Staff.User).
+// Nil-safe — a missing closure yields an empty map and staff lines stay blank.
+func fetchStaffNames(ctx context.Context, d *Deps, transcripts map[string]*transcript) map[string]string {
+	out := map[string]string{}
+	if d.GetStaffListPageData == nil {
+		return out
+	}
+	seen := map[string]bool{}
+	ids := []string{}
+	for _, tr := range transcripts {
+		if tr == nil {
+			continue
+		}
+		for _, tally := range tr.teachers {
+			for sid := range tally {
+				if sid != "" && !seen[sid] {
+					seen[sid] = true
+					ids = append(ids, sid)
+				}
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return out
+	}
+	sort.Strings(ids)
+	for start := 0; start < len(ids); start += pageLimit {
+		end := start + pageLimit
+		if end > len(ids) {
+			end = len(ids)
+		}
+		resp, err := d.GetStaffListPageData(ctx, &staffpb.GetStaffListPageDataRequest{
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("id", ids[start:end])}},
+		})
+		if err != nil {
+			log.Printf("report card doc: staff list page data: %v", err)
+			continue
+		}
+		for _, s := range resp.GetStaffList() {
+			id := s.GetId()
+			u := s.GetUser()
+			if id == "" || u == nil {
+				continue
+			}
+			name := strings.TrimSpace(strings.TrimSpace(u.GetFirstName()) + " " + strings.TrimSpace(u.GetLastName()))
+			if name != "" {
+				out[id] = name
+			}
+		}
+	}
+	return out
+}
+
+// topAssignee picks the modal assignee from a per-period tally. Ties prefer an
+// assignee different from avoid (the other period's pick — the rotation-pair
+// signal), then the lexicographically smallest id for determinism.
+func topAssignee(tally map[string]int, avoid string) string {
+	best, bestCount := "", -1
+	for sid, n := range tally {
+		switch {
+		case n > bestCount:
+			best, bestCount = sid, n
+		case n == bestCount:
+			bPref, sPref := best != avoid, sid != avoid
+			if sPref && !bPref {
+				best = sid
+			} else if sPref == bPref && sid < best {
+				best = sid
+			}
+		}
+	}
+	return best
+}
+
+// teacherLine composes the per-subject staff line: one distinct assignee →
+// "Teacher: X"; two (the rotation pair, period-1 first) → "Teachers: X / Y".
+// Wording comes from the lyngua-backed labels; blank when nothing resolves.
+func teacherLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[string]string) string {
+	if tr == nil {
+		return ""
+	}
+	s1 := topAssignee(tr.teachers[1], "")
+	s2 := topAssignee(tr.teachers[2], s1)
+	n1, n2 := strings.TrimSpace(names[s1]), strings.TrimSpace(names[s2])
+	if n1 == n2 {
+		n2 = ""
+	}
+	single := strings.TrimSpace(labels.StaffLabel)
+	plural := strings.TrimSpace(labels.StaffPluralLabel)
+	switch {
+	case n1 != "" && n2 != "":
+		return plural + " " + n1 + " / " + n2
+	case n1 != "":
+		return single + " " + n1
+	case n2 != "":
+		return single + " " + n2
+	}
+	return ""
+}
+
+// groupLeadName resolves the group-category job's modal assignee (across every
+// period) to a display name — the document's "Adviser" line.
+func groupLeadName(tr *transcript, names map[string]string) string {
+	if tr == nil {
+		return ""
+	}
+	merged := map[string]int{}
+	for _, tally := range tr.teachers {
+		for sid, n := range tally {
+			merged[sid] += n
+		}
+	}
+	return strings.TrimSpace(names[topAssignee(merged, "")])
+}
+
+// fetchSchedulePeriod resolves the section's price_schedule display period —
+// the schedule name with any non-numeric prefix dropped ("AY 2025-2026" →
+// "2025-2026"). Blank when the schedule is unresolvable (callers keep the
+// section-name fallback).
+func fetchSchedulePeriod(ctx context.Context, d *Deps, priceScheduleID string) string {
+	if d.ListPriceSchedules == nil || priceScheduleID == "" {
+		return ""
+	}
+	// List-and-match: the schedule list is tiny and the workspace-bound list is
+	// the closure every sibling surface already uses. TWO passes — the default
+	// (active) list and an explicit inactive list — because a CLOSED historical
+	// schedule row is active=false (the fetchSection precedent).
+	requests := []*priceschedulepb.ListPriceSchedulesRequest{
+		{},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{boolEq("active", false)}}},
+	}
+	for _, req := range requests {
+		resp, err := d.ListPriceSchedules(ctx, req)
+		if err != nil {
+			log.Printf("report card doc: list price schedules: %v", err)
+			continue
+		}
+		for _, ps := range resp.GetData() {
+			if ps.GetId() != priceScheduleID {
+				continue
+			}
+			name := strings.TrimSpace(ps.GetName())
+			if idx := strings.IndexFunc(name, func(r rune) bool { return r >= '0' && r <= '9' }); idx >= 0 {
+				return strings.TrimSpace(name[idx:])
+			}
+			return name
+		}
+	}
+	return ""
+}
+
+// fetchClientReference resolves the configured client-reference attribute
+// (DocumentOptions.ClientReferenceAttributeCode, e.g. "lrn") for the client.
+// Blank when unconfigured, unwired, or absent.
+func fetchClientReference(ctx context.Context, d *Deps, clientID string) string {
+	code := strings.TrimSpace(d.DocOptions.ClientReferenceAttributeCode)
+	if code == "" || clientID == "" || d.ListClientAttributes == nil || d.ResolveAttributeIDByCode == nil {
+		return ""
+	}
+	attrID, err := d.ResolveAttributeIDByCode(ctx, code)
+	if err != nil || strings.TrimSpace(attrID) == "" {
+		return ""
+	}
+	resp, err := d.ListClientAttributes(ctx, &clientattributepb.ListClientAttributesRequest{
+		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
+			stringEq("client_id", clientID), stringEq("attribute_id", attrID),
+		}},
+	})
+	if err != nil {
+		log.Printf("report card doc: list client attributes: %v", err)
+		return ""
+	}
+	for _, ca := range resp.GetData() {
+		if !ca.GetActive() {
+			continue
+		}
+		if v := strings.TrimSpace(ca.GetValue()); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// categoryIDByCode maps a job_category CODE to its id via the already-fetched
+// category metadata. Empty when the code is blank or unknown.
+func categoryIDByCode(cats map[string]catInfo, code string) string {
+	want := strings.ToLower(strings.TrimSpace(code))
+	if want == "" {
+		return ""
+	}
+	for id, c := range cats {
+		if strings.ToLower(strings.TrimSpace(c.code)) == want {
+			return id
+		}
+	}
+	return ""
 }
 
 // isNonEnrolledPlaceholder reports whether a subject row is a non-enrolled

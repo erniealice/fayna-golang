@@ -316,6 +316,10 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListJobTasks = u.Operation.JobTask.ListJobTasks
 	deps.ListTaskOutcomes = u.Operation.TaskOutcome.ListTaskOutcomes
 	deps.ListTemplateTaskCriterias = u.Operation.TemplateTaskCriteria.ListTemplateTaskCriterias
+	// v2 block-layout document enrichments: criterion display names + the
+	// User-hydrating staff read (bare ListStaffs never populates Staff.User).
+	deps.ListOutcomeCriterias = u.Operation.OutcomeCriteria.ListOutcomeCriterias
+	deps.GetStaffListPageData = u.Entity.Staff.GetStaffListPageData
 
 	// TB3 template settings — the report-card template binding lifecycle
 	// (list/create/delete/publish). Nil-safe: a nil aggregate leaves the settings

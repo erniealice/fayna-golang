@@ -33,6 +33,26 @@ type Options struct {
 	// which sets no options, is unaffected). Generic — the vertical code value is
 	// supplied by the consuming app (school-admin sets "academic").
 	CategoryFilter string
+	// Document configures the report-card document render (the per-client
+	// DOCX/PDF download). Zero value disables every document enrichment — the
+	// download renders exactly as before (service-admin unaffected).
+	Document DocumentOptions
+}
+
+// DocumentOptions — app-configurable knobs for the report-card document
+// render. Same generic-reference contract as the sibling option structs: the
+// vertical code values are supplied by the consuming app, never by this
+// package.
+type DocumentOptions struct {
+	// GroupCategoryFilter is the job_category CODE (e.g. "homeroom_deportment")
+	// whose single job represents the client's GROUP band on the document — its
+	// task assignee renders as the group lead ("Adviser") and its per-phase
+	// summaries as the group conduct row. Empty = no group band (blank fields).
+	GroupCategoryFilter string
+	// ClientReferenceAttributeCode is the client_attributes.<code> whose value
+	// prints as the client's reference number on the document identity line
+	// (e.g. "lrn"). Empty = blank reference.
+	ClientReferenceAttributeCode string
 }
 
 // TabOptions — view-1 tabstrip. GroupByField names the entity whose rows each

@@ -79,6 +79,11 @@ type PeriodLabels struct {
 	// DownloadAction (their CSV export); PeriodLabels lacked one. Generic
 	// identifier — the vertical wording lives in the lyngua value.
 	DownloadAction string `json:"download_action"`
+	// StaffLabel / StaffPluralLabel prefix the per-subject staff line on the
+	// report-card document ("Teacher:" / "Teachers:" on the education tier).
+	// Generic identifiers — the vertical wording lives in the label values.
+	StaffLabel       string `json:"staff_label"`
+	StaffPluralLabel string `json:"staff_plural_label"`
 }
 
 // LandingLabels holds the view-1 (report-cards landing) strings. Every field
@@ -231,8 +236,10 @@ func DefaultLabels() Labels {
 			YearColumn:     "Overall",
 			ProgressColumn: "Progress",
 			FinalColumn:    "Final",
-			ViewAction:     "View outcomes",
-			DownloadAction: "Download PDF",
+			ViewAction:       "View outcomes",
+			DownloadAction:   "Download PDF",
+			StaffLabel:       "Teacher:",
+			StaffPluralLabel: "Teachers:",
 		},
 		TemplateSettings: TemplateSettingsLabels{
 			Title:              "Outcome Report Templates",

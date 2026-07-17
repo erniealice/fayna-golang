@@ -22,7 +22,11 @@ import (
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/view"
 
+	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
+	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
+	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
+	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	joblinepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_line"
@@ -30,9 +34,11 @@ import (
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 )
@@ -57,6 +63,20 @@ type Deps struct {
 	// request via outcome_summary.ResolveCategoryID.
 	CategoryFilter    string
 	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
+
+	// DocOptions carries the app-configured document knobs (group category code,
+	// client-reference attribute code). Zero value disables every v2 enrichment —
+	// the download renders exactly as before.
+	DocOptions outcome_summary.DocumentOptions
+
+	// v2 block-layout enrichment closures (ALL optional/nil-safe — a missing
+	// closure blanks the affected field, never a placeholder leak or a panic).
+	ListOutcomeCriterias     func(ctx context.Context, req *criteriapb.ListOutcomeCriteriasRequest) (*criteriapb.ListOutcomeCriteriasResponse, error)
+	GetStaffListPageData     func(ctx context.Context, req *staffpb.GetStaffListPageDataRequest) (*staffpb.GetStaffListPageDataResponse, error)
+	ListPriceSchedules       func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
+	ListClientAttributes     func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
+	ResolveAttributeIDByCode func(ctx context.Context, code string) (string, error)
+	ListWorkspaceUsers       func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
 
 	// GenerateDoc wraps fycha DocumentService.ProcessBytes (template bytes + data
 	// map → processed .docx). Injected by the app container via the block Infra.
@@ -168,7 +188,10 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			rc.DocumentHeaderName = firstNonEmpty(d.Labels.Landing.Title, "Report Card")
 		}
 		rc.PrintedBy = firstNonEmpty(consumer.GetUserIDFromContext(ctx), "system")
-		rc.PrintedAt = time.Now().Format("2006-01-02 15:04")
+		now := time.Now()
+		rc.PrintedAt = now.Format("2006-01-02 15:04")
+		rc.PrintedAtLong = now.Format("January 2, 2006 03:04 PM")
+		rc.PrintedByName = printedByName(ctx, d, rc.PrintedBy)
 
 		// Template selection: the operator-uploaded, AY-scoped binding is the
 		// override; the embedded Template() is the fallback (the invoice_download
@@ -339,6 +362,34 @@ func encodeRFC5987(name string) string {
 		}
 	}
 	return b.String()
+}
+
+// printedByName resolves the printing user's display name via the
+// workspace_user read (whose adapter hydrates the joined user name). Falls
+// back to "" (callers keep the raw principal id). Nil-safe.
+func printedByName(ctx context.Context, d *Deps, userID string) string {
+	if d.ListWorkspaceUsers == nil || strings.TrimSpace(userID) == "" {
+		return ""
+	}
+	resp, err := d.ListWorkspaceUsers(ctx, &workspaceuserpb.ListWorkspaceUsersRequest{
+		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("user_id", userID)}},
+	})
+	if err != nil {
+		log.Printf("report card doc: list workspace users: %v", err)
+		return ""
+	}
+	for _, wu := range resp.GetData() {
+		if !wu.GetActive() {
+			continue
+		}
+		if u := wu.GetUser(); u != nil {
+			n := strings.TrimSpace(strings.TrimSpace(u.GetFirstName()) + " " + strings.TrimSpace(u.GetLastName()))
+			if n != "" {
+				return n
+			}
+		}
+	}
+	return ""
 }
 
 func firstNonEmpty(vals ...string) string {

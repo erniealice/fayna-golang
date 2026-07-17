@@ -21,6 +21,7 @@ import (
 	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
+	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
@@ -30,6 +31,7 @@ import (
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
@@ -66,7 +68,12 @@ type OutcomeSummaryModuleDeps struct {
 	ListJobTasks              func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
 	ListTaskOutcomes          func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
 	ListTemplateTaskCriterias func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
-	GenerateDoc               func(templateData []byte, data map[string]any) ([]byte, error)
+	// v2 block-layout document enrichments (optional/nil-safe): criterion
+	// display names + the User-hydrating staff read for the per-subject staff
+	// line and the group-lead ("Adviser") resolution.
+	ListOutcomeCriterias func(ctx context.Context, req *criteriapb.ListOutcomeCriteriasRequest) (*criteriapb.ListOutcomeCriteriasResponse, error)
+	GetStaffListPageData func(ctx context.Context, req *staffpb.GetStaffListPageDataRequest) (*staffpb.GetStaffListPageDataResponse, error)
+	GenerateDoc          func(templateData []byte, data map[string]any) ([]byte, error)
 	// GeneratePDF is the injected fycha ProcessBytesToPDF closure (DOCX → PDF via
 	// LibreOffice) — a SECOND closure mirroring GenerateDoc. Nil-safe: the
 	// download route still registers on GenerateDoc alone (DOCX baseline); a
@@ -258,7 +265,14 @@ func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc 
 		CommonLabels:                  deps.CommonLabels,
 		DocumentHeaderName:            deps.DocumentHeaderName,
 		CategoryFilter:                deps.Options.CategoryFilter,
+		DocOptions:                    deps.Options.Document,
 		ListJobCategories:             deps.ListJobCategories,
+		ListOutcomeCriterias:          deps.ListOutcomeCriterias,
+		GetStaffListPageData:          deps.GetStaffListPageData,
+		ListPriceSchedules:            deps.ListPriceSchedules,
+		ListClientAttributes:          deps.ListClientAttributes,
+		ResolveAttributeIDByCode:      deps.ResolveAttributeIDByCode,
+		ListWorkspaceUsers:            deps.ListWorkspaceUsers,
 		GenerateDoc:                   deps.GenerateDoc,
 		GeneratePDF:                   deps.GeneratePDF,
 		ResolveTemplateBytes:          deps.ResolveTemplateBytes,

@@ -44,10 +44,12 @@ type formationGroup struct {
 	Rows  []formationRow
 }
 
-// catInfo is the display metadata for a job_category (name + sort order).
+// catInfo is the display metadata for a job_category (name + sort order +
+// code, the app-config match key for DocumentOptions.GroupCategoryFilter).
 type catInfo struct {
 	name  string
 	order int32
+	code  string
 }
 
 // collectFormationGroups builds the Formation-page category blocks from the
@@ -164,7 +166,7 @@ func fetchCategories(ctx context.Context, d *Deps) map[string]catInfo {
 	}
 	for _, c := range resp.GetData() {
 		if id := c.GetId(); id != "" {
-			out[id] = catInfo{name: c.GetName(), order: c.GetSortOrder()}
+			out[id] = catInfo{name: c.GetName(), order: c.GetSortOrder(), code: c.GetCode()}
 		}
 	}
 	return out

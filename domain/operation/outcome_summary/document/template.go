@@ -29,11 +29,18 @@ var reportCardTemplateV1 []byte
 //go:embed report-card-template-v2.docx
 var reportCardTemplateV2 []byte
 
-// Template returns the embedded default report-card .docx template bytes
-// (the v2 faithful block layout).
-func Template() []byte { return reportCardTemplateV2 }
+// Template returns the ORIGINAL v1 summary-layout template bytes — the
+// package-wide zero-option fallback (tiers that configure nothing keep their
+// exact prior document), and the registered version-1 artifact for the
+// existing binding row.
+func Template() []byte { return reportCardTemplateV1 }
 
-// TemplateV1 returns the ORIGINAL v1 summary-layout template bytes — the
-// registered version-1 artifact, kept for the existing binding row and for
-// operators who re-publish the original layout.
+// TemplateV1 is the explicit-name alias for the original v1 artifact.
 func TemplateV1() []byte { return reportCardTemplateV1 }
+
+// TemplateV2 returns the v2 faithful block-layout template bytes. Selected as
+// the fallback ONLY where the app opts in via
+// DocumentOptions.TemplateVariant == TemplateVariantBlock (its content is
+// school-specific operator material — it must never become another tier's
+// implicit fallback).
+func TemplateV2() []byte { return reportCardTemplateV2 }

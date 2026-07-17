@@ -91,7 +91,8 @@ type reportCard struct {
 
 	// v2 (block-layout) enrichments — additive root fields; every one renders
 	// blank when its source is unwired/absent (never a placeholder leak).
-	SchedulePeriodSpaced string          // "2025 - 2026" (cover-page variant of SchedulePeriod)
+	SchedulePeriodDisplay string         // "2025-2026" — the price_schedule display period (v2 key ONLY; SchedulePeriod keeps the v1 section-derived value, M4)
+	SchedulePeriodSpaced string          // "2025 - 2026" (cover-page variant of SchedulePeriodDisplay)
 	GradeSection         string          // "Grade 7 - Nickel" (identity-line variant of GroupLevel+SectionName)
 	Adviser              string          // group-lead staff name (the group-category job's task assignee)
 	ClientReference      string          // client_attributes.<configured code> value (e.g. LRN)
@@ -167,7 +168,8 @@ func buildReportCardData(rc reportCard) map[string]any {
 		"subjects":         subjects,
 		"formation_groups": formationData(rc.FormationGroups),
 		// v2 block-layout root keys (additive).
-		"academic_year_spaced": orBlank(rc.SchedulePeriodSpaced),
+		"academic_year_display": orBlank(firstNonEmpty(rc.SchedulePeriodDisplay, rc.SchedulePeriod)),
+		"academic_year_spaced":  orBlank(rc.SchedulePeriodSpaced),
 		"grade_section":        orBlank(rc.GradeSection),
 		"adviser":              orBlank(rc.Adviser),
 		"client_reference":     orBlank(rc.ClientReference),
@@ -352,20 +354,23 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 
 	name, ay := sectionParts(group.GetName())
 	grade, section := gradeSection(name)
-	// Prefer the price_schedule display name for the schedule period (live
-	// format "2025-2026"); the section-name suffix ("2025-26") stays the
-	// fallback.
+	// The v2 display period prefers the price_schedule name (live format
+	// "2025-2026", active+inactive two-pass); the v1 `academic_year` key KEEPS
+	// the section-derived value — an operator-bound v1 template must not see
+	// its data contract change (M4).
+	displayPeriod := ay
 	if psPeriod := fetchSchedulePeriod(ctx, d, group.GetPriceScheduleId()); psPeriod != "" {
-		ay = psPeriod
+		displayPeriod = psPeriod
 	}
 	gradeSectionLine := section
 	if grade != "" {
 		gradeSectionLine = grade + " - " + section
 	}
 	rc := &reportCard{
-		DocumentHeaderName:   strings.TrimSpace(d.DocumentHeaderName),
-		SchedulePeriod:       ay,
-		SchedulePeriodSpaced: strings.Replace(ay, "-", " - ", 1),
+		DocumentHeaderName:    strings.TrimSpace(d.DocumentHeaderName),
+		SchedulePeriod:        ay,
+		SchedulePeriodDisplay: displayPeriod,
+		SchedulePeriodSpaced:  strings.Replace(displayPeriod, "-", " - ", 1),
 		ClientName:           studentName(ctx, d, clientID),
 		GroupLevel:           grade,
 		SectionName:          section,
@@ -1057,17 +1062,31 @@ func fetchStaffNames(ctx context.Context, d *Deps, transcripts map[string]*trans
 		if end > len(ids) {
 			end = len(ids)
 		}
+		chunk := ids[start:end]
 		resp, err := d.GetStaffListPageData(ctx, &staffpb.GetStaffListPageDataRequest{
-			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("id", ids[start:end])}},
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("id", chunk)}},
+			// Explicit limit ≥ the chunk size — the adapter's default page (50)
+			// would silently drop assignees past the first page.
+			Pagination: &commonpb.PaginationRequest{
+				Limit:  int32(pageLimit),
+				Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: 1}},
+			},
 		})
 		if err != nil {
 			log.Printf("report card doc: staff list page data: %v", err)
 			continue
 		}
+		requested := map[string]bool{}
+		for _, id := range chunk {
+			requested[id] = true
+		}
 		for _, s := range resp.GetStaffList() {
 			id := s.GetId()
 			u := s.GetUser()
-			if id == "" || u == nil {
+			// Keep only rows we actually asked for — defense-in-depth against
+			// an adapter that ignores the id filter (a first-page-of-everything
+			// response must never attribute foreign names).
+			if id == "" || u == nil || !requested[id] {
 				continue
 			}
 			name := strings.TrimSpace(strings.TrimSpace(u.GetFirstName()) + " " + strings.TrimSpace(u.GetLastName()))

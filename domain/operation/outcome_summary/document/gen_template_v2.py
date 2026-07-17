@@ -197,7 +197,7 @@ def identity_block(underline):
     ], after=40)
     line2 = para([
         run("Academic Year: ", size=16),
-        run("{{academic_year}}", bold=True, size=16, underline=underline),
+        run("{{academic_year_display}}", bold=True, size=16, underline=underline),
         run(gap + "LRN: ", size=16),
         run("{{client_reference}}", bold=True, size=16, underline=underline),
         run(gap + "Adviser: ", size=16),

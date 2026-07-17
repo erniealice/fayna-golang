@@ -53,7 +53,19 @@ type DocumentOptions struct {
 	// prints as the client's reference number on the document identity line
 	// (e.g. "lrn"). Empty = blank reference.
 	ClientReferenceAttributeCode string
+	// TemplateVariant selects the EMBEDDED fallback template the document
+	// handler renders when no operator-uploaded binding resolves.
+	// "" (zero value) = the original v1 summary layout — tiers that set no
+	// options keep their exact prior fallback. TemplateVariantBlock = the
+	// block-layout artifact (per-subject blocks, cover/boundary/formation
+	// pages). The artifact CONTENT is operator template material; only the
+	// selection knob lives in code.
+	TemplateVariant string
 }
+
+// TemplateVariantBlock selects the block-layout embedded template (the
+// faithful per-subject-block document) as the no-binding fallback.
+const TemplateVariantBlock = "block"
 
 // TabOptions — view-1 tabstrip. GroupByField names the entity whose rows each
 // become a tab (today: "price_schedule"). SortField is an entity-field ref

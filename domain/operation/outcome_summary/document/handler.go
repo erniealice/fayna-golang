@@ -194,10 +194,16 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 		rc.PrintedByName = printedByName(ctx, d, rc.PrintedBy)
 
 		// Template selection: the operator-uploaded, AY-scoped binding is the
-		// override; the embedded Template() is the fallback (the invoice_download
-		// precedent). A resolver error / no-binding / unavailable storage object
-		// keeps the embedded bytes — the proven live download must not regress.
+		// override; the embedded template is the fallback (the invoice_download
+		// precedent). Which EMBEDDED artifact falls back is app-configured (H1):
+		// the zero value keeps the original v1 summary layout; only a tier that
+		// opts in via TemplateVariant renders the block-layout artifact. A
+		// resolver error / no-binding / unavailable storage object keeps the
+		// embedded bytes — the proven live download must not regress.
 		tpl := Template()
+		if strings.EqualFold(strings.TrimSpace(d.DocOptions.TemplateVariant), outcome_summary.TemplateVariantBlock) {
+			tpl = TemplateV2()
+		}
 		if d.ResolveTemplateBytes != nil {
 			if b, rerr := d.ResolveTemplateBytes(ctx, rc.PriceScheduleID); rerr == nil && len(b) > 0 {
 				tpl = b
@@ -379,7 +385,10 @@ func printedByName(ctx context.Context, d *Deps, userID string) string {
 		return ""
 	}
 	for _, wu := range resp.GetData() {
-		if !wu.GetActive() {
+		// Re-check the user id in code (M5): the workspace_user list adapter is
+		// workspace-scoped but ignores request filters, so without this check
+		// the newest workspace user would be misattributed as the printer.
+		if !wu.GetActive() || wu.GetUserId() != userID {
 			continue
 		}
 		if u := wu.GetUser(); u != nil {

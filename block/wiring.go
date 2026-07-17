@@ -302,6 +302,9 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	// view-3 per-student card: maps each phase_outcome_summary to its Sem 1 / Sem 2
 	// column via job_phase.phase_order.
 	deps.ListJobPhases = u.Operation.JobPhase.ListJobPhases
+	// Block-layout report-card tree: resolves job_template_phase.code (projected by
+	// the specialized ListByJobTemplate SQL) so per-phase leaves key by phase code.
+	deps.ListJobTemplatePhasesByTemplate = u.Operation.JobTemplatePhase.ListByJobTemplate
 	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
 	deps.ListClients = u.Entity.Client.ListClients
 	deps.ListClientAttributes = u.Entity.ClientAttribute.ListClientAttributes
@@ -315,6 +318,9 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListJobOutcomeLines = u.Operation.JobOutcomeLine.ListJobOutcomeLines
 	deps.ListJobTasks = u.Operation.JobTask.ListJobTasks
 	deps.ListTaskOutcomes = u.Operation.TaskOutcome.ListTaskOutcomes
+	// Ownership-joined latest-cell read (phase/task/criterion codes) backing the
+	// coded-cell surface of the outcome-summary document. Optional/nil-safe.
+	deps.ListCodedTaskOutcomeValuesByJob = u.Operation.TaskOutcome.ListCodedTaskOutcomeValuesByJob
 	deps.ListTemplateTaskCriterias = u.Operation.TemplateTaskCriteria.ListTemplateTaskCriterias
 	// v2 block-layout document enrichments: criterion display names + the
 	// User-hydrating staff read (bare ListStaffs never populates Staff.User).

@@ -47,6 +47,9 @@ func NewAddAction(deps *Deps) view.View {
 			Name:          r.FormValue("name"),
 			PhaseOrder:    int32(phaseOrder),
 		}
+		if v := r.FormValue("code"); v != "" {
+			phase.Code = &v
+		}
 		if v := r.FormValue("resource_id"); v != "" {
 			phase.ResourceId = &v
 		}

@@ -2,7 +2,7 @@
 Job Template Phase drawer form — loaded into #sheetContent via HTMX.
 Used by both Add and Edit actions.
 
-Data: .FormAction, .IsEdit, .ID, .JobTemplateID, .Name, .PhaseOrder,
+Data: .FormAction, .IsEdit, .ID, .JobTemplateID, .Name, .Code, .PhaseOrder,
       .EstimatedDurationMinutes, .ResourceID, .ResourceName,
       .PredecessorTemplatePhaseID (Edit only, guarded by .IsEdit),
       .ResourceSearchURL, .Labels, .CommonLabels
@@ -24,6 +24,16 @@ Data: .FormAction, .IsEdit, .ID, .JobTemplateID, .Name, .PhaseOrder,
                 "Required"    true
                 "Placeholder" .Labels.Form.NamePlaceholder
                 "TestId"      "jtp-phase-name"
+            )}}
+        </div>
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"   "text"
+                "Name"   "code"
+                "Label"  .Labels.Form.Code
+                "Value"  .Code
+                "Hint"   .Labels.Form.CodeHint
+                "TestId" "jtp-phase-code"
             )}}
         </div>
         <div class="form-row">

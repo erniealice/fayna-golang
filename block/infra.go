@@ -51,6 +51,14 @@ type Infra struct {
 	ComputePhaseOutcome func(ctx context.Context, jobPhaseID string) (bool, error)
 	ComputeJobOutcome   func(ctx context.Context, jobID string) (bool, error)
 
+	// RecomputeEligibility classifies whether a saved numeric cell drives a
+	// scaled-summary recompute (graph-derived: the phase's scheme resolves a score
+	// scale and the cell's criterion is in that scheme's active component graph),
+	// returning eligibility + the in-scope criterion id set. Injected from the app
+	// AppContext (ctx.RecomputeEligibility). Nil-safe: when unwired (or on a lookup
+	// error) the record action falls back to numeric-type classification.
+	RecomputeEligibility func(ctx context.Context, jobPhaseID string) (bool, map[string]bool, error)
+
 	// ResolveTemplateBytes resolves the applicable published report-card template
 	// binding for a card's price_schedule and returns the bound template's storage
 	// bytes (binding resolver ∘ storage download, built in the app container).

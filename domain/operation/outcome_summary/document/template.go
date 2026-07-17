@@ -12,11 +12,18 @@
 //     KEPT (registered version); superseded as the operative block artifact by
 //     v3.
 //   - report-card-template-v3.docx (v3, gen_template_v3.py) — the SAME block
-//     layout as v2, rebuilt against the LOCKED generic, proto-grounded
-//     placeholder contract ({{#primary_jobs}}, {{job_template_name_display}},
-//     {{client_attributes.<code>}}, {{phase_N_scaled_label}}, …). Byte-identical
-//     to v2 except the placeholder keys, so the rendered card is identical. This
-//     is the embedded artifact the block TemplateVariant now selects.
+//     layout as v2 against an earlier generic placeholder contract
+//     ({{#primary_jobs}}, {{phase_N_scaled_label}}, …). FROZEN: its emissions
+//     were superseded, so no selector renders it (see TemplateV3, Deprecated).
+//   - outcome-summary-template-block.docx (gen_template_block.py) — the block
+//     layout against the CONVERGED generic, proto-grounded placeholder contract
+//     (one body loop {{#job_categories.<code>.jobs}}, per-phase leaves
+//     {{job_template_phases.<phase>.…}}, dot-path {{client_attributes.<code>}},
+//     and the wired attendance grid). This is the embedded artifact the block
+//     TemplateVariant now selects. Its companion
+//     outcome-summary-template-block.manifest.json enumerates every scalar and
+//     loop path the artifact references, so the builder can seed the referenced
+//     tree blank before overlay (the engine leaks unresolved leaves verbatim).
 //
 // An operator-uploaded, AY-scoped binding template (ResolveTemplateBytes)
 // still overrides the embedded default, mirroring the centymo invoice
@@ -39,6 +46,12 @@ var reportCardTemplateV2 []byte
 //go:embed report-card-template-v3.docx
 var reportCardTemplateV3 []byte
 
+//go:embed outcome-summary-template-block.docx
+var reportCardTemplateBlock []byte
+
+//go:embed outcome-summary-template-block.manifest.json
+var reportCardTemplateBlockManifest []byte
+
 // Template returns the ORIGINAL v1 summary-layout template bytes — the
 // package-wide zero-option fallback (tiers that configure nothing keep their
 // exact prior document), and the registered version-1 artifact for the
@@ -54,9 +67,23 @@ func TemplateV1() []byte { return reportCardTemplateV1 }
 // another tier's implicit fallback.
 func TemplateV2() []byte { return reportCardTemplateV2 }
 
-// TemplateV3 returns the v3 generic-variable block-layout template bytes — the
-// SAME rendered card as v2 with the LOCKED proto-grounded generic placeholder
-// keys. Selected as the embedded fallback where the app opts in via
-// DocumentOptions.TemplateVariant == TemplateVariantBlock. Like v2 it must never
-// become another tier's implicit fallback.
+// Deprecated: the v3 placeholder emissions were superseded by the converged
+// contract, and no selector renders these bytes any longer (the block
+// TemplateVariant selects TemplateBlock). The frozen bytes and this accessor are
+// retained only as the registered v3 artifact; do not wire new callers to it.
 func TemplateV3() []byte { return reportCardTemplateV3 }
+
+// TemplateBlock returns the converged generic-variable block-layout template
+// bytes — one body loop {{#job_categories.<code>.jobs}}, per-phase leaves, the
+// singleton homeroom projection, and the wired attendance grid. Selected as the
+// embedded artifact where the app opts in via DocumentOptions.TemplateVariant ==
+// TemplateVariantBlock. Its content is school-specific operator material — it
+// must never become another tier's implicit fallback.
+func TemplateBlock() []byte { return reportCardTemplateBlock }
+
+// ManifestBlock returns the blank-guard manifest JSON that accompanies
+// TemplateBlock: every scalar path and loop path the artifact references,
+// generated from the same profile as the DOCX. The builder consumes it to seed
+// the referenced tree blank before overlay (the engine leaks unresolved leaves
+// verbatim), so no handwritten placeholder inventory is maintained.
+func ManifestBlock() []byte { return reportCardTemplateBlockManifest }

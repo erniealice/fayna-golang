@@ -18,6 +18,8 @@
 package template_settings
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -56,8 +58,22 @@ const (
 	docxExt        = ".docx"
 	docxContentTyp = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 	maxUploadBytes = 10 << 20
-	tableID        = "report-card-templates-table"
-	dateLayout     = "2006-01-02"
+	// maxRequestBytes bounds the whole multipart request body (the .docx cap plus
+	// headroom for the multipart envelope + text fields) so ParseMultipartForm can
+	// never be steered into unbounded reads off the wire.
+	maxRequestBytes = maxUploadBytes + (1 << 20)
+	tableID         = "report-card-templates-table"
+	dateLayout      = "2006-01-02"
+)
+
+// DOCX archive hardening caps. A .docx is an OOXML ZIP; validate its structure
+// and bound its declared expansion before trusting the bytes downstream (the
+// renderer reads every entry). These caps are generous versus a real report-card
+// template (tens of KB) yet refuse a zip-bomb or a mislabeled archive.
+const (
+	maxArchiveEntries        = 2000
+	maxEntryUncompressed     = 64 << 20  // 64 MiB per entry
+	maxAggregateUncompressed = 256 << 20 // 256 MiB total declared
 )
 
 // Deps holds the template-settings view dependencies. The doc-template artifact
@@ -182,6 +198,11 @@ func NewUploadAction(deps *Deps) view.View {
 		if deps.UploadTemplate == nil || deps.CreateDocumentTemplate == nil || deps.CreateTemplateBinding == nil {
 			return view.HTMXError(l.NotConfigured)
 		}
+		// Bound the request body BEFORE parsing so a large/streamed multipart body
+		// cannot exhaust memory during ParseMultipartForm. (A nil ResponseWriter is
+		// safe: MaxBytesReader only type-asserts it to signal early connection
+		// close, and the assertion no-ops on nil.)
+		viewCtx.Request.Body = http.MaxBytesReader(nil, viewCtx.Request.Body, maxRequestBytes)
 		if err := viewCtx.Request.ParseMultipartForm(maxUploadBytes); err != nil {
 			return view.HTMXError(l.UploadFailed)
 		}
@@ -207,6 +228,15 @@ func NewUploadAction(deps *Deps) view.View {
 		content, err := io.ReadAll(io.LimitReader(fh, maxUploadBytes+1))
 		if err != nil || len(content) == 0 || int64(len(content)) > maxUploadBytes {
 			return view.HTMXError(l.UploadFailed)
+		}
+
+		// Structure hardening: a .docx must be a well-formed OOXML ZIP with the two
+		// mandatory parts and safe, bounded entries. Reject anything else (a
+		// mislabeled/renamed file, a zip-bomb, a traversal-crafted archive) before
+		// it reaches storage or the renderer.
+		if err := validateDocxArchive(content); err != nil {
+			log.Printf("report-card template upload: reject archive: %v", err)
+			return view.HTMXError(l.InvalidFile)
 		}
 
 		docID := newID()
@@ -349,6 +379,10 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 		statusLabel, statusVariant := statusBadge(b.GetVersionStatus(), l)
 		validity := formatValidity(b, l)
 
+		// Publish + Delete are DRAFT-only. A PUBLISHED/DEPRECATED binding is part
+		// of the immutable version history (historical as_of renders resolve it),
+		// so it exposes no row action — mirroring the server-side draft-only gate
+		// enforced in the publish + delete use cases and the persistence adapter.
 		actions := []types.TableAction{}
 		if b.GetVersionStatus() == enums.VersionStatus_VERSION_STATUS_DRAFT {
 			actions = append(actions, types.TableAction{
@@ -360,16 +394,16 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 				Disabled:        !canUpdate,
 				DisabledTooltip: l.NotConfigured,
 			})
+			actions = append(actions, types.TableAction{
+				Type: "delete", Label: l.DeleteAction, Action: "delete",
+				URL:             deps.Routes.TemplateDeleteURL,
+				ItemName:        name,
+				ConfirmTitle:    l.DeleteAction,
+				ConfirmMessage:  l.DeleteConfirm,
+				Disabled:        !canUpdate,
+				DisabledTooltip: l.NotConfigured,
+			})
 		}
-		actions = append(actions, types.TableAction{
-			Type: "delete", Label: l.DeleteAction, Action: "delete",
-			URL:             deps.Routes.TemplateDeleteURL,
-			ItemName:        name,
-			ConfirmTitle:    l.DeleteAction,
-			ConfirmMessage:  l.DeleteConfirm,
-			Disabled:        !canUpdate,
-			DisabledTooltip: l.NotConfigured,
-		})
 
 		rows = append(rows, types.TableRow{
 			ID: id,
@@ -551,6 +585,60 @@ func parseDate(v string) *timestamppb.Timestamp {
 		return nil
 	}
 	return timestamppb.New(t.UTC())
+}
+
+// validateDocxArchive verifies content is a well-formed DOCX (OOXML) ZIP: it
+// must open as a zip, contain the two mandatory OOXML parts ([Content_Types].xml
+// + word/document.xml), use only safe relative entry paths (no absolute paths, no
+// ".." traversal), and stay within the entry-count, per-entry, and aggregate
+// declared-uncompressed-size caps. It inspects only the central-directory
+// metadata — it never decompresses an entry — so a declared-size zip-bomb is
+// rejected without expansion. Returns a non-nil error describing the first
+// violation; nil means the archive is structurally acceptable.
+func validateDocxArchive(content []byte) error {
+	zr, err := zip.NewReader(bytes.NewReader(content), int64(len(content)))
+	if err != nil {
+		return fmt.Errorf("not a valid docx (zip) archive: %w", err)
+	}
+	if len(zr.File) > maxArchiveEntries {
+		return fmt.Errorf("archive has too many entries: %d > %d", len(zr.File), maxArchiveEntries)
+	}
+	var (
+		haveContentTypes bool
+		haveDocument     bool
+		aggregate        uint64
+	)
+	for _, f := range zr.File {
+		name := strings.ReplaceAll(f.Name, "\\", "/")
+		if strings.HasPrefix(name, "/") {
+			return fmt.Errorf("archive entry has an absolute path: %q", f.Name)
+		}
+		for _, seg := range strings.Split(name, "/") {
+			if seg == ".." {
+				return fmt.Errorf("archive entry escapes its root: %q", f.Name)
+			}
+		}
+		if f.UncompressedSize64 > maxEntryUncompressed {
+			return fmt.Errorf("archive entry %q declares %d uncompressed bytes (> %d)", f.Name, f.UncompressedSize64, uint64(maxEntryUncompressed))
+		}
+		aggregate += f.UncompressedSize64
+		if aggregate > maxAggregateUncompressed {
+			return fmt.Errorf("archive declares too many uncompressed bytes (> %d)", uint64(maxAggregateUncompressed))
+		}
+		switch name {
+		case "[Content_Types].xml":
+			haveContentTypes = true
+		case "word/document.xml":
+			haveDocument = true
+		}
+	}
+	if !haveContentTypes {
+		return fmt.Errorf("docx missing [Content_Types].xml")
+	}
+	if !haveDocument {
+		return fmt.Errorf("docx missing word/document.xml")
+	}
+	return nil
 }
 
 // newID returns a random 32-char hex id (stdlib; the doc-template Id + storage

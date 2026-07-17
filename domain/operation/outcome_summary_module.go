@@ -31,6 +31,7 @@ import (
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
@@ -65,9 +66,12 @@ type OutcomeSummaryModuleDeps struct {
 	// Per-criterion (crit_a..crit_d + criteria_total) transcript path: task_outcome
 	// reached through job_task, A/B/C/D ordered via template_task_criteria. All
 	// optional/nil-safe.
-	ListJobTasks              func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
-	ListTaskOutcomes          func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
-	ListTemplateTaskCriterias func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
+	ListJobTasks     func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
+	ListTaskOutcomes func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
+	// Ownership-joined latest-cell read carrying phase/task/criterion codes
+	// (job → template ancestry). Optional/nil-safe.
+	ListCodedTaskOutcomeValuesByJob func(ctx context.Context, req *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
+	ListTemplateTaskCriterias       func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
 	// v2 block-layout document enrichments (optional/nil-safe): criterion
 	// display names + the User-hydrating staff read for the per-subject staff
 	// line and the group-lead ("Adviser") resolution.
@@ -103,11 +107,15 @@ type OutcomeSummaryModuleDeps struct {
 	ListWorkspaceUsers                  func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
 	ListJobs                            func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 	ListJobPhases                       func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
-	ListJobTemplates                    func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
-	ListClients                         func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
-	ListClientAttributes                func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
-	ResolveAttributeIDByCode            func(ctx context.Context, code string) (string, error)
-	ListJobTemplateSummaries            func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
+	// ListJobTemplatePhasesByTemplate resolves a job_template's phases (with their
+	// stable `code`) so the report-card block tree can key per-phase leaves by
+	// phase code. Optional/nil-safe.
+	ListJobTemplatePhasesByTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListJobTemplates                func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+	ListClients                     func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+	ListClientAttributes            func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
+	ResolveAttributeIDByCode        func(ctx context.Context, code string) (string, error)
+	ListJobTemplateSummaries        func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 
 	// ListJobCategories resolves Options.CategoryFilter (a job_category code, e.g.
 	// "academic") to its id so the section grid, client card, and report-card
@@ -264,33 +272,35 @@ func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc 
 		return nil
 	}
 	return documentview.NewDownloadHandler(&documentview.Deps{
-		Labels:                        deps.Labels,
-		CommonLabels:                  deps.CommonLabels,
-		DocumentHeaderName:            deps.DocumentHeaderName,
-		CategoryFilter:                deps.Options.CategoryFilter,
-		DocOptions:                    deps.Options.Document,
-		ListJobCategories:             deps.ListJobCategories,
-		ListOutcomeCriterias:          deps.ListOutcomeCriterias,
-		GetStaffListPageData:          deps.GetStaffListPageData,
-		ListPriceSchedules:            deps.ListPriceSchedules,
-		ListClientAttributes:          deps.ListClientAttributes,
-		ResolveAttributeIDByCode:      deps.ResolveAttributeIDByCode,
-		ListWorkspaceUsers:            deps.ListWorkspaceUsers,
-		GenerateDoc:                   deps.GenerateDoc,
-		GeneratePDF:                   deps.GeneratePDF,
-		ResolveTemplateBytes:          deps.ResolveTemplateBytes,
-		ListSubscriptionGroups:        deps.ListSubscriptionGroups,
-		ListSubscriptionGroupMembers:  deps.ListSubscriptionGroupMembers,
-		ListJobs:                      deps.ListJobs,
-		ListJobTemplates:              deps.ListJobTemplates,
-		ListClients:                   deps.ListClients,
-		ListJobOutcomeSummarys:        deps.ListJobOutcomeSummarys,
-		ListPhaseOutcomeSummarysByJob: deps.ListPhaseOutcomeSummarysByJob,
-		ListJobPhases:                 deps.ListJobPhases,
-		ListJobOutcomeLines:           deps.ListJobOutcomeLines,
-		ListJobTasks:                  deps.ListJobTasks,
-		ListTaskOutcomes:              deps.ListTaskOutcomes,
-		ListTemplateTaskCriterias:     deps.ListTemplateTaskCriterias,
+		Labels:                          deps.Labels,
+		CommonLabels:                    deps.CommonLabels,
+		DocumentHeaderName:              deps.DocumentHeaderName,
+		CategoryFilter:                  deps.Options.CategoryFilter,
+		DocOptions:                      deps.Options.Document,
+		ListJobCategories:               deps.ListJobCategories,
+		ListOutcomeCriterias:            deps.ListOutcomeCriterias,
+		GetStaffListPageData:            deps.GetStaffListPageData,
+		ListPriceSchedules:              deps.ListPriceSchedules,
+		ListClientAttributes:            deps.ListClientAttributes,
+		ResolveAttributeIDByCode:        deps.ResolveAttributeIDByCode,
+		ListWorkspaceUsers:              deps.ListWorkspaceUsers,
+		GenerateDoc:                     deps.GenerateDoc,
+		GeneratePDF:                     deps.GeneratePDF,
+		ResolveTemplateBytes:            deps.ResolveTemplateBytes,
+		ListSubscriptionGroups:          deps.ListSubscriptionGroups,
+		ListSubscriptionGroupMembers:    deps.ListSubscriptionGroupMembers,
+		ListJobs:                        deps.ListJobs,
+		ListJobTemplates:                deps.ListJobTemplates,
+		ListClients:                     deps.ListClients,
+		ListJobOutcomeSummarys:          deps.ListJobOutcomeSummarys,
+		ListPhaseOutcomeSummarysByJob:   deps.ListPhaseOutcomeSummarysByJob,
+		ListJobPhases:                   deps.ListJobPhases,
+		ListJobTemplatePhasesByTemplate: deps.ListJobTemplatePhasesByTemplate,
+		ListJobOutcomeLines:             deps.ListJobOutcomeLines,
+		ListJobTasks:                    deps.ListJobTasks,
+		ListTaskOutcomes:                deps.ListTaskOutcomes,
+		ListCodedTaskOutcomeValuesByJob: deps.ListCodedTaskOutcomeValuesByJob,
+		ListTemplateTaskCriterias:       deps.ListTemplateTaskCriterias,
 	})
 }
 

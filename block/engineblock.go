@@ -140,6 +140,7 @@ func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 		// precedent) so no espyna dependency; nil-safe when unwired.
 		infra.ComputePhaseOutcome, _ = ctx.ComputePhaseOutcome.(func(context.Context, string) (bool, error))
 		infra.ComputeJobOutcome, _ = ctx.ComputeJobOutcome.(func(context.Context, string) (bool, error))
+		infra.RecomputeEligibility, _ = ctx.RecomputeEligibility.(func(context.Context, string) (bool, map[string]bool, error))
 		infra.ResolveTemplateBytes, _ = ctx.ResolveTemplateBytes.(func(context.Context, string) ([]byte, error))
 		// TB3 template settings artifact closures (upload + document_template CRUD).
 		infra.UploadTemplate, _ = ctx.UploadTemplate.(func(context.Context, string, string, []byte, string) error)
@@ -280,6 +281,7 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.TaskOutcome.UpdateTaskOutcome = op.TaskOutcome.UpdateTaskOutcome.Execute
 			result.Operation.TaskOutcome.DeleteTaskOutcome = op.TaskOutcome.DeleteTaskOutcome.Execute
 			result.Operation.TaskOutcome.ListTaskOutcomes = op.TaskOutcome.ListTaskOutcomes.Execute
+			result.Operation.TaskOutcome.ListCodedTaskOutcomeValuesByJob = op.TaskOutcome.ListCodedTaskOutcomeValuesByJob.Execute
 		}
 
 		if op.JobOutcomeSummary != nil {

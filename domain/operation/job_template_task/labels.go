@@ -27,6 +27,8 @@ type FormLabels struct {
 	SectionResource     string `json:"section_resource"`
 	Name                string `json:"name"`
 	NamePlaceholder     string `json:"name_placeholder"`
+	Code                string `json:"code"`
+	CodeHint            string `json:"code_hint"`
 	StepOrder           string `json:"step_order"`
 	EstDurationMinutes  string `json:"est_duration_minutes"`
 	Resource            string `json:"resource"`
@@ -59,6 +61,8 @@ func DefaultLabels() Labels {
 			SectionResource:     "Resource",
 			Name:                "Task Name",
 			NamePlaceholder:     "Enter task name",
+			Code:                "Code",
+			CodeHint:            "Optional stable key: lowercase letters, digits, underscore.",
 			StepOrder:           "Order",
 			EstDurationMinutes:  "Estimated Duration (min)",
 			Resource:            "Resource",

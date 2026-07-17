@@ -58,6 +58,7 @@ func NewEditAction(deps *Deps) view.View {
 				ID:                         p.GetId(),
 				JobTemplateID:              p.GetJobTemplateId(),
 				Name:                       p.GetName(),
+				Code:                       p.GetCode(),
 				PhaseOrder:                 p.GetPhaseOrder(),
 				EstimatedDurationMinutes:   estDuration,
 				ResourceID:                 resourceID,
@@ -81,6 +82,9 @@ func NewEditAction(deps *Deps) view.View {
 			JobTemplateId: r.FormValue("job_template_id"),
 			Name:          r.FormValue("name"),
 			PhaseOrder:    int32(phaseOrder),
+		}
+		if v := r.FormValue("code"); v != "" {
+			phase.Code = &v
 		}
 		if v := r.FormValue("resource_id"); v != "" {
 			phase.ResourceId = &v

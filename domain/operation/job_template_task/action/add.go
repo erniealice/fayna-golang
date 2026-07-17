@@ -47,6 +47,9 @@ func NewAddAction(deps *Deps) view.View {
 			Name:               r.FormValue("name"),
 			StepOrder:          int32(stepOrder),
 		}
+		if v := r.FormValue("code"); v != "" {
+			task.Code = &v
+		}
 		if v := r.FormValue("resource_id"); v != "" {
 			task.ResourceId = &v
 		}

@@ -27,6 +27,10 @@ type Data struct {
 	Name      string
 	StepOrder int32
 
+	// Code is the optional stable machine key for this task (path segment in
+	// document placeholders). Empty = unset. Operator-assigned in the drawer.
+	Code string
+
 	// Optional timing
 	EstimatedDurationMinutes int32
 

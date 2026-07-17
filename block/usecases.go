@@ -310,6 +310,10 @@ type TaskOutcomeUseCases struct {
 	UpdateTaskOutcome func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error)
 	DeleteTaskOutcome func(context.Context, *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error)
 	ListTaskOutcomes  func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
+	// ListCodedTaskOutcomeValuesByJob — ownership-joined latest-cell read
+	// (job → template ancestry) carrying phase/task/criterion codes. Optional /
+	// nil-safe: a nil closure leaves the coded-cell surface blank.
+	ListCodedTaskOutcomeValuesByJob func(context.Context, *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
 }
 
 // OutcomeMatrixUseCases — the generic, cross-vertical grading grid.

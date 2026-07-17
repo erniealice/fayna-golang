@@ -74,6 +74,14 @@ type recorder struct {
 	jobNil      bool
 	readOwner   string             // RecordedBy the ReadTaskOutcome fixture returns (default staffID)
 	readCT      enums.CriteriaType // CriteriaType the stored record reports (default NUMERIC_SCORE)
+
+	// recompute-eligibility fixture (wired only when wireElig): eligible + the
+	// scheme's in-scope criterion set. Unwired → the action falls back to
+	// numeric-type classification.
+	wireElig bool
+	eligible bool
+	inScope  map[string]bool
+	eligErr  error
 }
 
 func (r *recorder) deps(matrix *matrixpb.GetOutcomeMatrixResponse) *Deps {
@@ -118,6 +126,11 @@ func (r *recorder) deps(matrix *matrixpb.GetOutcomeMatrixResponse) *Deps {
 		d.ComputeJobOutcome = func(_ context.Context, id string) (bool, error) {
 			r.order = append(r.order, "job:"+id)
 			return r.jobRecomputed, r.jobErr
+		}
+	}
+	if r.wireElig {
+		d.RecomputeEligibility = func(_ context.Context, _ string) (bool, map[string]bool, error) {
+			return r.eligible, r.inScope, r.eligErr
 		}
 	}
 	return d
@@ -309,6 +322,65 @@ func TestCellMode_NonAcademic_NoRatingFresh(t *testing.T) {
 	}
 	if len(r.order) != 0 {
 		t.Errorf("non-academic write must not trigger any recompute, got %v", r.order)
+	}
+}
+
+func TestCellMode_LedgerScheme_NotApplicable(t *testing.T) {
+	// A numeric cell whose phase resolves a scheme with NO score scale (a
+	// ledger scheme) drives no recompute: it saves normally, acks
+	// not-applicable (ratingFresh omitted), and NEVER enqueues a roll-up that
+	// would fail loud.
+	r := &recorder{wireElig: true, eligible: false}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=21", bothPerms)
+	got := cells(t, res)[0]
+	if !got.OK {
+		t.Fatalf("ledger cell must save ok: %+v", got)
+	}
+	if got.Value != "21" {
+		t.Errorf("value: want 21 got %q", got.Value)
+	}
+	if got.RatingFresh != nil {
+		t.Errorf("ineligible numeric cell must omit ratingFresh, got %v", *got.RatingFresh)
+	}
+	if got.RatingNotRecomputed != "not_applicable" {
+		t.Errorf("want ratingNotRecomputed=not_applicable, got %q", got.RatingNotRecomputed)
+	}
+	if len(r.order) != 0 {
+		t.Errorf("ineligible cell must not trigger any recompute, got %v", r.order)
+	}
+}
+
+func TestCellMode_EligiblePhase_CriterionOutsideGraph_NotApplicable(t *testing.T) {
+	// The phase IS score-scaled, but this criterion is not in the scheme's active
+	// component graph → the cell still drives no recompute.
+	r := &recorder{wireElig: true, eligible: true, inScope: map[string]bool{"some-other-criterion": true}}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", bothPerms)
+	got := cells(t, res)[0]
+	if !got.OK {
+		t.Fatalf("out-of-graph cell must save ok: %+v", got)
+	}
+	if got.RatingFresh != nil {
+		t.Errorf("out-of-graph criterion must omit ratingFresh, got %v", *got.RatingFresh)
+	}
+	if got.RatingNotRecomputed != "not_applicable" {
+		t.Errorf("want ratingNotRecomputed=not_applicable, got %q", got.RatingNotRecomputed)
+	}
+	if len(r.order) != 0 {
+		t.Errorf("out-of-graph cell must not recompute, got %v", r.order)
+	}
+}
+
+func TestCellMode_EligiblePhase_InGraph_Recomputes(t *testing.T) {
+	// The phase is score-scaled and the criterion IS in the component graph → the
+	// cell drives the phase→job recompute and reports ratingFresh:true.
+	r := &recorder{wireElig: true, eligible: true, inScope: map[string]bool{criteriaID: true}, jobRecomputed: true}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", bothPerms)
+	got := cells(t, res)[0]
+	if got.RatingFresh == nil || !*got.RatingFresh {
+		t.Fatalf("eligible in-graph cell must recompute → ratingFresh:true, got %+v", got)
+	}
+	if len(r.order) != 2 || r.order[0] != "phase:"+jobPhaseID || r.order[1] != "job:"+jobID {
+		t.Errorf("want phase then job recompute, got %v", r.order)
 	}
 }
 

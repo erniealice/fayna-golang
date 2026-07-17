@@ -107,7 +107,8 @@ type reportCard struct {
 	SchedulePeriodDisplay string         // "2025-2026" — the price_schedule display period (v2 key ONLY; SchedulePeriod keeps the v1 section-derived value, M4)
 	SchedulePeriodSpaced  string         // "2025 - 2026" (cover-page variant of SchedulePeriodDisplay)
 	GroupLabel            string         // "Grade 7 - Nickel" (subscription_group display; identity-line variant of GroupLevel+SectionName)
-	GroupLead             string         // group-lead staff name (the group-category job's task assignee)
+	GroupLead             string         // group-lead staff name (the group-category job's task assignee) — FROZEN v1/v2 "adviser" key (first-job behavior)
+	LeadStaffDisplay      string         // block-layout root alias (lead_staff_name_display); populated ONLY when the group category has exactly one job (0/2+ ⇒ blank, so an arbitrary first-job adviser never leaks onto the cover/headers)
 	ClientReference       string         // client_attributes.<configured code> value (e.g. LRN)
 	ClientAttributes      map[string]any // code → value for every configured ClientAttributeCodes entry (always present, blank when absent)
 	PrintedByName         string         // display name of the printing user; falls back to PrintedBy
@@ -115,6 +116,13 @@ type reportCard struct {
 	ItemRatings           []ratingRow    // per-item rating (deportment) table rows (rotation pairs merged)
 	GroupRatingPhase1     string         // group (homeroom) rating, phase 1
 	GroupRatingPhase2     string         // group (homeroom) rating, phase 2
+
+	// JobCategories is the converged generic block-layout tree: job_category.code
+	// → subtree {jobs[], singleton projection}. Assembled by collectCard,
+	// flattened by buildReportCardData under the "job_categories" root key, and
+	// blank-guarded against the block manifest. Nil on the v1/v2 tiers (the block
+	// artifact is the only reader).
+	JobCategories map[string]any
 }
 
 // ratingRow is one row of the per-item rating (deportment) table on the
@@ -131,22 +139,14 @@ type ratingRow struct {
 // (engine leaks unresolved placeholders verbatim — G3/G5).
 func buildReportCardData(rc reportCard) map[string]any {
 	subjects := make([]any, 0, len(rc.Subjects))
-	primaryJobs := make([]any, 0, len(rc.Subjects))
 	for _, s := range rc.Subjects {
-		// v2 criteria loop (crit_*) + v3 outcome_criteria loop (phase_*_max):
-		// the same per-criterion source projected under both key sets.
+		// v2 criteria loop (crit_*) — FROZEN emission shape.
 		criteria := make([]any, 0, len(s.Criteria))
-		outcomeCriteria := make([]any, 0, len(s.Criteria))
 		for _, c := range s.Criteria {
 			criteria = append(criteria, map[string]any{
 				"crit_label": orBlank(c.Label),
 				"crit_sem1":  orBlank(c.Phase1),
 				"crit_sem2":  orBlank(c.Phase2),
-			})
-			outcomeCriteria = append(outcomeCriteria, map[string]any{
-				"outcome_criteria_label_display": orBlank(c.Label),
-				"phase_1_max_derived":            orBlank(c.Phase1),
-				"phase_2_max_derived":            orBlank(c.Phase2),
 			})
 		}
 		title := orBlank(s.ItemTitle)
@@ -170,37 +170,17 @@ func buildReportCardData(rc reportCard) map[string]any {
 			"sem1_total":    orBlank(s.Sem1Total),
 			"sem2_total":    orBlank(s.Sem2Total),
 		})
-		// v3 primary_jobs item map (proto-grounded generic keys). Blank-handling
-		// mirrors the v2 emissions above so the rendered output is identical.
-		primaryJobs = append(primaryJobs, map[string]any{
-			"job_template_name_display":        title,
-			"staff_line_display":               orBlank(s.StaffLine),
-			"phase_1_scaled_label":             orDash(s.Sem1Band),
-			"phase_2_scaled_label":             orDash(s.Sem2Band),
-			"phase_1_criteria_total_derived":   orBlank(s.Sem1Total),
-			"phase_2_criteria_total_derived":   orBlank(s.Sem2Total),
-			"job_outcome_summary_scaled_label": orDash(s.YearFinal),
-			"outcome_criteria":                 outcomeCriteria,
-		})
 	}
 	conduct := make([]any, 0, len(rc.ItemRatings))
-	secondaryJobs := make([]any, 0, len(rc.ItemRatings))
 	for _, r := range rc.ItemRatings {
 		conduct = append(conduct, map[string]any{
 			"conduct_title": orBlank(r.Title),
 			"conduct_sem1":  orBlank(r.Phase1),
 			"conduct_sem2":  orBlank(r.Phase2),
 		})
-		// v3 secondary_jobs item map — the item-scope keys are deliberately
-		// reused across the two job loops (the engine isolates loop scopes).
-		secondaryJobs = append(secondaryJobs, map[string]any{
-			"job_template_name_display": orBlank(r.Title),
-			"phase_1_scaled_label":      orBlank(r.Phase1),
-			"phase_2_scaled_label":      orBlank(r.Phase2),
-		})
 	}
 	// client_attributes is ALWAYS a map (never nil) that carries a blank leaf for
-	// EVERY code the v3 template can reference — enforced HERE at the builder,
+	// EVERY code the template can reference — enforced HERE at the builder,
 	// independent of any consumer's DocumentOptions.ClientAttributeCodes — so a
 	// hard-coded {{client_attributes.<code>}} placeholder can never leak (HIGH#2).
 	// Seed the template-referenced codes blank first, THEN overlay the resolved
@@ -212,7 +192,12 @@ func buildReportCardData(rc reportCard) map[string]any {
 	for code, val := range rc.ClientAttributes {
 		clientAttributes[code] = val
 	}
-	return map[string]any{
+	jobCategories := rc.JobCategories
+	if jobCategories == nil {
+		jobCategories = map[string]any{}
+	}
+	data := map[string]any{
+		// v1 emissions (FROZEN — the original summary-table template contract).
 		"school_name":      orBlank(rc.DocumentHeaderName),
 		"academic_year":    orBlank(rc.SchedulePeriod),
 		"student_name":     orBlank(rc.ClientName),
@@ -223,30 +208,32 @@ func buildReportCardData(rc reportCard) map[string]any {
 		"printed_at":       orBlank(rc.PrintedAt),
 		"subjects":         subjects,
 		"formation_groups": formationData(rc.FormationGroups),
-		// v2 block-layout root keys (additive; EMITTED KEY STRINGS unchanged).
+		// v2 block-layout root keys (FROZEN — EMITTED KEY STRINGS unchanged).
 		"academic_year_display": orBlank(firstNonEmpty(rc.SchedulePeriodDisplay, rc.SchedulePeriod)),
 		"academic_year_spaced":  orBlank(rc.SchedulePeriodSpaced),
 		"grade_section":         orBlank(rc.GroupLabel),
 		"adviser":               orBlank(rc.GroupLead),
 		"client_reference":      orBlank(rc.ClientReference),
-		"printed_by_name":       orBlank(firstNonEmpty(rc.PrintedByName, rc.PrintedBy)),
-		"printed_at_long":       orBlank(firstNonEmpty(rc.PrintedAtLong, rc.PrintedAt)),
 		"conduct_rows":          conduct,
 		"group_conduct_sem1":    orBlank(rc.GroupRatingPhase1),
 		"group_conduct_sem2":    orBlank(rc.GroupRatingPhase2),
-		// v3 proto-grounded generic root keys (additive). The v3 template reads
-		// these; the v1/v2 templates ignore them. Every scalar always emitted.
+		// Converged generic root scalars KEPT by the block contract.
 		"price_schedule_name_display":        orBlank(firstNonEmpty(rc.SchedulePeriodDisplay, rc.SchedulePeriod)),
 		"price_schedule_name_spaced_display": orBlank(rc.SchedulePeriodSpaced),
 		"client_name_display":                orBlank(rc.ClientName),
 		"subscription_group_name_display":    orBlank(rc.GroupLabel),
-		"lead_staff_name_display":            orBlank(rc.GroupLead),
+		"lead_staff_name_display":            orBlank(rc.LeadStaffDisplay),
 		"client_attributes":                  clientAttributes,
-		"group_phase_1_scaled_label":         orBlank(rc.GroupRatingPhase1),
-		"group_phase_2_scaled_label":         orBlank(rc.GroupRatingPhase2),
-		"primary_jobs":                       primaryJobs,
-		"secondary_jobs":                     secondaryJobs,
+		"printed_by_name":                    orBlank(firstNonEmpty(rc.PrintedByName, rc.PrintedBy)),
+		"printed_at_long":                    orBlank(firstNonEmpty(rc.PrintedAtLong, rc.PrintedAt)),
+		// Converged generic tree (block artifact reader).
+		"job_categories": jobCategories,
 	}
+	// Blank-guard: seed EVERY manifest scalar path blank and EVERY manifest loop
+	// path empty (recursing into real loop items) so no referenced {{leaf}} leaks
+	// verbatim. Real values already present are never clobbered.
+	applyBlockManifest(data)
+	return data
 }
 
 // collectCard assembles one client's report card by mirroring the view-3
@@ -323,7 +310,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	if groupJob != nil && groupJob.GetId() != "" {
 		walkIDs = append(append([]string{}, jobIDs...), groupJob.GetId())
 	}
-	phaseOrder, jobByPhase := fetchPhaseOrders(ctx, d, walkIDs)
+	phaseOrder, jobByPhase, _ := fetchPhaseOrders(ctx, d, walkIDs)
 	semByJob := fetchSemesterLabels(ctx, d, walkIDs, phaseOrder)
 	yearByJob := fetchYearLabels(ctx, d, jobIDs)
 	// Per-criterion marks + per-period teacher assignment from task_outcome /
@@ -347,6 +334,51 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	}
 	merged := mergeRotationPairs(conduct, academicNames, fetchInactiveSubjectNames(ctx, d, subID))
 
+	// --- converged block-layout tree fetches (phase codes + strict labels) ---
+	// The block tree keys its per-phase leaves by job_template_phase.code, reached
+	// from each instance job_phase via template_phase_id. These reads are separate
+	// from the academic transcript walk above (which stays scoped to walkIDs) so
+	// the deportment phase walk never inflates the criterion roll-up. The strict
+	// summary reads carry NO score fallback — the converged raw leaves are STRICT.
+	allCatJobIDs := append([]string{}, jobIDs...)
+	deportJobCat := map[string]string{}
+	deportTemplateIDs := []string{}
+	deportTmplSeen := map[string]bool{}
+	for _, j := range deportJobs {
+		jid, tid := j.GetId(), j.GetJobTemplateId()
+		if jid == "" {
+			continue
+		}
+		allCatJobIDs = append(allCatJobIDs, jid)
+		deportJobCat[jid] = j.GetJobCategoryId()
+		if tid != "" && !deportTmplSeen[tid] {
+			deportTmplSeen[tid] = true
+			deportTemplateIDs = append(deportTemplateIDs, tid)
+		}
+	}
+	allTemplateIDs := append(append([]string{}, templateIDs...), deportTemplateIDs...)
+	templatePhaseCode := fetchTemplatePhaseCodes(ctx, d, allTemplateIDs)
+	treeOrder, treeJobByPhase, treePhaseTmpl := fetchPhaseOrders(ctx, d, allCatJobIDs)
+	jobOrderCode := map[string]map[int32]string{}
+	for pid, jid := range treeJobByPhase {
+		code := strings.TrimSpace(templatePhaseCode[treePhaseTmpl[pid]])
+		if code == "" {
+			continue
+		}
+		if jobOrderCode[jid] == nil {
+			jobOrderCode[jid] = map[int32]string{}
+		}
+		jobOrderCode[jid][treeOrder[pid]] = code
+	}
+	treeStrictPhase := fetchPhaseLabelsStrict(ctx, d, allCatJobIDs, treeOrder)
+	treeStrictYear := fetchYearLabelsStrict(ctx, d, jobIDs)
+	groupCount := 0
+	for _, j := range deportJobs {
+		if j.GetJobCategoryId() == groupCatID {
+			groupCount++
+		}
+	}
+
 	// One row per subject (job), subject-name ASC — prod's canonical order.
 	type entry struct{ jobID, name string }
 	entries := make([]entry, 0, len(jobIDs))
@@ -362,6 +394,10 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	})
 
 	rows := make([]itemRow, 0, len(entries))
+	// academicRows pairs each rendered subject row with its job id for the block
+	// tree (the itemRow itself carries no id, but the tree needs it for the
+	// per-job strict-label and phase-code lookups).
+	academicRows := make([]academicTreeRow, 0, len(entries))
 	for _, e := range entries {
 		sem := semByJob[e.jobID]
 		display := cleanSubject(e.name)
@@ -404,6 +440,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		row.StaffLine = staffLine(d.Labels.Student, tr, staffNames)
 		row.Criteria, row.Sem1Total, row.Sem2Total = tr.criterionRows(critNames)
 		rows = append(rows, row)
+		academicRows = append(academicRows, academicTreeRow{jobID: e.jobID, row: row})
 	}
 
 	// Formation page (DOCX v2): the deportment-category tables. Additive to the
@@ -413,12 +450,44 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 
 	// Per-item rating rows + group rating (block layout).
 	itemRatings, groupPhase1, groupPhase2 := buildItemRatings(conduct, merged)
+	// Canonical conduct row set (rotation pairs merged, non-enrolled suppressed) —
+	// the SAME projection reused for the block-layout subject-deportment .jobs[]
+	// loop, so the block card can never regress to split half-rows / placeholders.
+	conductRows := deportRows(conduct, merged)
 
-	// Group lead = the modal task assignee on the group-category job.
+	// Group lead = the modal task assignee on the group-category job. This keeps
+	// feeding the FROZEN v1/v2 "adviser" key (its historical first-job behavior).
 	groupLead := ""
 	if groupJob != nil {
 		groupLead = groupLeadName(transcripts[groupJob.GetId()], staffNames)
 	}
+	// Block-layout root alias (lead_staff_name_display, used on the cover/headers)
+	// projects ONLY when the group category has EXACTLY one job — matching the
+	// nested singleton rule below. With a corrupt 2+ multiplicity the first-picked
+	// groupJob is arbitrary, so its adviser must NOT leak into the block root alias
+	// (the nested singleton already blanks). Cardinality is counted (groupCount)
+	// before this gate. The frozen v1/v2 "adviser" field is left untouched.
+	leadStaffDisplay := ""
+	if groupCount == 1 {
+		leadStaffDisplay = groupLead
+	}
+
+	// Converged generic block-layout tree (job_categories.<code>.jobs[] + the
+	// group-category singleton projection). Blank-guarded against the manifest in
+	// buildReportCardData. Nil-safe throughout — every unwired source blanks.
+	jobCategories := buildJobCategoriesTree(ctx, d, treeInputs{
+		cats:         cats,
+		academicCat:  catID,
+		academic:     academicRows,
+		deportJobs:   deportJobCat,
+		deportRows:   conductRows,
+		jobOrderCode: jobOrderCode,
+		strictPhase:  treeStrictPhase,
+		groupJob:     groupJob,
+		groupCatID:   groupCatID,
+		groupCount:   groupCount,
+		groupLead:    groupLead,
+	}, treeStrictYear)
 
 	name, ay := sectionParts(group.GetName())
 	grade, section := gradeSection(name)
@@ -447,12 +516,14 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		ClientReference:       fetchClientReference(ctx, d, clientID),
 		ClientAttributes:      fetchClientAttributes(ctx, d, clientID),
 		GroupLead:             groupLead,
+		LeadStaffDisplay:      leadStaffDisplay,
 		Subjects:              rows,
 		PriceScheduleID:       group.GetPriceScheduleId(),
 		FormationGroups:       formationGroups,
 		ItemRatings:           itemRatings,
 		GroupRatingPhase1:     groupPhase1,
 		GroupRatingPhase2:     groupPhase2,
+		JobCategories:         jobCategories,
 	}
 	return rc, true
 }
@@ -589,14 +660,17 @@ func fetchTemplateNames(ctx context.Context, d *Deps, templateIDs []string, hist
 	return out
 }
 
-// fetchPhaseOrders returns two maps keyed by job_phase id: phase_order (for the
-// Sem 1 / Sem 2 column mapping) and the owning job id (for the per-criterion
-// task_outcome roll-up, which walks phase → task → outcome back to the subject).
-func fetchPhaseOrders(ctx context.Context, d *Deps, jobIDs []string) (order map[string]int32, jobByPhase map[string]string) {
+// fetchPhaseOrders returns three maps keyed by job_phase id: phase_order (for the
+// Sem 1 / Sem 2 column mapping), the owning job id (for the per-criterion
+// task_outcome roll-up, which walks phase → task → outcome back to the subject),
+// and the template_phase id (for the phase-CODE lookup the block-layout tree keys
+// its per-phase leaves by, via job_phase.template_phase_id → job_template_phase.code).
+func fetchPhaseOrders(ctx context.Context, d *Deps, jobIDs []string) (order map[string]int32, jobByPhase, phaseTemplate map[string]string) {
 	order = map[string]int32{}
 	jobByPhase = map[string]string{}
+	phaseTemplate = map[string]string{}
 	if d.ListJobPhases == nil || len(jobIDs) == 0 {
-		return order, jobByPhase
+		return order, jobByPhase, phaseTemplate
 	}
 	for start := 0; start < len(jobIDs); start += pageLimit {
 		end := start + pageLimit
@@ -616,10 +690,13 @@ func fetchPhaseOrders(ctx context.Context, d *Deps, jobIDs []string) (order map[
 				if jid := p.GetJobId(); jid != "" {
 					jobByPhase[id] = jid
 				}
+				if tp := strings.TrimSpace(p.GetTemplatePhaseId()); tp != "" {
+					phaseTemplate[id] = tp
+				}
 			}
 		}
 	}
-	return order, jobByPhase
+	return order, jobByPhase, phaseTemplate
 }
 
 func fetchSemesterLabels(ctx context.Context, d *Deps, jobIDs []string, phaseOrder map[string]int32) map[string]map[int32]string {
@@ -813,8 +890,10 @@ func (t *transcript) criterionRows(names map[string]string) ([]criterionRow, str
 // authoritative per-criterion leaf (job_outcome_line on education1 is
 // per-subject only). It walks the grade-sheet join path job_phase → job_task →
 // task_outcome, SCOPED to this card's phases/jobs (so a student's prior-AY /
-// other-section grades never accumulate in), groups by (job, period, criterion)
-// taking the numeric MAX per period, and resolves the criterion order via
+// other-section grades never accumulate in), resolves the LATEST active outcome
+// per (job_task, criterion) (recorded_date DESC, id DESC) and THEN takes the MAX
+// across tasks per (job, period, criterion) — D1 layering — and resolves the
+// criterion order via
 // template_task_criteria.sequence_order (falling back to a stable criteria-id
 // order when that source is unavailable). Keyed by job id. Fully nil-safe — a
 // missing closure yields an empty map and the criterion columns render blank.
@@ -899,10 +978,26 @@ func fetchTranscripts(ctx context.Context, d *Deps, jobByPhase map[string]string
 		return out
 	}
 
-	// task_outcome: MAX numeric_value per (job, period, criterion). Also
-	// remember which template_task each (job, criterion) came from, for the
-	// sequence lookup.
-	jobCritTmplTask := map[string]map[string]string{} // jobID → critID → templateTaskID
+	// task_outcome → per (job, period, criterion) mark. D1 LAYERING: canonical
+	// cell resolution is the LATEST active outcome per (job_task, criterion)
+	// (recorded_date DESC, id DESC — matrix-canonical), and ONLY THEN the MAX
+	// across tasks within a (job, period, criterion). This fixes the stale-higher-
+	// revision hazard (a newer correction on the same task now supersedes an older
+	// higher value) while preserving the locked MAX-across-tasks render contract.
+	type cellKey struct{ taskID, critID string }
+	type cellAcc struct {
+		recorded int64
+		id       string
+		value    float64
+		tmplTask string
+	}
+	latest := map[cellKey]cellAcc{}
+	// jobCritTmplTasks retains EVERY template task that binds a (job, criterion): a
+	// criterion can appear on more than one template task. The fold below iterates
+	// `latest` in randomized map order, so a single overwrite must NOT decide the
+	// criterion's sequence source — collect all candidates and resolve them
+	// deterministically after the sequence read (D1 ordering fix).
+	jobCritTmplTasks := map[string]map[string]map[string]bool{} // jobID → critID → set(templateTaskID)
 	tmplTaskSet := map[string]bool{}
 	for start := 0; start < len(taskIDs); start += pageLimit {
 		end := start + pageLimit
@@ -927,26 +1022,22 @@ func fetchTranscripts(ctx context.Context, d *Deps, jobByPhase map[string]string
 				if !t.GetActive() || t.NumericValue == nil {
 					continue
 				}
-				jid := taskJob[t.GetJobTaskId()]
+				tid := t.GetJobTaskId()
 				cid := t.GetCriteriaVersionId()
-				if jid == "" || cid == "" {
+				if taskJob[tid] == "" || cid == "" {
 					continue
 				}
-				v := t.GetNumericValue()
-				period := taskPeriod[t.GetJobTaskId()]
-				tr := byJob(jid)
-				if tr.marks[cid] == nil {
-					tr.marks[cid] = map[int32]float64{}
+				k := cellKey{taskID: tid, critID: cid}
+				cand := cellAcc{
+					recorded: t.GetRecordedDate(),
+					id:       t.GetId(),
+					value:    t.GetNumericValue(),
+					tmplTask: taskTmplTask[tid],
 				}
-				if cur, ok := tr.marks[cid][period]; !ok || v > cur {
-					tr.marks[cid][period] = v
-				}
-				if tt := taskTmplTask[t.GetJobTaskId()]; tt != "" {
-					if jobCritTmplTask[jid] == nil {
-						jobCritTmplTask[jid] = map[string]string{}
-					}
-					jobCritTmplTask[jid][cid] = tt
-					tmplTaskSet[tt] = true
+				if cur, ok := latest[k]; !ok ||
+					cand.recorded > cur.recorded ||
+					(cand.recorded == cur.recorded && cand.id > cur.id) {
+					latest[k] = cand
 				}
 			}
 			if len(data) < pageLimit {
@@ -954,14 +1045,53 @@ func fetchTranscripts(ctx context.Context, d *Deps, jobByPhase map[string]string
 			}
 		}
 	}
+	// Fold the latest-per-(task,criterion) cells into per-(job,period,criterion)
+	// marks, taking the MAX across tasks. Collect every contributing template task
+	// per (job, criterion) for the deterministic sequence resolution below.
+	for k, acc := range latest {
+		jid := taskJob[k.taskID]
+		period := taskPeriod[k.taskID]
+		tr := byJob(jid)
+		if tr.marks[k.critID] == nil {
+			tr.marks[k.critID] = map[int32]float64{}
+		}
+		if cur, ok := tr.marks[k.critID][period]; !ok || acc.value > cur {
+			tr.marks[k.critID][period] = acc.value
+		}
+		if acc.tmplTask != "" {
+			if jobCritTmplTasks[jid] == nil {
+				jobCritTmplTasks[jid] = map[string]map[string]bool{}
+			}
+			if jobCritTmplTasks[jid][k.critID] == nil {
+				jobCritTmplTasks[jid][k.critID] = map[string]bool{}
+			}
+			jobCritTmplTasks[jid][k.critID][acc.tmplTask] = true
+			tmplTaskSet[acc.tmplTask] = true
+		}
+	}
 
 	seq := fetchCriteriaSequence(ctx, d, tmplTaskSet)
+	// Resolve each criterion's sequence_order DETERMINISTICALLY: among the template
+	// tasks that bind the criterion, pick the lowest sequence_order, tie-broken by
+	// the lowest template-task id. The comparison is a total order, so the result is
+	// independent of the randomized set-iteration order. Without this a criterion
+	// bound by two template tasks with different sequence_order would inherit a
+	// randomized order, reshuffling the A–D slots between renders.
 	for jid, tr := range out {
-		for cid, tt := range jobCritTmplTask[jid] {
-			if smap, ok := seq[tt]; ok {
-				if sv, ok := smap[cid]; ok {
-					tr.seq[cid] = sv
+		for cid, tts := range jobCritTmplTasks[jid] {
+			bestSeq := int32(0)
+			bestTT := ""
+			for tt := range tts {
+				sv, ok := seq[tt][cid]
+				if !ok {
+					continue
 				}
+				if bestTT == "" || sv < bestSeq || (sv == bestSeq && tt < bestTT) {
+					bestSeq, bestTT = sv, tt
+				}
+			}
+			if bestTT != "" {
+				tr.seq[cid] = bestSeq
 			}
 		}
 	}

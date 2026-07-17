@@ -61,16 +61,17 @@ const resultEvent = "omcell-result"
 //   - value       the normalized canonical stored value; becomes the client's
 //                 new saved-baseline (data-saved-value). pass_fail is normalized
 //                 to "true"/"false" so it round-trips the <select> option values.
-//   - ratingFresh (Q-GSE-5 inline recompute) present only for ACADEMIC cells:
+//   - ratingFresh (Q-GSE-5 inline recompute) present only for cells that drive a
+//                 scaled-summary recompute (graph-derived, see below):
 //                 true  → the affected phase (and job) roll-up recomputed (or was
 //                         authoritative/frozen and correctly left pinned);
 //                 false → the grade PERSISTED but its summary recompute failed or
 //                         is unwired — the rating is stale + retryable, NEVER a
 //                         reason to report the saved cell as failed. Omitted for
-//                         non-academic (deportment/text) cells (no roll-up rating).
+//                         cells that drive no scaled summary (no roll-up rating).
 //   - ratingNotRecomputed  optional bounded reason string for observability when a
 //                 rating was deliberately not recomputed (authoritative_frozen /
-//                 non_academic). The client ignores it; it documents the split.
+//                 not_applicable). The client ignores it; it documents the split.
 //
 // ── New-id handshake + idempotent create-retry ─────────────────────────────
 // Because the response can be lost, a client may re-POST new.{jt}:{cr} for a cell
@@ -82,11 +83,17 @@ const resultEvent = "omcell-result"
 // needs no idempotency table.
 //
 // ── Recompute freshness split (Q-GSE-5) ────────────────────────────────────
-// After the per-cell dispatch, the affected phase ids then job ids are deduped
-// FROM THE SERVER-DERIVED matrix (OutcomeCell.job_phase_id / job_id — never a
-// browser value) and ComputePhaseOutcome then ComputeJobOutcome run once each.
-// A frozen (is_authoritative) job_outcome_summary is left pinned (recompute
-// skipped, rating still fresh). A compute failure marks only that phase/job stale
+// After the per-cell dispatch, each saved numeric cell is classified against the
+// scoring graph (RecomputeEligibility): a cell drives a recompute only when its
+// phase resolves a scheme WITH a score scale AND its criterion participates in
+// that scheme's active component graph. Numeric ledger cells (whose scheme has
+// no score scale) drive nothing — they save normally and ack
+// not-applicable, never enqueued for a roll-up that would fail loud. The driving
+// cells' phase ids then job ids are deduped FROM THE SERVER-DERIVED matrix
+// (OutcomeCell.job_phase_id / job_id — never a browser value) and
+// ComputePhaseOutcome then ComputeJobOutcome run once each. A frozen
+// (is_authoritative) job_outcome_summary is left pinned (recompute skipped,
+// rating still fresh). A compute failure marks only that phase/job stale
 // (ratingFresh:false on its cells); the grade itself stays saved.
 func NewRecordAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
@@ -220,7 +227,8 @@ func NewRecordAction(deps *Deps) view.View {
 				sc := byOutcome[outcomeID]
 				acks = append(acks, cellAck{
 					key: key, ok: ok, outcomeID: outcomeID, value: normVal,
-					academic: isAcademic(sc.ct), jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
+					numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
+					jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
 					errMsg: failMsg(ok, "value_rejected"),
 				})
 
@@ -239,7 +247,8 @@ func NewRecordAction(deps *Deps) view.View {
 					sc := byCreateAddr[createAddr]
 					acks = append(acks, cellAck{
 						key: key, ok: done, outcomeID: newID, value: normVal,
-						academic: isAcademic(ct), jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
+						numeric: isNumericCriteria(ct), criteriaID: criteriaID,
+						jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
 						errMsg: failMsg(done, "value_rejected"),
 					})
 					continue
@@ -252,7 +261,8 @@ func NewRecordAction(deps *Deps) view.View {
 					normVal, done := updateCell(ctx, deps, actingStaff, sc.outcomeID, raw)
 					acks = append(acks, cellAck{
 						key: key, ok: done, outcomeID: sc.outcomeID, value: normVal,
-						academic: isAcademic(sc.ct), jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
+						numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
+						jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
 						errMsg: failMsg(done, "value_rejected"),
 					})
 					continue
@@ -262,13 +272,22 @@ func NewRecordAction(deps *Deps) view.View {
 			}
 		}
 
+		// Classify which saved numeric cells drive a scaled-summary recompute from
+		// the scoring graph (RecomputeEligibility), not the value's type: a phase
+		// whose scheme carries no score scale, or a criterion outside the scheme's
+		// active component graph, drives nothing and must never be enqueued (its
+		// roll-up would fail loud). markRecomputeDrivers memoizes the per-phase
+		// lookup and sets ack.drives; a nil/erroring closure falls back to
+		// numeric-type classification (the prior behavior).
+		markRecomputeDrivers(ctx, deps.RecomputeEligibility, acks)
+
 		// Inline recompute (Q-GSE-5): dedup the affected phase ids then job ids
-		// from the SERVER-DERIVED cells of the successfully-saved ACADEMIC writes
-		// (never a browser value), recompute phase→job once each, and classify
-		// each id recomputed | frozen | failed. ratingFresh per cell folds in the
-		// worst of its phase + job result.
-		phaseRes := recomputeIDs(ctx, deps.ComputePhaseOutcome, academicPhaseIDs(acks))
-		jobRes := recomputeIDs(ctx, deps.ComputeJobOutcome, academicJobIDs(acks))
+		// from the SERVER-DERIVED cells of the successfully-saved recompute-driving
+		// writes (never a browser value), recompute phase→job once each, and
+		// classify each id recomputed | frozen | failed. ratingFresh per cell folds
+		// in the worst of its phase + job result.
+		phaseRes := recomputeIDs(ctx, deps.ComputePhaseOutcome, recomputePhaseIDs(acks))
+		jobRes := recomputeIDs(ctx, deps.ComputeJobOutcome, recomputeJobIDs(acks))
 
 		if !cellMode {
 			// Legacy aggregate response (manual batch / a11y retry fallback).
@@ -315,7 +334,9 @@ type cellAck struct {
 	ok         bool
 	outcomeID  string
 	value      string
-	academic   bool
+	numeric    bool   // the criterion carries a numeric value (roll-up candidate)
+	criteriaID string // outcome_criteria id — matched against the phase's in-scope set
+	drives     bool   // graph-derived: this save drives a scaled-summary recompute
 	jobPhaseID string
 	jobID      string
 	errMsg     string // set only when !ok (bounded, never echoes the value)
@@ -354,16 +375,61 @@ func recomputeIDs(ctx context.Context, fn func(context.Context, string) (bool, e
 	return out
 }
 
-// academicPhaseIDs / academicJobIDs dedup the trusted phase/job ids of the
-// successfully-saved academic cells (empty ids excluded).
-func academicPhaseIDs(acks []cellAck) []string { return dedupIDs(acks, func(a cellAck) string { return a.jobPhaseID }) }
-func academicJobIDs(acks []cellAck) []string   { return dedupIDs(acks, func(a cellAck) string { return a.jobID }) }
+// markRecomputeDrivers sets ack.drives for every successfully-saved numeric cell
+// by asking the scoring graph whether its phase drives a scaled-summary recompute
+// and its criterion participates in that scheme's active component graph. The
+// per-phase lookup is memoized. When the closure is nil or errors, the phase
+// degrades to "eligible with no in-scope filter" so numeric cells still drive
+// recompute exactly as the prior type-based classification did — a save never
+// silently stops refreshing summaries.
+func markRecomputeDrivers(ctx context.Context, elig func(context.Context, string) (bool, map[string]bool, error), acks []cellAck) {
+	type phaseElig struct {
+		eligible bool
+		inScope  map[string]bool // nil ⇒ no per-criterion filter (fallback)
+	}
+	cache := make(map[string]phaseElig)
+	resolve := func(phaseID string) phaseElig {
+		if phaseID == "" {
+			return phaseElig{}
+		}
+		if pe, ok := cache[phaseID]; ok {
+			return pe
+		}
+		pe := phaseElig{eligible: true} // fallback: eligible, no filter
+		if elig != nil {
+			if ok, inScope, err := elig(ctx, phaseID); err != nil {
+				log.Printf("[outcome-matrix] recompute-eligibility lookup failed for phase %s: %v", phaseID, err)
+			} else {
+				pe = phaseElig{eligible: ok, inScope: inScope}
+			}
+		}
+		cache[phaseID] = pe
+		return pe
+	}
+	for i := range acks {
+		a := &acks[i]
+		if !a.ok || !a.numeric {
+			continue
+		}
+		pe := resolve(a.jobPhaseID)
+		a.drives = pe.eligible && (pe.inScope == nil || pe.inScope[a.criteriaID])
+	}
+}
+
+// recomputePhaseIDs / recomputeJobIDs dedup the trusted phase/job ids of the
+// successfully-saved recompute-driving cells (empty ids excluded).
+func recomputePhaseIDs(acks []cellAck) []string {
+	return dedupIDs(acks, func(a cellAck) string { return a.jobPhaseID })
+}
+func recomputeJobIDs(acks []cellAck) []string {
+	return dedupIDs(acks, func(a cellAck) string { return a.jobID })
+}
 
 func dedupIDs(acks []cellAck, pick func(cellAck) string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, a := range acks {
-		if !a.ok || !a.academic {
+		if !a.ok || !a.drives {
 			continue
 		}
 		if id := pick(a); id != "" && !seen[id] {
@@ -394,7 +460,7 @@ func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult) view.Vi
 			items = append(items, it)
 			continue
 		}
-		if a.academic {
+		if a.drives {
 			// Fold the worst of the phase + job recompute result. A failure on
 			// either → stale; a frozen skip on the job → fresh but flagged.
 			worst := recOK
@@ -410,8 +476,11 @@ func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult) view.Vi
 				it.RatingNotRecomputed = "authoritative_frozen"
 			}
 		} else {
-			// Non-academic (deportment/text) cell: no roll-up rating to refresh.
-			it.RatingNotRecomputed = "non_academic"
+			// Drives no scaled summary (a non-numeric cell, or a numeric ledger
+			// cell whose scheme has no score scale / whose criterion is outside the
+			// component graph): the value saved, but there is no roll-up rating to
+			// refresh — never reported stale.
+			it.RatingNotRecomputed = "not_applicable"
 		}
 		items = append(items, it)
 	}
@@ -432,11 +501,13 @@ func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult) view.Vi
 	}
 }
 
-// isAcademic reports whether a criterion drives an academic (score-scaled)
-// roll-up — only numeric criteria do. Deportment/text/categorical criteria have
-// no scaled phase/job summary, so their cells are never recomputed (and never
-// reported stale).
-func isAcademic(ct enums.CriteriaType) bool {
+// isNumericCriteria reports whether a criterion carries a numeric value. Only
+// numeric cells can drive a scaled-summary roll-up; whether one ACTUALLY drives a
+// recompute is decided from the scoring graph (RecomputeEligibility), never from
+// the type alone — a numeric ledger criterion is numeric yet drives no scaled
+// summary. Text/categorical/pass-fail cells are never numeric and never
+// recomputed.
+func isNumericCriteria(ct enums.CriteriaType) bool {
 	switch ct {
 	case enums.CriteriaType_CRITERIA_TYPE_NUMERIC_RANGE, enums.CriteriaType_CRITERIA_TYPE_NUMERIC_SCORE:
 		return true

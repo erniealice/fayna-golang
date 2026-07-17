@@ -1,0 +1,81 @@
+{
+  "scalars": [
+    "lead_staff_name_display",
+    "client_name_display",
+    "subscription_group_name_display",
+    "price_schedule_name_display",
+    "price_schedule_name_spaced_display",
+    "client_attributes.lrn",
+    "printed_by_name",
+    "printed_at_long",
+    "job_categories.homeroom_deportment.job_template_phases.s1.phase_outcome_summary_scaled_label",
+    "job_categories.homeroom_deportment.job_template_phases.s2.phase_outcome_summary_scaled_label",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m07.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m08.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m09.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m10.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m11.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m12.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m01.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m02.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m03.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m04.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m05.task_outcomes.school_days.numeric_value",
+    "job_categories.homeroom_deportment.task_outcomes.school_days.numeric_value_total_derived",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m07.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m08.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m09.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m10.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m11.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m12.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m01.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m02.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m03.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m04.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m05.task_outcomes.days_present.numeric_value",
+    "job_categories.homeroom_deportment.task_outcomes.days_present.numeric_value_total_derived",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m07.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m08.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m09.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m10.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m11.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m12.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m01.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m02.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m03.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m04.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.job_template_phases.s2.job_template_tasks.m05.task_outcomes.times_tardy.numeric_value",
+    "job_categories.homeroom_deportment.task_outcomes.times_tardy.numeric_value_total_derived"
+  ],
+  "loops": {
+    "job_categories.academic.jobs": {
+      "scalars": [
+        "job_template_name_display",
+        "staff_line_display",
+        "job_outcome_summary_scaled_label",
+        "job_template_phases.s1.phase_outcome_summary_scaled_label",
+        "job_template_phases.s2.phase_outcome_summary_scaled_label",
+        "job_template_phases.s1.task_outcome_numeric_value_total_derived",
+        "job_template_phases.s2.task_outcome_numeric_value_total_derived"
+      ],
+      "loops": {
+        "outcome_criteria": {
+          "scalars": [
+            "outcome_criteria_label_display",
+            "job_template_phases.s1.task_outcome_numeric_value_max_derived",
+            "job_template_phases.s2.task_outcome_numeric_value_max_derived"
+          ],
+          "loops": {}
+        }
+      }
+    },
+    "job_categories.subject_deportment.jobs": {
+      "scalars": [
+        "job_template_name_display",
+        "job_template_phases.s1.phase_outcome_summary_scaled_label",
+        "job_template_phases.s2.phase_outcome_summary_scaled_label"
+      ],
+      "loops": {}
+    }
+  }
+}

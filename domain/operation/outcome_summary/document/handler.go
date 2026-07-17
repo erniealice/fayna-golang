@@ -34,6 +34,7 @@ import (
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
@@ -107,6 +108,11 @@ type Deps struct {
 	ListJobOutcomeSummarys        func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
 	ListPhaseOutcomeSummarysByJob func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
 	ListJobPhases                 func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	// ListJobTemplatePhasesByTemplate resolves a job_template's phases (with their
+	// stable `code`, projected by the specialized SQL) so the block tree can key
+	// per-phase leaves by phase code via job_phase.template_phase_id. Optional/
+	// nil-safe: a missing closure leaves every phase key blank.
+	ListJobTemplatePhasesByTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
 	// ListJobOutcomeLines is retained for a potential per-subject fallback; the
 	// per-criterion transcript now reads task_outcome (see below) since
 	// job_outcome_line on education1 is per-subject only.
@@ -118,9 +124,14 @@ type Deps struct {
 	// template_task_criteria.sequence_order. Scoped to THIS card's jobs (no
 	// cross-AY accumulation). All nil-safe: a missing closure leaves the
 	// criterion columns blank.
-	ListJobTasks              func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
-	ListTaskOutcomes          func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
-	ListTemplateTaskCriterias func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
+	ListJobTasks     func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
+	ListTaskOutcomes func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
+	// ListCodedTaskOutcomeValuesByJob is the ownership-joined latest-cell read
+	// (job → template ancestry) carrying phase/task/criterion codes for the
+	// coded-cell surface. Workspace-scoped from trusted context in the adapter;
+	// nil-safe (a missing closure leaves coded cells blank).
+	ListCodedTaskOutcomeValuesByJob func(ctx context.Context, req *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
+	ListTemplateTaskCriterias       func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
 }
 
 // NewDownloadHandler returns the per-student report-card .docx download handler.
@@ -202,7 +213,7 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 		// embedded bytes — the proven live download must not regress.
 		tpl := Template()
 		if strings.EqualFold(strings.TrimSpace(d.DocOptions.TemplateVariant), outcome_summary.TemplateVariantBlock) {
-			tpl = TemplateV3()
+			tpl = TemplateBlock()
 		}
 		if d.ResolveTemplateBytes != nil {
 			if b, rerr := d.ResolveTemplateBytes(ctx, rc.PriceScheduleID); rerr == nil && len(b) > 0 {

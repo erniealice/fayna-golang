@@ -50,6 +50,13 @@ type OutcomeMatrixModuleDeps struct {
 	ComputePhaseOutcome func(ctx context.Context, jobPhaseID string) (bool, error)
 	ComputeJobOutcome   func(ctx context.Context, jobID string) (bool, error)
 
+	// RecomputeEligibility classifies whether a saved numeric cell drives a
+	// scaled-summary recompute (graph-derived: the phase's scheme resolves a score
+	// scale and the cell's criterion is in that scheme's active component graph).
+	// Optional/nil-safe: a nil closure (or a lookup error) falls back to
+	// numeric-type classification in the record action.
+	RecomputeEligibility func(ctx context.Context, jobPhaseID string) (bool, map[string]bool, error)
+
 	// ListClients hydrates the roster's display names (the matrix's client_id
 	// rows are otherwise opaque — see list/page.go's PageViewDeps.ListClients
 	// doc comment). Same closure the job drawer's client search picker
@@ -116,8 +123,9 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		ReadTaskOutcome:     deps.ReadTaskOutcome,
 		GetOutcomeMatrix:    deps.GetOutcomeMatrix,
 		ResolveStaff:        deps.ResolveStaff,
-		ComputePhaseOutcome: deps.ComputePhaseOutcome,
-		ComputeJobOutcome:   deps.ComputeJobOutcome,
+		ComputePhaseOutcome:  deps.ComputePhaseOutcome,
+		ComputeJobOutcome:    deps.ComputeJobOutcome,
+		RecomputeEligibility: deps.RecomputeEligibility,
 	})
 
 	return &OutcomeMatrixModule{

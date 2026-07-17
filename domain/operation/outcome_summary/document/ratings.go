@@ -85,7 +85,7 @@ func fetchItemRatings(ctx context.Context, d *Deps, deportJobs []*jobpb.Job, gro
 		c.nameOf[jid] = cleanSubject(colName(tmplNames, jobTemplate[jid]))
 	}
 
-	order, _ := fetchPhaseOrders(ctx, d, ids)
+	order, _, _ := fetchPhaseOrders(ctx, d, ids)
 	pos := fetchSemesterLabels(ctx, d, ids, order)
 	for jid, byOrder := range pos {
 		if jid == groupID {
@@ -186,17 +186,87 @@ func mergeRotationPairs(c *ratingContext, academicNames map[string]bool, inactiv
 	return m
 }
 
-// buildItemRatings assembles the per-item rating table rows (rotation pairs
-// merged into one row, phase-1 strand's value in the phase-1 column) plus the
-// group rating per-phase values. Non-enrolled strands (frozen average at the
-// transmute-of-zero floor) are suppressed exactly like the academic transcript.
-func buildItemRatings(c *ratingContext, merged mergedPairs) (rows []ratingRow, groupPhase1, groupPhase2 string) {
+// deportRow is one canonical conduct (deportment) row of the item-rating
+// projection: the merged/solo display title plus the job identities that supply
+// each period's value. For a rotation pair sem1Job supplies period 1 and sem2Job
+// period 2; for a solo (unpaired) strand both are the same job. showSem1/showSem2
+// carry the per-period enrollment gate (a pair may have only one enrolled half).
+// paired marks the rotation-pair rows, whose period value additionally falls back
+// to the frozen year average (matching the v2 conduct table).
+type deportRow struct {
+	title              string
+	sem1Job, sem2Job   string
+	showSem1, showSem2 bool
+	paired             bool
+}
+
+// deportRows is the ONE canonical conduct row set: rotation pairs merged into a
+// single row (period-1 strand first), non-enrolled placeholder strands suppressed,
+// sorted by title. BOTH the v2 conduct table (buildItemRatings) and the
+// block-layout subject-deportment .jobs[] loop (deportRowTreeItem) consume this so
+// the two surfaces can never drift into split half-rows or resurrected
+// non-enrolled placeholders. Deterministic: pairs are walked in canonical-key
+// order and the whole set is title-sorted.
+func deportRows(c *ratingContext, merged mergedPairs) []deportRow {
 	if c == nil {
-		return nil, "", ""
+		return nil
 	}
 	enrolled := func(jid string) bool {
 		ev := outcome_summary.EnrollmentEvidence{HasMarks: true}
 		return !outcome_summary.IsNonEnrolledCell(ev, strings.TrimSpace(c.avg[jid]))
+	}
+	var out []deportRow
+	inPair := map[string]bool{}
+	keys := make([]string, 0, len(merged.byCanonical))
+	for k := range merged.byCanonical {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		p := merged.byCanonical[k]
+		inPair[p.sem1Job] = true
+		inPair[p.sem2Job] = true
+		e1, e2 := enrolled(p.sem1Job), enrolled(p.sem2Job)
+		if !e1 && !e2 {
+			continue
+		}
+		out = append(out, deportRow{
+			title:    p.sem1Name + " / " + p.sem2Name,
+			sem1Job:  p.sem1Job,
+			sem2Job:  p.sem2Job,
+			showSem1: e1,
+			showSem2: e2,
+			paired:   true,
+		})
+	}
+	for _, j := range c.strandJobs {
+		jid := j.GetId()
+		if inPair[jid] || !enrolled(jid) {
+			continue
+		}
+		out = append(out, deportRow{
+			title:    c.nameOf[jid],
+			sem1Job:  jid,
+			sem2Job:  jid,
+			showSem1: true,
+			showSem2: true,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return strings.ToLower(out[i].title) < strings.ToLower(out[j].title)
+	})
+	return out
+}
+
+// buildItemRatings assembles the per-item rating table rows (rotation pairs
+// merged into one row, phase-1 strand's value in the phase-1 column) plus the
+// group rating per-phase values. Non-enrolled strands (frozen average at the
+// transmute-of-zero floor) are suppressed exactly like the academic transcript.
+// Row set + order come from the shared deportRows projection; this layer only
+// formats the per-period display value (pos label, pair-only avg fallback).
+func buildItemRatings(c *ratingContext, merged mergedPairs) (rows []ratingRow, groupPhase1, groupPhase2 string) {
+	if c == nil {
+		return nil, "", ""
 	}
 	phaseValue := func(jid string, phase int32) string {
 		if v, ok := c.pos[jid][phase]; ok {
@@ -204,38 +274,24 @@ func buildItemRatings(c *ratingContext, merged mergedPairs) (rows []ratingRow, g
 		}
 		return ""
 	}
-
-	inPair := map[string]bool{}
-	for _, p := range merged.byCanonical {
-		inPair[p.sem1Job] = true
-		inPair[p.sem2Job] = true
-		e1, e2 := enrolled(p.sem1Job), enrolled(p.sem2Job)
-		if !e1 && !e2 {
-			continue
+	for _, dr := range deportRows(c, merged) {
+		row := ratingRow{Title: dr.title}
+		if dr.showSem1 {
+			v := phaseValue(dr.sem1Job, 1)
+			if dr.paired {
+				v = firstNonEmpty(v, strings.TrimSpace(c.avg[dr.sem1Job]))
+			}
+			row.Phase1 = v
 		}
-		row := ratingRow{Title: p.sem1Name + " / " + p.sem2Name}
-		if e1 {
-			row.Phase1 = firstNonEmpty(phaseValue(p.sem1Job, 1), strings.TrimSpace(c.avg[p.sem1Job]))
-		}
-		if e2 {
-			row.Phase2 = firstNonEmpty(phaseValue(p.sem2Job, 2), strings.TrimSpace(c.avg[p.sem2Job]))
+		if dr.showSem2 {
+			v := phaseValue(dr.sem2Job, 2)
+			if dr.paired {
+				v = firstNonEmpty(v, strings.TrimSpace(c.avg[dr.sem2Job]))
+			}
+			row.Phase2 = v
 		}
 		rows = append(rows, row)
 	}
-	for _, j := range c.strandJobs {
-		jid := j.GetId()
-		if inPair[jid] || !enrolled(jid) {
-			continue
-		}
-		rows = append(rows, ratingRow{
-			Title:  c.nameOf[jid],
-			Phase1: phaseValue(jid, 1),
-			Phase2: phaseValue(jid, 2),
-		})
-	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		return strings.ToLower(rows[i].Title) < strings.ToLower(rows[j].Title)
-	})
 	return rows, strings.TrimSpace(c.groupPos[1]), strings.TrimSpace(c.groupPos[2])
 }
 

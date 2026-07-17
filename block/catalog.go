@@ -604,6 +604,7 @@ func OutcomeMatrixUnit(uc *UseCases, infra *Infra, options outcome_matrix.Option
 		if infra != nil {
 			deps.ComputePhaseOutcome = infra.ComputePhaseOutcome
 			deps.ComputeJobOutcome = infra.ComputeJobOutcome
+			deps.RecomputeEligibility = infra.RecomputeEligibility
 		}
 		// Header breadcrumb back-link to the job list (the matrix's parent
 		// surface): the job unit's RESOLVED routes/labels carry the tier's

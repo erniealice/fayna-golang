@@ -35,17 +35,30 @@ const (
 	dash      = "—"
 )
 
-// criterionRow is one assessment-criterion row of a subject block on the v2
-// (block-layout) template: the lettered display label ("A - Investigating")
-// and the per-period recomputed MAX marks.
+// templateReferencedAttributeCodes is the LEAK-LAW guard for the v3 template's
+// hard-coded {{client_attributes.<code>}} placeholders. buildReportCardData seeds
+// the client_attributes map with a blank leaf for EVERY code listed here BEFORE
+// overlaying the app-configured DocumentOptions.ClientAttributeCodes values, so a
+// referenced placeholder always resolves (blank, never a verbatim leak) even when
+// a block consumer omits the code from ClientAttributeCodes. This list MUST stay
+// in sync with the {{client_attributes.<code>}} placeholders in gen_template_v3.py
+// — add a code here whenever the generator adds a new client_attributes.<code>
+// placeholder. Today the v3 artifact references exactly one such code: "lrn".
+var templateReferencedAttributeCodes = []string{"lrn"}
+
+// criterionRow is one assessment-criterion row of an item block on the
+// block-layout template: the lettered display label ("A - Investigating")
+// and the per-phase recomputed MAX marks (phase = job_phase.phase_order).
 type criterionRow struct {
-	Label string
-	Sem1  string
-	Sem2  string
+	Label  string
+	Phase1 string
+	Phase2 string
 }
 
-// subjectRow is one row of the report card (one subject / job).
-type subjectRow struct {
+// itemRow is one row of the report card (one item / job — e.g. a school
+// subject). Generic identifiers; the vertical wording lives in lyngua values
+// and the template placeholder keys.
+type itemRow struct {
 	Name      string
 	CritA     string // per-criterion (job_outcome_line sub-strands); "—" when absent
 	CritB     string
@@ -56,13 +69,13 @@ type subjectRow struct {
 	Sem2Band  string // phase_outcome_summary (phase_order 2) — recompute-equivalent
 	YearFinal string // job_outcome_summary.scaled_label — STORED, never recomputed
 
-	// v2 (block-layout) enrichments — additive; the v1 summary-table template
+	// block-layout enrichments — additive; the v1 summary-table template
 	// never references these keys.
-	Title       string         // display title (rotation pair merged, e.g. "Arts: Visual Arts / Arts: Music"); falls back to Name
-	TeacherLine string         // "Teacher: X" / "Teachers: X / Y" (label wording from lyngua)
-	Criteria    []criterionRow // ordered criterion rows with per-period marks
-	Sem1Total   string         // Σ of the period-1 per-criterion MAX; "" when no marks
-	Sem2Total   string         // Σ of the period-2 per-criterion MAX; "" when no marks
+	ItemTitle string         // display title (rotation pair merged, e.g. "Arts: Visual Arts / Arts: Music"); falls back to Name
+	StaffLine string         // "Teacher: X" / "Teachers: X / Y" (label wording from lyngua)
+	Criteria  []criterionRow // ordered criterion rows with per-phase marks
+	Sem1Total string         // Σ of the phase-1 per-criterion MAX; "" when no marks
+	Sem2Total string         // Σ of the phase-2 per-criterion MAX; "" when no marks
 }
 
 // reportCard is one client's assembled card (meta + ordered subjects). Generic
@@ -78,7 +91,7 @@ type reportCard struct {
 	LRN                string
 	PrintedBy          string
 	PrintedAt          string
-	Subjects           []subjectRow
+	Subjects           []itemRow
 	// PriceScheduleID is the section's AY anchor (subscription_group.price_schedule_id),
 	// threaded to the report-card template-binding resolver. Empty → the resolver
 	// returns the workspace-wide fallback binding (or none → embedded template).
@@ -89,26 +102,27 @@ type reportCard struct {
 	// configured or the student has no deportment data. See formation.go.
 	FormationGroups []formationGroup
 
-	// v2 (block-layout) enrichments — additive root fields; every one renders
+	// block-layout enrichments — additive root fields; every one renders
 	// blank when its source is unwired/absent (never a placeholder leak).
 	SchedulePeriodDisplay string         // "2025-2026" — the price_schedule display period (v2 key ONLY; SchedulePeriod keeps the v1 section-derived value, M4)
-	SchedulePeriodSpaced string          // "2025 - 2026" (cover-page variant of SchedulePeriodDisplay)
-	GradeSection         string          // "Grade 7 - Nickel" (identity-line variant of GroupLevel+SectionName)
-	Adviser              string          // group-lead staff name (the group-category job's task assignee)
-	ClientReference      string          // client_attributes.<configured code> value (e.g. LRN)
-	PrintedByName        string          // display name of the printing user; falls back to PrintedBy
-	PrintedAtLong        string          // "July 13, 2026 08:13 AM" long-form print timestamp
-	ConductRows          []conductRow    // per-subject conduct table rows (rotation pairs merged)
-	GroupConductSem1     string          // group (homeroom) conduct, period 1
-	GroupConductSem2     string          // group (homeroom) conduct, period 2
+	SchedulePeriodSpaced  string         // "2025 - 2026" (cover-page variant of SchedulePeriodDisplay)
+	GroupLabel            string         // "Grade 7 - Nickel" (subscription_group display; identity-line variant of GroupLevel+SectionName)
+	GroupLead             string         // group-lead staff name (the group-category job's task assignee)
+	ClientReference       string         // client_attributes.<configured code> value (e.g. LRN)
+	ClientAttributes      map[string]any // code → value for every configured ClientAttributeCodes entry (always present, blank when absent)
+	PrintedByName         string         // display name of the printing user; falls back to PrintedBy
+	PrintedAtLong         string         // "July 13, 2026 08:13 AM" long-form print timestamp
+	ItemRatings           []ratingRow    // per-item rating (deportment) table rows (rotation pairs merged)
+	GroupRatingPhase1     string         // group (homeroom) rating, phase 1
+	GroupRatingPhase2     string         // group (homeroom) rating, phase 2
 }
 
-// conductRow is one row of the per-subject conduct (deportment) table on the
-// formation page: the merged display title and the per-period values.
-type conductRow struct {
-	Title string
-	Sem1  string
-	Sem2  string
+// ratingRow is one row of the per-item rating (deportment) table on the
+// formation page: the merged display title and the per-phase values.
+type ratingRow struct {
+	Title  string
+	Phase1 string
+	Phase2 string
 }
 
 // buildReportCardData mirrors buildInvoiceData: it flattens the assembled card
@@ -117,16 +131,25 @@ type conductRow struct {
 // (engine leaks unresolved placeholders verbatim — G3/G5).
 func buildReportCardData(rc reportCard) map[string]any {
 	subjects := make([]any, 0, len(rc.Subjects))
+	primaryJobs := make([]any, 0, len(rc.Subjects))
 	for _, s := range rc.Subjects {
+		// v2 criteria loop (crit_*) + v3 outcome_criteria loop (phase_*_max):
+		// the same per-criterion source projected under both key sets.
 		criteria := make([]any, 0, len(s.Criteria))
+		outcomeCriteria := make([]any, 0, len(s.Criteria))
 		for _, c := range s.Criteria {
 			criteria = append(criteria, map[string]any{
 				"crit_label": orBlank(c.Label),
-				"crit_sem1":  orBlank(c.Sem1),
-				"crit_sem2":  orBlank(c.Sem2),
+				"crit_sem1":  orBlank(c.Phase1),
+				"crit_sem2":  orBlank(c.Phase2),
+			})
+			outcomeCriteria = append(outcomeCriteria, map[string]any{
+				"outcome_criteria_label_display": orBlank(c.Label),
+				"phase_1_max_derived":            orBlank(c.Phase1),
+				"phase_2_max_derived":            orBlank(c.Phase2),
 			})
 		}
-		title := orBlank(s.Title)
+		title := orBlank(s.ItemTitle)
 		if title == "" {
 			title = orBlank(s.Name)
 		}
@@ -142,19 +165,52 @@ func buildReportCardData(rc reportCard) map[string]any {
 			"myp_overall":    orDash(s.YearFinal),
 			// v2 block-layout keys (additive; unreferenced by the v1 template).
 			"subject_title": title,
-			"teacher_line":  orBlank(s.TeacherLine),
+			"teacher_line":  orBlank(s.StaffLine),
 			"criteria":      criteria,
 			"sem1_total":    orBlank(s.Sem1Total),
 			"sem2_total":    orBlank(s.Sem2Total),
 		})
+		// v3 primary_jobs item map (proto-grounded generic keys). Blank-handling
+		// mirrors the v2 emissions above so the rendered output is identical.
+		primaryJobs = append(primaryJobs, map[string]any{
+			"job_template_name_display":        title,
+			"staff_line_display":               orBlank(s.StaffLine),
+			"phase_1_scaled_label":             orDash(s.Sem1Band),
+			"phase_2_scaled_label":             orDash(s.Sem2Band),
+			"phase_1_criteria_total_derived":   orBlank(s.Sem1Total),
+			"phase_2_criteria_total_derived":   orBlank(s.Sem2Total),
+			"job_outcome_summary_scaled_label": orDash(s.YearFinal),
+			"outcome_criteria":                 outcomeCriteria,
+		})
 	}
-	conduct := make([]any, 0, len(rc.ConductRows))
-	for _, r := range rc.ConductRows {
+	conduct := make([]any, 0, len(rc.ItemRatings))
+	secondaryJobs := make([]any, 0, len(rc.ItemRatings))
+	for _, r := range rc.ItemRatings {
 		conduct = append(conduct, map[string]any{
 			"conduct_title": orBlank(r.Title),
-			"conduct_sem1":  orBlank(r.Sem1),
-			"conduct_sem2":  orBlank(r.Sem2),
+			"conduct_sem1":  orBlank(r.Phase1),
+			"conduct_sem2":  orBlank(r.Phase2),
 		})
+		// v3 secondary_jobs item map — the item-scope keys are deliberately
+		// reused across the two job loops (the engine isolates loop scopes).
+		secondaryJobs = append(secondaryJobs, map[string]any{
+			"job_template_name_display": orBlank(r.Title),
+			"phase_1_scaled_label":      orBlank(r.Phase1),
+			"phase_2_scaled_label":      orBlank(r.Phase2),
+		})
+	}
+	// client_attributes is ALWAYS a map (never nil) that carries a blank leaf for
+	// EVERY code the v3 template can reference — enforced HERE at the builder,
+	// independent of any consumer's DocumentOptions.ClientAttributeCodes — so a
+	// hard-coded {{client_attributes.<code>}} placeholder can never leak (HIGH#2).
+	// Seed the template-referenced codes blank first, THEN overlay the resolved
+	// per-client values (a real value wins over the seeded blank).
+	clientAttributes := map[string]any{}
+	for _, code := range templateReferencedAttributeCodes {
+		clientAttributes[code] = ""
+	}
+	for code, val := range rc.ClientAttributes {
+		clientAttributes[code] = val
 	}
 	return map[string]any{
 		"school_name":      orBlank(rc.DocumentHeaderName),
@@ -167,17 +223,29 @@ func buildReportCardData(rc reportCard) map[string]any {
 		"printed_at":       orBlank(rc.PrintedAt),
 		"subjects":         subjects,
 		"formation_groups": formationData(rc.FormationGroups),
-		// v2 block-layout root keys (additive).
+		// v2 block-layout root keys (additive; EMITTED KEY STRINGS unchanged).
 		"academic_year_display": orBlank(firstNonEmpty(rc.SchedulePeriodDisplay, rc.SchedulePeriod)),
 		"academic_year_spaced":  orBlank(rc.SchedulePeriodSpaced),
-		"grade_section":        orBlank(rc.GradeSection),
-		"adviser":              orBlank(rc.Adviser),
-		"client_reference":     orBlank(rc.ClientReference),
-		"printed_by_name":      orBlank(firstNonEmpty(rc.PrintedByName, rc.PrintedBy)),
-		"printed_at_long":      orBlank(firstNonEmpty(rc.PrintedAtLong, rc.PrintedAt)),
-		"conduct_rows":         conduct,
-		"group_conduct_sem1":   orBlank(rc.GroupConductSem1),
-		"group_conduct_sem2":   orBlank(rc.GroupConductSem2),
+		"grade_section":         orBlank(rc.GroupLabel),
+		"adviser":               orBlank(rc.GroupLead),
+		"client_reference":      orBlank(rc.ClientReference),
+		"printed_by_name":       orBlank(firstNonEmpty(rc.PrintedByName, rc.PrintedBy)),
+		"printed_at_long":       orBlank(firstNonEmpty(rc.PrintedAtLong, rc.PrintedAt)),
+		"conduct_rows":          conduct,
+		"group_conduct_sem1":    orBlank(rc.GroupRatingPhase1),
+		"group_conduct_sem2":    orBlank(rc.GroupRatingPhase2),
+		// v3 proto-grounded generic root keys (additive). The v3 template reads
+		// these; the v1/v2 templates ignore them. Every scalar always emitted.
+		"price_schedule_name_display":        orBlank(firstNonEmpty(rc.SchedulePeriodDisplay, rc.SchedulePeriod)),
+		"price_schedule_name_spaced_display": orBlank(rc.SchedulePeriodSpaced),
+		"client_name_display":                orBlank(rc.ClientName),
+		"subscription_group_name_display":    orBlank(rc.GroupLabel),
+		"lead_staff_name_display":            orBlank(rc.GroupLead),
+		"client_attributes":                  clientAttributes,
+		"group_phase_1_scaled_label":         orBlank(rc.GroupRatingPhase1),
+		"group_phase_2_scaled_label":         orBlank(rc.GroupRatingPhase2),
+		"primary_jobs":                       primaryJobs,
+		"secondary_jobs":                     secondaryJobs,
 	}
 }
 
@@ -272,7 +340,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	// conduct-category strands ("Arts: Visual Arts", "Arts: Music") identify the
 	// per-period variants renders under the merged pair title. The conduct table
 	// reuses the same pairing.
-	conduct := fetchConduct(ctx, d, deportJobs, groupJob, historical)
+	conduct := fetchItemRatings(ctx, d, deportJobs, groupJob, historical)
 	academicNames := map[string]bool{}
 	for _, jid := range jobIDs {
 		academicNames[strings.ToLower(cleanSubject(colName(tmplNames, jobTemplate[jid])))] = true
@@ -293,7 +361,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		return a < b
 	})
 
-	rows := make([]subjectRow, 0, len(entries))
+	rows := make([]itemRow, 0, len(entries))
 	for _, e := range entries {
 		sem := semByJob[e.jobID]
 		display := cleanSubject(e.name)
@@ -302,7 +370,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		// task_outcome (even an all-zero one); hasMarks distinguishes an all-zero
 		// scaffold (present, total="0") from a subject with no task_outcome at all.
 		crit, hasMarks := tr.yearCriteria()
-		row := subjectRow{
+		row := itemRow{
 			Name:     display,
 			CritA:    crit.a,
 			CritB:    crit.b,
@@ -331,9 +399,9 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		if isNonEnrolledPlaceholder(row, hasMarks) {
 			continue
 		}
-		// v2 block-layout enrichments (blank-safe when sources are unwired).
-		row.Title = merged.titleFor(display)
-		row.TeacherLine = teacherLine(d.Labels.Student, tr, staffNames)
+		// block-layout enrichments (blank-safe when sources are unwired).
+		row.ItemTitle = merged.titleFor(display)
+		row.StaffLine = staffLine(d.Labels.Student, tr, staffNames)
 		row.Criteria, row.Sem1Total, row.Sem2Total = tr.criterionRows(critNames)
 		rows = append(rows, row)
 	}
@@ -343,13 +411,13 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	// student has no deportment data.
 	formationGroups := collectFormationGroups(ctx, d, deportJobs, historical)
 
-	// Per-subject conduct rows + group conduct (v2 block layout).
-	conductRows, groupSem1, groupSem2 := buildConductRows(conduct, merged)
+	// Per-item rating rows + group rating (block layout).
+	itemRatings, groupPhase1, groupPhase2 := buildItemRatings(conduct, merged)
 
-	// Group lead ("Adviser") = the modal task assignee on the group-category job.
-	adviser := ""
+	// Group lead = the modal task assignee on the group-category job.
+	groupLead := ""
 	if groupJob != nil {
-		adviser = groupLeadName(transcripts[groupJob.GetId()], staffNames)
+		groupLead = groupLeadName(transcripts[groupJob.GetId()], staffNames)
 	}
 
 	name, ay := sectionParts(group.GetName())
@@ -371,19 +439,20 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		SchedulePeriod:        ay,
 		SchedulePeriodDisplay: displayPeriod,
 		SchedulePeriodSpaced:  strings.Replace(displayPeriod, "-", " - ", 1),
-		ClientName:           studentName(ctx, d, clientID),
-		GroupLevel:           grade,
-		SectionName:          section,
-		GradeSection:         gradeSectionLine,
-		LRN:                  "",
-		ClientReference:      fetchClientReference(ctx, d, clientID),
-		Adviser:              adviser,
-		Subjects:             rows,
-		PriceScheduleID:      group.GetPriceScheduleId(),
-		FormationGroups:      formationGroups,
-		ConductRows:          conductRows,
-		GroupConductSem1:     groupSem1,
-		GroupConductSem2:     groupSem2,
+		ClientName:            studentName(ctx, d, clientID),
+		GroupLevel:            grade,
+		SectionName:           section,
+		GroupLabel:            gradeSectionLine,
+		LRN:                   "",
+		ClientReference:       fetchClientReference(ctx, d, clientID),
+		ClientAttributes:      fetchClientAttributes(ctx, d, clientID),
+		GroupLead:             groupLead,
+		Subjects:              rows,
+		PriceScheduleID:       group.GetPriceScheduleId(),
+		FormationGroups:       formationGroups,
+		ItemRatings:           itemRatings,
+		GroupRatingPhase1:     groupPhase1,
+		GroupRatingPhase2:     groupPhase2,
 	}
 	return rc, true
 }
@@ -718,12 +787,12 @@ func (t *transcript) criterionRows(names map[string]string) ([]criterionRow, str
 		}
 		row := criterionRow{Label: label}
 		if v, ok := t.marks[cid][1]; ok {
-			row.Sem1 = fmtNum(v)
+			row.Phase1 = fmtNum(v)
 			sums[1] += v
 			has[1] = true
 		}
 		if v, ok := t.marks[cid][2]; ok {
-			row.Sem2 = fmtNum(v)
+			row.Phase2 = fmtNum(v)
 			sums[2] += v
 			has[2] = true
 		}
@@ -1119,10 +1188,11 @@ func topAssignee(tally map[string]int, avoid string) string {
 	return best
 }
 
-// teacherLine composes the per-subject staff line: one distinct assignee →
-// "Teacher: X"; two (the rotation pair, period-1 first) → "Teachers: X / Y".
-// Wording comes from the lyngua-backed labels; blank when nothing resolves.
-func teacherLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[string]string) string {
+// staffLine composes the per-item staff line: one distinct assignee →
+// "Teacher: X" (e.g.); two (the rotation pair, phase-1 first) →
+// "Teachers: X / Y". Wording comes from the lyngua-backed labels; blank when
+// nothing resolves.
+func staffLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[string]string) string {
 	if tr == nil {
 		return ""
 	}
@@ -1228,6 +1298,71 @@ func fetchClientReference(ctx context.Context, d *Deps, clientID string) string 
 	return ""
 }
 
+// fetchClientAttributes resolves the configured client_attributes.<code> map
+// (DocumentOptions.ClientAttributeCodes, e.g. ["lrn","gender"]) for the client.
+// Every configured, non-empty, dot-free code is ALWAYS present in the returned
+// map (blank when the client has no such attribute) so a
+// {{client_attributes.<code>}} placeholder never leaks. Resolution: each code →
+// ResolveAttributeIDByCode → ONE client_id-filtered ListClientAttributes pass →
+// attribute_id→code→value (first non-empty value wins). Nil-safe: a missing
+// closure leaves every configured code blank.
+func fetchClientAttributes(ctx context.Context, d *Deps, clientID string) map[string]any {
+	out := map[string]any{}
+	codeByAttrID := map[string]string{}
+	for _, raw := range d.DocOptions.ClientAttributeCodes {
+		code := strings.TrimSpace(raw)
+		// Codes must be non-empty and dot-free: a dotted code would split into
+		// extra dot-path segments in the engine and never address a flat key.
+		if code == "" || strings.Contains(code, ".") {
+			continue
+		}
+		out[code] = "" // always-present key (blank until resolved)
+		if clientID == "" || d.ResolveAttributeIDByCode == nil || d.ListClientAttributes == nil {
+			continue
+		}
+		attrID, err := d.ResolveAttributeIDByCode(ctx, code)
+		if err != nil || strings.TrimSpace(attrID) == "" {
+			continue
+		}
+		codeByAttrID[strings.TrimSpace(attrID)] = code
+	}
+	if len(codeByAttrID) == 0 || clientID == "" || d.ListClientAttributes == nil {
+		return out
+	}
+	resp, err := d.ListClientAttributes(ctx, &clientattributepb.ListClientAttributesRequest{
+		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("client_id", clientID)}},
+	})
+	if err != nil {
+		log.Printf("report card doc: list client attributes (map): %v", err)
+		return out
+	}
+	for _, ca := range resp.GetData() {
+		if !ca.GetActive() {
+			continue
+		}
+		// HIGH#1 client-isolation (defense-in-depth): client_attribute has NO
+		// workspace_id column, so its generic list cannot be workspace-scoped — an
+		// adapter that ignored the client_id filter (or returned extra rows) could
+		// otherwise surface ANOTHER client's attribute value. Re-check the row's own
+		// client_id against the requested clientID before accepting its value. The
+		// dot-free code guard above still holds.
+		if ca.GetClientId() != clientID {
+			continue
+		}
+		code, ok := codeByAttrID[strings.TrimSpace(ca.GetAttributeId())]
+		if !ok {
+			continue
+		}
+		if cur, _ := out[code].(string); cur != "" {
+			continue
+		}
+		if v := strings.TrimSpace(ca.GetValue()); v != "" {
+			out[code] = v
+		}
+	}
+	return out
+}
+
 // categoryIDByCode maps a job_category CODE to its id via the already-fetched
 // category metadata. Empty when the code is blank or unknown.
 func categoryIDByCode(cats map[string]catInfo, code string) string {
@@ -1260,7 +1395,7 @@ func categoryIDByCode(cats map[string]catInfo, code string) string {
 // A genuinely-enrolled subject with a real 0 keeps rendering: it has a positive
 // mark somewhere, a real (>1) stored final, or — for historical imports — no
 // task_outcome but a real year-final (hasMarks=false + a summary present).
-func isNonEnrolledPlaceholder(row subjectRow, hasMarks bool) bool {
+func isNonEnrolledPlaceholder(row itemRow, hasMarks bool) bool {
 	// Delegate to the shared enrollment predicate so the grid/card surfaces and
 	// the DOCX apply ONE definition of "non-enrolled placeholder". HasPositiveMark
 	// is derived from this row's already-fetched per-criterion marks (the DOCX

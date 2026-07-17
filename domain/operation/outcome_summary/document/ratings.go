@@ -1,21 +1,21 @@
 package document
 
-// deportment.go — the v2 block-layout conduct enrichment: the rotation-pair
-// merge (G1) and the per-subject / group conduct tables.
+// ratings.go — the block-layout item-rating enrichment: the rotation-pair
+// merge (G1) and the per-item / group rating (deportment) tables.
 //
-// Rotation pairs: a canonical academic subject (e.g. "Arts") is graded on ONE
-// job whose period 1 marks come from one strand variant ("Arts: Visual Arts")
-// and period 2 from the other ("Arts: Music"). The strand identities survive
-// only on the conduct-category jobs, whose names keep the "Prefix: Variant"
-// form. The merged display title lists the period-1 strand first — exactly the
-// operator's printed card ("Arts: Visual Arts / Arts: Music").
+// Rotation pairs: a canonical item (e.g. a school subject "Arts") is graded on
+// ONE job whose phase 1 marks come from one strand variant ("Arts: Visual
+// Arts") and phase 2 from the other ("Arts: Music"). The strand identities
+// survive only on the rating-category jobs, whose names keep the "Prefix:
+// Variant" form. The merged display title lists the phase-1 strand first —
+// exactly the operator's printed card ("Arts: Visual Arts / Arts: Music").
 //
-// Which strand is period 1 is decided data-first:
-//  1. the strand conduct job with a period-1 phase summary is the period-1
-//     strand (the conduct semester import writes a summary only for the
+// Which strand is phase 1 is decided data-first:
+//  1. the strand rating job with a phase-1 phase summary is the phase-1
+//     strand (the rating semester import writes a summary only for the
 //     strand's active half);
-//  2. else the strand whose name matches an INACTIVE academic job is period 2
-//     (the canonicalization deactivated the merged-in period-2 strand);
+//  2. else the strand whose name matches an INACTIVE academic job is phase 2
+//     (the canonicalization deactivated the merged-in phase-2 strand);
 //  3. else alphabetical (deterministic fallback).
 
 import (
@@ -30,10 +30,10 @@ import (
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 )
 
-// conductContext is the one-shot fetch bundle for the conduct-category jobs:
-// strand names, per-period phase summaries, frozen year averages, and the
-// group-category job's per-period summaries.
-type conductContext struct {
+// ratingContext is the one-shot fetch bundle for the rating-category jobs:
+// strand names, per-phase phase summaries, frozen year averages, and the
+// group-category job's per-phase summaries.
+type ratingContext struct {
 	strandJobs []*jobpb.Job
 	nameOf     map[string]string           // strand jobID → cleaned display name
 	pos        map[string]map[int32]string // strand jobID → phase_order → scaled label
@@ -41,11 +41,11 @@ type conductContext struct {
 	groupPos   map[int32]string            // group job phase_order → scaled label
 }
 
-// fetchConduct loads the conduct enrichment sources for the card's
+// fetchItemRatings loads the item-rating enrichment sources for the card's
 // non-academic jobs. Fully nil-safe: missing closures leave the affected maps
-// empty and every conduct field renders blank.
-func fetchConduct(ctx context.Context, d *Deps, deportJobs []*jobpb.Job, groupJob *jobpb.Job, historical bool) *conductContext {
-	c := &conductContext{
+// empty and every rating field renders blank.
+func fetchItemRatings(ctx context.Context, d *Deps, deportJobs []*jobpb.Job, groupJob *jobpb.Job, historical bool) *ratingContext {
+	c := &ratingContext{
 		nameOf:   map[string]string{},
 		pos:      map[string]map[int32]string{},
 		avg:      map[string]string{},
@@ -129,7 +129,7 @@ func (m mergedPairs) titleFor(name string) string {
 // their canonical academic subject ("Prefix") and decides the period order.
 // Only exact two-strand pairs whose prefix IS an academic subject merge;
 // anything else renders unmerged (fail-soft).
-func mergeRotationPairs(c *conductContext, academicNames map[string]bool, inactiveNames map[string]bool) mergedPairs {
+func mergeRotationPairs(c *ratingContext, academicNames map[string]bool, inactiveNames map[string]bool) mergedPairs {
 	m := mergedPairs{byCanonical: map[string]rotationPair{}}
 	if c == nil || len(c.strandJobs) == 0 {
 		return m
@@ -186,12 +186,11 @@ func mergeRotationPairs(c *conductContext, academicNames map[string]bool, inacti
 	return m
 }
 
-// buildConductRows assembles the per-subject conduct table rows (rotation
-// pairs merged into one row, period-1 strand's value in the period-1 column)
-// plus the group conduct per-period values. Non-enrolled strands (frozen
-// average at the transmute-of-zero floor) are suppressed exactly like the
-// academic transcript.
-func buildConductRows(c *conductContext, merged mergedPairs) (rows []conductRow, groupSem1, groupSem2 string) {
+// buildItemRatings assembles the per-item rating table rows (rotation pairs
+// merged into one row, phase-1 strand's value in the phase-1 column) plus the
+// group rating per-phase values. Non-enrolled strands (frozen average at the
+// transmute-of-zero floor) are suppressed exactly like the academic transcript.
+func buildItemRatings(c *ratingContext, merged mergedPairs) (rows []ratingRow, groupPhase1, groupPhase2 string) {
 	if c == nil {
 		return nil, "", ""
 	}
@@ -199,8 +198,8 @@ func buildConductRows(c *conductContext, merged mergedPairs) (rows []conductRow,
 		ev := outcome_summary.EnrollmentEvidence{HasMarks: true}
 		return !outcome_summary.IsNonEnrolledCell(ev, strings.TrimSpace(c.avg[jid]))
 	}
-	semValue := func(jid string, period int32) string {
-		if v, ok := c.pos[jid][period]; ok {
+	phaseValue := func(jid string, phase int32) string {
+		if v, ok := c.pos[jid][phase]; ok {
 			return strings.TrimSpace(v)
 		}
 		return ""
@@ -214,12 +213,12 @@ func buildConductRows(c *conductContext, merged mergedPairs) (rows []conductRow,
 		if !e1 && !e2 {
 			continue
 		}
-		row := conductRow{Title: p.sem1Name + " / " + p.sem2Name}
+		row := ratingRow{Title: p.sem1Name + " / " + p.sem2Name}
 		if e1 {
-			row.Sem1 = firstNonEmpty(semValue(p.sem1Job, 1), strings.TrimSpace(c.avg[p.sem1Job]))
+			row.Phase1 = firstNonEmpty(phaseValue(p.sem1Job, 1), strings.TrimSpace(c.avg[p.sem1Job]))
 		}
 		if e2 {
-			row.Sem2 = firstNonEmpty(semValue(p.sem2Job, 2), strings.TrimSpace(c.avg[p.sem2Job]))
+			row.Phase2 = firstNonEmpty(phaseValue(p.sem2Job, 2), strings.TrimSpace(c.avg[p.sem2Job]))
 		}
 		rows = append(rows, row)
 	}
@@ -228,10 +227,10 @@ func buildConductRows(c *conductContext, merged mergedPairs) (rows []conductRow,
 		if inPair[jid] || !enrolled(jid) {
 			continue
 		}
-		rows = append(rows, conductRow{
-			Title: c.nameOf[jid],
-			Sem1:  semValue(jid, 1),
-			Sem2:  semValue(jid, 2),
+		rows = append(rows, ratingRow{
+			Title:  c.nameOf[jid],
+			Phase1: phaseValue(jid, 1),
+			Phase2: phaseValue(jid, 2),
 		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {

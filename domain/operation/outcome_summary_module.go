@@ -190,6 +190,9 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			ListJobTemplateSummaries:     deps.ListJobTemplateSummaries,
 			ListSubscriptionGroupMembers: deps.ListSubscriptionGroupMembers,
 			ListJobs:                     deps.ListJobs,
+			// Section-visibility scoping (Options.List.ScopeByServicingGrant).
+			ListWorkspaceUsers:                  deps.ListWorkspaceUsers,
+			ListSubscriptionGroupWorkspaceUsers: deps.ListSubscriptionGroupWorkspaceUsers,
 		}),
 		Section:         sectionview.NewView(sectionDeps),
 		SectionExport:   sectionview.NewExportHandler(sectionDeps),

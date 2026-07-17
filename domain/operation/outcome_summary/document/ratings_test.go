@@ -12,7 +12,7 @@ import (
 // The rotation-pair merge: the period-1 strand (identified by its period-1
 // conduct summary) titles first — "Arts: Visual Arts / Arts: Music".
 func TestMergeRotationPairsPeriodOrder(t *testing.T) {
-	c := &conductContext{
+	c := &ratingContext{
 		nameOf: map[string]string{
 			"jva": "Arts: Visual Arts",
 			"jmu": "Arts: Music",
@@ -36,7 +36,7 @@ func TestMergeRotationPairsPeriodOrder(t *testing.T) {
 // Without conduct summaries the INACTIVE-academic-strand fallback decides the
 // period-2 strand.
 func TestMergeRotationPairsInactiveFallback(t *testing.T) {
-	c := &conductContext{
+	c := &ratingContext{
 		nameOf: map[string]string{
 			"jtle": "Design: TLE",
 			"jcom": "Design: Computer",
@@ -58,7 +58,7 @@ func TestMergeRotationPairsInactiveFallback(t *testing.T) {
 // A prefix that is NOT an academic subject never merges; a lone strand never
 // merges.
 func TestMergeRotationPairsEligibility(t *testing.T) {
-	c := &conductContext{
+	c := &ratingContext{
 		nameOf: map[string]string{
 			"j1": "Arts: Visual Arts",
 			"j2": "Arts: Music",
@@ -81,11 +81,11 @@ func TestMergeRotationPairsEligibility(t *testing.T) {
 // Conduct rows: the merged pair reads each strand's own period column; the
 // non-enrolled strand side stays blank; unpaired strands keep their per-period
 // summaries; rows sort by title.
-func TestBuildConductRows(t *testing.T) {
-	c := &conductContext{
+func TestBuildItemRatings(t *testing.T) {
+	c := &ratingContext{
 		nameOf: map[string]string{
-			"jva": "Arts: Visual Arts",
-			"jmu": "Arts: Music",
+			"jva":  "Arts: Visual Arts",
+			"jmu":  "Arts: Music",
 			"jsci": "Sciences",
 			"jkor": "Language and Literature: Korean",
 			"jfil": "Language Acquisition: Filipino",
@@ -107,18 +107,18 @@ func TestBuildConductRows(t *testing.T) {
 	m := mergedPairs{byCanonical: map[string]rotationPair{
 		"arts": {sem1Name: "Arts: Visual Arts", sem2Name: "Arts: Music", sem1Job: "jva", sem2Job: "jmu"},
 	}}
-	rows, _, _ := buildConductRows(c, m)
+	rows, _, _ := buildItemRatings(c, m)
 
 	if len(rows) != 3 {
 		t.Fatalf("rows = %d, want 3 (merged pair + Sciences + Korean; Filipino suppressed)", len(rows))
 	}
-	if rows[0].Title != "Arts: Visual Arts / Arts: Music" || rows[0].Sem1 != "100" || rows[0].Sem2 != "98" {
+	if rows[0].Title != "Arts: Visual Arts / Arts: Music" || rows[0].Phase1 != "100" || rows[0].Phase2 != "98" {
 		t.Fatalf("merged row = %+v", rows[0])
 	}
 	if rows[1].Title != "Language and Literature: Korean" {
 		t.Fatalf("sort order: rows[1] = %+v", rows[1])
 	}
-	if rows[2].Title != "Sciences" || rows[2].Sem1 != "100" || rows[2].Sem2 != "80" {
+	if rows[2].Title != "Sciences" || rows[2].Phase1 != "100" || rows[2].Phase2 != "80" {
 		t.Fatalf("Sciences row = %+v", rows[2])
 	}
 }
@@ -128,10 +128,10 @@ func TestBuildConductRows(t *testing.T) {
 func TestTranscriptCriterionRowsAndYearCollapse(t *testing.T) {
 	tr := &transcript{
 		marks: map[string]map[int32]float64{
-			"oc-investigating":        {1: 7, 2: 4},
-			"oc-developing":           {1: 4, 2: 3},
-			"oc-creating-performing":  {1: 5, 2: 4},
-			"oc-evaluating":           {1: 7, 2: 3},
+			"oc-investigating":       {1: 7, 2: 4},
+			"oc-developing":          {1: 4, 2: 3},
+			"oc-creating-performing": {1: 5, 2: 4},
+			"oc-evaluating":          {1: 7, 2: 3},
 		},
 		seq: map[string]int32{
 			"oc-investigating": 1, "oc-developing": 2,
@@ -148,7 +148,7 @@ func TestTranscriptCriterionRowsAndYearCollapse(t *testing.T) {
 	if len(rows) != 4 {
 		t.Fatalf("rows = %d", len(rows))
 	}
-	if rows[0].Label != "A - Investigating" || rows[0].Sem1 != "7" || rows[0].Sem2 != "4" {
+	if rows[0].Label != "A - Investigating" || rows[0].Phase1 != "7" || rows[0].Phase2 != "4" {
 		t.Fatalf("row A = %+v", rows[0])
 	}
 	if rows[2].Label != "C - Creating/performing" {
@@ -165,7 +165,7 @@ func TestTranscriptCriterionRowsAndYearCollapse(t *testing.T) {
 
 // The teacher line: rotation pair (tie in period 2 prefers the non-period-1
 // assignee) vs single-teacher subject.
-func TestTeacherLine(t *testing.T) {
+func TestStaffLine(t *testing.T) {
 	labels := outcome_summary.PeriodLabels{StaffLabel: "Teacher:", StaffPluralLabel: "Teachers:"}
 	names := map[string]string{"sP": "Alexis Purisima", "sC": "Darianne Cabornay"}
 
@@ -173,23 +173,23 @@ func TestTeacherLine(t *testing.T) {
 		1: {"sP": 1},
 		2: {"sP": 1, "sC": 1}, // tie → prefer the non-period-1 assignee
 	}}
-	if got := teacherLine(labels, pair, names); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
+	if got := staffLine(labels, pair, names); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
 		t.Fatalf("pair line = %q", got)
 	}
 
 	single := &transcript{teachers: map[int32]map[string]int{
 		1: {"sP": 1}, 2: {"sP": 1},
 	}}
-	if got := teacherLine(labels, single, names); got != "Teacher: Alexis Purisima" {
+	if got := staffLine(labels, single, names); got != "Teacher: Alexis Purisima" {
 		t.Fatalf("single line = %q", got)
 	}
 
-	if got := teacherLine(labels, nil, names); got != "" {
+	if got := staffLine(labels, nil, names); got != "" {
 		t.Fatalf("nil transcript line = %q", got)
 	}
 }
 
-// jobsFromNames builds the minimal strand-job slice for conductContext tests
+// jobsFromNames builds the minimal strand-job slice for ratingContext tests
 // (deterministic id order; only GetId() is consumed by the code under test).
 func jobsFromNames(names map[string]string) []*jobpb.Job {
 	ids := make([]string, 0, len(names))

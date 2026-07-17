@@ -87,13 +87,13 @@ func TestMemberSubscription_HistoricalAccepted(t *testing.T) {
 func TestIsNonEnrolledPlaceholder(t *testing.T) {
 	cases := []struct {
 		name     string
-		row      subjectRow
+		row      itemRow
 		hasMarks bool
 		want     bool // true = placeholder (suppressed from the DOCX)
 	}{
 		{
 			name: "non-enrolled untaken elective all-zero scaffold suppressed",
-			row: subjectRow{
+			row: itemRow{
 				Name: "Korean", CritA: "0", CritB: "0", CritC: "0", CritD: "0",
 				Total: "0", YearFinal: "1", // transmute-of-zero floor, not evidence
 			},
@@ -102,7 +102,7 @@ func TestIsNonEnrolledPlaceholder(t *testing.T) {
 		},
 		{
 			name: "enrolled subject real zero protected by a positive criterion mark",
-			row: subjectRow{
+			row: itemRow{
 				Name: "Mathematics", CritA: "0", CritB: "0", CritC: "0", CritD: "5",
 				Total: "5", YearFinal: "0",
 			},
@@ -111,7 +111,7 @@ func TestIsNonEnrolledPlaceholder(t *testing.T) {
 		},
 		{
 			name: "enrolled subject all-zero criteria kept by a real non-floor semester band",
-			row: subjectRow{
+			row: itemRow{
 				Name: "Partial", CritA: "0", CritB: "0", CritC: "0", CritD: "0",
 				Total: "0", Sem1Band: "6",
 			},
@@ -120,7 +120,7 @@ func TestIsNonEnrolledPlaceholder(t *testing.T) {
 		},
 		{
 			name: "normal graded row rendered",
-			row: subjectRow{
+			row: itemRow{
 				Name: "Science", CritA: "6", CritB: "7", CritC: "5", CritD: "6",
 				Total: "24", Sem1Band: "6", Sem2Band: "7", YearFinal: "7",
 			},
@@ -129,7 +129,7 @@ func TestIsNonEnrolledPlaceholder(t *testing.T) {
 		},
 		{
 			name: "historical import no task_outcome but a real stored year-final kept",
-			row: subjectRow{
+			row: itemRow{
 				Name: "History", YearFinal: "6",
 			},
 			hasMarks: false,
@@ -137,7 +137,7 @@ func TestIsNonEnrolledPlaceholder(t *testing.T) {
 		},
 		{
 			name:     "fully blank row with no summary at all suppressed",
-			row:      subjectRow{Name: "Blank"},
+			row:      itemRow{Name: "Blank"},
 			hasMarks: false,
 			want:     true,
 		},

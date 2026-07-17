@@ -202,7 +202,7 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 		// embedded bytes — the proven live download must not regress.
 		tpl := Template()
 		if strings.EqualFold(strings.TrimSpace(d.DocOptions.TemplateVariant), outcome_summary.TemplateVariantBlock) {
-			tpl = TemplateV2()
+			tpl = TemplateV3()
 		}
 		if d.ResolveTemplateBytes != nil {
 			if b, rerr := d.ResolveTemplateBytes(ctx, rc.PriceScheduleID); rerr == nil && len(b) > 0 {
@@ -323,7 +323,7 @@ func reportCardPDFFilename(rc *reportCard) string {
 }
 
 // contentDisposition builds an attachment Content-Disposition with BOTH an
-// ASCII-safe filename="" fallback and an RFC-5987 filename*=UTF-8'' form, so
+// ASCII-safe filename="" fallback and an RFC-5987 filename*=UTF-8” form, so
 // names with spaces/commas/non-ASCII (student names) download correctly across
 // browsers without header injection.
 func contentDisposition(name string) string {

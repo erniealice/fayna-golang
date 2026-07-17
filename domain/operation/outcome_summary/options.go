@@ -53,6 +53,13 @@ type DocumentOptions struct {
 	// prints as the client's reference number on the document identity line
 	// (e.g. "lrn"). Empty = blank reference.
 	ClientReferenceAttributeCode string
+	// ClientAttributeCodes are the attribute CODES exposed generically to the
+	// document as the {{client_attributes.<code>}} map (e.g. ["lrn","gender"]).
+	// Each configured, non-empty, dot-free code is ALWAYS present in the map
+	// (blank when the client has no value) so the placeholder never leaks.
+	// Codes are per-workspace data supplied by the consuming app; the package
+	// treats them as opaque attribute.code lookups (ResolveAttributeIDByCode).
+	ClientAttributeCodes []string
 	// TemplateVariant selects the EMBEDDED fallback template the document
 	// handler renders when no operator-uploaded binding resolves.
 	// "" (zero value) = the original v1 summary layout — tiers that set no
@@ -82,6 +89,16 @@ type TabOptions struct {
 // ignored by the view, which then renders its default flat list — Q-LIST-5).
 type ListOptions struct {
 	Entity string
+	// ScopeByServicingGrant, when true, confines the section landing to the
+	// sections the ACTING principal holds an active servicing grant
+	// (subscription_group_workspace_user, sgwu) on — fail-closed section
+	// visibility (a principal with no grant sees zero sections). A principal
+	// holding the workspace:list capability (operator/superadmin) BYPASSES the
+	// filter and sees every section. Empty/false = today's unscoped landing
+	// (service-admin, zero-valued, is unaffected). Generic: the grant family is
+	// the cross-vertical `*_workspace_user` ACCESS axis (visibility resolver),
+	// distinct from the delivery/StaffScope row axis that already scopes grades.
+	ScopeByServicingGrant bool
 }
 
 // RowOptions — view-2 row presentation, same semantics as outcome_matrix rows.

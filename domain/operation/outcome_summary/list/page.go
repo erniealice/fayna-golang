@@ -9,18 +9,22 @@ import (
 
 	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
+	"github.com/erniealice/espyna-golang/consumer"
+	entityid "github.com/erniealice/espyna-golang/registry/entityid"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
+	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
 
@@ -82,6 +86,13 @@ type ListViewDeps struct {
 	// the rendered tab. Optional/nil-safe (missing → counts stay blank).
 	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
 	ListJobs                     func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+
+	// Servicing-grant scoping deps (Options.List.ScopeByServicingGrant, Option A).
+	// Resolve the acting principal → workspace_user → active sgwu grants → the
+	// sections they may see. Optional/nil-safe: BOTH nil → no scoping (the app
+	// did not opt in; the landing stays unscoped — never an accidental lockout).
+	ListWorkspaceUsers                  func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
+	ListSubscriptionGroupWorkspaceUsers func(ctx context.Context, req *subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest) (*subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersResponse, error)
 }
 
 // PageData holds the data for the outcome summary list page (flat or landing).
@@ -243,6 +254,16 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	//    listAllSchedules keeps the historical view correct.
 	groups := listAllGroups(ctx, deps)
 
+	// 3b. Section visibility (Option A, Mantra-locked 2026-07-17): confine the
+	//     landing to the sections the acting principal holds an active servicing
+	//     grant on. Opt-in (Options.List.ScopeByServicingGrant); fail-closed;
+	//     operator/superadmin (workspace:list) bypasses. This closes the HAZ-03
+	//     unscoped-list over-exposure. Row-level grade reads stay StaffScope'd
+	//     at the espyna adapter (the allow-union's delivery axis) — unchanged.
+	if deps.Options.List.ScopeByServicingGrant {
+		groups = scopeGroupsByServicingGrant(ctx, deps, groups)
+	}
+
 	// 4. counts via ONE grouped read (no N+1): subjects = distinct templates per
 	//    section, students = the section's largest per-subject cohort. The
 	//    aggregate covers ACTIVE rows only, so historical sections then fill
@@ -400,6 +421,81 @@ func listAllSchedules(ctx context.Context, deps *ListViewDeps) []*priceschedulep
 // listAllGroups returns every subscription_group (active + inactive) so
 // historical schedules' sections stay visible. Same default-active +
 // explicit-inactive merge as listAllSchedules. Nil-safe → empty slice.
+// scopeGroupsByServicingGrant filters the section groups to those the acting
+// principal holds an ACTIVE servicing grant (sgwu) on — the fail-closed
+// section-visibility gate (Option A / visibility-resolver ACCESS axis).
+//
+// Bypass: an operator/superadmin (holds workspace:list, the resolver's scope=ALL
+// capability) sees every section. Every other principal is confined to their
+// granted sections; a principal with no resolvable identity or zero grants sees
+// ZERO sections (fail-closed — never a fall-open to the full set).
+//
+// Nil-safe: if either scoping closure is unwired the groups are returned
+// unchanged (the app opted in via the flag but did not wire the reads — treated
+// as "not configured", not a lockout). The workspace_user list adapter ignores
+// request filters (a known limitation), so we fetch active workspace_users and
+// match user_id in code (small table); sgwu is filtered by workspace_user_id.
+func scopeGroupsByServicingGrant(ctx context.Context, deps *ListViewDeps, groups []*subscriptiongrouppb.SubscriptionGroup) []*subscriptiongrouppb.SubscriptionGroup {
+	if deps.ListWorkspaceUsers == nil || deps.ListSubscriptionGroupWorkspaceUsers == nil {
+		return groups // opted-in but unwired → not configured (no scoping)
+	}
+	// Operator/superadmin bypass — sees all sections.
+	if view.GetUserPermissions(ctx).Can(entityid.Workspace, "list") {
+		return groups
+	}
+	userID := strings.TrimSpace(consumer.GetUserIDFromContext(ctx))
+	if userID == "" {
+		return nil // no identity → fail-closed
+	}
+	// acting user → workspace_user id(s). The adapter ignores filters, so match
+	// user_id in code over the (small, workspace-scoped) active set.
+	wuResp, err := deps.ListWorkspaceUsers(ctx, &workspaceuserpb.ListWorkspaceUsersRequest{})
+	if err != nil {
+		log.Printf("report cards landing: resolve workspace_user for section scoping: %v", err)
+		return nil // fail-closed
+	}
+	myWU := map[string]bool{}
+	for _, wu := range wuResp.GetData() {
+		if wu.GetActive() && wu.GetUserId() == userID && wu.GetId() != "" {
+			myWU[wu.GetId()] = true
+		}
+	}
+	if len(myWU) == 0 {
+		return nil // no workspace_user for this principal → fail-closed
+	}
+	wuIDs := make([]string, 0, len(myWU))
+	for id := range myWU {
+		wuIDs = append(wuIDs, id)
+	}
+	// active sgwu grants for those workspace_users → the granted section ids.
+	sgResp, err := deps.ListSubscriptionGroupWorkspaceUsers(ctx, &subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest{
+		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
+			listIn("workspace_user_id", wuIDs), boolEq("active", true),
+		}},
+	})
+	if err != nil {
+		log.Printf("report cards landing: list servicing grants for section scoping: %v", err)
+		return nil // fail-closed
+	}
+	granted := map[string]bool{}
+	for _, g := range sgResp.GetData() {
+		// Defense-in-depth against a filter-ignoring adapter: only honor grants
+		// whose workspace_user_id is actually the acting principal's.
+		if g.GetActive() && myWU[g.GetWorkspaceUserId()] {
+			if sid := g.GetSubscriptionGroupId(); sid != "" {
+				granted[sid] = true
+			}
+		}
+	}
+	out := groups[:0:0]
+	for _, grp := range groups {
+		if granted[grp.GetId()] {
+			out = append(out, grp)
+		}
+	}
+	return out
+}
+
 func listAllGroups(ctx context.Context, deps *ListViewDeps) []*subscriptiongrouppb.SubscriptionGroup {
 	if deps.ListSubscriptionGroups == nil {
 		return nil

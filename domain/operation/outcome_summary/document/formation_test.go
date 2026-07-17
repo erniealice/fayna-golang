@@ -172,7 +172,7 @@ func TestFormationData_Shape(t *testing.T) {
 // so the template's {{#formation_groups}} loop resolves rather than leaking).
 func TestBuildReportCardData_IncludesFormation(t *testing.T) {
 	rc := reportCard{
-		Subjects:        []subjectRow{{Name: "Science", Sem1Band: "6", Sem2Band: "7", YearFinal: "7"}},
+		Subjects:        []itemRow{{Name: "Science", Sem1Band: "6", Sem2Band: "7", YearFinal: "7"}},
 		FormationGroups: []formationGroup{{Title: "Subject Deportment", Rows: []formationRow{{Subject: "Mathematics", Average: "98"}}}},
 	}
 	m := buildReportCardData(rc)

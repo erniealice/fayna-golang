@@ -2,9 +2,12 @@ package client_card
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/pyeza-golang/types"
+	"github.com/erniealice/pyeza-golang/view"
 
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
@@ -140,6 +143,87 @@ func jobTasksFn(tasks ...*jobtaskpb.JobTask) func(context.Context, *jobtaskpb.Li
 func taskOutcomesFn(outcomes ...*taskoutcomepb.TaskOutcome) func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error) {
 	return func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error) {
 		return &taskoutcomepb.ListTaskOutcomesResponse{Data: outcomes}, nil
+	}
+}
+
+// --- W-A7: Download-PDF wired into the table primary action ------------------
+
+// TestOkPage_DownloadWiredIntoPrimaryAction pins the moved Download-PDF: when a
+// document URL exists it lands in TableConfig.PrimaryAction with Download=true,
+// the preserved rc-download-pdf test id, and the student.download_action label.
+func TestOkPage_DownloadWiredIntoPrimaryAction(t *testing.T) {
+	deps := &Deps{
+		Routes: outcome_summary.Routes{
+			ClientDocumentURL: "/rc/section/{id}/client/{client_id}/doc",
+			SectionURL:        "/rc/section/{id}",
+			ActiveNav:         "reports",
+		},
+		Labels: outcome_summary.Labels{
+			Student: outcome_summary.PeriodLabels{DownloadAction: "Download report card (PDF)"},
+		},
+	}
+	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "Grade 5 Diamond"}
+	viewCtx := &view.ViewContext{CacheVersion: "v1", CurrentPath: "/rc/section/sec-1/client/c-1"}
+	table := &types.TableConfig{ID: "report-cards-student"}
+
+	res := okPage(viewCtx, deps, group, "c-1", "Ada Lovelace", table)
+	pd, ok := res.Data.(*PageData)
+	if !ok {
+		t.Fatalf("Data is not *PageData: %T", res.Data)
+	}
+	pa := pd.Table.PrimaryAction
+	if pa == nil {
+		t.Fatal("PrimaryAction must be wired when a document URL exists")
+	}
+	if pa.Label != "Download report card (PDF)" {
+		t.Errorf("Label = %q, want the student.download_action label", pa.Label)
+	}
+	if !pa.Download {
+		t.Error("Download must be true so the body-boosted app does not intercept the download")
+	}
+	if pa.TestID != "rc-download-pdf" {
+		t.Errorf("TestID = %q, want rc-download-pdf (preserved)", pa.TestID)
+	}
+	if !strings.HasSuffix(pa.Href, "?format=pdf") {
+		t.Errorf("Href = %q, want the resolved document URL + ?format=pdf", pa.Href)
+	}
+}
+
+// TestOkPage_NoDocumentURL_NoPrimaryAction preserves the former
+// {{if .DocumentDownloadURL}} gate: no document URL ⇒ no primary action.
+func TestOkPage_NoDocumentURL_NoPrimaryAction(t *testing.T) {
+	deps := &Deps{
+		Routes: outcome_summary.Routes{SectionURL: "/rc/section/{id}"}, // ClientDocumentURL empty
+		Labels: outcome_summary.Labels{Student: outcome_summary.PeriodLabels{DownloadAction: "x"}},
+	}
+	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "S"}
+	viewCtx := &view.ViewContext{CacheVersion: "v1"}
+	table := &types.TableConfig{ID: "report-cards-student"}
+
+	res := okPage(viewCtx, deps, group, "c-1", "N", table)
+	pd := res.Data.(*PageData)
+	if pd.Table.PrimaryAction != nil {
+		t.Errorf("no document URL → no primary action; got %+v", pd.Table.PrimaryAction)
+	}
+}
+
+// TestOkPage_NilTable_NoPanic confirms a blank card (table == nil ⇒ NotComputed)
+// takes the no-URL path without a nil-pointer deref on table.PrimaryAction.
+func TestOkPage_NilTable_NoPanic(t *testing.T) {
+	deps := &Deps{
+		Routes: outcome_summary.Routes{ClientDocumentURL: "/rc/{id}/{client_id}", SectionURL: "/rc/{id}"},
+		Labels: outcome_summary.Labels{Section: outcome_summary.SectionLabels{NotComputedBanner: "not yet"}},
+	}
+	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "S"}
+	viewCtx := &view.ViewContext{CacheVersion: "v1"}
+
+	res := okPage(viewCtx, deps, group, "c-1", "N", nil)
+	pd := res.Data.(*PageData)
+	if pd.Table != nil {
+		t.Errorf("nil table must stay nil; got %+v", pd.Table)
+	}
+	if !pd.NotComputed {
+		t.Error("nil table → NotComputed true")
 	}
 }
 

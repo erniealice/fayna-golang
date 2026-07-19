@@ -92,13 +92,6 @@ type PageData struct {
 	Table           *types.TableConfig
 	NotComputed     bool
 	Banner          string
-	// DocumentDownloadURL is the per-student report-card PDF download link
-	// (ClientDocumentURL resolved for this section+client, "?format=pdf"). Empty
-	// when there are no computed grades (NotComputed) — the download endpoint
-	// would 404 — so the affordance only renders alongside the grade table.
-	DocumentDownloadURL string
-	// DownloadLabel is the lyngua-sourced link text for the PDF download.
-	DownloadLabel string
 }
 
 // NewView creates the per-student report-card view.
@@ -590,6 +583,21 @@ func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.Su
 	if strings.TrimSpace(downloadLabel) == "" {
 		downloadLabel = "Download PDF"
 	}
+	// Download-PDF lives in the table's toolbar primary-action slot (Q-R9-9),
+	// reclaiming the standalone band's row + margin. Download=true makes the
+	// toolbar anchor emit download + hx-boost="false" so the body-boosted app
+	// does not intercept the file download as an HTMX navigation (mirrors the old
+	// band's attributes). Only attached when a URL exists (no URL → no primary
+	// action), preserving the former {{if .DocumentDownloadURL}} gate; a blank
+	// card (table == nil ⇒ downloadURL == "") shows no action.
+	if downloadURL != "" {
+		table.PrimaryAction = &types.PrimaryAction{
+			Label:    downloadLabel,
+			Href:     downloadURL,
+			Download: true,
+			TestID:   "rc-download-pdf",
+		}
+	}
 	pd := &PageData{
 		PageData: types.PageData{
 			CacheVersion:        viewCtx.CacheVersion,
@@ -604,12 +612,10 @@ func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.Su
 			HeaderIcon:          "icon-award",
 			CommonLabels:        deps.CommonLabels,
 		},
-		ContentTemplate:     "outcome-summary-student-content",
-		Table:               table,
-		NotComputed:         table == nil,
-		Banner:              l.Section.NotComputedBanner,
-		DocumentDownloadURL: downloadURL,
-		DownloadLabel:       downloadLabel,
+		ContentTemplate: "outcome-summary-student-content",
+		Table:           table,
+		NotComputed:     table == nil,
+		Banner:          l.Section.NotComputedBanner,
 	}
 	return view.OK("outcome-summary-student", pd)
 }

@@ -12,11 +12,11 @@
     {{if .NotComputed}}
     {{template "alert" (dict "State" "info" "Variant" "subtle" "Message" .Banner)}}
     {{else}}
-    {{if .DocumentDownloadURL}}
-    <div class="page-content__actions" style="margin-bottom: var(--space-4, 1rem);">
-        <a href="{{.DocumentDownloadURL}}" class="btn btn-secondary btn-sm" download hx-boost="false" data-testid="rc-download-pdf">{{.DownloadLabel}}</a>
-    </div>
-    {{end}}
+    {{/* Download-PDF now lives in the table toolbar primary-action slot
+         (.Table.PrimaryAction, Download=true), reclaiming the old standalone
+         band's row + margin. Attached in okPage only when a URL exists, so the
+         no-URL → no-action semantics of the former {{if .DocumentDownloadURL}}
+         gate is preserved. */}}
     {{template "table-card" .Table}}
     {{end}}
 </div>

@@ -117,6 +117,11 @@ type reportCard struct {
 	GroupRatingPhase1     string         // group (homeroom) rating, phase 1
 	GroupRatingPhase2     string         // group (homeroom) rating, phase 2
 
+	// JobIDs is the full set of this card's active jobs (academic + deportment +
+	// group), used by the D5 render gate to test whether any feeding sheet is a
+	// data-present, workflow-entered, not-fully-published phase. Never rendered.
+	JobIDs []string
+
 	// JobCategories is the converged generic block-layout tree: job_category.code
 	// → subtree {jobs[], singleton projection}. Assembled by collectCard,
 	// flattened by buildReportCardData under the "job_categories" root key, and
@@ -504,8 +509,22 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	if grade != "" {
 		gradeSectionLine = grade + " - " + section
 	}
+	// D5 render-gate scope: every active job feeding this card (academic +
+	// deportment complement + group). A workflow-entered, data-present, not-
+	// fully-published phase under ANY of these blocks the render (409).
+	gateJobIDs := append([]string{}, jobIDs...)
+	for _, dj := range deportJobs {
+		if id := dj.GetId(); id != "" {
+			gateJobIDs = append(gateJobIDs, id)
+		}
+	}
+	if groupJob != nil && groupJob.GetId() != "" {
+		gateJobIDs = append(gateJobIDs, groupJob.GetId())
+	}
+
 	rc := &reportCard{
 		DocumentHeaderName:    strings.TrimSpace(d.DocumentHeaderName),
+		JobIDs:                gateJobIDs,
 		SchedulePeriod:        ay,
 		SchedulePeriodDisplay: displayPeriod,
 		SchedulePeriodSpaced:  strings.Replace(displayPeriod, "-", " - ", 1),

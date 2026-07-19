@@ -18,7 +18,10 @@ import (
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 )
@@ -69,6 +72,18 @@ func fullCardDeps(gen, pdf func([]byte, map[string]any) ([]byte, error)) *Deps {
 		},
 		ListClients: func(context.Context, *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error) {
 			return &clientpb.ListClientsResponse{Data: []*clientpb.Client{{Id: "stu-1", LastName: sp("Dela Cruz"), FirstName: sp("Juan")}}}, nil
+		},
+		// D5 render-gate reads (required, wired): empty phase set → the gate proves
+		// the card safe (never-workflowed) and renders. The gate now FAILS CLOSED if
+		// these are unwired (codex §B4), so the happy-path test must supply them.
+		ListJobPhases: func(context.Context, *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error) {
+			return &jobphasepb.ListJobPhasesResponse{Success: true}, nil
+		},
+		ListJobTasks: func(context.Context, *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error) {
+			return &jobtaskpb.ListJobTasksResponse{Success: true}, nil
+		},
+		ListTaskOutcomes: func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error) {
+			return &taskoutcomepb.ListTaskOutcomesResponse{Success: true}, nil
 		},
 	}
 }

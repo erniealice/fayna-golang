@@ -9,6 +9,17 @@ package outcome_matrix
 const (
 	MatrixURL = "/outcome-matrix/{id}"
 	RecordURL = "/action/outcome-matrix/{id}/record"
+
+	// Per-phase approval transition POST targets ({id} == job_template_id; the
+	// job_template_phase_id rides in the form body). Each is a real, query-free
+	// HTMX POST form signed by {{actionForm}} over its exact resolved path (the
+	// landed Q7 rowActionTokens table path does NOT cover these bar buttons —
+	// codex fresh finding). All live under /action/* so the CSRF + action-
+	// workspace guards apply exactly as for RecordURL.
+	SubmitURL  = "/action/outcome-matrix/{id}/submit"
+	VerifyURL  = "/action/outcome-matrix/{id}/verify"
+	PublishURL = "/action/outcome-matrix/{id}/publish"
+	ReturnURL  = "/action/outcome-matrix/{id}/return"
 )
 
 // Routes holds all route paths for the outcome matrix view.
@@ -19,6 +30,12 @@ type Routes struct {
 
 	MatrixURL string `json:"matrix_url"`
 	RecordURL string `json:"record_url"`
+
+	// Per-phase approval transition routes.
+	SubmitURL  string `json:"submit_url"`
+	VerifyURL  string `json:"verify_url"`
+	PublishURL string `json:"publish_url"`
+	ReturnURL  string `json:"return_url"`
 }
 
 // DefaultRoutes returns a Routes populated from the package-level route
@@ -30,13 +47,22 @@ func DefaultRoutes() Routes {
 
 		MatrixURL: MatrixURL,
 		RecordURL: RecordURL,
+
+		SubmitURL:  SubmitURL,
+		VerifyURL:  VerifyURL,
+		PublishURL: PublishURL,
+		ReturnURL:  ReturnURL,
 	}
 }
 
 // RouteMap returns a map of dot-notation keys to route paths.
 func (r Routes) RouteMap() map[string]string {
 	return map[string]string{
-		"outcome_matrix.matrix": r.MatrixURL,
-		"outcome_matrix.record": r.RecordURL,
+		"outcome_matrix.matrix":  r.MatrixURL,
+		"outcome_matrix.record":  r.RecordURL,
+		"outcome_matrix.submit":  r.SubmitURL,
+		"outcome_matrix.verify":  r.VerifyURL,
+		"outcome_matrix.publish": r.PublishURL,
+		"outcome_matrix.return":  r.ReturnURL,
 	}
 }

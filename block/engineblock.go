@@ -188,6 +188,21 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.JobPhase.UpdateJobPhase = op.JobPhase.UpdateJobPhase.Execute
 			result.Operation.JobPhase.DeleteJobPhase = op.JobPhase.DeleteJobPhase.Execute
 			result.Operation.JobPhase.ListJobPhases = op.JobPhase.ListJobPhases.Execute
+			// Per-phase approval transitions (approval bar). Nil-guarded: a build
+			// that did not construct these leaves the bar actions unwired (fail
+			// closed) rather than panicking here.
+			if op.JobPhase.SubmitJobPhaseApproval != nil {
+				result.Operation.JobPhase.SubmitJobPhaseApproval = op.JobPhase.SubmitJobPhaseApproval.Execute
+			}
+			if op.JobPhase.VerifyJobPhaseApproval != nil {
+				result.Operation.JobPhase.VerifyJobPhaseApproval = op.JobPhase.VerifyJobPhaseApproval.Execute
+			}
+			if op.JobPhase.PublishJobPhaseApproval != nil {
+				result.Operation.JobPhase.PublishJobPhaseApproval = op.JobPhase.PublishJobPhaseApproval.Execute
+			}
+			if op.JobPhase.ReturnJobPhaseApproval != nil {
+				result.Operation.JobPhase.ReturnJobPhaseApproval = op.JobPhase.ReturnJobPhaseApproval.Execute
+			}
 		}
 
 		if op.JobTask != nil {

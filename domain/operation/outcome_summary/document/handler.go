@@ -201,6 +201,25 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			return
 		}
 
+		// D5 render gate (plan §4.4 / codex-p3-review §B4): a LIVE render must not
+		// re-issue a card drawn from a sheet whose grades have entered the approval
+		// workflow but are not yet fully PUBLISHED (mixed / returned / for-review /
+		// verified), evaluated over the FULL template-phase sheet S. Never-workflowed
+		// backfill sheets keep rendering; republish clears the gate. FAIL CLOSED: an
+		// unprovable sheet (nil dep / list error / permission denial) returns 503, a
+		// proven-unsafe sheet returns 409 — a document-issuance integrity boundary.
+		blocked, gateErr := reportRenderStatus(ctx, d, rc.JobIDs)
+		if gateErr != nil {
+			log.Printf("report render gate: cannot prove sheet safe: %v", gateErr)
+			http.Error(w, "report card cannot be generated right now — please retry", http.StatusServiceUnavailable)
+			return
+		}
+		if blocked {
+			msg := firstNonEmpty(d.Labels.Errors.RenderGate, "This report card cannot be generated yet — its grades have not been published.")
+			http.Error(w, msg, http.StatusConflict)
+			return
+		}
+
 		if rc.DocumentHeaderName == "" {
 			rc.DocumentHeaderName = firstNonEmpty(d.Labels.Landing.Title, "Report Card")
 		}

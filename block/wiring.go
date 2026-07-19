@@ -248,6 +248,17 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	deps.GetOutcomeMatrix = om.GetOutcomeMatrix
 	deps.ResolveStaff = om.ResolveStaff
 
+	// Per-phase approval transitions backing the approval bar (plan §4.2). These
+	// route through the espyna job_phase transition use cases (full-set authz, D7
+	// ownership / admin override, ancestry+workspace, hard-freeze, exact-set
+	// compare) — never raw SQL from the view. Nil-safe (a build without them
+	// leaves the bar actions unwired / fail-closed).
+	jp := &u.Operation.JobPhase
+	deps.SubmitJobPhaseApproval = jp.SubmitJobPhaseApproval
+	deps.VerifyJobPhaseApproval = jp.VerifyJobPhaseApproval
+	deps.PublishJobPhaseApproval = jp.PublishJobPhaseApproval
+	deps.ReturnJobPhaseApproval = jp.ReturnJobPhaseApproval
+
 	// Batch-save write path routes through the typed task_outcome CRUD use cases
 	// (Read backs the IDOR ownership check; Update/Create apply the values).
 	to := &u.Operation.TaskOutcome

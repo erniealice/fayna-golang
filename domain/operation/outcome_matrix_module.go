@@ -13,6 +13,7 @@ import (
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
@@ -31,6 +32,14 @@ type OutcomeMatrixModuleDeps struct {
 	CommonLabels pyeza.CommonLabels
 
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
+
+	// Per-phase approval transition use cases (plan §4.2). Back the approval-bar
+	// POST forms; each carries only the trusted sheet identity (actor + workspace
+	// from context). Optional/nil-safe: a nil closure fails the bar action closed.
+	SubmitJobPhaseApproval  func(ctx context.Context, req *jobphasepb.SubmitJobPhaseApprovalRequest) (*jobphasepb.SubmitJobPhaseApprovalResponse, error)
+	VerifyJobPhaseApproval  func(ctx context.Context, req *jobphasepb.VerifyJobPhaseApprovalRequest) (*jobphasepb.VerifyJobPhaseApprovalResponse, error)
+	PublishJobPhaseApproval func(ctx context.Context, req *jobphasepb.PublishJobPhaseApprovalRequest) (*jobphasepb.PublishJobPhaseApprovalResponse, error)
+	ReturnJobPhaseApproval  func(ctx context.Context, req *jobphasepb.ReturnJobPhaseApprovalRequest) (*jobphasepb.ReturnJobPhaseApprovalResponse, error)
 
 	CreateTaskOutcome func(ctx context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, error)
 	UpdateTaskOutcome func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error)
@@ -91,9 +100,13 @@ type OutcomeMatrixModuleDeps struct {
 
 // OutcomeMatrixModule holds the constructed outcome matrix views.
 type OutcomeMatrixModule struct {
-	routes outcomematrixpkg.Routes
-	Matrix view.View // GET — the grid page
-	Record view.View // POST — batch save
+	routes  outcomematrixpkg.Routes
+	Matrix  view.View // GET — the grid page
+	Record  view.View // POST — batch save
+	Submit  view.View // POST — approval: IN_PROGRESS → FOR_REVIEW
+	Verify  view.View // POST — approval: FOR_REVIEW → VERIFIED
+	Publish view.View // POST — approval: VERIFIED → PUBLISHED
+	Return  view.View // POST — approval: mixed/advanced → IN_PROGRESS
 }
 
 // NewOutcomeMatrixModule creates the outcome matrix module with all views wired.
@@ -116,22 +129,39 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 	})
 
 	recordView := outcomematrixaction.NewRecordAction(&outcomematrixaction.Deps{
-		Routes:              deps.Routes,
-		Labels:              deps.Labels,
-		CreateTaskOutcome:   deps.CreateTaskOutcome,
-		UpdateTaskOutcome:   deps.UpdateTaskOutcome,
-		ReadTaskOutcome:     deps.ReadTaskOutcome,
-		GetOutcomeMatrix:    deps.GetOutcomeMatrix,
-		ResolveStaff:        deps.ResolveStaff,
+		Routes:               deps.Routes,
+		Labels:               deps.Labels,
+		CreateTaskOutcome:    deps.CreateTaskOutcome,
+		UpdateTaskOutcome:    deps.UpdateTaskOutcome,
+		ReadTaskOutcome:      deps.ReadTaskOutcome,
+		GetOutcomeMatrix:     deps.GetOutcomeMatrix,
+		ResolveStaff:         deps.ResolveStaff,
 		ComputePhaseOutcome:  deps.ComputePhaseOutcome,
 		ComputeJobOutcome:    deps.ComputeJobOutcome,
 		RecomputeEligibility: deps.RecomputeEligibility,
 	})
 
+	// Per-phase approval transition handlers (the signed HTMX POST forms in the
+	// approval bar). Share one TransitionDeps; each handler gates on its own
+	// job_phase:<verb> and forwards the trusted sheet identity to the espyna use
+	// case (authoritative).
+	transitionDeps := &outcomematrixaction.TransitionDeps{
+		Routes:  deps.Routes,
+		Labels:  deps.Labels,
+		Submit:  deps.SubmitJobPhaseApproval,
+		Verify:  deps.VerifyJobPhaseApproval,
+		Publish: deps.PublishJobPhaseApproval,
+		Return:  deps.ReturnJobPhaseApproval,
+	}
+
 	return &OutcomeMatrixModule{
-		routes: deps.Routes,
-		Matrix: matrixView,
-		Record: recordView,
+		routes:  deps.Routes,
+		Matrix:  matrixView,
+		Record:  recordView,
+		Submit:  outcomematrixaction.NewSubmitAction(transitionDeps),
+		Verify:  outcomematrixaction.NewVerifyAction(transitionDeps),
+		Publish: outcomematrixaction.NewPublishAction(transitionDeps),
+		Return:  outcomematrixaction.NewReturnAction(transitionDeps),
 	}
 }
 
@@ -142,5 +172,17 @@ func (m *OutcomeMatrixModule) RegisterRoutes(r view.RouteRegistrar) {
 	}
 	if m.Record != nil {
 		r.POST(m.routes.RecordURL, m.Record)
+	}
+	if m.Submit != nil {
+		r.POST(m.routes.SubmitURL, m.Submit)
+	}
+	if m.Verify != nil {
+		r.POST(m.routes.VerifyURL, m.Verify)
+	}
+	if m.Publish != nil {
+		r.POST(m.routes.PublishURL, m.Publish)
+	}
+	if m.Return != nil {
+		r.POST(m.routes.ReturnURL, m.Return)
 	}
 }

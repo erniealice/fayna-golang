@@ -17,11 +17,74 @@ import (
 
 // Labels holds all translatable strings for the outcome matrix module.
 type Labels struct {
-	Page   PageLabels   `json:"page"`
-	Picker PickerLabels `json:"picker"`
-	Scope  ScopeLabels  `json:"scope"`
-	Grid   GridLabels   `json:"grid"`
-	Errors ErrorLabels  `json:"errors"`
+	Page     PageLabels     `json:"page"`
+	Picker   PickerLabels   `json:"picker"`
+	Scope    ScopeLabels    `json:"scope"`
+	Grid     GridLabels     `json:"grid"`
+	Errors   ErrorLabels    `json:"errors"`
+	Approval ApprovalLabels `json:"approval"`
+}
+
+// ApprovalLabels holds the per-phase approval-bar strings (plan §4.5 / lyngua.md).
+// Badge VARIANT (default/warning/info/success) is a Go switch, NOT lyngua — only
+// the status TEXT lives here. Vocabulary is relabeled by the education overlay.
+type ApprovalLabels struct {
+	Bar     ApprovalBarLabels     `json:"bar"`
+	Status  ApprovalStatusLabels  `json:"status"`
+	Actions ApprovalActionLabels  `json:"actions"`
+	Chip    ApprovalChipLabels    `json:"chip"`
+	Confirm ApprovalConfirmLabels `json:"confirm"`
+	Errors  ApprovalErrorLabels   `json:"errors"`
+
+	// Derived-overlay + hint strings (codex label additions).
+	Mixed          string `json:"mixed"`            // mixed/Attention marker
+	NotStarted     string `json:"not_started"`      // IN_PROGRESS && no data
+	LockedHint     string `json:"locked_hint"`      // workflow-locked (advanced, not frozen)
+	HardFrozenHint string `json:"hard_frozen_hint"` // finalized / closed schedule
+}
+
+// ApprovalBarLabels — the bar heading.
+type ApprovalBarLabels struct {
+	Title string `json:"title"`
+}
+
+// ApprovalStatusLabels — the four ladder status texts (chip/badge label).
+type ApprovalStatusLabels struct {
+	InProgress string `json:"in_progress"`
+	ForReview  string `json:"for_review"`
+	Verified   string `json:"verified"`
+	Published  string `json:"published"`
+}
+
+// ApprovalActionLabels — the transition button texts + the return reason field.
+type ApprovalActionLabels struct {
+	Submit               string `json:"submit"`
+	Verify               string `json:"verify"`
+	Publish              string `json:"publish"`
+	Return               string `json:"return"`
+	ReturnReason         string `json:"return_reason"`          // input label / placeholder (optional case)
+	ReturnReasonRequired string `json:"return_reason_required"` // placeholder when a published row forces it
+}
+
+// ApprovalChipLabels — chip aria + count framing.
+type ApprovalChipLabels struct {
+	Aria           string `json:"aria"`            // aria-label for the chip
+	PublishedCount string `json:"published_count"` // "{n} students" target-count caption
+}
+
+// ApprovalConfirmLabels — hx-confirm dialog messages. Submit carries a "{count}"
+// placeholder the view substitutes with the blank required-cell count (D6).
+type ApprovalConfirmLabels struct {
+	Submit  string `json:"submit"` // "{count}" substituted with the blank required-cell count
+	Verify  string `json:"verify"`
+	Publish string `json:"publish"`
+	Return  string `json:"return"`
+}
+
+// ApprovalErrorLabels — the single generic transition-failure message (raw
+// server errors are never echoed to the client — fail-closed messaging).
+type ApprovalErrorLabels struct {
+	ActionFailed string `json:"action_failed"`
 }
 
 // PageLabels — page heading.
@@ -90,6 +153,40 @@ func DefaultLabels() Labels {
 		},
 		Errors: ErrorLabels{
 			PermissionDenied: "You do not have permission to perform this action",
+		},
+		Approval: ApprovalLabels{
+			Bar: ApprovalBarLabels{Title: "Phase Approvals"},
+			Status: ApprovalStatusLabels{
+				InProgress: "In Progress",
+				ForReview:  "For Review",
+				Verified:   "Verified",
+				Published:  "Published",
+			},
+			Actions: ApprovalActionLabels{
+				Submit:               "Submit for Review",
+				Verify:               "Verify",
+				Publish:              "Publish",
+				Return:               "Return",
+				ReturnReason:         "Return reason (optional)",
+				ReturnReasonRequired: "Return reason (required)",
+			},
+			Chip: ApprovalChipLabels{
+				Aria:           "Phase approval status",
+				PublishedCount: "{count} in this phase",
+			},
+			Confirm: ApprovalConfirmLabels{
+				Submit:  "Submit this phase for review? {count} required cells are still blank. Editing locks until it is returned.",
+				Verify:  "Verify this phase?",
+				Publish: "Publish this phase?",
+				Return:  "Return this phase to In Progress? Editing reopens.",
+			},
+			Errors: ApprovalErrorLabels{
+				ActionFailed: "This phase could not be updated — it may be locked, finalized, or you may lack permission.",
+			},
+			Mixed:          "Attention — mixed",
+			NotStarted:     "Not started",
+			LockedHint:     "This phase is locked — return it to edit",
+			HardFrozenHint: "This phase is finalized and can no longer be edited",
 		},
 	}
 }

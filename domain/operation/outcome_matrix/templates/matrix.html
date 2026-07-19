@@ -15,6 +15,78 @@ populated on PageData for any non-template consumer that needs it. */}}
             {{end}}
         </div>
     </div>
+    {{if .ShowApprovalBar}}
+    {{template "outcome-matrix-approval-bar" .}}
+    {{end}}
     {{template "cell-grid-card" .Grid}}
 </div>
+{{end}}
+
+{{/* outcome-matrix-approval-bar — per-phase approval chips + state-gated
+     transition affordances. Each action is a REAL, query-free HTMX POST form
+     signed by {{actionForm}} over its EXACT resolved path (the action-workspace
+     guard verifies over r.URL.Path); the landed Q7 rowActionTokens path does
+     NOT cover these non-table bar buttons (codex fresh finding). CSRF rides the
+     htmx:configRequest hook (scripts.html). Success → HX-Redirect reload; error
+     → HX-Error-Message swapped into the per-phase form-result banner via the
+     shared data-hx-on="form-result" handler (CSP-safe, no inline eval). */}}
+{{define "outcome-matrix-approval-bar"}}
+<section class="pa-bar" data-testid="pa-bar" aria-label="{{.Labels.Approval.Bar.Title}}">
+    <h2 class="pa-bar__title">{{.Labels.Approval.Bar.Title}}</h2>
+    <div class="pa-bar__phases">
+        {{$root := .}}
+        {{range .ApprovalBar}}
+        <div class="pa-phase" data-testid="pa-{{.Slug}}" data-status="{{.Status}}">
+            <div class="pa-phase__head">
+                <span class="pa-phase__label">{{.Label}}</span>
+                <span class="badge badge-{{.ChipVariant}}" data-testid="pa-{{.Slug}}-chip" aria-label="{{$root.Labels.Approval.Chip.Aria}}">{{.StatusLabel}}</span>
+                {{if .Mixed}}<span class="badge badge-warning" data-testid="pa-{{.Slug}}-mixed">{{$root.Labels.Approval.Mixed}}</span>{{end}}
+                {{if .NotStarted}}<span class="pa-phase__muted" data-testid="pa-{{.Slug}}-not-started">{{$root.Labels.Approval.NotStarted}}</span>{{end}}
+                <span class="pa-phase__count">{{.TargetLabel}}</span>
+            </div>
+            {{if .Hint}}<p class="pa-phase__hint" data-testid="pa-{{.Slug}}-hint">{{.Hint}}</p>{{end}}
+            <div class="pa-phase__actions">
+                {{if .CanSubmit}}
+                <form class="pa-form" hx-post="{{.SubmitPath}}" hx-confirm="{{.SubmitConfirm}}"
+                      data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
+                      data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
+                    {{actionForm .SubmitPath $root.WorkspaceID}}
+                    <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
+                    <button type="submit" class="btn btn-action pa-form__btn" data-testid="pa-{{.Slug}}-submit">{{$root.Labels.Approval.Actions.Submit}}</button>
+                </form>
+                {{end}}
+                {{if .CanVerify}}
+                <form class="pa-form" hx-post="{{.VerifyPath}}" hx-confirm="{{.VerifyConfirm}}"
+                      data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
+                      data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
+                    {{actionForm .VerifyPath $root.WorkspaceID}}
+                    <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
+                    <button type="submit" class="btn btn-action pa-form__btn" data-testid="pa-{{.Slug}}-verify">{{$root.Labels.Approval.Actions.Verify}}</button>
+                </form>
+                {{end}}
+                {{if .CanPublish}}
+                <form class="pa-form" hx-post="{{.PublishPath}}" hx-confirm="{{.PublishConfirm}}"
+                      data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
+                      data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
+                    {{actionForm .PublishPath $root.WorkspaceID}}
+                    <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
+                    <button type="submit" class="btn btn-action pa-form__btn" data-testid="pa-{{.Slug}}-publish">{{$root.Labels.Approval.Actions.Publish}}</button>
+                </form>
+                {{end}}
+                {{if .CanReturn}}
+                <form class="pa-form pa-form--return" hx-post="{{.ReturnPath}}" hx-confirm="{{.ReturnConfirm}}"
+                      data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
+                      data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
+                    {{actionForm .ReturnPath $root.WorkspaceID}}
+                    <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
+                    <input type="text" name="reason" class="pa-form__reason" placeholder="{{.ReturnReasonLabel}}"{{if .ReturnReasonRequired}} required{{end}} data-testid="pa-{{.Slug}}-return-reason">
+                    <button type="submit" class="btn btn-ghost pa-form__btn" data-testid="pa-{{.Slug}}-return">{{$root.Labels.Approval.Actions.Return}}</button>
+                </form>
+                {{end}}
+            </div>
+            <div id="pa-{{.Slug}}-result" class="form-result form-result--hidden" role="status" aria-live="polite" data-testid="pa-{{.Slug}}-result"></div>
+        </div>
+        {{end}}
+    </div>
+</section>
 {{end}}

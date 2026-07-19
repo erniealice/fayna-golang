@@ -206,13 +206,19 @@ type JobUseCases struct {
 	ListJobs  func(context.Context, *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 }
 
-// JobPhaseUseCases — JobPhase CRUD + list (standalone module + Job detail tab).
+// JobPhaseUseCases — JobPhase CRUD + list (standalone module + Job detail tab)
+// + the per-phase approval transitions (outcome-matrix approval bar, plan §4.2).
 type JobPhaseUseCases struct {
 	CreateJobPhase func(context.Context, *jobphasepb.CreateJobPhaseRequest) (*jobphasepb.CreateJobPhaseResponse, error)
 	ReadJobPhase   func(context.Context, *jobphasepb.ReadJobPhaseRequest) (*jobphasepb.ReadJobPhaseResponse, error)
 	UpdateJobPhase func(context.Context, *jobphasepb.UpdateJobPhaseRequest) (*jobphasepb.UpdateJobPhaseResponse, error)
 	DeleteJobPhase func(context.Context, *jobphasepb.DeleteJobPhaseRequest) (*jobphasepb.DeleteJobPhaseResponse, error)
 	ListJobPhases  func(context.Context, *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+
+	SubmitJobPhaseApproval  func(context.Context, *jobphasepb.SubmitJobPhaseApprovalRequest) (*jobphasepb.SubmitJobPhaseApprovalResponse, error)
+	VerifyJobPhaseApproval  func(context.Context, *jobphasepb.VerifyJobPhaseApprovalRequest) (*jobphasepb.VerifyJobPhaseApprovalResponse, error)
+	PublishJobPhaseApproval func(context.Context, *jobphasepb.PublishJobPhaseApprovalRequest) (*jobphasepb.PublishJobPhaseApprovalResponse, error)
+	ReturnJobPhaseApproval  func(context.Context, *jobphasepb.ReturnJobPhaseApprovalRequest) (*jobphasepb.ReturnJobPhaseApprovalResponse, error)
 }
 
 // JobTaskUseCases — JobTask CRUD + list + ListByPhase.

@@ -20,6 +20,7 @@ import (
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	outcomecriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
@@ -103,6 +104,10 @@ type PageViewDeps struct {
 // PageData holds the data for the outcome matrix page. The Grid field is named
 // "Grid" so the render pipeline's reflection injector (parallel to TableConfig's
 // "Table" branch) populates Grid.Nonce / Grid.WorkspaceID on render.
+//
+// WorkspaceID (promoted from the embedded types.PageData, injected by the
+// ViewAdapter every render) is required by the approval bar's {{actionForm}}
+// hidden-input signing.
 type PageData struct {
 	types.PageData
 	Grid   *types.CellGridConfig
@@ -113,6 +118,55 @@ type PageData struct {
 	ScopeMineURL string
 	ScopeAllURL  string
 	ShowScopeAll bool
+
+	// ApprovalBar is the per-phase approval bar (one entry per template phase,
+	// derived from the response roll-up over the full sheet S). Empty when the
+	// template has no phase roll-up (mock build / no sheet).
+	ApprovalBar     []ApprovalPhase
+	ShowApprovalBar bool
+}
+
+// ApprovalPhase is one phase's approval-bar entry: the derived chip state + the
+// state-gated transition affordances rendered as signed HTMX POST forms.
+type ApprovalPhase struct {
+	PhaseID     string
+	Label       string
+	Status      string // enum name, e.g. PHASE_APPROVAL_STATUS_FOR_REVIEW
+	StatusLabel string // lyngua status text
+	ChipVariant string // "" (default) | "warning" | "info" | "success"
+	Slug        string // testid-safe phase slug
+
+	Mixed       bool
+	NotStarted  bool
+	HardFrozen  bool
+	HasData     bool
+	TargetCount int32
+	TargetLabel string // "{count} students/…" caption
+	BlankCount  int32
+
+	Hint string // workflow-locked or hard-frozen hint text ("" when neither)
+
+	// State-gated action affordances. Each *Path is the EXACT resolved POST path
+	// (used identically for hx-post and {{actionForm}} so the action-workspace
+	// guard's r.URL.Path signature check matches).
+	CanSubmit   bool
+	CanVerify   bool
+	CanPublish  bool
+	CanReturn   bool
+	SubmitPath  string
+	VerifyPath  string
+	PublishPath string
+	ReturnPath  string
+
+	SubmitConfirm  string // hx-confirm text with {count} substituted (D6)
+	VerifyConfirm  string
+	PublishConfirm string
+	ReturnConfirm  string
+
+	// ReturnReasonRequired hints the UI (server is authoritative) that a return
+	// will require a non-blank reason because a member is/was published.
+	ReturnReasonRequired bool
+	ReturnReasonLabel    string
 }
 
 // NewView creates the outcome matrix GET view.
@@ -220,6 +274,10 @@ func NewView(deps *PageViewDeps) view.View {
 			ScopeAllURL:  route.ResolveURL(deps.Routes.MatrixURL, "id", templateID) + "?scope=all",
 			ShowScopeAll: canSeeAll,
 		}
+
+		bar := buildApprovalBar(deps, perms, resp, templateID)
+		pageData.ApprovalBar = bar
+		pageData.ShowApprovalBar = len(bar) > 0
 
 		return view.OK("outcome-matrix", pageData)
 	})
@@ -340,7 +398,7 @@ func buildGrid(
 	attrValues := fetchClientAttributeValues(ctx, deps, rosterIDs)
 
 	cfg.Columns = buildColumns(resp.GetPhases())
-	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames)
+	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames, phaseEditableFunc(resp))
 	applyRowOptions(cfg, deps.Options, attrValues, clientNames)
 	if cfg.AutoSave {
 		// Populate the W2 edit-mode per-cell fields AFTER applyRowOptions has
@@ -656,6 +714,136 @@ func clientDisplayName(c *clientpb.Client) string {
 	return c.GetId()
 }
 
+// buildApprovalBar maps the response roll-up (derived over the full sheet S) into
+// the per-phase approval-bar entries. Each entry carries the derived chip state +
+// the state-gated transition affordances (permission-gated view mirror; the
+// espyna use-case ActionGatekeeper + strict authorizer are authoritative). The
+// action buttons render as real signed HTMX POST forms in the template.
+func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *matrixpb.GetOutcomeMatrixResponse, templateID string) []ApprovalPhase {
+	if resp == nil || templateID == "" {
+		return nil
+	}
+	rollups := resp.GetApprovalRollups()
+	if len(rollups) == 0 {
+		return nil
+	}
+	l := deps.Labels.Approval
+
+	phaseLabel := map[string]string{}
+	for _, ph := range resp.GetPhases() {
+		phaseLabel[ph.GetJobTemplatePhaseId()] = ph.GetLabel()
+	}
+
+	// Layer-2 view gates cite the SAME job_phase:<verb> codes the use-case
+	// ActionGatekeeper.Check + strict authorizer verify (copya.md gate discipline).
+	canSubmit := perms.Can("job_phase", "submit")
+	canVerify := perms.Can("job_phase", "verify")
+	canPublish := perms.Can("job_phase", "publish")
+	canReturn := perms.Can("job_phase", "return")
+
+	submitPath := route.ResolveURL(deps.Routes.SubmitURL, "id", templateID)
+	verifyPath := route.ResolveURL(deps.Routes.VerifyURL, "id", templateID)
+	publishPath := route.ResolveURL(deps.Routes.PublishURL, "id", templateID)
+	returnPath := route.ResolveURL(deps.Routes.ReturnURL, "id", templateID)
+
+	out := make([]ApprovalPhase, 0, len(rollups))
+	for _, ru := range rollups {
+		status := ru.GetStatus()
+		inProgress := status == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_IN_PROGRESS
+		forReview := status == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_FOR_REVIEW
+		verified := status == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_VERIFIED
+		published := status == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_PUBLISHED
+		frozen := ru.GetHardFrozen()
+		mixed := ru.GetMixed()
+
+		ap := ApprovalPhase{
+			PhaseID:        ru.GetJobTemplatePhaseId(),
+			Label:          phaseLabel[ru.GetJobTemplatePhaseId()],
+			Status:         status.String(),
+			StatusLabel:    approvalStatusLabel(l, status),
+			ChipVariant:    approvalChipVariant(status),
+			Slug:           slug(ru.GetJobTemplatePhaseId()),
+			Mixed:          mixed,
+			NotStarted:     inProgress && !ru.GetHasData(),
+			HardFrozen:     frozen,
+			HasData:        ru.GetHasData(),
+			TargetCount:    ru.GetTargetCount(),
+			TargetLabel:    subCount(l.Chip.PublishedCount, ru.GetTargetCount()),
+			BlankCount:     ru.GetBlankRequiredCount(),
+			SubmitPath:     submitPath,
+			VerifyPath:     verifyPath,
+			PublishPath:    publishPath,
+			ReturnPath:     returnPath,
+			SubmitConfirm:  subCount(l.Confirm.Submit, ru.GetBlankRequiredCount()),
+			VerifyConfirm:  l.Confirm.Verify,
+			PublishConfirm: l.Confirm.Publish,
+			ReturnConfirm:  l.Confirm.Return,
+		}
+
+		// One hint line: hard-frozen dominates; else any workflow lock.
+		switch {
+		case frozen:
+			ap.Hint = l.HardFrozenHint
+		case !inProgress || mixed:
+			ap.Hint = l.LockedHint
+		}
+
+		// State-gated action affordances (a hard-frozen sheet exposes none).
+		ap.CanSubmit = canSubmit && inProgress && !mixed && !frozen
+		ap.CanVerify = canVerify && forReview && !mixed && !frozen
+		ap.CanPublish = canPublish && verified && !mixed && !frozen
+		ap.CanReturn = canReturn && !frozen && (mixed || !inProgress)
+
+		// A published sheet's return needs a reason (server enforces; UI marks the
+		// input required as a best-effort hint — a mixed/was-published case the
+		// roll-up cannot see is still enforced server-side, surfacing as a 422).
+		ap.ReturnReasonRequired = published
+		if ap.ReturnReasonRequired {
+			ap.ReturnReasonLabel = l.Actions.ReturnReasonRequired
+		} else {
+			ap.ReturnReasonLabel = l.Actions.ReturnReason
+		}
+
+		out = append(out, ap)
+	}
+	return out
+}
+
+// approvalStatusLabel maps the ladder enum to its lyngua status text.
+func approvalStatusLabel(l outcome_matrix.ApprovalLabels, s jobphasepb.PhaseApprovalStatus) string {
+	switch s {
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_FOR_REVIEW:
+		return l.Status.ForReview
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_VERIFIED:
+		return l.Status.Verified
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_PUBLISHED:
+		return l.Status.Published
+	default:
+		return l.Status.InProgress
+	}
+}
+
+// approvalChipVariant is the Go badge-variant switch (NOT lyngua) → the pyeza
+// badge modifier suffix: in_progress → neutral, for_review → warning, verified →
+// info, published → success. The template renders `badge badge-{{.ChipVariant}}`.
+func approvalChipVariant(s jobphasepb.PhaseApprovalStatus) string {
+	switch s {
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_FOR_REVIEW:
+		return "warning"
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_VERIFIED:
+		return "info"
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_PUBLISHED:
+		return "success"
+	default:
+		return "neutral"
+	}
+}
+
+// subCount substitutes the "{count}" placeholder with n (once).
+func subCount(tmpl string, n int32) string {
+	return strings.Replace(tmpl, "{count}", strconv.FormatInt(int64(n), 10), 1)
+}
+
 // buildColumns maps the proto phase→task→criterion tree into CellGridLevel1/2/3.
 func buildColumns(phases []*matrixpb.PhaseColumn) []types.CellGridLevel1 {
 	columns := make([]types.CellGridLevel1, 0, len(phases))
@@ -683,8 +871,50 @@ func buildColumns(phases []*matrixpb.PhaseColumn) []types.CellGridLevel1 {
 	return columns
 }
 
+// phaseEditableFunc returns a colKey → bool predicate mirroring the server
+// cell_editable gate at PHASE grain (plan §4.4: cell_editable = IN_PROGRESS &&
+// !hard_frozen && ownership). The ownership half is the espyna OutcomeCell.
+// Editable flag (already recorder/assignee-scoped); THIS adds the phase-status
+// half from the roll-up over the full sheet S: a cell is render-editable only
+// when its phase's roll-up is cleanly IN_PROGRESS (not mixed) and not
+// hard-frozen. The server GuardCellWrite stays authoritative per job_phase row;
+// this render mirror never widens editability, only narrows it (a mixed sheet
+// locks in the UI and awaits a return). Phases with no roll-up entry default to
+// permissive (the server still guards) so an unrelated read path never over-locks.
+func phaseEditableFunc(resp *matrixpb.GetOutcomeMatrixResponse) func(colKey string) bool {
+	taskToPhase := map[string]string{}
+	for _, ph := range resp.GetPhases() {
+		for _, tk := range ph.GetTasks() {
+			taskToPhase[tk.GetJobTemplateTaskId()] = ph.GetJobTemplatePhaseId()
+		}
+	}
+	phaseEditable := map[string]bool{}
+	for _, ru := range resp.GetApprovalRollups() {
+		phaseEditable[ru.GetJobTemplatePhaseId()] =
+			ru.GetStatus() == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_IN_PROGRESS &&
+				!ru.GetMixed() && !ru.GetHardFrozen()
+	}
+	return func(colKey string) bool {
+		taskID := colKey
+		if i := strings.Index(colKey, ":"); i >= 0 {
+			taskID = colKey[:i]
+		}
+		ph, ok := taskToPhase[taskID]
+		if !ok {
+			return true
+		}
+		ed, ok := phaseEditable[ph]
+		if !ok {
+			return true
+		}
+		return ed
+	}
+}
+
 // buildRows maps the proto rows into CellGridRows with the read-only gate applied.
-func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string, clientNames map[string]clientName) []types.CellGridRow {
+// allowEdit is the phase-status render mirror (phaseEditableFunc): a locked or
+// hard-frozen phase forces every cell read-only regardless of ownership.
+func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string, clientNames map[string]clientName, allowEdit func(colKey string) bool) []types.CellGridRow {
 	out := make([]types.CellGridRow, 0, len(rows))
 	for _, r := range rows {
 		clientID := r.GetClientId()
@@ -698,13 +928,20 @@ func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string,
 			// Read-only when recorded by a different staff member. Honor the
 			// backend editable flag too (job not spawned → not editable).
 			readOnly := cell.GetRecordedBy() != "" && cell.GetRecordedBy() != actingStaff
+			editable := cell.GetEditable()
+			// Phase-status render mirror: a workflow-locked / hard-frozen phase
+			// forces the cell read-only (server GuardCellWrite is authoritative).
+			if allowEdit != nil && !allowEdit(colKey) {
+				editable = false
+				readOnly = true
+			}
 			gr.Cells[colKey] = types.CellGridCell{
 				OutcomeID:       cell.GetOutcomeId(),
 				JobTaskID:       cell.GetJobTaskId(),
 				CriteriaID:      criteriaIDFromColumnKey(colKey),
 				Value:           cellValue(cell),
 				TextValue:       cellSecondaryText(cell),
-				Editable:        cell.GetEditable(),
+				Editable:        editable,
 				ReadOnly:        readOnly,
 				ReadOnlyTooltip: readOnlyTooltip,
 				TestID:          cellTestID(clientID, colKey, readOnly),

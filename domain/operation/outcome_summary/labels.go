@@ -160,6 +160,9 @@ type DetailLabels struct {
 type ErrorLabels struct {
 	NotFound         string `json:"not_found"`
 	PermissionDenied string `json:"permission_denied"`
+	// RenderGate is the D5 409 message shown when a card's grades have entered
+	// the approval workflow but are not yet fully published (plan §4.4).
+	RenderGate string `json:"render_gate"`
 }
 
 // DefaultOutcomeSummaryLabels returns OutcomeSummaryLabels with sensible English defaults.
@@ -207,6 +210,7 @@ func DefaultLabels() Labels {
 		Errors: ErrorLabels{
 			NotFound:         "Outcome summary not found",
 			PermissionDenied: "You do not have permission to perform this action",
+			RenderGate:       "This report card cannot be generated yet — its grades are still being reviewed and have not been published. Please try again after the grading period is published.",
 		},
 		Landing: LandingLabels{
 			Title:           "Outcome Reports",

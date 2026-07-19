@@ -47,7 +47,13 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 
-		group, table := buildSectionTable(ctx, deps, sectionID)
+		// Thread the SAME ?jc= as the HTML view through the SAME shared resolver
+		// (buildSectionTable), so the CSV is filtered to exactly the category the
+		// user is looking at — HTML and CSV never disagree. With no ?jc= this
+		// returns the DEFAULT (configured H2) category grid, i.e. the whole
+		// section at its default category (the landing's no-jc row download).
+		// The tabstrip is irrelevant to a CSV, so it is discarded.
+		group, table, _ := buildSectionTable(ctx, deps, sectionID, r.URL.Query().Get("jc"))
 		if group == nil {
 			// Workspace EXISTS gate failed — same fail-closed response for
 			// foreign and missing ids (no leak).

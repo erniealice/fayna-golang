@@ -37,6 +37,13 @@ type Options struct {
 	// DOCX/PDF download). Zero value disables every document enrichment — the
 	// download renders exactly as before (service-admin unaffected).
 	Document DocumentOptions
+	// ClientCard configures view-3 (the per-student client card) presentation —
+	// a DEDICATED job-category banding option, NOT the section grid's Row (which
+	// is occupied by client-attribute gender bands and gated behind the global
+	// academic-only CategoryFilter that would gut category bands, codex §5 /
+	// Q-R9-8). Zero value → today's flat client card, byte-identical
+	// (service-admin, which sets no options, is unaffected).
+	ClientCard ClientCardOptions
 }
 
 // DocumentOptions — app-configurable knobs for the report-card document
@@ -89,6 +96,17 @@ type TabOptions struct {
 // ignored by the view, which then renders its default flat list — Q-LIST-5).
 type ListOptions struct {
 	Entity string
+	// ColumnsByField — view-1 landing count-column axis (R9 W-A2). When set to
+	// the job_category entity ref ("job_category"), the landing's single static
+	// count column is replaced by ONE count column per ACTIVE job_category row
+	// (ordered by sort_order NULLS LAST, name ASC), each cell carrying that
+	// (section × category) subject count plus an eye deep-link into the
+	// section's category view (?jc=<category id>). Zero value (service-admin)
+	// or an unrecognized ref keeps today's static column set byte-identical;
+	// even when set, a nil/empty/denied/failed category read degrades to the
+	// SAME static columns (the two-layer degrade contract, plan §3.7). Generic —
+	// the category display names are per-workspace job_category.name DATA.
+	ColumnsByField string
 	// ScopeByServicingGrant, when true, confines the section landing to the
 	// sections the ACTING principal holds an active servicing grant
 	// (subscription_group_workspace_user, sgwu) on — fail-closed section
@@ -116,6 +134,35 @@ type RowOptions struct {
 	SortDirection   string
 }
 
+// ClientCardOptions — view-3 (per-student client card) row presentation. A
+// DEDICATED banding knob so the card can group its subject rows into
+// job-category bands independently of the section grid's Row (gender) bands and
+// the global academic-only CategoryFilter — the section's Row string cannot
+// serve both, and CategoryFilter would drop every non-academic job before bands
+// could form (codex §5 / Q-R9-8). Zero value → flat card. Generic — the band
+// titles are per-workspace job_category.name DATA, never code vocabulary.
+type ClientCardOptions struct {
+	// Row.GroupByField, when set to the job_category entity ref ("job_category"),
+	// groups the card's subject rows into one native TableRowGroup band per
+	// distinct job_category (band title = job_category.name DATA, ordered by the
+	// category sort contract; a NULL/foreign effective category folds into a
+	// single trailing Uncategorized band, never dropped/duplicated). Any other
+	// value → flat rows. Reuses the section's RowOptions shape for grammar
+	// symmetry (Options.Row vs Options.ClientCard.Row); only GroupByField is
+	// consulted here — the ordering follows the category's own sort_order, not
+	// GroupValueOrder.
+	Row RowOptions
+	// IncludeAllCategories, when true (with banding on), LIFTS the card's H2
+	// academic-only job filter FOR BANDING so same-origin deportment subjects
+	// render under their own band. The lift is LOCAL to the card's own table:
+	// the report-card DOCUMENT download and the section grid keep H2 (separate
+	// fetches/handlers — the document view has its own job read + CategoryFilter).
+	// Without it the card keeps H2 and, on academic-only seeded data, the
+	// ≥2-category branch is unreachable (bands would never render). Zero value
+	// (false) preserves today's H2-filtered card.
+	IncludeAllCategories bool
+}
+
 // Entity reference constants (the implemented values).
 const (
 	// TabEntityPriceSchedule is the entity ref that turns each price_schedule
@@ -123,6 +170,9 @@ const (
 	TabEntityPriceSchedule = "price_schedule"
 	// ListEntitySubscriptionGroup is the single implemented List.Entity value.
 	ListEntitySubscriptionGroup = "subscription_group"
+	// ListColumnsJobCategory is the entity ref that turns each ACTIVE
+	// job_category row into a view-1 landing count column (R9 W-A2).
+	ListColumnsJobCategory = "job_category"
 	// PriceScheduleSortOrderField is the entity-field ref suffix that selects
 	// the explicit sort_order tab ordering (NULLS LAST, name ASC fallback).
 	priceScheduleSortOrderField = "sort_order"
@@ -185,6 +235,23 @@ func (t TabOptions) Direction() string { return normalizeDirection(t.SortDirecti
 // (the single implemented List.Entity value).
 func (l ListOptions) SubscriptionGroups() bool {
 	return strings.TrimSpace(l.Entity) == ListEntitySubscriptionGroup
+}
+
+// CategoryColumns reports whether the landing should render one count column
+// per active job_category (the single implemented ColumnsByField value). Any
+// other value keeps the static column set (the fail-safe default).
+func (l ListOptions) CategoryColumns() bool {
+	return strings.TrimSpace(l.ColumnsByField) == ListColumnsJobCategory
+}
+
+// --- Client-card helpers -------------------------------------------------
+
+// BandByCategory reports whether the client card should group its subject rows
+// into job_category bands (the single implemented ClientCard.Row.GroupByField
+// value — the shared job_category entity ref, the same const the landing count
+// columns key on). Any other value keeps flat rows (the fail-safe default).
+func (c ClientCardOptions) BandByCategory() bool {
+	return strings.TrimSpace(c.Row.GroupByField) == ListColumnsJobCategory
 }
 
 // --- Row helpers ---------------------------------------------------------

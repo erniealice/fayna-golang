@@ -84,6 +84,12 @@ type PeriodLabels struct {
 	// Generic identifiers — the vertical wording lives in the label values.
 	StaffLabel       string `json:"staff_label"`
 	StaffPluralLabel string `json:"staff_plural_label"`
+	// UncategorizedBand titles the client card's single NULL/foreign-category
+	// band (R9 W-A6) when the card is banded by job_category — templates whose
+	// effective category is NULL/stale/foreign count here, never dropped or
+	// duplicated. Generic identifier; the wording lives in the lyngua value. On
+	// education1 (zero NULL-category jobs) this band is a defensive path.
+	UncategorizedBand string `json:"uncategorized_band"`
 }
 
 // LandingLabels holds the view-1 (report-cards landing) strings. Every field
@@ -100,6 +106,19 @@ type LandingLabels struct {
 	DownloadAction  string `json:"download_action"`
 	TabsAriaLabel   string `json:"tabs_aria_label"`
 	InactiveSuffix  string `json:"inactive_suffix"`
+	// CellViewAction is the aria-label FRAME for each category cell's eye link
+	// (R9 W-A2). It MUST name BOTH nouns — the {category} and {section}
+	// placeholders are substituted from DATA at render (job_category.name /
+	// subscription_group.name) so the link's accessible name carries both
+	// dimensions (pyeza renders the first cell as a plain <td>, not a row
+	// header, so the section is NOT automatically in the accessible name). A
+	// frame missing either placeholder falls back to the typed cell's default
+	// "{category} — {section}" composition (fail-safe a11y).
+	CellViewAction string `json:"cell_view_action"`
+	// UncategorizedColumn heads the single NULL-category bucket column (plan
+	// §3.0): templates whose effective category is NULL are never dropped and
+	// never duplicated across categories — they count under this one column.
+	UncategorizedColumn string `json:"uncategorized_column"`
 }
 
 // SectionLabels holds the view-2 (per-section report-card grid) strings. Same
@@ -111,6 +130,12 @@ type SectionLabels struct {
 	DownloadAction    string `json:"download_action"`
 	DetailLink        string `json:"detail_link"`
 	NotComputedBanner string `json:"not_computed_banner"`
+	// CategoryTabsAriaLabel is the aria-label on the section's ?jc= category
+	// tabstrip <nav> (R9 W-A3). Without it the strip falls back to the pyeza
+	// tabs component's generic "Tabs" default (harmless but generic). Generic
+	// identifier — the vertical wording lives only in the lyngua value. The tab
+	// LABELS themselves are job_category.name DATA, never lyngua keys.
+	CategoryTabsAriaLabel string `json:"category_tabs_aria_label"`
 }
 
 type ColumnLabels struct {
@@ -222,14 +247,19 @@ func DefaultLabels() Labels {
 			DownloadAction:  "Download outcomes (CSV)",
 			TabsAriaLabel:   "Schedules",
 			InactiveSuffix:  "(inactive)",
+			// Both placeholders are DATA-substituted at render; the frame must
+			// name category AND section (codex §4 pt 8).
+			CellViewAction:      "View {category} for {section}",
+			UncategorizedColumn: "Uncategorized",
 		},
 		Section: SectionLabels{
-			Title:             "Group outcomes",
-			ClientColumn:      "Client",
-			RatingEmpty:       "—",
-			DownloadAction:    "Download outcomes (CSV)",
-			DetailLink:        "View group",
-			NotComputedBanner: "Final outcomes have not been computed yet.",
+			Title:                 "Group outcomes",
+			ClientColumn:          "Client",
+			RatingEmpty:           "—",
+			DownloadAction:        "Download outcomes (CSV)",
+			DetailLink:            "View group",
+			NotComputedBanner:     "Final outcomes have not been computed yet.",
+			CategoryTabsAriaLabel: "Categories",
 		},
 		Student: PeriodLabels{
 			Title:            "Client outcomes",
@@ -240,10 +270,11 @@ func DefaultLabels() Labels {
 			YearColumn:       "Overall",
 			ProgressColumn:   "Progress",
 			FinalColumn:      "Final",
-			ViewAction:       "View outcomes",
-			DownloadAction:   "Download PDF",
-			StaffLabel:       "Staff:",
-			StaffPluralLabel: "Staff:",
+			ViewAction:        "View outcomes",
+			DownloadAction:    "Download PDF",
+			StaffLabel:        "Staff:",
+			StaffPluralLabel:  "Staff:",
+			UncategorizedBand: "Uncategorized",
 		},
 		TemplateSettings: TemplateSettingsLabels{
 			Title:              "Outcome Report Templates",

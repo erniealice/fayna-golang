@@ -68,6 +68,17 @@ type Deps struct {
 	CategoryFilter    string
 	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
 
+	// BandByCategory + IncludeAllCategories (R9 W-A6) — the DEDICATED client-card
+	// banding policy (Options.ClientCard). BandByCategory groups the subject rows
+	// into native job-category TableRowGroup bands; IncludeAllCategories LIFTS the
+	// card's H2 academic-only filter FOR BANDING so deportment subjects render
+	// under their own band (the report-card document + section grid keep H2 —
+	// separate fetches). Both zero (service-admin / unset) → today's flat card,
+	// byte-identical (module contract). The lift and the band-title read together
+	// issue EXACTLY ONE job_category read (statement count unchanged).
+	BandByCategory       bool
+	IncludeAllCategories bool
+
 	ListSubscriptionGroups        func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListSubscriptionGroupMembers  func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
 	ListJobs                      func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
@@ -202,18 +213,35 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 		return nil
 	}
 
-	// H2: keep only the configured category's subjects (academic), dropping
-	// same-origin deportment jobs. catID "" with catOK=true (no filter) keeps
-	// every job; catOK=false (a configured filter that could not be resolved)
-	// fails CLOSED — the card drops every job.
-	catID, catOK := outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.CategoryFilter)
+	// Card-specific category inclusion policy (R9 W-A6). Two mutually exclusive
+	// modes, each issuing EXACTLY ONE job_category read (statement count
+	// unchanged):
+	//   - liftH2 == false (default / service-admin): the H2 academic-only filter
+	//     as today — ResolveCategoryID (a code-filtered read) drops same-origin
+	//     deportment jobs. catID "" with catOK=true (no filter) keeps every job;
+	//     catOK=false (a configured filter that could not resolve) fails CLOSED —
+	//     the card drops every job.
+	//   - liftH2 == true (banding + IncludeAllCategories): H2 is LIFTED for the
+	//     card's OWN table so deportment subjects render under their own band; the
+	//     ONE read instead fetches ALL active categories for band titles/order
+	//     (fetchBandCategories). The document download + section grid keep H2 —
+	//     they run separate job fetches with their own CategoryFilter.
+	liftH2 := deps.BandByCategory && deps.IncludeAllCategories
+	var catID string
+	catOK := true
+	var bandCats []*jobcategorypb.JobCategory
+	if liftH2 {
+		bandCats = fetchBandCategories(ctx, deps)
+	} else {
+		catID, catOK = outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.CategoryFilter)
+	}
 
 	jobTemplate := map[string]string{} // job_id -> template_id
 	jobIDs := make([]string, 0, len(jobs))
 	templateIDs := []string{}
 	tmplSeen := map[string]bool{}
 	for _, j := range jobs {
-		if !catOK || !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+		if !liftH2 && (!catOK || !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId())) {
 			continue
 		}
 		jid, tid := j.GetId(), j.GetJobTemplateId()
@@ -228,7 +256,7 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 		}
 	}
 
-	tmplNames := fetchTemplateNames(ctx, deps, templateIDs, historical)
+	tmplNames, tmplCategory := fetchTemplateNames(ctx, deps, templateIDs, historical)
 	phaseOrder := fetchPhaseOrders(ctx, deps, jobIDs)              // job_phase_id -> phase_order
 	semByJob := fetchSemesterLabels(ctx, deps, jobIDs, phaseOrder) // job_id -> {order -> label}
 	yearByJob := fetchYearLabels(ctx, deps, jobIDs)                // job_id -> year-final label
@@ -299,10 +327,9 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 		})
 	}
 
-	return &types.TableConfig{
+	cfg := &types.TableConfig{
 		ID:              "report-cards-student",
 		ColumnGroups:    buildColumnGroups(l),
-		Rows:            rows,
 		NameColumnLabel: l.Student.SubjectColumn,
 		ShowSearch:      true,
 		ShowColumns:     true,
@@ -316,6 +343,18 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 			Message: l.Section.NotComputedBanner,
 		},
 	}
+	// Job-category bands (R9 W-A6): when configured AND ≥2 distinct effective
+	// categories are present, group the (already subject-name-sorted) rows into
+	// native TableRowGroup bands. The flat `rows` slice is built identically
+	// above, so the degrade path (<2 categories) and the unbanded path stay
+	// byte-equal to today. No BulkActions is set, so the band-header bulk-select
+	// controls render inert (CSS-hidden — table.css:3427/3456).
+	if groups := bandSubjectRows(l, rows, jobTemplate, tmplCategory, bandCats); groups != nil {
+		cfg.Groups = groups
+	} else {
+		cfg.Rows = rows
+	}
+	return cfg
 }
 
 // buildColumnGroups builds the nested semester headers: Semester 1 [Progress |
@@ -391,12 +430,17 @@ func fetchJobs(ctx context.Context, deps *Deps, subID string, historical bool) [
 	return out
 }
 
-// fetchTemplateNames resolves job_template_id -> name, chunked; historical mode
-// also reads inactive templates (frozen-year subjects).
-func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string, historical bool) map[string]string {
-	out := map[string]string{}
+// fetchTemplateNames resolves job_template_id -> name AND job_template_id ->
+// job_category_id (proto field 32, the authoritative CURRENT category FK per
+// §3.0), chunked; historical mode also reads inactive templates (frozen-year
+// subjects). The category map backs the job-category bands (R9 W-A6) — the read
+// already returns the FK, so capturing it is free (no extra statement). Callers
+// that do not band simply ignore the second return.
+func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string, historical bool) (names, categories map[string]string) {
+	names = map[string]string{}
+	categories = map[string]string{}
 	if deps.ListJobTemplates == nil || len(templateIDs) == 0 {
-		return out
+		return names, categories
 	}
 	for start := 0; start < len(templateIDs); start += pageLimit {
 		end := start + pageLimit
@@ -422,12 +466,136 @@ func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string, h
 			}
 			for _, t := range resp.GetData() {
 				if id := t.GetId(); id != "" {
-					out[id] = t.GetName()
+					names[id] = t.GetName()
+					categories[id] = t.GetJobCategoryId()
 				}
 			}
 		}
 	}
-	return out
+	return names, categories
+}
+
+// fetchBandCategories issues the ONE all-category read (replacing the
+// code-filtered ResolveCategoryID read when H2 is lifted, so the client-card
+// statement count is unchanged) and returns the ACTIVE job_category rows sorted
+// by the category sort contract (sort_order NULLS LAST → name → id) for band
+// titles + order. A nil closure or read error → nil (banding degrades to flat).
+func fetchBandCategories(ctx context.Context, deps *Deps) []*jobcategorypb.JobCategory {
+	if deps.ListJobCategories == nil {
+		return nil
+	}
+	resp, err := deps.ListJobCategories(ctx, &jobcategorypb.ListJobCategoriesRequest{})
+	if err != nil {
+		log.Printf("student card: list job categories for bands: %v", err)
+		return nil
+	}
+	var cats []*jobcategorypb.JobCategory
+	for _, c := range resp.GetData() {
+		if c.GetActive() && c.GetId() != "" {
+			cats = append(cats, c)
+		}
+	}
+	sortBandCategories(cats)
+	return cats
+}
+
+// sortBandCategories orders the card's bands by job_category.sort_order ASC
+// (NULLs LAST), then name ASC, then id — the category primitive's own sort
+// contract (mirrors the landing's sortLandingCategories, plan §3.3). TabOptions
+// governs only the price_schedule tabstrip and never this axis.
+func sortBandCategories(cats []*jobcategorypb.JobCategory) {
+	sort.SliceStable(cats, func(i, j int) bool {
+		a, b := cats[i], cats[j]
+		ao, aok := bandOrderOf(a)
+		bo, bok := bandOrderOf(b)
+		if aok != bok {
+			return aok // NULLS LAST
+		}
+		if aok && bok && ao != bo {
+			return ao < bo
+		}
+		an, bn := strings.ToLower(a.GetName()), strings.ToLower(b.GetName())
+		if an == bn {
+			return a.GetId() < b.GetId()
+		}
+		return an < bn
+	})
+}
+
+// bandOrderOf returns the category's sort_order and whether it is set (NULL =
+// not set → sorts last).
+func bandOrderOf(c *jobcategorypb.JobCategory) (int32, bool) {
+	if c != nil && c.SortOrder != nil {
+		return c.GetSortOrder(), true
+	}
+	return 0, false
+}
+
+// bandSubjectRows groups the subject rows into native job-category
+// TableRowGroup bands, or returns nil to keep the flat row set. Banding applies
+// only when the card is configured for it (cats non-empty ⇒ liftH2 was on) AND
+// ≥2 distinct effective bands are present (the degrade contract). Effective
+// category per row = job_template.job_category_id (current-FK authority, §3.0);
+// a NULL or out-of-corpus (stale/inactive/foreign) category folds into a single
+// trailing Uncategorized band — never dropped, never duplicated. Row order
+// within a band is preserved (subject-name ASC, as built by the caller); band
+// order = the pre-sorted `cats` contract, Uncategorized last.
+func bandSubjectRows(l outcome_summary.Labels, rows []types.TableRow, jobTemplate, tmplCategory map[string]string, cats []*jobcategorypb.JobCategory) []types.TableRowGroup {
+	if len(cats) == 0 || len(rows) == 0 {
+		return nil
+	}
+	corpus := make(map[string]bool, len(cats))
+	for _, c := range cats {
+		corpus[c.GetId()] = true
+	}
+	buckets := map[string][]types.TableRow{} // "" = Uncategorized bucket
+	for _, r := range rows {
+		eff := tmplCategory[jobTemplate[r.ID]]
+		if eff == "" || !corpus[eff] {
+			eff = "" // NULL/foreign → Uncategorized
+		}
+		buckets[eff] = append(buckets[eff], r)
+	}
+	groups := make([]types.TableRowGroup, 0, len(cats)+1)
+	for _, c := range cats {
+		rs := buckets[c.GetId()]
+		if len(rs) == 0 {
+			continue
+		}
+		key := bandKey(c)
+		groups = append(groups, types.TableRowGroup{
+			ID:        "rc-band-" + key,
+			Title:     c.GetName(),
+			Rows:      rs,
+			DataAttrs: map[string]string{"testid": "rc-band-" + key},
+		})
+	}
+	if un := buckets[""]; len(un) > 0 {
+		title := strings.TrimSpace(l.Student.UncategorizedBand)
+		if title == "" {
+			title = "Uncategorized"
+		}
+		groups = append(groups, types.TableRowGroup{
+			ID:        "rc-band-uncategorized",
+			Title:     title,
+			Rows:      un,
+			DataAttrs: map[string]string{"testid": "rc-band-uncategorized"},
+		})
+	}
+	if len(groups) < 2 {
+		return nil // degrade: <2 distinct bands → flat rows
+	}
+	return groups
+}
+
+// bandKey returns a stable, HTML-id-safe band suffix: the category CODE (a
+// unique snake_case job_category.code, e.g. "academic") when present, else the
+// collision-resistant id tail.
+func bandKey(c *jobcategorypb.JobCategory) string {
+	if code := strings.TrimSpace(c.GetCode()); code != "" {
+		return code
+	}
+	return short(c.GetId())
 }
 
 // fetchPhaseOrders maps job_phase_id -> phase_order for the student's jobs, so

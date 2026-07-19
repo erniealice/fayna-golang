@@ -328,6 +328,10 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListClientAttributes = u.Entity.ClientAttribute.ListClientAttributes
 	deps.ResolveAttributeIDByCode = u.Entity.ClientAttribute.ResolveAttributeIDByCode
 	deps.ListJobTemplateSummaries = u.Operation.JobTemplateSummary.ListJobTemplateSummaries
+	// Landing dynamic category columns (R9 W-A2): the SAME single-statement
+	// tab-support UNION read the "/classes" job list consumes — category
+	// headers + the ACTIVE template→category map. Nil-safe → static columns.
+	deps.ListJobListTabSupport = u.Operation.JobListTabSupport.ListJobListTabSupport
 	// Report-card document download: the per-criterion transcript fetch. The
 	// authoritative per-criterion marks live on task_outcome, reached through
 	// job_task and A/B/C/D-ordered via template_task_criteria.sequence_order.

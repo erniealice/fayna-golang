@@ -120,6 +120,15 @@ type OutcomeSummaryModuleDeps struct {
 	ResolveAttributeIDByCode        func(ctx context.Context, code string) (string, error)
 	ListJobTemplateSummaries        func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 
+	// ListJobListTabSupport (R9 W-A2) — the ONE no-argument single-statement
+	// UNION tab-support read (all job_category rows + ACTIVE job_template
+	// stubs, per-kind permission-intersected in the espyna use case). The
+	// landing consumes it for its dynamic category count columns (headers +
+	// template→category map); it is the SAME closure the job list's "/classes"
+	// tabstrip consumes. Optional/nil-safe — nil degrades the landing to its
+	// static column set.
+	ListJobListTabSupport func(ctx context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error)
+
 	// ListJobCategories resolves Options.CategoryFilter (a job_category code, e.g.
 	// "academic") to its id so the section grid, client card, and report-card
 	// document drop same-origin deportment jobs (gate H2). Optional/nil-safe —
@@ -203,6 +212,7 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			ListPriceSchedules:           deps.ListPriceSchedules,
 			ListSubscriptionGroups:       deps.ListSubscriptionGroups,
 			ListJobTemplateSummaries:     deps.ListJobTemplateSummaries,
+			ListJobListTabSupport:        deps.ListJobListTabSupport,
 			ListSubscriptionGroupMembers: deps.ListSubscriptionGroupMembers,
 			ListJobs:                     deps.ListJobs,
 			// Section-visibility scoping (Options.List.ScopeByServicingGrant).
@@ -218,6 +228,14 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			CommonLabels:                  deps.CommonLabels,
 			TableLabels:                   deps.TableLabels,
 			CategoryFilter:                deps.Options.CategoryFilter,
+			// Client-card job-category banding (R9 W-A6, dedicated Options.ClientCard
+			// — NOT Options.Row). BandByCategory groups the subject rows into native
+			// job-category TableRowGroup bands; IncludeAllCategories lifts the card's
+			// H2 academic-only filter FOR BANDING so deportment subjects appear under
+			// their own band (the document/section paths keep H2 — separate fetches).
+			// Both zero (service-admin / unset) → today's flat card, byte-identical.
+			BandByCategory:                deps.Options.ClientCard.BandByCategory(),
+			IncludeAllCategories:          deps.Options.ClientCard.IncludeAllCategories,
 			ListJobCategories:             deps.ListJobCategories,
 			ListSubscriptionGroups:        deps.ListSubscriptionGroups,
 			ListSubscriptionGroupMembers:  deps.ListSubscriptionGroupMembers,

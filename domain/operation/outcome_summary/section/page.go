@@ -17,6 +17,7 @@ import (
 	"context"
 	"html"
 	"log"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -53,6 +54,14 @@ import (
 // by buildColumns + the export handler so a rename can never desync the two —
 // a mismatch would leak raw HTML action anchors into every CSV row.
 const actionsColumnKey = "rc-actions"
+
+// uncategorizedTab is the stable, URL-safe ?jc= sentinel for the single
+// NULL/out-of-corpus category tab (plan §3.0). It can never collide with a real
+// job_category id (a uuidv7) nor with short(id) (max 8 chars) — see
+// sectionTabKey. Templates whose effective category is NULL, or whose category
+// is outside the active corpus (stale/inactive/foreign), fold into this one
+// bucket — never dropped, never duplicated across category tabs.
+const uncategorizedTab = "uncategorized"
 
 // pageLimit chunks ListFilter(IN) id sets so each call's result set stays under
 // the adapter's default cap (the fetchClientNames pattern).
@@ -126,6 +135,32 @@ type PageData struct {
 	Table           *types.TableConfig
 	NotComputed     bool
 	Banner          string
+
+	// ?jc= category tabstrip extras. Zero on the flat/static path (tabs disabled,
+	// or degraded to today's static H2 filter). When TabItems is set the template
+	// renders the tabstrip OUTSIDE the NotComputed branch (plan §3.3) so an empty
+	// category tab stays navigable.
+	TabItems  []pyeza.TabItem
+	ActiveTab string
+	TabsAria  string
+}
+
+// sectionTabInfo carries the resolved ?jc= tabstrip for one render — the shared
+// output of resolveSectionPartition, consumed by the HTML view (into PageData)
+// and discarded by the CSV export (which needs only the filtered table).
+type sectionTabInfo struct {
+	Items     []pyeza.TabItem
+	ActiveTab string
+	Aria      string
+}
+
+// templateMeta is the per-template metadata the section grid needs: the display
+// name (columns) and the authoritative CURRENT category FK
+// (job_template.job_category_id, proto field 32 — plan §3.0), NOT the possibly
+// stale job.job_category_id snapshot.
+type templateMeta struct {
+	name       string
+	categoryID string
 }
 
 // student is one row's resolved identity.
@@ -159,17 +194,22 @@ func NewView(deps *Deps) view.View {
 			return view.Forbidden("job_outcome_summary:list")
 		}
 
-		group, table := buildSectionTable(ctx, deps, sectionID)
+		// ?jc= selects the active category tab (validated fail-closed inside
+		// buildSectionTable's shared resolver). The same raw value flows to the CSV
+		// export handler, so HTML and CSV never disagree (plan §3.3-3.4).
+		rawJC := viewCtx.Request.URL.Query().Get("jc")
+		group, table, tabs := buildSectionTable(ctx, deps, sectionID, rawJC)
 		if group == nil {
 			return view.Forbidden("job_outcome_summary:list")
 		}
 		grantHolders := fetchGrantHolderNames(ctx, deps, sectionID)
 		if table == nil {
 			// Empty-state: no computed summaries for this section → banner, not
-			// a blank grid (D.4 do-not-ship-blank).
-			return okPage(viewCtx, deps, group, grantHolders, nil, deps.Labels.Section.NotComputedBanner)
+			// a blank grid (D.4 do-not-ship-blank). The tabstrip still renders
+			// (OUTSIDE the NotComputed branch) so an empty tab stays navigable.
+			return okPage(viewCtx, deps, group, grantHolders, nil, deps.Labels.Section.NotComputedBanner, tabs)
 		}
-		return okPage(viewCtx, deps, group, grantHolders, table, "")
+		return okPage(viewCtx, deps, group, grantHolders, table, "", tabs)
 	})
 }
 
@@ -224,17 +264,21 @@ func fetchGrantHolderNames(ctx context.Context, deps *Deps, sectionID string) []
 }
 
 // buildSectionTable assembles the per-section grid: the workspace-gated group
-// plus a fully-ordered TableConfig (bands + rows + cells). Shared by the HTML
-// view and the CSV export handler so both render the identical grid.
-// Returns (nil, nil) when the group fails the workspace EXISTS gate and
-// (group, nil) when the section has no computed summaries yet.
-func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subscriptiongrouppb.SubscriptionGroup, *types.TableConfig) {
+// plus a fully-ordered TableConfig (bands + rows + cells) and (when the
+// category-columns Options knob is set) the ?jc= category tabstrip. Shared by
+// the HTML view and the CSV export handler so both render the identical grid
+// for the same rawJC — HTML and CSV never disagree (plan §3.3-3.4).
+//
+// Returns (nil, nil, nil) when the group fails the workspace EXISTS gate and
+// (group, nil, tabs) when the section has no computed summaries yet — the tabs
+// are still returned so the empty-state banner stays navigable (plan §3.3).
+func buildSectionTable(ctx context.Context, deps *Deps, sectionID, rawJC string) (*subscriptiongrouppb.SubscriptionGroup, *types.TableConfig, *sectionTabInfo) {
 	// EXISTS gate: the group must belong to the session workspace. The
 	// ListSubscriptionGroups adapter is workspace-scoped, so a foreign or
 	// missing id returns no rows → fail-closed (no leak).
 	group := fetchSection(ctx, deps, sectionID)
 	if group == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	l := deps.Labels
@@ -251,11 +295,11 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 	// adapter. Rows + columns are derived from THIS set (Q-SEC-7).
 	jobs := fetchSectionJobs(ctx, deps, keysOf(subToClient), historical)
 
-	// H2: keep only the configured category's subjects (academic), dropping
-	// same-origin deportment jobs that would otherwise render as columns. catID
-	// "" with catOK=true (no filter) keeps every job; catOK=false (a configured
-	// filter that could not be resolved) fails CLOSED — the grid drops every job.
-	catID, catOK := outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.Options.CategoryFilter)
+	// SHARED fail-closed resolver (view + export): decide the job-keep predicate,
+	// the tabstrip, and — on the tabbed path — the template metadata that also
+	// supplies the column names. The static (tabs-disabled / degraded) path keeps
+	// today's H2 category filter byte-for-byte (plan §3.3).
+	keep, tmplMeta, tabs := resolveSectionPartition(ctx, deps, sectionID, rawJC, jobs, subToClient, historical, l)
 
 	// Build the (client, template) → job map + distinct sets.
 	cellJob := map[string]string{} // clientID+"\x00"+templateID -> jobID
@@ -265,7 +309,7 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 	tmplSeen := map[string]bool{}
 	jobIDs := []string{}
 	for _, j := range jobs {
-		if !catOK || !outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId()) {
+		if !keep(j) {
 			continue
 		}
 		jobID := j.GetId()
@@ -292,7 +336,7 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 	// summaries(job_id IN jobs) → jobID → scaled label.
 	labelByJob := fetchSummaryLabels(ctx, deps, jobIDs, l)
 	if len(labelByJob) == 0 {
-		return group, nil
+		return group, nil, tabs
 	}
 
 	// Non-enrolled-placeholder evidence: one bulk job_phase → job_task →
@@ -315,8 +359,16 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 	// gender (or configured) attribute values for bands.
 	attrValues := fetchAttributeValues(ctx, deps, clientIDs)
 
-	// template names (columns), name ASC.
-	tmplNames := fetchTemplateNames(ctx, deps, templateIDs, historical)
+	// template names (columns), name ASC. On the tabbed path the metadata is
+	// already fetched (resolveSectionPartition needed the category FK); reuse it
+	// so no second ListJobTemplates read is issued. The static path reads names
+	// exactly as before (byte-for-byte).
+	var tmplNames map[string]string
+	if tmplMeta != nil {
+		tmplNames = namesFromMeta(tmplMeta, templateIDs)
+	} else {
+		tmplNames = fetchTemplateNames(ctx, deps, templateIDs, historical)
+	}
 	columns := buildColumns(templateIDs, tmplNames, l)
 
 	table := &types.TableConfig{
@@ -346,7 +398,327 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID string) (*subs
 	applyRowPresentation(table, rows, students, attrValues, deps.Options)
 	numberRows(table)
 	types.ApplyColumnStyles(table.Columns, allRows(table))
-	return group, table
+	return group, table, tabs
+}
+
+// resolveSectionPartition is the SHARED fail-closed resolver behind both the
+// HTML view and the CSV export. It returns the job-keep predicate the grid
+// builder filters with, plus — on the tabbed path — the template metadata
+// (name + authoritative category FK) and the ?jc= tabstrip. Identical inputs
+// always yield the identical partition, so the two surfaces never disagree.
+//
+// Fail-closed contract (plan §3.3), four branches:
+//   - tabs DISABLED (no category-columns Options) → today's static H2 filter,
+//     byte-for-byte, no tabs;
+//   - category read ERROR / empty corpus → degrade to the SAME static H2 filter,
+//     no tabs — NEVER an all-categories render (that would strip the H2 guard
+//     and leak same-origin deportment jobs into the academic grid);
+//   - successful nonempty corpus → validate ?jc= against the PRESENT buckets;
+//     default to the configured category (backward-compatible), then the first
+//     present active category;
+//   - a stale/foreign/inactive/empty ?jc= is never trusted raw — it falls back
+//     to that default.
+func resolveSectionPartition(
+	ctx context.Context,
+	deps *Deps,
+	sectionID, rawJC string,
+	jobs []*jobpb.Job,
+	subToClient map[string]string,
+	historical bool,
+	l outcome_summary.Labels,
+) (keep func(*jobpb.Job) bool, tmplMeta map[string]templateMeta, tabs *sectionTabInfo) {
+	// static returns the today's-behavior predicate: the configured H2 category
+	// filter (Options.CategoryFilter), resolved fail-closed. catOK=false (a
+	// configured code that would not resolve) drops every job — never leaks.
+	static := func() func(*jobpb.Job) bool {
+		catID, catOK := outcome_summary.ResolveCategoryID(ctx, deps.ListJobCategories, deps.Options.CategoryFilter)
+		return func(j *jobpb.Job) bool {
+			return catOK && outcome_summary.KeepJobInCategory(catID, j.GetJobCategoryId())
+		}
+	}
+
+	// Config gate: without the category-columns Options knob the section renders
+	// today's single static-category grid, no tabs (service-admin / any tier that
+	// does not opt in is byte-identical).
+	if !deps.Options.List.CategoryColumns() {
+		return static(), nil, nil
+	}
+
+	// Corpus = ACTIVE categories (the ONE shared corpus, plan §3.0), via the
+	// section's already-wired ListJobCategories closure — zero new espyna surface.
+	// A read error or empty corpus fails CLOSED to the static path (no tabs,
+	// never all-categories).
+	cats, err := listActiveCategories(ctx, deps)
+	if err != nil {
+		log.Printf("report cards section: list categories (FAIL CLOSED to static H2 filter, no tabs): %v", err)
+		return static(), nil, nil
+	}
+	if len(cats) == 0 {
+		return static(), nil, nil
+	}
+	sortSectionCategories(cats)
+	corpus := categoryIDSet(cats)
+
+	// Strict authoritative partition (plan §3.0): job_template.job_category_id
+	// (the CURRENT template FK) — NOT the possibly-stale job snapshot, NOT the
+	// blank-matches-every-category KeepJobInCategory helper. The frozen job
+	// snapshot is consulted ONLY when a job's template row is absent.
+	tmplMeta = fetchTemplateMeta(ctx, deps, distinctTemplateIDs(jobs), historical)
+	bucketOf := func(j *jobpb.Job) string {
+		return sectionBucket(j.GetJobCategoryId(), j.GetJobTemplateId(), tmplMeta, corpus)
+	}
+
+	// Per-bucket distinct-template (subject) counts over the section's VALID jobs
+	// — the tab badges + the "present in this section" filter.
+	counts := map[string]int{}
+	seenBucketTid := map[string]bool{}
+	for _, j := range jobs {
+		tid := j.GetJobTemplateId()
+		clientID := subToClient[j.GetOriginId()]
+		if clientID == "" {
+			clientID = j.GetClientId()
+		}
+		if clientID == "" || tid == "" || j.GetId() == "" {
+			continue
+		}
+		b := bucketOf(j)
+		if k := b + "\x00" + tid; !seenBucketTid[k] {
+			seenBucketTid[k] = true
+			counts[b]++
+		}
+	}
+
+	// Selection (fail-closed): validate ?jc= against the present buckets, else the
+	// configured-then-first-active default.
+	selected := resolveSectionSelection(rawJC, cats, counts, deps.Options.CategoryFilter)
+
+	keep = func(j *jobpb.Job) bool { return bucketOf(j) == selected }
+	tabs = buildSectionCategoryTabs(cats, counts, selected, sectionID, deps.Routes, l)
+	return keep, tmplMeta, tabs
+}
+
+// sectionBucket resolves one job's tab bucket under the strict authoritative
+// partition (plan §3.0): the CURRENT template FK (job_template.job_category_id)
+// when the template row is known — even if the frozen job snapshot disagrees —
+// and the snapshot ONLY as a missing-template fallback. Any effective category
+// outside the active corpus (NULL, inactive, stale, foreign) folds into the
+// single Uncategorized bucket: never dropped, never duplicated across tabs.
+func sectionBucket(jobCategorySnapshot, templateID string, tmplMeta map[string]templateMeta, corpus map[string]bool) string {
+	cat := jobCategorySnapshot
+	if m, ok := tmplMeta[templateID]; ok {
+		cat = m.categoryID // authoritative current FK (may be "" for a NULL FK)
+	}
+	if cat != "" && corpus[cat] {
+		return cat
+	}
+	return uncategorizedTab
+}
+
+// resolveSectionSelection validates the raw ?jc= against the PRESENT buckets and
+// returns the selected bucket, defaulting fail-closed to the configured category
+// (today's static H2 category — backward-compatible), then the first present
+// active category, then Uncategorized. It NEVER returns an all-categories
+// selection and NEVER trusts a stale/foreign/inactive/empty ?jc= raw.
+func resolveSectionSelection(rawJC string, cats []*jobcategorypb.JobCategory, counts map[string]int, configuredCode string) string {
+	present := func(bucket string) bool { return counts[bucket] > 0 }
+	jc := strings.TrimSpace(rawJC)
+
+	// 1. An explicit ?jc= naming a PRESENT bucket (an active category id, or the
+	//    Uncategorized sentinel) selects it. Everything else falls through.
+	if jc != "" {
+		if jc == uncategorizedTab && present(uncategorizedTab) {
+			return uncategorizedTab
+		}
+		if isActiveCategory(cats, jc) && present(jc) {
+			return jc
+		}
+	}
+	// 2. Default = the configured category (today's static H2 category), when
+	//    present — preserves the pre-tabs render on a bare URL.
+	if id := categoryIDByCode(cats, configuredCode); id != "" && present(id) {
+		return id
+	}
+	// 3. First PRESENT active category in the canonical sort order.
+	for _, c := range cats {
+		if present(c.GetId()) {
+			return c.GetId()
+		}
+	}
+	// 4. Only Uncategorized present.
+	if present(uncategorizedTab) {
+		return uncategorizedTab
+	}
+	return "" // nothing present → an empty grid (no matching jobs)
+}
+
+// buildSectionCategoryTabs builds one TabItem per active category PRESENT in the
+// section (count > 0), in the canonical sort order, plus a trailing
+// Uncategorized tab when that bucket is present. Href is the query-encoded
+// ?jc= deep-link onto the same section URL; the tab whose key == selected is
+// active. Returns nil when no bucket is present (degrade to no tabstrip).
+func buildSectionCategoryTabs(
+	cats []*jobcategorypb.JobCategory,
+	counts map[string]int,
+	selected, sectionID string,
+	routes outcome_summary.Routes,
+	l outcome_summary.Labels,
+) *sectionTabInfo {
+	base := route.ResolveURL(routes.SectionURL, "id", sectionID)
+	items := make([]pyeza.TabItem, 0, len(cats)+1)
+	for _, c := range cats {
+		id := c.GetId()
+		if counts[id] == 0 {
+			continue // only categories present in THIS section's template set
+		}
+		items = append(items, pyeza.TabItem{
+			Key:   sectionTabKey(id),
+			Label: c.GetName(), // job_category.name is DATA (lyngua.md)
+			Href:  sectionCategoryURL(base, id),
+			Count: counts[id],
+		})
+	}
+	if counts[uncategorizedTab] > 0 {
+		items = append(items, pyeza.TabItem{
+			Key:   sectionTabKey(uncategorizedTab),
+			Label: l.Landing.UncategorizedColumn, // reuse the landing's lyngua'd label
+			Href:  sectionCategoryURL(base, uncategorizedTab),
+			Count: counts[uncategorizedTab],
+		})
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return &sectionTabInfo{
+		Items:     items,
+		ActiveTab: sectionTabKey(selected),
+		Aria:      l.Section.CategoryTabsAriaLabel,
+	}
+}
+
+// listActiveCategories fetches the workspace's ACTIVE job_category corpus via the
+// section's already-wired ListJobCategories closure. The filterless generic list
+// defaults to active=true rows; the explicit GetActive() guard keeps the corpus
+// active-only even if an adapter ever changed that default (plan §3.0). Nil-safe.
+func listActiveCategories(ctx context.Context, deps *Deps) ([]*jobcategorypb.JobCategory, error) {
+	if deps.ListJobCategories == nil {
+		return nil, nil
+	}
+	resp, err := deps.ListJobCategories(ctx, &jobcategorypb.ListJobCategoriesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	var cats []*jobcategorypb.JobCategory
+	for _, c := range resp.GetData() {
+		if c.GetActive() {
+			cats = append(cats, c)
+		}
+	}
+	return cats, nil
+}
+
+// sortSectionCategories orders the tabs by job_category.sort_order ASC with
+// NULLs LAST, then name ASC, then id — the category primitive's OWN sort
+// contract (plan §3.3; mirrors list.sortLandingCategories). TabOptions governs
+// only the price_schedule tabstrip and never this axis.
+func sortSectionCategories(cats []*jobcategorypb.JobCategory) {
+	sort.SliceStable(cats, func(i, j int) bool {
+		a, b := cats[i], cats[j]
+		ai, aok := categoryOrderOf(a)
+		bi, bok := categoryOrderOf(b)
+		if aok != bok {
+			return aok // NULLS LAST
+		}
+		if aok && bok && ai != bi {
+			return ai < bi
+		}
+		an := strings.ToLower(a.GetName())
+		bn := strings.ToLower(b.GetName())
+		if an == bn {
+			return a.GetId() < b.GetId()
+		}
+		return an < bn
+	})
+}
+
+// categoryOrderOf returns the category's sort_order and whether it is set (NULL
+// = not set → sorts last).
+func categoryOrderOf(c *jobcategorypb.JobCategory) (int32, bool) {
+	if c != nil && c.SortOrder != nil {
+		return c.GetSortOrder(), true
+	}
+	return 0, false
+}
+
+// categoryIDSet returns the corpus-membership set for the active category slice.
+func categoryIDSet(cats []*jobcategorypb.JobCategory) map[string]bool {
+	set := make(map[string]bool, len(cats))
+	for _, c := range cats {
+		set[c.GetId()] = true
+	}
+	return set
+}
+
+// categoryIDByCode resolves a configured job_category CODE (Options.CategoryFilter,
+// e.g. "academic") to its id against the already-fetched corpus (case-insensitive,
+// trimmed) — no extra read. "" when unset or unmatched.
+func categoryIDByCode(cats []*jobcategorypb.JobCategory, code string) string {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return ""
+	}
+	for _, c := range cats {
+		if strings.EqualFold(strings.TrimSpace(c.GetCode()), code) {
+			return c.GetId()
+		}
+	}
+	return ""
+}
+
+// isActiveCategory reports whether id matches a category in the active corpus —
+// the guard that keeps a stale/foreign/inactive/tampered ?jc= from selecting a
+// non-existent tab.
+func isActiveCategory(cats []*jobcategorypb.JobCategory, id string) bool {
+	for _, c := range cats {
+		if c.GetId() == id {
+			return true
+		}
+	}
+	return false
+}
+
+// distinctTemplateIDs collects the distinct non-empty job_template_ids across the
+// section's (pre-filter) jobs — the id set fetchTemplateMeta resolves for the
+// authoritative partition + column names.
+func distinctTemplateIDs(jobs []*jobpb.Job) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, j := range jobs {
+		if tid := j.GetJobTemplateId(); tid != "" && !seen[tid] {
+			seen[tid] = true
+			out = append(out, tid)
+		}
+	}
+	return out
+}
+
+// sectionTabKey builds a stable, collision-proof tab key from a category id: the
+// last-8-char slug of the id (short()), or the full-word Uncategorized key. The
+// Uncategorized word (13 chars) can never collide with "jc-tab-"+short(id) (≤8
+// chars), and the sentinel can never equal a real uuidv7 id.
+func sectionTabKey(id string) string {
+	if id == "" {
+		return ""
+	}
+	if id == uncategorizedTab {
+		return "jc-tab-uncategorized"
+	}
+	return "jc-tab-" + short(id)
+}
+
+// sectionCategoryURL appends a query-encoded ?jc= onto the resolved section URL
+// (plan §3.2: url.Values encoding, not string concatenation).
+func sectionCategoryURL(base, catID string) string {
+	return base + "?" + url.Values{"jc": {catID}}.Encode()
 }
 
 // numberRows prefixes each student cell with its sequence number in final
@@ -380,7 +752,7 @@ func numberRows(table *types.TableConfig) {
 // the group's servicing-grant holder names (comma-separated — a group can
 // carry several subscription_group_workspace_user rows), falling back to the
 // lyngua'd DetailLink label when no grants resolve.
-func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, grantHolders []string, table *types.TableConfig, banner string) view.ViewResult {
+func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, grantHolders []string, table *types.TableConfig, banner string, tabs *sectionTabInfo) view.ViewResult {
 	l := deps.Labels
 	caption := strings.Join(grantHolders, ", ")
 	if caption == "" {
@@ -405,6 +777,11 @@ func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.Su
 		Table:           table,
 		NotComputed:     table == nil,
 		Banner:          banner,
+	}
+	if tabs != nil {
+		pd.TabItems = tabs.Items
+		pd.ActiveTab = tabs.ActiveTab
+		pd.TabsAria = tabs.Aria
 	}
 	return view.OK("outcome-summary-section", pd)
 }
@@ -654,11 +1031,14 @@ func fetchAttributeValues(ctx context.Context, deps *Deps, clientIDs []string) m
 	return out
 }
 
-// fetchTemplateNames resolves job_template_id → name, chunked. Historical
-// mode also reads inactive templates (a frozen year's subjects are retired
-// from active curricula) — without it the columns fall back to raw ids.
-func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string, historical bool) map[string]string {
-	out := map[string]string{}
+// fetchTemplateMeta resolves job_template_id → {name, job_category_id}, chunked.
+// Historical mode also reads inactive templates (a frozen year's subjects are
+// retired from active curricula) — without it the columns fall back to raw ids
+// and inactive templates would mis-bucket to Uncategorized. The category FK is
+// the authoritative CURRENT partition key (plan §3.0); it may be "" (NULL FK),
+// which collates to the Uncategorized bucket.
+func fetchTemplateMeta(ctx context.Context, deps *Deps, templateIDs []string, historical bool) map[string]templateMeta {
+	out := map[string]templateMeta{}
 	if deps.ListJobTemplates == nil || len(templateIDs) == 0 {
 		return out
 	}
@@ -686,9 +1066,33 @@ func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string, h
 			}
 			for _, t := range resp.GetData() {
 				if id := t.GetId(); id != "" {
-					out[id] = t.GetName()
+					out[id] = templateMeta{name: t.GetName(), categoryID: t.GetJobCategoryId()}
 				}
 			}
+		}
+	}
+	return out
+}
+
+// fetchTemplateNames resolves job_template_id → name (the static path's column
+// labels), a thin projection over fetchTemplateMeta — behavior byte-identical to
+// the pre-tab section grid.
+func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string, historical bool) map[string]string {
+	meta := fetchTemplateMeta(ctx, deps, templateIDs, historical)
+	out := make(map[string]string, len(meta))
+	for id, m := range meta {
+		out[id] = m.name
+	}
+	return out
+}
+
+// namesFromMeta projects the (already-fetched, tabbed-path) template metadata to
+// the id→name map buildColumns needs, restricted to the surviving column set.
+func namesFromMeta(meta map[string]templateMeta, templateIDs []string) map[string]string {
+	out := make(map[string]string, len(templateIDs))
+	for _, tid := range templateIDs {
+		if m, ok := meta[tid]; ok {
+			out[tid] = m.name
 		}
 	}
 	return out

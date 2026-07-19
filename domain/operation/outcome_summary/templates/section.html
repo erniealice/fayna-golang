@@ -6,6 +6,20 @@
 {{/* Content-only partial — per-section report-card grid (view-2) */}}
 {{define "outcome-summary-section-content"}}
 <div class="page-content page-content--table">
+    {{/* ?jc= category tabstrip (school-admin, when the category-columns Options
+         knob is set). Rendered OUTSIDE the NotComputed branch so an empty
+         category tab stays navigable (plan §3.3). Link-flavor pyeza tabs
+         (Variant "default"): a <nav> of anchors, aria-current on the active tab,
+         hx-push-url'd partial swaps under the app-shell's body hx-boost. The
+         table id ("report-cards-grid") stays CONSTANT across tabs so both the
+         seed script below AND the in-memory paginator state survive a boosted
+         tab swap (R8). Zero TabItems (service-admin / any non-opting tier) →
+         this whole branch is skipped and the grid renders byte-identically. */}}
+    {{if .TabItems}}
+    {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default"
+                           "ID" "report-cards-category-tabs" "Label" .TabsAria "Indicator" "#tabContent")}}
+    <div id="tabContent" role="tabpanel"{{if .ActiveTab}} aria-labelledby="tab-{{.ActiveTab}}"{{end}}>
+    {{end}}
     {{if .NotComputed}}
     {{template "alert" (dict "State" "info" "Variant" "subtle" "Message" .Banner)}}
     {{else}}
@@ -30,6 +44,9 @@
         if (sel) { sel.value = '100'; }
     })();
     </script>
+    {{end}}
+    {{if .TabItems}}
+    </div>
     {{end}}
 </div>
 {{end}}

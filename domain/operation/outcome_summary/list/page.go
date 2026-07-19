@@ -20,7 +20,9 @@ import (
 	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
@@ -79,6 +81,18 @@ type ListViewDeps struct {
 	ListPriceSchedules       func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
 	ListSubscriptionGroups   func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
+
+	// ListJobListTabSupport (R9 W-A2) — the ONE no-argument single-statement
+	// UNION read (block/usecases.go JobListTabSupportUseCases) supplying the
+	// landing's dynamic category columns: every workspace job_category row
+	// (active + inactive; the view keeps ACTIVE only, sorted by sort_order —
+	// the §3.0 shared corpus) AND every ACTIVE job_template stub (the
+	// template→category map for the historical fallback's bucketing). Called
+	// ONLY when Options.List.CategoryColumns() is set, AFTER the empty-band
+	// guard (the cheap path stays cheap — plan §3.6). Optional/nil-safe: a nil
+	// closure, an error, a denied kind, or an empty category set all degrade to
+	// the static column set (plan §3.7's two-layer degrade).
+	ListJobListTabSupport func(ctx context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error)
 
 	// Historical-count fallback deps: the grouped ListJobTemplateSummaries
 	// aggregate binds active rows only, so a historical (inactive) schedule's
@@ -264,22 +278,40 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 		groups = scopeGroupsByServicingGrant(ctx, deps, groups)
 	}
 
+	// 3c. category corpus (R9 W-A2) — the ONE shared active-only set (plan
+	//     §3.0) + the ACTIVE template→category map, from the single-statement
+	//     tab-support UNION read. Config-gated (Options.List.CategoryColumns)
+	//     and placed AFTER the empty-band guard so the cheap path stays cheap
+	//     (§3.6: Scenario-A 11→12; empty band unchanged). Empty/nil/error →
+	//     static columns (the data-gated degrade).
+	cats, templateToCat, hasNullTemplate := loadLandingCategories(ctx, deps)
+
 	// 4. counts via ONE grouped read (no N+1): subjects = distinct templates per
-	//    section, students = the section's largest per-subject cohort. The
-	//    aggregate covers ACTIVE rows only, so historical sections then fill
-	//    their counts from direct member/job reads (selected tab only).
-	subjectCount, studentCount := sectionCounts(ctx, deps)
-	fillHistoricalCounts(ctx, deps, groups, selected, subjectCount, studentCount)
+	//    section (bucketed per category — the summary rows carry the template's
+	//    CURRENT job_category_id, W-A1), students = the section's largest
+	//    per-subject cohort. The aggregate covers ACTIVE rows only, so
+	//    historical sections then fill their counts from direct member/job
+	//    reads (selected tab only), bucketed in-memory over the SAME fetched
+	//    rows (no per-category read fan-out — §3.6 historical row).
+	subjectCount, subjectsByCat, studentCount := sectionCounts(ctx, deps)
+	fillHistoricalCounts(ctx, deps, groups, selected, subjectCount, studentCount, subjectsByCat, templateToCat)
+
+	// Uncategorized bucket (§3.0 NULL policy): render the single named bucket
+	// column ONLY when out-of-corpus subjects exist — an ACTIVE template stub
+	// with no category FK, a "" (NULL) bucketed count, or a count under a
+	// stale/inactive/foreign category id folded into the bucket. Never
+	// dropped, never duplicated.
+	showUncategorized := len(cats) > 0 && (hasNullTemplate || anyUncategorizedCount(subjectsByCat, categoryIDSet(cats)))
 
 	// 5. tabs (one per schedule; Count = active sections under it).
 	tabs := buildTabs(schedules, groups, selected, l, baseHref)
 
 	// 6. section rows for the selected tab, name ASC.
-	rows := buildSectionRows(groups, selected, subjectCount, studentCount, l, deps.Routes)
+	rows := buildSectionRows(groups, selected, subjectCount, studentCount, l, deps.Routes, cats, subjectsByCat, showUncategorized)
 
 	tableConfig := &types.TableConfig{
 		ID:                   "report-cards-sections",
-		Columns:              landingColumns(l),
+		Columns:              landingColumnsFor(l, cats, showUncategorized),
 		Rows:                 rows,
 		ShowSearch:           true,
 		ShowSort:             true,
@@ -598,9 +630,14 @@ func orderOf(s *priceschedulepb.PriceSchedule) (int32, bool) {
 // counts from ONE ListJobTemplateSummaries grouped read (staff-scoped at the
 // adapter): subjects = distinct job_template rows for the group; students = the
 // group's largest per-subject job_count (its roster size for a section where
-// every student shares ≥1 subject). Nil-safe → empty maps (blank counts).
-func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string]int, students map[string]int) {
+// every student shares ≥1 subject). subjectsByCat additionally buckets the SAME
+// distinct templates by the row's job_category_id (the template's CURRENT FK,
+// projected by W-A1; "" = the NULL/Uncategorized bucket, §3.0) — a pure
+// in-memory regroup of the one read, zero extra statements. Nil-safe → empty
+// maps (blank counts).
+func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string]int, subjectsByCat map[string]map[string]int, students map[string]int) {
 	subjects = map[string]int{}
+	subjectsByCat = map[string]map[string]int{}
 	students = map[string]int{}
 	if deps.ListJobTemplateSummaries == nil {
 		return
@@ -622,6 +659,10 @@ func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string
 		if tid := s.GetJobTemplateId(); tid != "" && !seen[gid][tid] {
 			seen[gid][tid] = true
 			subjects[gid]++
+			if subjectsByCat[gid] == nil {
+				subjectsByCat[gid] = map[string]int{}
+			}
+			subjectsByCat[gid][s.GetJobCategoryId()]++
 		}
 		if jc := int(s.GetJobCount()); jc > students[gid] {
 			students[gid] = jc
@@ -637,12 +678,22 @@ func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string
 // job_templates over the members' jobs (active + inactive). Bulk reads, no
 // N+1: one member read (+inactive merge) and chunked job reads across the
 // tab's groups. Nil-safe; missing closures leave counts blank.
+//
+// Category bucketing (R9 W-A2) rides the SAME fetched job rows — no extra
+// read, and NEVER a per-category fan-out (§3.6 historical row). Effective
+// category per §3.0: the template's CURRENT FK via templateToCat when the
+// template is in the active corpus; the job's frozen job_category_id snapshot
+// ONLY as the missing-template fallback (historical templates are inactive and
+// absent from the active stub map); "" = the Uncategorized bucket. A nil
+// templateToCat (categories not configured/degraded) skips bucketing entirely.
 func fillHistoricalCounts(
 	ctx context.Context,
 	deps *ListViewDeps,
 	groups []*subscriptiongrouppb.SubscriptionGroup,
 	selected string,
 	subjectCount, studentCount map[string]int,
+	subjectsByCat map[string]map[string]int,
+	templateToCat map[string]string,
 ) {
 	if deps.ListSubscriptionGroupMembers == nil {
 		return
@@ -711,6 +762,7 @@ func fillHistoricalCounts(
 	const chunk = 100
 	for gid, subIDs := range subsPerGroup {
 		tmpls := map[string]bool{}
+		tmplCat := map[string]string{} // template id → effective category (§3.0)
 		for start := 0; start < len(subIDs); start += chunk {
 			end := start + chunk
 			if end > len(subIDs) {
@@ -740,6 +792,20 @@ func fillHistoricalCounts(
 					for _, j := range resp.GetData() {
 						if tid := j.GetJobTemplateId(); tid != "" {
 							tmpls[tid] = true
+							if templateToCat != nil {
+								if _, done := tmplCat[tid]; !done {
+									// Authority = the template's CURRENT FK; the
+									// job's frozen snapshot ONLY when the template
+									// is absent from the active corpus (§3.0). A
+									// mapped-but-NULL template stays "" —
+									// Uncategorized, never snapshot-overridden.
+									cat, mapped := templateToCat[tid]
+									if !mapped {
+										cat = j.GetJobCategoryId()
+									}
+									tmplCat[tid] = cat
+								}
+							}
 						}
 					}
 					if len(resp.GetData()) < chunk {
@@ -750,6 +816,13 @@ func fillHistoricalCounts(
 		}
 		if subjectCount[gid] == 0 {
 			subjectCount[gid] = len(tmpls)
+		}
+		if subjectsByCat != nil && len(subjectsByCat[gid]) == 0 && len(tmplCat) > 0 {
+			byCat := make(map[string]int, len(tmplCat))
+			for _, cat := range tmplCat {
+				byCat[cat]++
+			}
+			subjectsByCat[gid] = byCat
 		}
 	}
 }
@@ -830,12 +903,23 @@ func scopeActiveSubNav(scope string) string {
 // buildSectionRows builds the section table rows for the selected schedule
 // (inactive groups included — the historical view), name ASC. Each row links
 // (view action) into the per-section grid.
+//
+// With a nonempty category corpus (R9 W-A2) the single subject-count cell is
+// replaced by one TYPED composite cell per category (plan §3.11 — committed
+// pyeza BuildCompositeCell: count + eye deep-link, URL-query-encoded ?jc=,
+// collision-proof rc-eye-<section>-<category> test id, aria naming category
+// AND section), plus the Uncategorized bucket cell (bare count, no eye — the
+// NULL bucket has no addressable ?jc= target) when enabled. Zero categories →
+// EXACTLY today's static cells (the degrade contract).
 func buildSectionRows(
 	groups []*subscriptiongrouppb.SubscriptionGroup,
 	selected string,
 	subjectCount, studentCount map[string]int,
 	l outcome_summary.Labels,
 	routes outcome_summary.Routes,
+	cats []*jobcategorypb.JobCategory,
+	subjectsByCat map[string]map[string]int,
+	showUncategorized bool,
 ) []types.TableRow {
 	var filtered []*subscriptiongrouppb.SubscriptionGroup
 	for _, g := range groups {
@@ -853,32 +937,71 @@ func buildSectionRows(
 		return a < b
 	})
 
+	corpus := categoryIDSet(cats)
 	rows := make([]types.TableRow, 0, len(filtered))
 	for _, g := range filtered {
 		gid := g.GetId()
+		sectionURL := route.ResolveURL(routes.SectionURL, "id", gid)
+		cells := []types.TableCell{
+			{Value: g.GetName()},
+			{Value: fmt.Sprintf("%d", studentCount[gid])},
+		}
+		if len(cats) == 0 {
+			// Static degrade path — byte-identical to the pre-R9 landing cell.
+			cells = append(cells, types.TableCell{Value: fmt.Sprintf("%d", subjectCount[gid])})
+		} else {
+			for _, c := range cats {
+				cells = append(cells, types.BuildCompositeCell(types.CompositeCellParams{
+					Count:        subjectsByCat[gid][c.GetId()],
+					BasePath:     sectionURL,
+					QueryKey:     "jc",
+					SectionID:    gid,
+					CategoryID:   c.GetId(),
+					SectionName:  g.GetName(),
+					CategoryName: c.GetName(),
+					// The lyngua frame names category AND section; a frame
+					// missing either placeholder falls back ("") to the typed
+					// cell's default both-nouns composition.
+					AccessibleName: cellAccessibleName(l.Landing.CellViewAction, c.GetName(), g.GetName()),
+				}))
+			}
+			if showUncategorized {
+				// Bucket cell (§3.0): the NULL bucket plus every out-of-corpus
+				// fold, count only — SectionID/CategoryID are deliberately
+				// empty so BuildCompositeCell omits the eye (there is no
+				// addressable ?jc= target for the bucket).
+				cells = append(cells, types.BuildCompositeCell(types.CompositeCellParams{
+					Count: uncategorizedCount(subjectsByCat[gid], corpus),
+				}))
+			}
+		}
 		rows = append(rows, types.TableRow{
 			ID:        gid,
 			DataAttrs: map[string]string{"testid": "rc-section-" + short(gid)},
-			Cells: []types.TableCell{
-				{Value: g.GetName()},
-				{Value: fmt.Sprintf("%d", studentCount[gid])},
-				{Value: fmt.Sprintf("%d", subjectCount[gid])},
-			},
+			Cells:     cells,
 			Actions: []types.TableAction{
 				{
 					Type:   "view",
 					Label:  l.Landing.ViewAction,
-					Href:   route.ResolveURL(routes.SectionURL, "id", gid),
+					Href:   sectionURL,
 					TestID: "rc-view-" + short(gid),
 				},
 				{
-					// The download JS appends ?id=<row id> (this section's own
-					// id) — the export handler ignores it and serves the full
-					// section grid.
+					// R9 W-A2 export-link fix (Q-R9-7 locked; plan §3.4 pt 3):
+					// the row-download JS unconditionally appends "?id=<row id>"
+					// (pyeza table-actions.js) — here the row id is the SECTION's
+					// own id, which matches no client row in the section export
+					// (section/export.go:64-83). Pre-seeding an EMPTY "?id="
+					// makes the JS append "&id=<gid>" instead, and Go's
+					// Query().Get("id") returns the FIRST value ("") — so the
+					// server never attempts the bogus section-id row lookup and
+					// the whole-section CSV is guaranteed regardless of how the
+					// narrowing evolves. Fully dropping the appended param needs
+					// a pyeza table-actions.js delta (frozen this wave).
 					Type:   "download",
 					Label:  l.Landing.DownloadAction,
 					Action: "download",
-					URL:    route.ResolveURL(routes.SectionExportURL, "id", gid),
+					URL:    route.ResolveURL(routes.SectionExportURL, "id", gid) + "?id=",
 					TestID: "rc-download-" + short(gid),
 				},
 			},

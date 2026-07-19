@@ -287,6 +287,11 @@ type treeInputs struct {
 	groupCatID string     // the group category id
 	groupCount int        // number of jobs in the group category (singleton rule)
 	groupLead  string     // resolved group-lead ("Adviser") display name
+
+	// historical is set when the card's section is inactive (a past academic
+	// year). A past card's job/phase/task ancestry is inactive, so the singleton
+	// coded-cell read must route to the inactive-admitting historical reader.
+	historical bool
 }
 
 // academicTreeRow pairs a rendered academic subject row with its job id (needed
@@ -354,7 +359,7 @@ func buildJobCategoriesTree(ctx context.Context, d *Deps, in treeInputs, strictY
 		switch {
 		case in.groupCount == 1 && in.groupJob != nil:
 			singleton := buildSingletonProjection(ctx, d, in.groupJob, in.groupLead,
-				in.jobOrderCode[in.groupJob.GetId()], in.strictPhase[in.groupJob.GetId()])
+				in.jobOrderCode[in.groupJob.GetId()], in.strictPhase[in.groupJob.GetId()], in.historical)
 			if m := catMap(groupCode); m != nil {
 				for k, v := range singleton {
 					m[k] = v
@@ -450,7 +455,7 @@ func deportRowTreeItem(dr deportRow, jobOrderCode map[string]map[int32]string, s
 // lead-staff alias, per-phase strict labels, the per-(task,criterion) coded cells
 // (attendance grid), and the per-criterion totals (Σ across phases of RECORDED
 // values only — absence stays blank, a recorded 0 renders "0").
-func buildSingletonProjection(ctx context.Context, d *Deps, groupJob *jobpb.Job, groupLead string, orderCode map[int32]string, strictPhase map[int32]string) map[string]any {
+func buildSingletonProjection(ctx context.Context, d *Deps, groupJob *jobpb.Job, groupLead string, orderCode map[int32]string, strictPhase map[int32]string, historical bool) map[string]any {
 	out := map[string]any{
 		"lead_staff_name_display": orBlank(groupLead),
 	}
@@ -476,10 +481,20 @@ func buildSingletonProjection(ctx context.Context, d *Deps, groupJob *jobpb.Job,
 	}
 
 	// Coded cells + per-criterion totals from the ownership-joined latest-cell read.
+	// A past-AY (historical) card's job/phase/task ancestry is inactive, so its
+	// cells only resolve through the inactive-admitting historical reader; the live
+	// reader (which requires active ancestry) would return nothing and the whole
+	// attendance grid would render blank. Fail-closed when historical but the
+	// historical closure is unwired (leaves the cells blank, never a silent
+	// live-path fallback that would misreport a past card as empty).
+	codedReader := d.ListCodedTaskOutcomeValuesByJob
+	if historical {
+		codedReader = d.ListCodedTaskOutcomeValuesByJobHistorical
+	}
 	totals := map[string]float64{}
 	hasTotal := map[string]bool{}
-	if d.ListCodedTaskOutcomeValuesByJob != nil && groupJob.GetId() != "" {
-		resp, err := d.ListCodedTaskOutcomeValuesByJob(ctx, &taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest{
+	if codedReader != nil && groupJob.GetId() != "" {
+		resp, err := codedReader(ctx, &taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest{
 			JobIds: []string{groupJob.GetId()},
 		})
 		if err != nil {
@@ -560,4 +575,3 @@ func phaseLabelAt(byOrder map[int32]string, order int32) string {
 	}
 	return orBlank(byOrder[order])
 }
-

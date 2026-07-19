@@ -3,8 +3,19 @@ package template_settings
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/erniealice/pyeza-golang/types"
+	"github.com/erniealice/pyeza-golang/view"
+
+	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
+	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 )
 
 // makeZip builds an in-memory ZIP from name→content entries. Entry order is not
@@ -108,5 +119,262 @@ func TestValidateDocxArchive_TooManyEntries(t *testing.T) {
 	}
 	if err := validateDocxArchive(makeZip(t, entries)); err == nil {
 		t.Fatalf("expected an archive with > %d entries to be rejected", maxArchiveEntries)
+	}
+}
+
+// ── Q4: permission-family alignment + upload-orphan cleanup ─────────────────
+
+// permsCtx returns a request context carrying exactly the given permission
+// codes (the same seam the ViewAdapter uses in production).
+func permsCtx(codes ...string) context.Context {
+	return view.WithUserPermissions(context.Background(), types.NewUserPermissions(codes))
+}
+
+// uploadRecorder wires a Deps whose closures record call order + arguments and
+// fail on demand, so the tests can pin the bytes-LAST ordering and the
+// compensation contract.
+type uploadRecorder struct {
+	order []string
+
+	failCreateDoc     bool
+	failCreateBinding bool
+	failUpload        bool
+	listErr           error
+
+	createdDocID     string
+	createdBindingID string
+	deletedBindingID string
+	deletedDocID     string
+	uploadedKey      string
+
+	bindings []*bindingpb.JobOutcomeSummaryDocumentTemplate
+}
+
+func (r *uploadRecorder) deps() *Deps {
+	return &Deps{
+		UploadTemplate: func(_ context.Context, _, key string, _ []byte, _ string) error {
+			r.order = append(r.order, "upload")
+			if r.failUpload {
+				return errors.New("upload boom")
+			}
+			r.uploadedKey = key
+			return nil
+		},
+		CreateDocumentTemplate: func(_ context.Context, req *documenttemplatepb.CreateDocumentTemplateRequest) (*documenttemplatepb.CreateDocumentTemplateResponse, error) {
+			r.order = append(r.order, "create_doc")
+			if r.failCreateDoc {
+				return nil, errors.New("create doc boom")
+			}
+			r.createdDocID = req.GetData().GetId()
+			return &documenttemplatepb.CreateDocumentTemplateResponse{Success: true}, nil
+		},
+		DeleteDocumentTemplate: func(_ context.Context, req *documenttemplatepb.DeleteDocumentTemplateRequest) (*documenttemplatepb.DeleteDocumentTemplateResponse, error) {
+			r.order = append(r.order, "delete_doc")
+			r.deletedDocID = req.GetData().GetId()
+			return &documenttemplatepb.DeleteDocumentTemplateResponse{Success: true}, nil
+		},
+		CreateTemplateBinding: func(_ context.Context, _ *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error) {
+			r.order = append(r.order, "create_binding")
+			if r.failCreateBinding {
+				return nil, errors.New("create binding boom")
+			}
+			r.createdBindingID = "b-created"
+			return &bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse{
+				Data:    []*bindingpb.JobOutcomeSummaryDocumentTemplate{{Id: "b-created"}},
+				Success: true,
+			}, nil
+		},
+		DeleteTemplateBinding: func(_ context.Context, req *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error) {
+			r.order = append(r.order, "delete_binding")
+			r.deletedBindingID = req.GetData().GetId()
+			return &bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse{Success: true}, nil
+		},
+		ListTemplateBindings: func(_ context.Context, _ *bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest) (*bindingpb.ListJobOutcomeSummaryDocumentTemplatesResponse, error) {
+			if r.listErr != nil {
+				return nil, r.listErr
+			}
+			return &bindingpb.ListJobOutcomeSummaryDocumentTemplatesResponse{Data: r.bindings, Success: true}, nil
+		},
+	}
+}
+
+func uploadPost(t *testing.T, content []byte) *view.ViewContext {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField("name", "Test Template"); err != nil {
+		t.Fatalf("write name field: %v", err)
+	}
+	fw, err := mw.CreateFormFile("template_file", "report.docx")
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := fw.Write(content); err != nil {
+		t.Fatalf("write file part: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close multipart: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/settings/report-card-templates/upload", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return &view.ViewContext{Request: req}
+}
+
+// TestListView_GatesOnBindingFamily locks the split-role alignment: the page
+// gate cites the SAME code the list use case enforces
+// (job_outcome_summary_document_template:list). Holding only the PARENT
+// entity's code is no longer enough — and holding the binding code without the
+// parent code is.
+func TestListView_GatesOnBindingFamily(t *testing.T) {
+	v := NewListView((&uploadRecorder{}).deps())
+
+	res := v.Handle(permsCtx("job_outcome_summary:list"), &view.ViewContext{})
+	if res.StatusCode != http.StatusForbidden {
+		t.Errorf("parent-entity-only role must be forbidden, got %d", res.StatusCode)
+	}
+	res = v.Handle(permsCtx("job_outcome_summary_document_template:list"), &view.ViewContext{})
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("binding-family list role must see the page, got %d", res.StatusCode)
+	}
+}
+
+// TestPublishAction_GatesOnBindingFamily: publish cites :update of the binding
+// entity (the publish use case's Gatekeeper code), not the parent's.
+func TestPublishAction_GatesOnBindingFamily(t *testing.T) {
+	published := ""
+	deps := (&uploadRecorder{}).deps()
+	deps.PublishTemplateBinding = func(_ context.Context, req *bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse, error) {
+		published = req.GetId()
+		return &bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse{Success: true}, nil
+	}
+	v := NewPublishAction(deps)
+	vc := &view.ViewContext{Request: httptest.NewRequest(http.MethodPost, "/x?id=b-1", nil)}
+
+	if res := v.Handle(permsCtx("job_outcome_summary:update"), vc); res.StatusCode == http.StatusOK || published != "" {
+		t.Errorf("parent-entity-only role must not publish (status %d, published %q)", res.StatusCode, published)
+	}
+	if res := v.Handle(permsCtx("job_outcome_summary_document_template:update"), vc); res.StatusCode != http.StatusOK || published != "b-1" {
+		t.Errorf("binding-family update role must publish (status %d, published %q)", res.StatusCode, published)
+	}
+}
+
+// TestUploadAction_BytesLastOrdering locks the Q4 orphan fix: the storage
+// write happens LAST, only after both permission-gated creates succeed.
+func TestUploadAction_BytesLastOrdering(t *testing.T) {
+	rec := &uploadRecorder{}
+	v := NewUploadAction(rec.deps())
+
+	res := v.Handle(permsCtx("job_outcome_summary_document_template:create"), uploadPost(t, minimalDocx(t)))
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("upload should succeed, got %d", res.StatusCode)
+	}
+	want := []string{"create_doc", "create_binding", "upload"}
+	if fmt.Sprint(rec.order) != fmt.Sprint(want) {
+		t.Errorf("bytes must be written LAST: order = %v, want %v", rec.order, want)
+	}
+	if rec.uploadedKey == "" || rec.createdDocID == "" {
+		t.Errorf("expected a stored object + doc row (key %q, doc %q)", rec.uploadedKey, rec.createdDocID)
+	}
+}
+
+// TestUploadAction_DeniedCreateLeavesNoStorageOrphan: a failed (e.g. denied)
+// document_template create must leave NOTHING — in particular no storage
+// object (the exact orphan the live pass found in tmp/storage).
+func TestUploadAction_DeniedCreateLeavesNoStorageOrphan(t *testing.T) {
+	rec := &uploadRecorder{failCreateDoc: true}
+	v := NewUploadAction(rec.deps())
+
+	res := v.Handle(permsCtx("job_outcome_summary_document_template:create"), uploadPost(t, minimalDocx(t)))
+	if res.StatusCode == http.StatusOK {
+		t.Fatal("upload must fail when the doc-template create fails")
+	}
+	for _, step := range rec.order {
+		if step == "upload" {
+			t.Error("no storage byte write may happen after a failed create (orphan)")
+		}
+	}
+}
+
+// TestUploadAction_BindingCreateFailureCompensatesDocRow: a failed binding
+// create deletes the just-created artifact row and never writes bytes.
+func TestUploadAction_BindingCreateFailureCompensatesDocRow(t *testing.T) {
+	rec := &uploadRecorder{failCreateBinding: true}
+	v := NewUploadAction(rec.deps())
+
+	res := v.Handle(permsCtx("job_outcome_summary_document_template:create"), uploadPost(t, minimalDocx(t)))
+	if res.StatusCode == http.StatusOK {
+		t.Fatal("upload must fail when the binding create fails")
+	}
+	for _, step := range rec.order {
+		if step == "upload" {
+			t.Error("no storage byte write may happen after a failed binding create")
+		}
+	}
+	if rec.deletedDocID == "" || rec.deletedDocID != rec.createdDocID {
+		t.Errorf("the orphaned doc row must be compensated (created %q, deleted %q)", rec.createdDocID, rec.deletedDocID)
+	}
+}
+
+// TestUploadAction_ByteWriteFailureCompensatesBothRows: a failed byte write
+// (creates already committed) deletes the draft binding AND the artifact row.
+func TestUploadAction_ByteWriteFailureCompensatesBothRows(t *testing.T) {
+	rec := &uploadRecorder{failUpload: true}
+	v := NewUploadAction(rec.deps())
+
+	res := v.Handle(permsCtx("job_outcome_summary_document_template:create"), uploadPost(t, minimalDocx(t)))
+	if res.StatusCode == http.StatusOK {
+		t.Fatal("upload must fail when the byte write fails")
+	}
+	if rec.deletedBindingID != "b-created" {
+		t.Errorf("the draft binding must be compensated, deleted %q", rec.deletedBindingID)
+	}
+	if rec.deletedDocID == "" || rec.deletedDocID != rec.createdDocID {
+		t.Errorf("the artifact row must be compensated (created %q, deleted %q)", rec.createdDocID, rec.deletedDocID)
+	}
+}
+
+// TestDeleteAction_ReapsUnreferencedArtifact: deleting the LAST binding that
+// references an artifact row reaps the row; any remaining reference — or an
+// incomplete reference scan — leaves it in place (fail-safe).
+func TestDeleteAction_ReapsUnreferencedArtifact(t *testing.T) {
+	ctx := permsCtx("job_outcome_summary_document_template:delete")
+	vc := &view.ViewContext{Request: httptest.NewRequest(http.MethodPost, "/x?id=b-1", nil)}
+
+	// Sole reference → reaped.
+	rec := &uploadRecorder{bindings: []*bindingpb.JobOutcomeSummaryDocumentTemplate{
+		{Id: "b-1", DocumentTemplateId: "dt-1"},
+	}}
+	if res := NewDeleteAction(rec.deps()).Handle(ctx, vc); res.StatusCode != http.StatusOK {
+		t.Fatalf("delete should succeed, got %d", res.StatusCode)
+	}
+	if rec.deletedBindingID != "b-1" || rec.deletedDocID != "dt-1" {
+		t.Errorf("sole-reference delete must reap the artifact (binding %q, doc %q)", rec.deletedBindingID, rec.deletedDocID)
+	}
+
+	// Still referenced by another binding → never reaped.
+	rec = &uploadRecorder{bindings: []*bindingpb.JobOutcomeSummaryDocumentTemplate{
+		{Id: "b-1", DocumentTemplateId: "dt-1"},
+		{Id: "b-2", DocumentTemplateId: "dt-1"},
+	}}
+	if res := NewDeleteAction(rec.deps()).Handle(ctx, vc); res.StatusCode != http.StatusOK {
+		t.Fatalf("delete should succeed, got %d", res.StatusCode)
+	}
+	if rec.deletedDocID != "" {
+		t.Errorf("a still-referenced artifact must never be reaped, deleted %q", rec.deletedDocID)
+	}
+
+	// Reference scan fails → fail-safe, nothing reaped.
+	rec = &uploadRecorder{listErr: errors.New("list boom")}
+	if res := NewDeleteAction(rec.deps()).Handle(ctx, vc); res.StatusCode != http.StatusOK {
+		t.Fatalf("delete should still succeed on a scan failure, got %d", res.StatusCode)
+	}
+	if rec.deletedDocID != "" {
+		t.Errorf("an incomplete reference scan must never reap, deleted %q", rec.deletedDocID)
+	}
+
+	// Parent-entity-only role → denied, nothing deleted.
+	rec = &uploadRecorder{bindings: []*bindingpb.JobOutcomeSummaryDocumentTemplate{{Id: "b-1", DocumentTemplateId: "dt-1"}}}
+	if res := NewDeleteAction(rec.deps()).Handle(permsCtx("job_outcome_summary:update"), vc); res.StatusCode == http.StatusOK || rec.deletedBindingID != "" {
+		t.Errorf("parent-entity-only role must not delete (deleted %q)", rec.deletedBindingID)
 	}
 }

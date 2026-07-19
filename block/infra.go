@@ -74,4 +74,11 @@ type Infra struct {
 	UploadTemplate    func(ctx context.Context, bucket, key string, content []byte, contentType string) error
 	ListDocTemplates  func(ctx context.Context, req *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error)
 	CreateDocTemplate func(ctx context.Context, req *documenttemplatepb.CreateDocumentTemplateRequest) (*documenttemplatepb.CreateDocumentTemplateResponse, error)
+
+	// DeleteDocTemplate backs the Q4 template-settings upload-orphan cleanup
+	// (upload compensation + post-delete artifact reap), sourced from the app
+	// AppContext (ctx.DeleteDocTemplate — already stamped by the app's
+	// appInject; the EngineBlock assertion populates this slot). Optional/
+	// nil-safe — unwired, the cleanup degrades to a logged no-op.
+	DeleteDocTemplate func(ctx context.Context, req *documenttemplatepb.DeleteDocumentTemplateRequest) (*documenttemplatepb.DeleteDocumentTemplateResponse, error)
 }

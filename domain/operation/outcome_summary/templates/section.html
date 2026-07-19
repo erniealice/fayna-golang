@@ -10,6 +10,26 @@
     {{template "alert" (dict "State" "info" "Variant" "subtle" "Message" .Banner)}}
     {{else}}
     {{template "table-card" .Table}}
+    {{/* Default the client-side entries-per-page to 100 so a whole section
+         (typically ~26 students, up to ~100) renders on one page without a
+         manual pager click. pyeza's table-footer-full.html (shared by every
+         client-side/ShowEntries table) hardcodes "25" as the pre-selected
+         <option> with no per-instance TableConfig field to override it — this
+         inline, CSP-nonce'd script is scoped to THIS grid only (id
+         "report-cards-grid-entries"; buildSectionTable sets Table.ID =
+         "report-cards-grid"). It presets the <select> before
+         table-pagination.js's initClientPagination() reads
+         entriesSelector.value on DOMContentLoaded / htmx:afterSettle, so no
+         other table on any other page is affected. A user's own manual
+         entries-selector choice (persisted in lf.TableState.pagination by
+         table ID) still wins on subsequent boosted navs — this only seeds the
+         first render. */}}
+    <script nonce="{{.Nonce}}">
+    (function() {
+        var sel = document.getElementById('report-cards-grid-entries');
+        if (sel) { sel.value = '100'; }
+    })();
+    </script>
     {{end}}
 </div>
 {{end}}

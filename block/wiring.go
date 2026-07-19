@@ -62,6 +62,13 @@ func wireJobDeps(deps *operation.JobModuleDeps, u *UseCases) {
 	// education-tier filter needs. Both nil-safe → flat list when absent.
 	deps.ListJobCategories = u.Operation.JobCategory.ListJobCategories
 	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
+
+	// "/classes" tabstrip single-statement support read (20260718 courses-list-
+	// perf Rank-1). ONE call per page load returns all categories + active
+	// template stubs, replacing the 12 generic-List statements above (the two
+	// ListJobCategories closures + the paged ListJobTemplates). Nil-safe → the
+	// list falls back to no tabs.
+	deps.ListJobListTabSupport = u.Operation.JobListTabSupport.ListJobListTabSupport
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +328,9 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	// Ownership-joined latest-cell read (phase/task/criterion codes) backing the
 	// coded-cell surface of the outcome-summary document. Optional/nil-safe.
 	deps.ListCodedTaskOutcomeValuesByJob = u.Operation.TaskOutcome.ListCodedTaskOutcomeValuesByJob
+	// Past-AY sibling: admits the inactive historical ancestry so past report
+	// cards resolve their attendance/coded cells instead of rendering blank.
+	deps.ListCodedTaskOutcomeValuesByJobHistorical = u.Operation.TaskOutcome.ListCodedTaskOutcomeValuesByJobHistorical
 	deps.ListTemplateTaskCriterias = u.Operation.TemplateTaskCriteria.ListTemplateTaskCriterias
 	// v2 block-layout document enrichments: criterion display names + the
 	// User-hydrating staff read (bare ListStaffs never populates Staff.User).

@@ -10,11 +10,16 @@
 // actions), but targets the BINDING entity (version/validity/publish lifecycle)
 // rather than a bare document_template, so it is a bespoke view.
 //
-// Security: the page GET gates on job_outcome_summary:list; every mutation
-// (upload/publish/delete) gates on job_outcome_summary:update. Tenant isolation
-// for the binding CRUD/publish is enforced in the espyna adapter from trusted
-// context — the view supplies no workspace_id. The uploaded artifact is pinned
-// to .docx by extension.
+// Security (Q4 — permission-family alignment): the view gates on the SAME
+// permission family the invoked use cases enforce — the binding entity's own
+// codes (job_outcome_summary_document_template:list/create/update/delete),
+// matching the espyna Gatekeeper checks (list→list, upload→create,
+// publish→update, delete→delete). Gating the view on the PARENT entity
+// (job_outcome_summary:*) showed split-role users enabled controls that then
+// failed downstream, and hid controls from users who actually held rights.
+// Tenant isolation for the binding CRUD/publish is enforced in the espyna
+// adapter from trusted context — the view supplies no workspace_id. The
+// uploaded artifact is pinned to .docx by extension.
 package template_settings
 
 import (
@@ -51,6 +56,14 @@ import (
 // upload path share (D6). Vertical vocabulary ("Report Card") lives only in
 // lyngua values, never here.
 const documentPurpose = "report_card"
+
+// bindingPermissionEntity is the permission-family entity every gate in this
+// view cites — the binding's OWN entity, byte-identical to the entity the
+// espyna use cases hand the ActionGatekeeper
+// (entityid.JobOutcomeSummaryDocumentTemplate). View and use case MUST agree
+// (Q4): a divergent family yields enabled-but-failing or hidden-but-permitted
+// controls for split-role users.
+const bindingPermissionEntity = "job_outcome_summary_document_template"
 
 const (
 	storageBucket  = "templates"
@@ -95,6 +108,13 @@ type Deps struct {
 	ListDocumentTemplates  func(ctx context.Context, req *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error)
 	CreateDocumentTemplate func(ctx context.Context, req *documenttemplatepb.CreateDocumentTemplateRequest) (*documenttemplatepb.CreateDocumentTemplateResponse, error)
 
+	// DeleteDocumentTemplate soft-deletes a document_template row. Used by the
+	// Q4 orphan cleanup: compensation when a later upload step fails, and
+	// reaping the artifact row after its last referencing binding is deleted.
+	// Optional/nil-safe — when unwired the orphan is logged and left in place
+	// (render-safe: nothing resolves an unbound or inactive artifact row).
+	DeleteDocumentTemplate func(ctx context.Context, req *documenttemplatepb.DeleteDocumentTemplateRequest) (*documenttemplatepb.DeleteDocumentTemplateResponse, error)
+
 	// Binding lifecycle (espyna use cases via the block seam).
 	ListTemplateBindings   func(ctx context.Context, req *bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest) (*bindingpb.ListJobOutcomeSummaryDocumentTemplatesResponse, error)
 	CreateTemplateBinding  func(ctx context.Context, req *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error)
@@ -121,12 +141,13 @@ type UploadFormData struct {
 }
 
 // NewListView builds the settings list view (GET). Fail-closed on
-// job_outcome_summary:list.
+// job_outcome_summary_document_template:list — the SAME code the invoked list
+// use case enforces (Q4).
 func NewListView(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
-		if !perms.Can("job_outcome_summary", "list") {
-			return view.Forbidden("job_outcome_summary:list")
+		if !perms.Can(bindingPermissionEntity, "list") {
+			return view.Forbidden(bindingPermissionEntity + ":list")
 		}
 
 		l := deps.Labels.TemplateSettings
@@ -146,10 +167,12 @@ func NewListView(deps *Deps) view.View {
 				Message: l.EmptyMessage,
 			},
 			PrimaryAction: &types.PrimaryAction{
-				Label:           l.UploadAction,
-				ActionURL:       deps.Routes.TemplateUploadURL,
-				Icon:            "icon-upload",
-				Disabled:        !perms.Can("job_outcome_summary", "update"),
+				Label:     l.UploadAction,
+				ActionURL: deps.Routes.TemplateUploadURL,
+				Icon:      "icon-upload",
+				// Upload CREATES a draft binding — cite the create code the
+				// upload path's binding use case enforces (Q4).
+				Disabled:        !perms.Can(bindingPermissionEntity, "create"),
 				DisabledTooltip: l.NotConfigured,
 			},
 		}
@@ -175,11 +198,14 @@ func NewListView(deps *Deps) view.View {
 	})
 }
 
-// NewUploadAction is the upload drawer (GET = form, POST = create draft binding).
+// NewUploadAction is the upload drawer (GET = form, POST = create draft
+// binding). Gates on job_outcome_summary_document_template:create — the code
+// the CreateTemplateBinding use case enforces (Q4); the document_template
+// artifact create additionally enforces document_template:create downstream.
 func NewUploadAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
-		if !perms.Can("job_outcome_summary", "update") {
+		if !perms.Can(bindingPermissionEntity, "create") {
 			return view.HTMXError(deps.Labels.TemplateSettings.NotConfigured)
 		}
 		l := deps.Labels.TemplateSettings
@@ -239,12 +265,20 @@ func NewUploadAction(deps *Deps) view.View {
 			return view.HTMXError(l.InvalidFile)
 		}
 
+		// Q4 upload-orphan cleanup — ORDERING IS LOAD-BEARING. The storage bytes
+		// are written LAST, after BOTH permission-gated creates succeed: the old
+		// bytes-first order meant a denied or failed create left an orphaned
+		// object in storage (codex wave-b MED; orphans were found live in
+		// tmp/storage). Now a denied/failed document_template create leaves
+		// nothing at all; a failed binding create is compensated by deleting the
+		// just-created artifact row; and a failed byte write is compensated by
+		// deleting the draft binding + artifact row. Any residue on a FAILED
+		// compensation is rows pointing at a missing object — render-safe (the
+		// resolver's template fetch falls back to the embedded template) and
+		// logged. The brief window where the binding exists before its bytes is
+		// equally render-safe for the same reason.
 		docID := newID()
 		objectKey := fmt.Sprintf("%s/%s%s", storagePrefix, docID, docxExt)
-		if err := deps.UploadTemplate(ctx, storageBucket, objectKey, content, docxContentTyp); err != nil {
-			log.Printf("report-card template upload: store bytes: %v", err)
-			return view.HTMXError(l.UploadFailed)
-		}
 
 		bucket := storageBucket
 		key := objectKey
@@ -283,8 +317,25 @@ func NewUploadAction(deps *Deps) view.View {
 		if ts := parseDate(viewCtx.Request.FormValue("validity_end")); ts != nil {
 			binding.ValidityEnd = ts
 		}
-		if _, err := deps.CreateTemplateBinding(ctx, &bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest{Data: binding}); err != nil {
+		createResp, err := deps.CreateTemplateBinding(ctx, &bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest{Data: binding})
+		if err != nil {
 			log.Printf("report-card template upload: create binding: %v", err)
+			cleanupDocumentTemplate(ctx, deps, docID)
+			return view.HTMXError(l.UploadFailed)
+		}
+
+		// Bytes LAST. On failure, compensate both created rows (best effort).
+		if err := deps.UploadTemplate(ctx, storageBucket, objectKey, content, docxContentTyp); err != nil {
+			log.Printf("report-card template upload: store bytes: %v", err)
+			if createResp != nil && len(createResp.GetData()) > 0 {
+				bindingID := createResp.GetData()[0].GetId()
+				if _, derr := deps.DeleteTemplateBinding(ctx, &bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest{
+					Data: &bindingpb.JobOutcomeSummaryDocumentTemplate{Id: bindingID},
+				}); derr != nil {
+					log.Printf("report-card template upload: compensate delete binding %s: %v", bindingID, derr)
+				}
+			}
+			cleanupDocumentTemplate(ctx, deps, docID)
 			return view.HTMXError(l.UploadFailed)
 		}
 
@@ -298,11 +349,13 @@ func NewUploadAction(deps *Deps) view.View {
 	})
 }
 
-// NewPublishAction publishes a DRAFT binding (POST; id via ?id=).
+// NewPublishAction publishes a DRAFT binding (POST; id via ?id=). Gates on
+// job_outcome_summary_document_template:update — the code the publish use case
+// enforces (Q4).
 func NewPublishAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
-		if !perms.Can("job_outcome_summary", "update") {
+		if !perms.Can(bindingPermissionEntity, "update") {
 			return view.HTMXError(deps.Labels.TemplateSettings.NotConfigured)
 		}
 		if deps.PublishTemplateBinding == nil {
@@ -320,11 +373,15 @@ func NewPublishAction(deps *Deps) view.View {
 	})
 }
 
-// NewDeleteAction deletes a binding (POST; id via ?id=).
+// NewDeleteAction deletes a binding (POST; id via ?id=). Gates on
+// job_outcome_summary_document_template:delete — the code the delete use case
+// enforces (Q4). The delete itself stays draft-only (use case + adapter guard);
+// after it succeeds the now-unreferenced document_template artifact row is
+// reaped (Q4 upload-orphan cleanup).
 func NewDeleteAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
-		if !perms.Can("job_outcome_summary", "update") {
+		if !perms.Can(bindingPermissionEntity, "delete") {
 			return view.HTMXError(deps.Labels.TemplateSettings.NotConfigured)
 		}
 		if deps.DeleteTemplateBinding == nil {
@@ -334,14 +391,118 @@ func NewDeleteAction(deps *Deps) view.View {
 		if id == "" {
 			return view.HTMXError(deps.Labels.TemplateSettings.NotConfigured)
 		}
+		// Capture the binding's artifact reference BEFORE the delete (the row is
+		// soft-deleted and invisible to the default list afterwards).
+		docTemplateID := bindingDocTemplateID(ctx, deps, id)
 		if _, err := deps.DeleteTemplateBinding(ctx, &bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest{
 			Data: &bindingpb.JobOutcomeSummaryDocumentTemplate{Id: id},
 		}); err != nil {
 			log.Printf("report-card template delete %s: %v", id, err)
 			return view.HTMXError(err.Error())
 		}
+		reapUnreferencedDocTemplate(ctx, deps, docTemplateID, id)
 		return view.HTMXSuccess(tableID)
 	})
+}
+
+// --- Q4 upload-orphan cleanup helpers ------------------------------------
+
+// cleanupDocumentTemplate best-effort soft-deletes an orphaned
+// document_template row (upload compensation / post-delete reap). Nil-safe:
+// without the closure the orphan row is logged and left in place — render-safe,
+// since the resolver only reaches ACTIVE artifact rows through a PUBLISHED
+// binding join. Never touches storage: the storage provider contract exposes
+// no object delete, so object reaping is a provider-lifecycle concern.
+func cleanupDocumentTemplate(ctx context.Context, deps *Deps, docID string) {
+	if docID == "" {
+		return
+	}
+	if deps.DeleteDocumentTemplate == nil {
+		log.Printf("report-card template cleanup: document_template %s left in place (delete closure not wired)", docID)
+		return
+	}
+	if _, err := deps.DeleteDocumentTemplate(ctx, &documenttemplatepb.DeleteDocumentTemplateRequest{
+		Data: &documenttemplatepb.DocumentTemplate{Id: docID},
+	}); err != nil {
+		log.Printf("report-card template cleanup: delete document_template %s: %v", docID, err)
+	}
+}
+
+// bindingDocTemplateID resolves a binding's document_template_id via the list
+// closure (active pass + explicit inactive pass), "" when unresolvable —
+// cleanup then degrades to a no-op (fail-safe).
+func bindingDocTemplateID(ctx context.Context, deps *Deps, bindingID string) string {
+	all, ok := listAllBindings(ctx, deps)
+	if !ok {
+		return ""
+	}
+	for _, b := range all {
+		if b.GetId() == bindingID {
+			return b.GetDocumentTemplateId()
+		}
+	}
+	return ""
+}
+
+// reapUnreferencedDocTemplate soft-deletes the artifact row a just-deleted
+// binding referenced, IFF no OTHER binding — any lifecycle status, active or
+// soft-deleted — still references it. FAIL-SAFE: any remaining reference, or a
+// reference scan that could not COMPLETELY resolve (list error), skips the
+// reap; we never remove an artifact that anything might still point at.
+// Storage bytes are intentionally left (no object-delete API in the storage
+// contract).
+func reapUnreferencedDocTemplate(ctx context.Context, deps *Deps, docTemplateID, deletedBindingID string) {
+	if docTemplateID == "" {
+		return
+	}
+	all, ok := listAllBindings(ctx, deps)
+	if !ok {
+		log.Printf("report-card template cleanup: reference scan incomplete — leaving document_template %s in place", docTemplateID)
+		return
+	}
+	for _, b := range all {
+		if b.GetId() == deletedBindingID {
+			continue // the binding just soft-deleted — not a live reference
+		}
+		if b.GetDocumentTemplateId() == docTemplateID {
+			return // still referenced — never reap
+		}
+	}
+	cleanupDocumentTemplate(ctx, deps, docTemplateID)
+}
+
+// listAllBindings returns every binding (active + soft-deleted) via the list
+// closure's two-pass active/inactive merge (the generic List defaults to
+// active-only unless an explicit active filter is supplied). ok=false when the
+// scan is incomplete (missing closure or any pass errored) — callers making
+// destructive decisions MUST treat that as "unknown references" (fail-safe).
+func listAllBindings(ctx context.Context, deps *Deps) ([]*bindingpb.JobOutcomeSummaryDocumentTemplate, bool) {
+	if deps.ListTemplateBindings == nil {
+		return nil, false
+	}
+	out := make([]*bindingpb.JobOutcomeSummaryDocumentTemplate, 0, 8)
+	seen := map[string]bool{}
+	requests := []*bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest{
+		{},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{{
+			Field:      "active",
+			FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: false}},
+		}}}},
+	}
+	for _, req := range requests {
+		resp, err := deps.ListTemplateBindings(ctx, req)
+		if err != nil {
+			log.Printf("report-card template cleanup: list bindings: %v", err)
+			return nil, false
+		}
+		for _, b := range resp.GetData() {
+			if id := b.GetId(); id != "" && !seen[id] {
+				seen[id] = true
+				out = append(out, b)
+			}
+		}
+	}
+	return out, true
 }
 
 // --- list assembly -------------------------------------------------------
@@ -368,7 +529,10 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 	l := deps.Labels.TemplateSettings
 	docNames := docTemplateNames(ctx, deps)
 	schedNames := scheduleNames(ctx, deps)
-	canUpdate := perms.Can("job_outcome_summary", "update")
+	// Q4: each row action cites the code its use case enforces — publish gates
+	// :update, delete gates :delete (a split role may hold one, not the other).
+	canPublish := perms.Can(bindingPermissionEntity, "update")
+	canDelete := perms.Can(bindingPermissionEntity, "delete")
 
 	rows := make([]types.TableRow, 0, len(resp.GetData()))
 	for _, b := range resp.GetData() {
@@ -391,7 +555,7 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 				ItemName:        name,
 				ConfirmTitle:    l.PublishAction,
 				ConfirmMessage:  l.PublishConfirm,
-				Disabled:        !canUpdate,
+				Disabled:        !canPublish,
 				DisabledTooltip: l.NotConfigured,
 			})
 			actions = append(actions, types.TableAction{
@@ -400,7 +564,7 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 				ItemName:        name,
 				ConfirmTitle:    l.DeleteAction,
 				ConfirmMessage:  l.DeleteConfirm,
-				Disabled:        !canUpdate,
+				Disabled:        !canDelete,
 				DisabledTooltip: l.NotConfigured,
 			})
 		}

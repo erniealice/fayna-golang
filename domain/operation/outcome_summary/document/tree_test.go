@@ -233,7 +233,7 @@ func TestBuildSingletonProjection_AbsenceVsZero(t *testing.T) {
 		),
 	}
 	out := buildSingletonProjection(context.Background(), d, &jobpb.Job{Id: "jH"}, "Adviser",
-		map[int32]string{1: "s1", 2: "s2"}, map[int32]string{1: "A"})
+		map[int32]string{1: "s1", 2: "s2"}, map[int32]string{1: "A"}, false)
 
 	assertLeaf(t, out, "job_template_phases.s1.job_template_tasks.m07.task_outcomes.days_present.numeric_value", "")  // absence → blank
 	assertLeaf(t, out, "job_template_phases.s1.job_template_tasks.m08.task_outcomes.days_present.numeric_value", "0") // recorded 0
@@ -243,6 +243,49 @@ func TestBuildSingletonProjection_AbsenceVsZero(t *testing.T) {
 	// times_tardy has only a nil cell → NO total emitted (blank when zero contributors).
 	if _, ok := resolvePath(out, "task_outcomes.times_tardy.numeric_value_total_derived"); ok {
 		t.Fatalf("times_tardy total must stay blank (no recorded contributor), got a value")
+	}
+}
+
+// --- Q6 historical-AY coded-path routing ----------------------------------
+
+// A past-AY (historical) card must resolve its coded/attendance cells through the
+// inactive-admitting historical reader, NOT the active-only live reader. The live
+// reader here returns EMPTY (as it would against a past card's inactive ancestry);
+// only the historical reader carries values. historical=true must therefore route
+// to the historical reader and populate the grid — proving the fix un-blanks past
+// cards without touching the live path.
+func TestBuildSingletonProjection_HistoricalRouting(t *testing.T) {
+	liveCalled, histCalled := false, false
+	d := &Deps{
+		ListCodedTaskOutcomeValuesByJob: func(context.Context, *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error) {
+			liveCalled = true
+			return &taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse{}, nil // live path is blank for a past card
+		},
+		ListCodedTaskOutcomeValuesByJobHistorical: func(context.Context, *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error) {
+			histCalled = true
+			return &taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse{Values: []*taskoutcomepb.CodedTaskOutcomeValue{
+				{PhaseCode: "s1", TaskCode: "m07", CriteriaCode: "days_present", NumericValue: f64p(16)},
+				{PhaseCode: "s1", TaskCode: "m07", CriteriaCode: "school_days", NumericValue: f64p(20)},
+			}}, nil
+		},
+	}
+
+	hist := buildSingletonProjection(context.Background(), d, &jobpb.Job{Id: "jH"}, "Adviser",
+		map[int32]string{1: "s1", 2: "s2"}, map[int32]string{1: "A"}, true)
+	if !histCalled || liveCalled {
+		t.Fatalf("historical=true must call ONLY the historical reader (histCalled=%v liveCalled=%v)", histCalled, liveCalled)
+	}
+	assertLeaf(t, hist, "job_template_phases.s1.job_template_tasks.m07.task_outcomes.days_present.numeric_value", "16")
+	assertLeaf(t, hist, "job_template_phases.s1.job_template_tasks.m07.task_outcomes.school_days.numeric_value", "20")
+	assertLeaf(t, hist, "task_outcomes.days_present.numeric_value_total_derived", "16")
+
+	// And the mirror: historical=false must use ONLY the live reader (no regression
+	// of the current-AY card onto the historical path).
+	liveCalled, histCalled = false, false
+	_ = buildSingletonProjection(context.Background(), d, &jobpb.Job{Id: "jH"}, "Adviser",
+		map[int32]string{1: "s1", 2: "s2"}, map[int32]string{1: "A"}, false)
+	if !liveCalled || histCalled {
+		t.Fatalf("historical=false must call ONLY the live reader (liveCalled=%v histCalled=%v)", liveCalled, histCalled)
 	}
 }
 
@@ -375,8 +418,8 @@ func TestBuildJobCategoriesTree_DeportRotationPairAndNonEnrolled(t *testing.T) {
 		nameOf: map[string]string{
 			"jva":  "Arts: Visual Arts",
 			"jmu":  "Arts: Music",
-			"jkor": "Language and Literature: Korean",   // non-enrolled placeholder
-			"jeng": "Language and Literature: English",   // enrolled solo (prefix is NOT an academic subject → no merge)
+			"jkor": "Language and Literature: Korean",  // non-enrolled placeholder
+			"jeng": "Language and Literature: English", // enrolled solo (prefix is NOT an academic subject → no merge)
 		},
 		pos: map[string]map[int32]string{
 			"jva":  {1: "100"},

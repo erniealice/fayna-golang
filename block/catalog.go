@@ -650,6 +650,9 @@ func OutcomeSummaryUnit(uc *UseCases, infra *Infra, options outcome_summary.Opti
 			deps.UploadTemplate = infra.UploadTemplate
 			deps.ListDocumentTemplates = infra.ListDocTemplates
 			deps.CreateDocumentTemplate = infra.CreateDocTemplate
+			// Q4 upload-orphan cleanup (nil-safe until the EngineBlock
+			// asserts ctx.DeleteDocTemplate into infra.DeleteDocTemplate).
+			deps.DeleteDocumentTemplate = infra.DeleteDocTemplate
 		}
 		wireOutcomeSummaryDeps(deps, uc)
 		operation.NewOutcomeSummaryModule(deps).RegisterRoutes(mc.Routes)

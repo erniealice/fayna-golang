@@ -71,7 +71,10 @@ type OutcomeSummaryModuleDeps struct {
 	// Ownership-joined latest-cell read carrying phase/task/criterion codes
 	// (job → template ancestry). Optional/nil-safe.
 	ListCodedTaskOutcomeValuesByJob func(ctx context.Context, req *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
-	ListTemplateTaskCriterias       func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
+	// Past-AY sibling of the above: admits inactive historical ancestry so past
+	// report cards resolve their coded/attendance cells. Optional/nil-safe.
+	ListCodedTaskOutcomeValuesByJobHistorical func(ctx context.Context, req *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
+	ListTemplateTaskCriterias                 func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
 	// v2 block-layout document enrichments (optional/nil-safe): criterion
 	// display names + the User-hydrating staff read for the per-subject staff
 	// line and the group-lead ("Adviser") resolution.
@@ -131,6 +134,10 @@ type OutcomeSummaryModuleDeps struct {
 	UploadTemplate         func(ctx context.Context, bucket, key string, content []byte, contentType string) error
 	ListDocumentTemplates  func(ctx context.Context, req *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error)
 	CreateDocumentTemplate func(ctx context.Context, req *documenttemplatepb.CreateDocumentTemplateRequest) (*documenttemplatepb.CreateDocumentTemplateResponse, error)
+	// DeleteDocumentTemplate backs the Q4 upload-orphan cleanup (upload
+	// compensation + post-delete artifact reap). Optional/nil-safe — when
+	// unwired the cleanup degrades to a logged no-op.
+	DeleteDocumentTemplate func(ctx context.Context, req *documenttemplatepb.DeleteDocumentTemplateRequest) (*documenttemplatepb.DeleteDocumentTemplateResponse, error)
 	ListTemplateBindings   func(ctx context.Context, req *bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest) (*bindingpb.ListJobOutcomeSummaryDocumentTemplatesResponse, error)
 	CreateTemplateBinding  func(ctx context.Context, req *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error)
 	DeleteTemplateBinding  func(ctx context.Context, req *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error)
@@ -256,6 +263,7 @@ func templateSettingsDeps(deps *OutcomeSummaryModuleDeps) *templatesettings.Deps
 		UploadTemplate:         deps.UploadTemplate,
 		ListDocumentTemplates:  deps.ListDocumentTemplates,
 		CreateDocumentTemplate: deps.CreateDocumentTemplate,
+		DeleteDocumentTemplate: deps.DeleteDocumentTemplate,
 		ListTemplateBindings:   deps.ListTemplateBindings,
 		CreateTemplateBinding:  deps.CreateTemplateBinding,
 		DeleteTemplateBinding:  deps.DeleteTemplateBinding,
@@ -272,35 +280,36 @@ func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc 
 		return nil
 	}
 	return documentview.NewDownloadHandler(&documentview.Deps{
-		Labels:                          deps.Labels,
-		CommonLabels:                    deps.CommonLabels,
-		DocumentHeaderName:              deps.DocumentHeaderName,
-		CategoryFilter:                  deps.Options.CategoryFilter,
-		DocOptions:                      deps.Options.Document,
-		ListJobCategories:               deps.ListJobCategories,
-		ListOutcomeCriterias:            deps.ListOutcomeCriterias,
-		GetStaffListPageData:            deps.GetStaffListPageData,
-		ListPriceSchedules:              deps.ListPriceSchedules,
-		ListClientAttributes:            deps.ListClientAttributes,
-		ResolveAttributeIDByCode:        deps.ResolveAttributeIDByCode,
-		ListWorkspaceUsers:              deps.ListWorkspaceUsers,
-		GenerateDoc:                     deps.GenerateDoc,
-		GeneratePDF:                     deps.GeneratePDF,
-		ResolveTemplateBytes:            deps.ResolveTemplateBytes,
-		ListSubscriptionGroups:          deps.ListSubscriptionGroups,
-		ListSubscriptionGroupMembers:    deps.ListSubscriptionGroupMembers,
-		ListJobs:                        deps.ListJobs,
-		ListJobTemplates:                deps.ListJobTemplates,
-		ListClients:                     deps.ListClients,
-		ListJobOutcomeSummarys:          deps.ListJobOutcomeSummarys,
-		ListPhaseOutcomeSummarysByJob:   deps.ListPhaseOutcomeSummarysByJob,
-		ListJobPhases:                   deps.ListJobPhases,
-		ListJobTemplatePhasesByTemplate: deps.ListJobTemplatePhasesByTemplate,
-		ListJobOutcomeLines:             deps.ListJobOutcomeLines,
-		ListJobTasks:                    deps.ListJobTasks,
-		ListTaskOutcomes:                deps.ListTaskOutcomes,
-		ListCodedTaskOutcomeValuesByJob: deps.ListCodedTaskOutcomeValuesByJob,
-		ListTemplateTaskCriterias:       deps.ListTemplateTaskCriterias,
+		Labels:                                    deps.Labels,
+		CommonLabels:                              deps.CommonLabels,
+		DocumentHeaderName:                        deps.DocumentHeaderName,
+		CategoryFilter:                            deps.Options.CategoryFilter,
+		DocOptions:                                deps.Options.Document,
+		ListJobCategories:                         deps.ListJobCategories,
+		ListOutcomeCriterias:                      deps.ListOutcomeCriterias,
+		GetStaffListPageData:                      deps.GetStaffListPageData,
+		ListPriceSchedules:                        deps.ListPriceSchedules,
+		ListClientAttributes:                      deps.ListClientAttributes,
+		ResolveAttributeIDByCode:                  deps.ResolveAttributeIDByCode,
+		ListWorkspaceUsers:                        deps.ListWorkspaceUsers,
+		GenerateDoc:                               deps.GenerateDoc,
+		GeneratePDF:                               deps.GeneratePDF,
+		ResolveTemplateBytes:                      deps.ResolveTemplateBytes,
+		ListSubscriptionGroups:                    deps.ListSubscriptionGroups,
+		ListSubscriptionGroupMembers:              deps.ListSubscriptionGroupMembers,
+		ListJobs:                                  deps.ListJobs,
+		ListJobTemplates:                          deps.ListJobTemplates,
+		ListClients:                               deps.ListClients,
+		ListJobOutcomeSummarys:                    deps.ListJobOutcomeSummarys,
+		ListPhaseOutcomeSummarysByJob:             deps.ListPhaseOutcomeSummarysByJob,
+		ListJobPhases:                             deps.ListJobPhases,
+		ListJobTemplatePhasesByTemplate:           deps.ListJobTemplatePhasesByTemplate,
+		ListJobOutcomeLines:                       deps.ListJobOutcomeLines,
+		ListJobTasks:                              deps.ListJobTasks,
+		ListTaskOutcomes:                          deps.ListTaskOutcomes,
+		ListCodedTaskOutcomeValuesByJob:           deps.ListCodedTaskOutcomeValuesByJob,
+		ListCodedTaskOutcomeValuesByJobHistorical: deps.ListCodedTaskOutcomeValuesByJobHistorical,
+		ListTemplateTaskCriterias:                 deps.ListTemplateTaskCriterias,
 	})
 }
 

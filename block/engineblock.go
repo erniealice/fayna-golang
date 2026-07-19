@@ -19,6 +19,8 @@ import (
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	fulfillmentdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/fulfillment"
 	jobdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/job"
 )
@@ -146,6 +148,7 @@ func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 		infra.UploadTemplate, _ = ctx.UploadTemplate.(func(context.Context, string, string, []byte, string) error)
 		infra.ListDocTemplates, _ = ctx.ListDocTemplates.(func(context.Context, *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error))
 		infra.CreateDocTemplate, _ = ctx.CreateDocTemplate.(func(context.Context, *documenttemplatepb.CreateDocumentTemplateRequest) (*documenttemplatepb.CreateDocumentTemplateResponse, error))
+		infra.DeleteDocTemplate, _ = ctx.DeleteDocTemplate.(func(context.Context, *documenttemplatepb.DeleteDocumentTemplateRequest) (*documenttemplatepb.DeleteDocumentTemplateResponse, error))
 
 		units := AllUnits(adapted, infra, opts...)
 		return consumerapp.AssembleEngineBlock("fayna", units, ctx)
@@ -282,6 +285,7 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.TaskOutcome.DeleteTaskOutcome = op.TaskOutcome.DeleteTaskOutcome.Execute
 			result.Operation.TaskOutcome.ListTaskOutcomes = op.TaskOutcome.ListTaskOutcomes.Execute
 			result.Operation.TaskOutcome.ListCodedTaskOutcomeValuesByJob = op.TaskOutcome.ListCodedTaskOutcomeValuesByJob.Execute
+			result.Operation.TaskOutcome.ListCodedTaskOutcomeValuesByJobHistorical = op.TaskOutcome.ListCodedTaskOutcomeValuesByJob.ExecuteHistorical
 		}
 
 		if op.JobOutcomeSummary != nil {
@@ -450,6 +454,30 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 	if uc.Service != nil && uc.Service.JobTemplateSummary != nil &&
 		uc.Service.JobTemplateSummary.ListJobTemplateSummaries != nil {
 		result.Operation.JobTemplateSummary.ListJobTemplateSummaries = uc.Service.JobTemplateSummary.ListJobTemplateSummaries.Execute
+	}
+
+	// -- Service/operation JobListTabSupport (tabstrip single-statement read) -----
+	//
+	// The 20260718 courses-list-perf Rank-1 read lives on espyna's SERVICE
+	// aggregate (service/operation/job_list_tab_support). Its Execute returns a
+	// proto-less *JobListTabSupportResponse carrying the two proto slices; adapt it
+	// to the block closure that returns them directly. Per-kind gates
+	// (job_category:list / job_template:list) are enforced inside Execute — a
+	// denied kind comes back as an empty slice. Nil-safe: a nil Service /
+	// JobListTabSupport leaves the closure nil → the list degrades to no tabs.
+	if uc.Service != nil && uc.Service.JobListTabSupport != nil &&
+		uc.Service.JobListTabSupport.ListJobListTabSupport != nil {
+		exec := uc.Service.JobListTabSupport.ListJobListTabSupport.Execute
+		result.Operation.JobListTabSupport.ListJobListTabSupport = func(ctx context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error) {
+			resp, err := exec(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+			if resp == nil {
+				return nil, nil, nil
+			}
+			return resp.Categories, resp.Templates, nil
+		}
 	}
 
 	// -- Service.Dashboard.Job — proto→view translation --------------------------

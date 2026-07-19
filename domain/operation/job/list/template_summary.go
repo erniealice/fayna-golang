@@ -36,6 +36,7 @@ import (
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
 
@@ -84,9 +85,9 @@ func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status s
 // (0 aggregate rows) to their active templates. Counts follow the same split:
 // aggregate row count for aggregate-backed categories, active-template count
 // otherwise.
-func buildDeliverySummaryTableTabbed(ctx context.Context, deps *ListViewDeps, status, selected string) (*types.TableConfig, map[string]int, error) {
+func buildDeliverySummaryTableTabbed(ctx context.Context, deps *ListViewDeps, status, selected string, templates []*jobtemplatepb.JobTemplate) (*types.TableConfig, map[string]int, error) {
 	allRows := buildTemplateSummaryRows(ctx, deps, status)
-	catToTemplates, templateToCat := activeTemplatesByCategory(ctx, deps)
+	catToTemplates, templateToCat := activeTemplatesByCategory(templates)
 
 	// aggCounts: aggregate summary rows per category (Academic's tab count/rows).
 	aggCounts := map[string]int{}

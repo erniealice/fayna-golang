@@ -738,9 +738,9 @@ func orderedColumnIDs(cols []types.TableColumn) []string {
 
 // buildRows builds one row per student: student-name cell + a rating cell per
 // subject column (linking to the per-job summary; "—" when no summary) + a
-// per-row CSV download action (the export endpoint narrowed to the row's
-// client via the download JS's ?id= suffix). CSVValue carries the raw rating
-// so both the client-side table export and the server CSV emit clean text.
+// per-row report-card PDF download action (the per-client document endpoint,
+// ?format=pdf). CSVValue carries the raw rating so the client-side table
+// export and the section CSV endpoint emit clean text.
 func buildRows(
 	students map[string]student,
 	templateIDs []string,
@@ -754,19 +754,20 @@ func buildRows(
 	if empty == "" {
 		empty = "—"
 	}
-	exportURL := route.ResolveURL(routes.SectionExportURL, "id", sectionID)
 	rows := make([]types.TableRow, 0, len(students))
 	for clientID, st := range students {
 		cells := make([]types.TableCell, 0, len(templateIDs)+2)
 		cells = append(cells, types.TableCell{Value: st.listName()})
 		// Frozen 2nd column: per-row actions — VIEW this student's report card
-		// (boosted nav → view-3), then DOWNLOAD the CSV. The view link is a
-		// normal boosted anchor (hx-push-url); the download is hx-boost="false" +
-		// download so the boosted body doesn't AJAX-swap the attachment response
-		// (?id=<client> narrows the export to this row).
+		// (boosted nav → view-3), then DOWNLOAD the rendered card as a PDF (the
+		// per-client document endpoint, ?format=pdf — same idiom as the client
+		// card's header button). The view link is a normal boosted anchor
+		// (hx-push-url); the download is hx-boost="false" + download so the
+		// boosted body doesn't AJAX-swap the attachment response.
 		studentURL := route.ResolveURL(routes.ClientCardURL, "id", sectionID, "client_id", clientID)
+		docURL := route.ResolveURL(routes.ClientDocumentURL, "id", sectionID, "client_id", clientID) + "?format=pdf"
 		viewAnchor := `<a href="` + html.EscapeString(studentURL) + `" class="action-btn view" title="` + html.EscapeString(l.Student.ViewAction) + `" aria-label="` + html.EscapeString(l.Student.ViewAction) + `" data-testid="rc-view-` + short(clientID) + `" hx-push-url="true">` + viewIcon + `</a>`
-		dlAnchor := `<a href="` + html.EscapeString(exportURL+"?id="+clientID) + `" class="action-btn download" title="` + html.EscapeString(l.Section.DownloadAction) + `" aria-label="` + html.EscapeString(l.Section.DownloadAction) + `" data-testid="rc-download-` + short(clientID) + `" hx-boost="false" download>` + downloadIcon + `</a>`
+		dlAnchor := `<a href="` + html.EscapeString(docURL) + `" class="action-btn download" title="` + html.EscapeString(l.Student.DownloadAction) + `" aria-label="` + html.EscapeString(l.Student.DownloadAction) + `" data-testid="rc-download-` + short(clientID) + `" hx-boost="false" download>` + downloadIcon + `</a>`
 		cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(`<div class="action-buttons">` + viewAnchor + dlAnchor + `</div>`)})
 		for _, tid := range templateIDs {
 			testid := html.EscapeString("rc-cell-" + short(clientID) + "-" + short(tid))

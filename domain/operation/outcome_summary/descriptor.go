@@ -29,7 +29,11 @@ func Describe() compose.Unit {
 				// positioned immediately AFTER the reports item. Generic key +
 				// route; the "Report Card Templates" wording lives in lyngua
 				// (template_settings_label / education tier).
-				{Key: "outcome-summary-templates", Route: "outcome_summary.template_settings", Label: "Report Templates", Icon: "icon-file-text", Permission: "job_outcome_summary:list", LabelKey: "template_settings_label", IconKey: "template_settings_icon"},
+				// Q4: gated on the binding entity's OWN list code — the same code
+				// the settings page GET and its list use case enforce — so the
+				// sidebar entry, the page gate, and the Gatekeeper agree for
+				// split-role users.
+				{Key: "outcome-summary-templates", Route: "outcome_summary.template_settings", Label: "Report Templates", Icon: "icon-file-text", Permission: "job_outcome_summary_document_template:list", LabelKey: "template_settings_label", IconKey: "template_settings_icon"},
 			},
 		},
 	}

@@ -15,54 +15,34 @@ package list
 
 import (
 	"context"
-	"log"
 	"sort"
 	"strings"
 
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
 	pyeza "github.com/erniealice/pyeza-golang"
 
-	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 )
 
-// jobTemplateTabPageLimit caps each ListJobTemplates page in the category map
-// build (the adapter honors Pagination for this RPC).
-const jobTemplateTabPageLimit = 100
-
-// boolCatFilter builds a BooleanFilter TypedFilter (the inactive-merge selector).
-func boolCatFilter(field string, v bool) *commonpb.TypedFilter {
-	return &commonpb.TypedFilter{
-		Field:      field,
-		FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: v}},
+// loadJobListTabSupport issues the ONE tab-support read per page load (20260718
+// courses-list-perf Rank-1) and splits it into the tabstrip's two shapes: every
+// job_category (active + inactive — the tab rows) and every ACTIVE job_template
+// stub (id/name/job_category_id). This replaces the former listAllJobCategories
+// two-call concat + the paged activeTemplatesByCategory loop (12 statements → 1).
+//
+// Per-kind authorization (job_category:list, job_template:list) is enforced in the
+// espyna use case: a denied kind returns an empty slice, so the tabstrip degrades
+// exactly as before (no tabs / no fallback for the denied kind). Unlike the old
+// helpers, a DB/query error is NOT swallowed — it propagates so renderTabbed can
+// render a real error state instead of silently-partial tabs.
+//
+// Nil-safe: no closure wired → (nil, nil, nil) → the list degrades to no tabs.
+func loadJobListTabSupport(ctx context.Context, deps *ListViewDeps) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error) {
+	if deps.ListJobListTabSupport == nil {
+		return nil, nil, nil
 	}
-}
-
-// listAllJobCategories returns every job_category (active + inactive) so all
-// category tabs render. The generic List defaults to active=true unless an
-// explicit `active` BooleanFilter is present, and one boolean value can't span
-// both — so make one default (active) call plus one active=false call and
-// concatenate (the outcome_summary.listAllSchedules pattern). Nil-safe: no
-// closure → empty slice → no tabs (flat list).
-func listAllJobCategories(ctx context.Context, deps *ListViewDeps) []*jobcategorypb.JobCategory {
-	if deps.ListJobCategories == nil {
-		return nil
-	}
-	out := make([]*jobcategorypb.JobCategory, 0, 4)
-	if resp, err := deps.ListJobCategories(ctx, &jobcategorypb.ListJobCategoriesRequest{}); err != nil {
-		log.Printf("job list tabs: list active job categories: %v", err)
-	} else {
-		out = append(out, resp.GetData()...)
-	}
-	if resp, err := deps.ListJobCategories(ctx, &jobcategorypb.ListJobCategoriesRequest{
-		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{boolCatFilter("active", false)}},
-	}); err != nil {
-		log.Printf("job list tabs: list inactive job categories: %v", err)
-	} else {
-		out = append(out, resp.GetData()...)
-	}
-	return out
+	return deps.ListJobListTabSupport(ctx)
 }
 
 // sortJobCategories orders categories per the Tab options: when SortByOrder is
@@ -158,47 +138,29 @@ func buildJobCategoryTabs(
 	return tabs
 }
 
-// activeTemplatesByCategory lists every ACTIVE job_template and groups it by
-// job_category_id. It returns two views of the same set:
+// activeTemplatesByCategory groups an already-fetched set of ACTIVE job_templates
+// (from loadJobListTabSupport) by job_category_id. It returns two views of the
+// same set:
 //   - catToTemplates: category id → its active templates, used to render (and
 //     count) a job_category the delivery-summary aggregate never reaches —
 //     deportment conduct records are JOB_STATUS_COMPLETED jobs with no active
 //     subscription_seat / product_plan match, so they fall out of the aggregate's
 //     inner joins and their tab would otherwise be empty.
 //   - templateToCat: template id → category id, used to map each aggregate
-//     summary row back to its category. The aggregate joins `jt.active`, so it
-//     only ever references active templates — an active-only map is complete for
-//     that purpose (no inactive pass needed).
+//     summary row back to its category. The tab-support read returns only ACTIVE
+//     templates (the aggregate joins `jt.active`), so an active-only map is
+//     complete for that purpose.
 //
-// Pages through ListJobTemplates (the generic List defaults to active=true when
-// no `active` BooleanFilter is present). Nil-safe → empty maps (no tabs claim
-// any category, so the list degrades to the unfiltered aggregate).
-func activeTemplatesByCategory(ctx context.Context, deps *ListViewDeps) (catToTemplates map[string][]*jobtemplatepb.JobTemplate, templateToCat map[string]string) {
+// Pure (no ctx/DB): the single tab-support statement already fetched the rows, so
+// this is an in-memory regroup. Nil/empty input → empty maps (no tabs claim any
+// category, so the list degrades to the unfiltered aggregate).
+func activeTemplatesByCategory(templates []*jobtemplatepb.JobTemplate) (catToTemplates map[string][]*jobtemplatepb.JobTemplate, templateToCat map[string]string) {
 	catToTemplates = map[string][]*jobtemplatepb.JobTemplate{}
 	templateToCat = map[string]string{}
-	if deps.ListJobTemplates == nil {
-		return catToTemplates, templateToCat
-	}
-	req := &jobtemplatepb.ListJobTemplatesRequest{}
-	for page := int32(1); ; page++ {
-		req.Pagination = &commonpb.PaginationRequest{
-			Limit:  jobTemplateTabPageLimit,
-			Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
-		}
-		resp, err := deps.ListJobTemplates(ctx, req)
-		if err != nil {
-			log.Printf("job list tabs: list active job templates (page %d): %v", page, err)
-			break
-		}
-		batch := resp.GetData()
-		for _, t := range batch {
-			cat := t.GetJobCategoryId()
-			catToTemplates[cat] = append(catToTemplates[cat], t)
-			templateToCat[t.GetId()] = cat
-		}
-		if int32(len(batch)) < jobTemplateTabPageLimit {
-			break
-		}
+	for _, t := range templates {
+		cat := t.GetJobCategoryId()
+		catToTemplates[cat] = append(catToTemplates[cat], t)
+		templateToCat[t.GetId()] = cat
 	}
 	return catToTemplates, templateToCat
 }

@@ -64,6 +64,16 @@ type ListViewDeps struct {
 	// job.job_category_id denorm directly — no template join).
 	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
 	ListJobTemplates  func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+
+	// ListJobListTabSupport (20260718 courses-list-perf Rank-1) — the ONE
+	// tabstrip support read per page load. Returns ALL job_category rows (active
+	// AND inactive — the tab rows) and ALL ACTIVE job_template stubs (id/name/
+	// job_category_id — the template→category map + deportment fallback) from a
+	// single UNION-ALL statement, replacing the two ListJobCategories closures +
+	// the paged ListJobTemplates loop (12 statements → 1). Per-kind authorization
+	// is enforced in the espyna use case (a denied kind returns an empty slice);
+	// errors PROPAGATE (no silent partial tabs). Optional/nil-safe → no tabs.
+	ListJobListTabSupport func(ctx context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error)
 }
 
 // PageData holds the data for the job list page.
@@ -139,7 +149,15 @@ func renderFlat(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewConte
 func renderTabbed(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewContext, status string, perms *types.UserPermissions) view.ViewResult {
 	l := deps.Labels
 
-	cats := listAllJobCategories(ctx, deps)
+	// ONE tab-support read per page load (20260718 courses-list-perf Rank-1):
+	// categories (tab rows) + active template stubs (the template→category map +
+	// deportment fallback) in a single statement. Errors PROPAGATE — a failed read
+	// renders a real error state, not silently-partial tabs.
+	cats, templates, err := loadJobListTabSupport(ctx, deps)
+	if err != nil {
+		log.Printf("Failed to load job list tab support: %v", err)
+		return view.Error(fmt.Errorf("failed to load job list tabs: %w", err))
+	}
 	sortJobCategories(cats, deps.Options.Tab)
 
 	// ?jc= selects the active tab. Validate it against the fetched set: an empty,
@@ -152,9 +170,8 @@ func renderTabbed(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCon
 
 	var tableConfig *types.TableConfig
 	var counts map[string]int
-	var err error
 	if deps.BusinessType == businessTypeEducation {
-		tableConfig, counts, err = buildDeliverySummaryTableTabbed(ctx, deps, status, selected)
+		tableConfig, counts, err = buildDeliverySummaryTableTabbed(ctx, deps, status, selected, templates)
 	} else {
 		tableConfig, counts, err = buildJobTableTabbed(ctx, deps, status, selected, perms)
 	}

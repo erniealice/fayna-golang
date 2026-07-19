@@ -85,7 +85,7 @@ func fetchItemRatings(ctx context.Context, d *Deps, deportJobs []*jobpb.Job, gro
 		c.nameOf[jid] = cleanSubject(colName(tmplNames, jobTemplate[jid]))
 	}
 
-	order, _, _ := fetchPhaseOrders(ctx, d, ids)
+	order, _, _ := fetchPhaseOrders(ctx, d, ids, historical)
 	pos := fetchSemesterLabels(ctx, d, ids, order)
 	for jid, byOrder := range pos {
 		if jid == groupID {

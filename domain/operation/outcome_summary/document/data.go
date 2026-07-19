@@ -310,7 +310,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	if groupJob != nil && groupJob.GetId() != "" {
 		walkIDs = append(append([]string{}, jobIDs...), groupJob.GetId())
 	}
-	phaseOrder, jobByPhase, _ := fetchPhaseOrders(ctx, d, walkIDs)
+	phaseOrder, jobByPhase, _ := fetchPhaseOrders(ctx, d, walkIDs, historical)
 	semByJob := fetchSemesterLabels(ctx, d, walkIDs, phaseOrder)
 	yearByJob := fetchYearLabels(ctx, d, jobIDs)
 	// Per-criterion marks + per-period teacher assignment from task_outcome /
@@ -358,7 +358,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	}
 	allTemplateIDs := append(append([]string{}, templateIDs...), deportTemplateIDs...)
 	templatePhaseCode := fetchTemplatePhaseCodes(ctx, d, allTemplateIDs)
-	treeOrder, treeJobByPhase, treePhaseTmpl := fetchPhaseOrders(ctx, d, allCatJobIDs)
+	treeOrder, treeJobByPhase, treePhaseTmpl := fetchPhaseOrders(ctx, d, allCatJobIDs, historical)
 	jobOrderCode := map[string]map[int32]string{}
 	for pid, jid := range treeJobByPhase {
 		code := strings.TrimSpace(templatePhaseCode[treePhaseTmpl[pid]])
@@ -487,6 +487,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		groupCatID:   groupCatID,
 		groupCount:   groupCount,
 		groupLead:    groupLead,
+		historical:   historical,
 	}, treeStrictYear)
 
 	name, ay := sectionParts(group.GetName())
@@ -665,7 +666,7 @@ func fetchTemplateNames(ctx context.Context, d *Deps, templateIDs []string, hist
 // task_outcome roll-up, which walks phase → task → outcome back to the subject),
 // and the template_phase id (for the phase-CODE lookup the block-layout tree keys
 // its per-phase leaves by, via job_phase.template_phase_id → job_template_phase.code).
-func fetchPhaseOrders(ctx context.Context, d *Deps, jobIDs []string) (order map[string]int32, jobByPhase, phaseTemplate map[string]string) {
+func fetchPhaseOrders(ctx context.Context, d *Deps, jobIDs []string, historical bool) (order map[string]int32, jobByPhase, phaseTemplate map[string]string) {
 	order = map[string]int32{}
 	jobByPhase = map[string]string{}
 	phaseTemplate = map[string]string{}
@@ -677,21 +678,33 @@ func fetchPhaseOrders(ctx context.Context, d *Deps, jobIDs []string) (order map[
 		if end > len(jobIDs) {
 			end = len(jobIDs)
 		}
-		resp, err := d.ListJobPhases(ctx, &jobphasepb.ListJobPhasesRequest{
-			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("job_id", jobIDs[start:end])}},
-		})
-		if err != nil {
-			log.Printf("report card doc: list job phases: %v", err)
-			continue
+		// The generic adapter defaults to active=true unless an explicit boolean
+		// filter is supplied. A past-AY card's job_phase rows are inactive, so a
+		// second inactive-admitting pass is added when historical (mirroring
+		// fetchJobs / fetchTemplateNames); otherwise every historical phase is
+		// silently dropped and the per-phase leaves render blank. The result maps
+		// are keyed by phase id, so the active + inactive passes never double-count.
+		filterSets := [][]*commonpb.TypedFilter{{listIn("job_id", jobIDs[start:end])}}
+		if historical {
+			filterSets = append(filterSets, []*commonpb.TypedFilter{listIn("job_id", jobIDs[start:end]), boolEq("active", false)})
 		}
-		for _, p := range resp.GetData() {
-			if id := p.GetId(); id != "" {
-				order[id] = p.GetPhaseOrder()
-				if jid := p.GetJobId(); jid != "" {
-					jobByPhase[id] = jid
-				}
-				if tp := strings.TrimSpace(p.GetTemplatePhaseId()); tp != "" {
-					phaseTemplate[id] = tp
+		for _, filters := range filterSets {
+			resp, err := d.ListJobPhases(ctx, &jobphasepb.ListJobPhasesRequest{
+				Filters: &commonpb.FilterRequest{Filters: filters},
+			})
+			if err != nil {
+				log.Printf("report card doc: list job phases: %v", err)
+				continue
+			}
+			for _, p := range resp.GetData() {
+				if id := p.GetId(); id != "" {
+					order[id] = p.GetPhaseOrder()
+					if jid := p.GetJobId(); jid != "" {
+						jobByPhase[id] = jid
+					}
+					if tp := strings.TrimSpace(p.GetTemplatePhaseId()); tp != "" {
+						phaseTemplate[id] = tp
+					}
 				}
 			}
 		}

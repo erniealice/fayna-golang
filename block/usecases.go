@@ -151,6 +151,14 @@ type OperationUseCases struct {
 	// (service/operation/job_template_summary), surfaced here on Operation
 	// because the consuming view is the Job list module (education tier).
 	JobTemplateSummary JobTemplateSummaryUseCases
+	// JobListTabSupport — the single-statement job-list "/classes" tabstrip
+	// support read (20260718 courses-list-perf Rank-1). ONE closure returning ALL
+	// categories (tab rows) + ACTIVE template stubs (the template→category map +
+	// deportment fallback), sourced from espyna's SERVICE aggregate
+	// (service/operation/job_list_tab_support). Replaces the former 12 generic-List
+	// statements per page load. OPTIONAL / nil-able: a nil closure degrades the
+	// list to no tabs (flat).
+	JobListTabSupport JobListTabSupportUseCases
 	// TemplateTaskCriteria — JobTemplate detail criteria-by-task list.
 	TemplateTaskCriteria TemplateTaskCriteriaUseCases
 	JobOutcomeSummary    JobOutcomeSummaryUseCases
@@ -314,6 +322,11 @@ type TaskOutcomeUseCases struct {
 	// (job → template ancestry) carrying phase/task/criterion codes. Optional /
 	// nil-safe: a nil closure leaves the coded-cell surface blank.
 	ListCodedTaskOutcomeValuesByJob func(context.Context, *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
+	// ListCodedTaskOutcomeValuesByJobHistorical — the past-academic-year sibling of
+	// the above: same tenant/latest-cell contract but admits the inactive
+	// instance+template ancestry a past-AY card carries, so historical attendance /
+	// coded cells resolve instead of manifest-seeding blank. Optional / nil-safe.
+	ListCodedTaskOutcomeValuesByJobHistorical func(context.Context, *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
 }
 
 // OutcomeMatrixUseCases — the generic, cross-vertical grading grid.
@@ -338,6 +351,19 @@ type OutcomeMatrixUseCases struct {
 // a nil closure renders the education-tier list empty.
 type JobTemplateSummaryUseCases struct {
 	ListJobTemplateSummaries func(context.Context, *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
+}
+
+// JobListTabSupportUseCases — the single-statement job-list "/classes" tabstrip
+// support read (20260718 courses-list-perf Rank-1). ListJobListTabSupport returns
+// BOTH row kinds from ONE SQL statement: all workspace job_category rows (active
+// AND inactive — the tab rows) and all ACTIVE job_template stubs (id/name/
+// job_category_id — the template→category map + deportment template-grain
+// fallback). Per-kind authorization (job_category:list, job_template:list) is
+// enforced inside the espyna use case; a denied kind returns an empty slice.
+// Workspace comes from session context only. OPTIONAL / nil-able (NOT in
+// RequireFor): a nil closure degrades the list to no tabs (flat).
+type JobListTabSupportUseCases struct {
+	ListJobListTabSupport func(context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error)
 }
 
 // ScoringSchemeUseCases — ScoringScheme CRUD + list (education grading 20260616).

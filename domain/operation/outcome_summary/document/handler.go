@@ -131,7 +131,13 @@ type Deps struct {
 	// coded-cell surface. Workspace-scoped from trusted context in the adapter;
 	// nil-safe (a missing closure leaves coded cells blank).
 	ListCodedTaskOutcomeValuesByJob func(ctx context.Context, req *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
-	ListTemplateTaskCriterias       func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
+	// ListCodedTaskOutcomeValuesByJobHistorical is the past-academic-year sibling
+	// of the above. A past card's instance+template ancestry is inactive, so the
+	// live reader resolves nothing; collectCard routes to this reader (which admits
+	// inactive ancestry) when the section is historical. nil-safe: a missing closure
+	// leaves a past card's coded cells blank exactly as before.
+	ListCodedTaskOutcomeValuesByJobHistorical func(ctx context.Context, req *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
+	ListTemplateTaskCriterias                 func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
 }
 
 // NewDownloadHandler returns the per-student report-card .docx download handler.

@@ -86,6 +86,13 @@ type JobModuleDeps struct {
 	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
 	ListJobTemplates  func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
 
+	// ListJobListTabSupport (20260718 courses-list-perf Rank-1) — the ONE
+	// tabstrip support read that returns all categories + active template stubs
+	// in a single statement (replacing the two ListJobCategories closures + the
+	// paged ListJobTemplates on the "/classes" tabbed path). Optional/nil-safe →
+	// the list falls back to no tabs.
+	ListJobListTabSupport func(ctx context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error)
+
 	// Job phase operations (list only — CRUD is now owned by the job_phase module)
 	ListJobPhases func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
 
@@ -220,9 +227,10 @@ func NewJobModule(deps *JobModuleDeps) *JobModule {
 			ListJobTemplateSummaries: deps.ListJobTemplateSummaries,
 			MatrixDetailURL:          deps.MatrixDetailURL,
 			// "/classes" job_category tab-split.
-			Options:           deps.JobListOptions,
-			ListJobCategories: deps.ListJobCategories,
-			ListJobTemplates:  deps.ListJobTemplates,
+			Options:               deps.JobListOptions,
+			ListJobCategories:     deps.ListJobCategories,
+			ListJobTemplates:      deps.ListJobTemplates,
+			ListJobListTabSupport: deps.ListJobListTabSupport,
 		}),
 		Detail:           jobdetail.NewView(detailDeps),
 		TabAction:        jobdetail.NewTabAction(detailDeps),

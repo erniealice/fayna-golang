@@ -293,7 +293,7 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	//    historical sections then fill their counts from direct member/job
 	//    reads (selected tab only), bucketed in-memory over the SAME fetched
 	//    rows (no per-category read fan-out — §3.6 historical row).
-	subjectCount, subjectsByCat, studentCount := sectionCounts(ctx, deps)
+	subjectCount, subjectsByCat, statusByCat, studentCount := sectionCounts(ctx, deps)
 	fillHistoricalCounts(ctx, deps, groups, selected, subjectCount, studentCount, subjectsByCat, templateToCat)
 
 	// Uncategorized bucket (§3.0 NULL policy): render the single named bucket
@@ -307,7 +307,7 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	tabs := buildTabs(schedules, groups, selected, l, baseHref)
 
 	// 6. section rows for the selected tab, name ASC.
-	rows := buildSectionRows(groups, selected, subjectCount, studentCount, l, deps.Routes, cats, subjectsByCat, showUncategorized)
+	rows := buildSectionRows(groups, selected, subjectCount, studentCount, l, deps.Routes, cats, subjectsByCat, statusByCat, showUncategorized)
 
 	tableConfig := &types.TableConfig{
 		ID:                   "report-cards-sections",
@@ -635,9 +635,17 @@ func orderOf(s *priceschedulepb.PriceSchedule) (int32, bool) {
 // projected by W-A1; "" = the NULL/Uncategorized bucket, §3.0) — a pure
 // in-memory regroup of the one read, zero extra statements. Nil-safe → empty
 // maps (blank counts).
-func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string]int, subjectsByCat map[string]map[string]int, students map[string]int) {
+//
+// statusByCat (R9 W-B1, Phase B) rides the SAME dedup: per (group, category) it
+// distributes those distinct subjects across their group_lowest_status (proto
+// field 20) with the group_mixed_attention overlay (field 21), EXCLUDING
+// no-data subjects (group_phase_count == 0, field 19). Populated inside the
+// seen[gid][tid] block so staff-folded rows count once (chips.go
+// recordSubjectStatus). Statement budget +0 — no extra read (plan §3.6).
+func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string]int, subjectsByCat map[string]map[string]int, statusByCat map[string]map[string]*cellStatusDist, students map[string]int) {
 	subjects = map[string]int{}
 	subjectsByCat = map[string]map[string]int{}
+	statusByCat = map[string]map[string]*cellStatusDist{}
 	students = map[string]int{}
 	if deps.ListJobTemplateSummaries == nil {
 		return
@@ -663,6 +671,10 @@ func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string
 				subjectsByCat[gid] = map[string]int{}
 			}
 			subjectsByCat[gid][s.GetJobCategoryId()]++
+			// Phase-B chip distribution — once per distinct subject (the
+			// staff-fold dedup); no-data subjects are excluded inside the helper
+			// but STILL counted above (the count-only degrade).
+			recordSubjectStatus(statusByCat, gid, s.GetJobCategoryId(), s)
 		}
 		if jc := int(s.GetJobCount()); jc > students[gid] {
 			students[gid] = jc
@@ -911,6 +923,12 @@ func scopeActiveSubNav(scope string) string {
 // AND section), plus the Uncategorized bucket cell (bare count, no eye — the
 // NULL bucket has no addressable ?jc= target) when enabled. Zero categories →
 // EXACTLY today's static cells (the degrade contract).
+//
+// Phase B (R9 W-B2): each category cell also carries a ladder-ordered
+// status-distribution chip set from statusByCat (chips.go buildStatusChips) —
+// count-only when the cell has no data-bearing status (nil dist → nil chips,
+// the degrade). The Uncategorized bucket stays count-only (it folds
+// heterogeneous out-of-corpus subjects with no addressable tab).
 func buildSectionRows(
 	groups []*subscriptiongrouppb.SubscriptionGroup,
 	selected string,
@@ -919,6 +937,7 @@ func buildSectionRows(
 	routes outcome_summary.Routes,
 	cats []*jobcategorypb.JobCategory,
 	subjectsByCat map[string]map[string]int,
+	statusByCat map[string]map[string]*cellStatusDist,
 	showUncategorized bool,
 ) []types.TableRow {
 	var filtered []*subscriptiongrouppb.SubscriptionGroup
@@ -953,6 +972,7 @@ func buildSectionRows(
 			for _, c := range cats {
 				cells = append(cells, types.BuildCompositeCell(types.CompositeCellParams{
 					Count:        subjectsByCat[gid][c.GetId()],
+					Chips:        buildStatusChips(statusByCat[gid][c.GetId()], l),
 					BasePath:     sectionURL,
 					QueryKey:     "jc",
 					SectionID:    gid,

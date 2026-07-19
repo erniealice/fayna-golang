@@ -119,6 +119,27 @@ type LandingLabels struct {
 	// §3.0): templates whose effective category is NULL are never dropped and
 	// never duplicated across categories — they count under this one column.
 	UncategorizedColumn string `json:"uncategorized_column"`
+	// ApprovalStatus supplies the Phase-B status-distribution chip labels
+	// (R9 W-B2; Q-R9-1/Q-R9-4). It REUSES R7's approval-ladder vocabulary
+	// (outcome_matrix approval.status.* + approval.mixed) VERBATIM — the same
+	// wording lives here too because the outcome_summary landing loads its OWN
+	// lyngua namespace and cannot read the outcome_matrix keys directly. Do not
+	// diverge the wording from R7 (lyngua.md); the badge VARIANT is a Go switch,
+	// never lyngua (chips.go approvalChipVariant).
+	ApprovalStatus ApprovalStatusChipLabels `json:"approval_status"`
+}
+
+// ApprovalStatusChipLabels holds the four approval-ladder status texts plus the
+// mixed/attention overlay marker used by the Phase-B landing-cell chips. It
+// MIRRORS outcome_matrix.ApprovalStatusLabels (+ its Mixed marker) — identical
+// vocabulary, separate namespace (see LandingLabels.ApprovalStatus). Every
+// field carries a snake_case json tag matching R7's keys.
+type ApprovalStatusChipLabels struct {
+	InProgress string `json:"in_progress"`
+	ForReview  string `json:"for_review"`
+	Verified   string `json:"verified"`
+	Published  string `json:"published"`
+	Mixed      string `json:"mixed"` // attention/mixed overlay (R7 approval.mixed)
 }
 
 // SectionLabels holds the view-2 (per-section report-card grid) strings. Same
@@ -251,6 +272,15 @@ func DefaultLabels() Labels {
 			// name category AND section (codex §4 pt 8).
 			CellViewAction:      "View {category} for {section}",
 			UncategorizedColumn: "Uncategorized",
+			// Phase-B chip vocabulary — reuses R7's approval ladder wording
+			// verbatim (outcome_matrix approval.status.* / approval.mixed).
+			ApprovalStatus: ApprovalStatusChipLabels{
+				InProgress: "In Progress",
+				ForReview:  "For Review",
+				Verified:   "Verified",
+				Published:  "Published",
+				Mixed:      "Attention — mixed",
+			},
 		},
 		Section: SectionLabels{
 			Title:                 "Group outcomes",

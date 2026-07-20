@@ -279,12 +279,16 @@ roster_table = table([
 ], grid=GRID)
 body.append(roster_table)
 
+R_NS = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+
+# The root MUST declare xmlns:r as well as xmlns:w — the sectPr footerReference
+# carries r:id, and an unbound prefix is tolerated by the fycha etree pass but
+# rejected by LibreOffice ("source file could not be loaded"), which silently
+# yields no PDF. Caught live 2026-07-20.
 document_xml = (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    "<w:document %s><w:body>%s%s</w:body></w:document>"
-) % (W_NS, "".join(body), sectpr("rId201"))
-
-R_NS = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    "<w:document %s %s><w:body>%s%s</w:body></w:document>"
+) % (W_NS, R_NS, "".join(body), sectpr("rId201"))
 
 
 def footer_xml():

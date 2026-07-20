@@ -479,8 +479,10 @@ func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageVi
 
 	// "grade-sheet-{subject-slug}-{ay-slug}.pdf" — the page-title prefix + subject
 	// + AY (RFC-5987 dual-encoded so a non-ASCII subject/AY downloads correctly).
+	// Seeded template names embed the AY as a suffix ("Arts — AY 2025-2026"), so
+	// only append the AY slug when the subject slug does not already carry it.
 	filename := exportFilename(deps.Labels, subjectName, templateID)
-	if ay := slug(academicYear); ay != "" && ay != "none" {
+	if ay := slug(academicYear); ay != "" && ay != "none" && !strings.HasSuffix(filename, ay) {
 		filename += "-" + ay
 	}
 	filename += ".pdf"

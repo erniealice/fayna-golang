@@ -249,6 +249,12 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	deps.GetOutcomeSummaryRoster = om.GetOutcomeSummaryRoster
 	deps.ResolveStaff = om.ResolveStaff
 
+	// Grade-sheet PDF render context (P5): the job_template read resolves the
+	// sheet's job_category_id (binding axis) + name (header). The same already-
+	// wired ReadJobTemplate use case the job/template modules consume — no new
+	// espyna surface. Nil-safe (a nil closure fails the pdf export loud/closed).
+	deps.ReadJobTemplate = u.Operation.JobTemplate.ReadJobTemplate
+
 	// Per-phase approval transitions backing the approval bar (plan §4.2). These
 	// route through the espyna job_phase transition use cases (full-set authz, D7
 	// ownership / admin override, ancestry+workspace, hard-freeze, exact-set

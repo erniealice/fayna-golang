@@ -127,18 +127,47 @@ func ListAll(ctx context.Context, listGroups ListSubscriptionGroupsFunc) map[str
 // (academic-year) name. Empty strings mean "unresolved" (nil-safe deps, an
 // unmapped subscription, or no matching group) — callers render blank.
 func ResolveOne(ctx context.Context, listMembers ListSubscriptionGroupMembersFunc, listGroups ListSubscriptionGroupsFunc, subscriptionID string) (groupName, scheduleName string) {
+	d := ResolveOneDetail(ctx, listMembers, listGroups, subscriptionID)
+	return d.GroupName, d.ScheduleName
+}
+
+// GroupDetail is the full delivery-group resolution: both the display names
+// ResolveOne returns AND the two ids a downstream render-context resolver needs
+// (the grade-sheet PDF resolver keys its template binding on the group's
+// price_schedule_id, 20260720 P5). Every field is "" when unresolved.
+type GroupDetail struct {
+	GroupID         string // subscription_group.id
+	PriceScheduleID string // subscription_group.price_schedule_id (the AY anchor)
+	GroupName       string // subscription_group.name (section)
+	ScheduleName    string // price_schedule.name (academic year)
+}
+
+// ResolveOneDetail is the id-carrying sibling of ResolveOne: it resolves one
+// origin subscription id to its delivery-group id + the group's price_schedule_id
+// (both on the group row, which the espyna adapter hydrates alongside the nested
+// PriceSchedule) plus the two display names. Added as a SIBLING (not a widened
+// ResolveOne) so the existing page-header callers — which only want the two names
+// — keep their exact two-return signature untouched; the PDF render path is the
+// only caller that needs the ids. Empty fields mean "unresolved" (nil-safe deps,
+// an unmapped subscription, or no matching group).
+func ResolveOneDetail(ctx context.Context, listMembers ListSubscriptionGroupMembersFunc, listGroups ListSubscriptionGroupsFunc, subscriptionID string) GroupDetail {
 	if subscriptionID == "" {
-		return "", ""
+		return GroupDetail{}
 	}
 	ids := ResolveGroupIDs(ctx, listMembers, []string{subscriptionID})
 	groupID := ids[subscriptionID]
 	if groupID == "" {
-		return "", ""
+		return GroupDetail{}
 	}
 	groups := ListAll(ctx, listGroups)
 	g := groups[groupID]
 	if g == nil {
-		return "", ""
+		return GroupDetail{}
 	}
-	return g.GetName(), g.GetPriceSchedule().GetName()
+	return GroupDetail{
+		GroupID:         groupID,
+		PriceScheduleID: g.GetPriceScheduleId(),
+		GroupName:       g.GetName(),
+		ScheduleName:    g.GetPriceSchedule().GetName(),
+	}
 }

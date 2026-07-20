@@ -11,16 +11,23 @@ package list
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"log"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	deliverygroup "github.com/erniealice/fayna-golang/domain/operation/deliverygroup"
 	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	sheetdoc "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix/document"
 	"github.com/erniealice/pyeza-golang/view"
 
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
+
+	"github.com/erniealice/espyna-golang/consumer"
 )
 
 // NewExportHandler creates the outcome-matrix CSV download handler.
@@ -84,11 +91,13 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 			return
 		}
 
-		// format=pdf: the composite PDF render is P5. Fail loud with the lyngua
-		// "no template configured" body (503) — no embedded fallback in v1.
-		// P5 wires the render pipeline (resolve binding → storage bytes → engine).
+		// format=pdf: the MMIS-parity composite gradesheet PDF (Q1 LOCKED). period
+		// is IGNORED for pdf in v1 — one artifact per shape, no conditional columns
+		// (the drawer already locks/disables the period select for pdf; the server
+		// simply ignores it after the periodKnown 400 guard above). The resolved
+		// scope IS honored (the roster read is scope-threaded, MINE stays MINE).
 		if format == "pdf" {
-			http.Error(w, deps.Labels.Export.NoTemplateError, http.StatusServiceUnavailable)
+			writeGradeSheetPDF(ctx, w, deps, resp, templateID, scope)
 			return
 		}
 
@@ -321,6 +330,250 @@ func writeFinalCompositeCSV(ctx context.Context, w http.ResponseWriter, deps *Pa
 		}
 	}
 	cw.Flush()
+}
+
+// writeGradeSheetPDF renders the MMIS-parity composite gradesheet PDF (Q1 rec A):
+// a roster grid (one row per student, columns = per-period finals + year Final)
+// from the SAME roster composite read the Final CSV uses (D8 stored values, read
+// verbatim). It is FAIL-LOUD by design (Q1 / entities.html §5): a missing PDF
+// closure, an unresolvable template binding, or empty template bytes all return
+// the lyngua "no template configured" 503 — NEVER an embedded fallback and never
+// another document family's template. soffice absent → 503 (the fycha
+// ErrLibreOfficeUnavailable sentinel). A zero-row roster (foreign/empty template,
+// or a MINE-scoped non-staff caller) 404s — never an empty PDF (composite-CSV
+// parity, IDOR-safe identical bodies).
+func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageViewDeps, resp *matrixpb.GetOutcomeMatrixResponse, templateID string, scope matrixpb.OutcomeMatrixScope) {
+	// PDF wiring gate: the render closure must be present (a nil GeneratePDF is a
+	// narrower, format-specific 503 — fail-closed, "not configured").
+	if deps.GeneratePDF == nil {
+		log.Printf("grade sheet pdf: GeneratePDF not wired — refusing to serve")
+		http.Error(w, deps.Labels.Export.NoTemplateError, http.StatusServiceUnavailable)
+		return
+	}
+
+	// Render context: the job_template's category (keys the binding) + name; the
+	// delivery-group section + academic year + the group's price_schedule_id (the
+	// second binding axis). Both use already-wired reads — never raw SQL.
+	subjectName := resp.GetJobTemplateName()
+	jobCategoryID := ""
+	if deps.ReadJobTemplate != nil {
+		if jt, err := deps.ReadJobTemplate(ctx, &jobtemplatepb.ReadJobTemplateRequest{
+			Data: &jobtemplatepb.JobTemplate{Id: templateID},
+		}); err == nil && jt != nil {
+			for _, t := range jt.GetData() {
+				if t.GetId() != templateID {
+					continue
+				}
+				jobCategoryID = t.GetJobCategoryId()
+				if n := strings.TrimSpace(t.GetName()); n != "" {
+					subjectName = n
+				}
+				break
+			}
+		} else if err != nil {
+			log.Printf("grade sheet pdf: read job template: %v", err)
+		}
+	}
+
+	sectionName, academicYear, priceScheduleID := "", "", ""
+	if originID := sampleOriginSubscription(ctx, deps, templateID); originID != "" {
+		gd := deliverygroup.ResolveOneDetail(ctx, deps.ListSubscriptionGroupMembers, deps.ListSubscriptionGroups, originID)
+		sectionName, academicYear, priceScheduleID = gd.GroupName, gd.ScheduleName, gd.PriceScheduleID
+	}
+
+	// Template resolution — FAIL-LOUD on ANY miss (no embedded fallback, no
+	// cross-family template). A nil closure, a resolver error, or empty bytes all
+	// map to the "no template configured" 503.
+	if deps.ResolveSheetTemplateBytes == nil {
+		log.Printf("grade sheet pdf: ResolveSheetTemplateBytes not wired — refusing to serve")
+		http.Error(w, deps.Labels.Export.NoTemplateError, http.StatusServiceUnavailable)
+		return
+	}
+	tpl, terr := deps.ResolveSheetTemplateBytes(ctx, jobCategoryID, priceScheduleID)
+	if terr != nil {
+		log.Printf("grade sheet pdf: resolve template bytes: %v", terr)
+		http.Error(w, deps.Labels.Export.NoTemplateError, http.StatusServiceUnavailable)
+		return
+	}
+	if len(tpl) == 0 {
+		http.Error(w, deps.Labels.Export.NoTemplateError, http.StatusServiceUnavailable)
+		return
+	}
+
+	// Roster composite (the SAME read the Final CSV uses; scope-threaded so a
+	// MINE-scoped caller never receives the full-workspace roster). Zero rows →
+	// 404 (never an empty PDF; foreign/empty template IDOR parity).
+	if deps.GetOutcomeSummaryRoster == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	roster, err := deps.GetOutcomeSummaryRoster(ctx, &matrixpb.GetOutcomeSummaryRosterRequest{
+		JobTemplateId: templateID,
+		Scope:         scope,
+	})
+	if err != nil || roster == nil || len(roster.GetRows()) == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	cols := rosterPhaseColumns(roster.GetRows())
+
+	ids := make([]string, 0, len(roster.GetRows()))
+	for _, row := range roster.GetRows() {
+		ids = append(ids, row.GetClientId())
+	}
+	names := fetchClientNames(ctx, deps, ids)
+
+	periodLabels := make([]string, 0, len(cols))
+	for _, c := range cols {
+		periodLabels = append(periodLabels, c.label)
+	}
+
+	students := make([]sheetdoc.SheetStudent, 0, len(roster.GetRows()))
+	for _, row := range roster.GetRows() {
+		byPhase := make(map[string]string, len(row.GetPhases()))
+		for _, pe := range row.GetPhases() {
+			byPhase[pe.GetJobTemplatePhaseId()] = pe.GetScaledLabel()
+		}
+		finals := make([]string, 0, len(cols))
+		for _, c := range cols {
+			finals = append(finals, byPhase[c.id])
+		}
+		students = append(students, sheetdoc.SheetStudent{
+			Name:        rosterLabel(row, names),
+			PhaseFinals: finals,
+			YearFinal:   row.GetYearFinalLabel(),
+		})
+	}
+
+	header := sheetdoc.SheetHeader{
+		Title:        firstNonEmptyStr(deps.Labels.Page.Title, "Grade Sheet"),
+		SectionName:  sectionName,
+		AcademicYear: academicYear,
+		NameLabel:    deps.Labels.Grid.ClientColumn,
+		FinalLabel:   deps.Labels.Export.PeriodFinal,
+		PrintedBy:    firstNonEmptyStr(consumer.GetUserIDFromContext(ctx), "system"),
+		PrintedAt:    nowStamp(),
+	}
+	data := sheetdoc.BuildSheetData(header, periodLabels, students)
+
+	outBytes, gerr := deps.GeneratePDF(tpl, data)
+	if gerr != nil {
+		// soffice absent at runtime → 503 (the closure IS wired). fayna must NOT
+		// import fycha, so the ErrLibreOfficeUnavailable sentinel is matched
+		// structurally (errors.As on the LibreOfficeUnavailable() interface) with a
+		// stable-message fallback. Any other error is a genuine 500.
+		if isLibreOfficeUnavailable(gerr) {
+			log.Printf("grade sheet pdf: LibreOffice unavailable: %v", gerr)
+			http.Error(w, "grade sheet PDF rendering is unavailable — LibreOffice is not installed", http.StatusServiceUnavailable)
+			return
+		}
+		log.Printf("grade sheet pdf: generate: %v", gerr)
+		http.Error(w, "failed to generate grade sheet PDF", http.StatusInternalServerError)
+		return
+	}
+	if len(outBytes) == 0 {
+		http.Error(w, "failed to generate grade sheet PDF", http.StatusInternalServerError)
+		return
+	}
+
+	// "grade-sheet-{subject-slug}-{ay-slug}.pdf" — the page-title prefix + subject
+	// + AY (RFC-5987 dual-encoded so a non-ASCII subject/AY downloads correctly).
+	filename := exportFilename(deps.Labels, subjectName, templateID)
+	if ay := slug(academicYear); ay != "" && ay != "none" {
+		filename += "-" + ay
+	}
+	filename += ".pdf"
+	w.Header().Set("Content-Type", pdfContentType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", contentDisposition(filename))
+	if _, werr := w.Write(outBytes); werr != nil {
+		log.Printf("grade sheet pdf: write response: %v", werr)
+	}
+}
+
+const pdfContentType = "application/pdf"
+
+// libreOfficeUnavailable is the STRUCTURAL contract fycha's
+// document.ErrLibreOfficeUnavailable satisfies. fayna must NOT import fycha (the
+// PDF path is an injected closure), so we assert this tiny interface via errors.As
+// — no import needed. Cloned from outcome_summary/document/handler.go:319-344.
+type libreOfficeUnavailable interface {
+	LibreOfficeUnavailable() bool
+}
+
+// isLibreOfficeUnavailable reports whether err is (or wraps) the fycha "soffice
+// absent" condition (→ 503). PREFERRED: the structural interface via errors.As
+// (survives a message reword). FALLBACK: the stable substring (defense-in-depth
+// for an error that crossed a boundary dropping the typed wrapper).
+func isLibreOfficeUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	var lou libreOfficeUnavailable
+	if errors.As(err, &lou) && lou.LibreOfficeUnavailable() {
+		return true
+	}
+	return strings.Contains(err.Error(), "LibreOffice is not installed")
+}
+
+// contentDisposition builds an attachment Content-Disposition with BOTH an
+// ASCII-safe filename="" fallback and an RFC-5987 filename*=UTF-8” form (spaces/
+// commas/non-ASCII download correctly without header injection). Cloned from
+// outcome_summary/document/handler.go:346-407.
+func contentDisposition(name string) string {
+	return `attachment; filename="` + asciiFilename(name) + `"; filename*=UTF-8''` + encodeRFC5987(name)
+}
+
+func asciiFilename(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if r >= 0x20 && r < 0x7f && r != '"' && r != '\\' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	if out == "" {
+		return "grade-sheet.pdf"
+	}
+	return out
+}
+
+func encodeRFC5987(name string) string {
+	const attr = "!#$&+-.^_`|~"
+	var b strings.Builder
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9',
+			strings.IndexByte(attr, c) >= 0:
+			b.WriteByte(c)
+		default:
+			b.WriteByte('%')
+			const hex = "0123456789ABCDEF"
+			b.WriteByte(hex[c>>4])
+			b.WriteByte(hex[c&0x0f])
+		}
+	}
+	return b.String()
+}
+
+// firstNonEmptyStr returns the first trimmed-non-empty argument.
+func firstNonEmptyStr(vals ...string) string {
+	for _, v := range vals {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// nowStamp is the footer print timestamp ("printed_at"), pre-formatted (the
+// engine is %v-only).
+func nowStamp() string {
+	return time.Now().Format("2006-01-02 15:04")
 }
 
 // rosterLabel resolves the display name for a composite-CSV student row: the

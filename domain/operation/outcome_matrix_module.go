@@ -20,6 +20,7 @@ import (
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	sheetbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_document_template"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
@@ -48,6 +49,21 @@ type OutcomeMatrixModuleDeps struct {
 	// (same seam as GetOutcomeMatrix). Optional/nil-safe: a nil closure 404s a
 	// period=final export (no composite source), never a 500.
 	GetOutcomeSummaryRoster func(ctx context.Context, req *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error)
+
+	// --- Grade-sheet PDF render (20260720 P5) ---
+	//
+	// ReadJobTemplate resolves the template's job_category_id + name for the PDF
+	// render context (category keys the binding; name headers the sheet).
+	// GenerateDoc/GeneratePDF are the injected fycha closures (from the app
+	// AppContext via infra, the report-card GenerateDoc precedent).
+	// ResolveSheetTemplateBytes resolves the PUBLISHED sheet binding + downloads
+	// its storage bytes (fail-loud on any miss — Q1, no embedded fallback). All
+	// four are threaded onto the list PageViewDeps for the format=pdf export
+	// branch. Optional/nil-safe: a nil closure fails the pdf export loud/closed.
+	ReadJobTemplate           func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)
+	GenerateDoc               func(templateData []byte, data map[string]any) ([]byte, error)
+	GeneratePDF               func(templateData []byte, data map[string]any) ([]byte, error)
+	ResolveSheetTemplateBytes func(ctx context.Context, jobCategoryID, priceScheduleID string) ([]byte, error)
 
 	// Per-phase approval transition use cases (plan §4.2). Back the approval-bar
 	// POST forms; each carries only the trusted sheet identity (actor + workspace
@@ -167,6 +183,11 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		GetOutcomeMatrix:             deps.GetOutcomeMatrix,
 		GetOutcomeSummaryRoster:      deps.GetOutcomeSummaryRoster,
 		ResolveStaff:                 deps.ResolveStaff,
+		// Grade-sheet PDF render context (P5).
+		ReadJobTemplate:           deps.ReadJobTemplate,
+		GenerateDoc:               deps.GenerateDoc,
+		GeneratePDF:               deps.GeneratePDF,
+		ResolveSheetTemplateBytes: deps.ResolveSheetTemplateBytes,
 		ListClients:                  deps.ListClients,
 		ListJobs:                     deps.ListJobs,
 		ListSubscriptionGroupMembers: deps.ListSubscriptionGroupMembers,

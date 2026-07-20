@@ -67,6 +67,16 @@ type Infra struct {
 	// download regression). Nil when the app did not wire the resolver.
 	ResolveTemplateBytes func(ctx context.Context, priceScheduleID string) ([]byte, error)
 
+	// ResolveSheetTemplateBytes resolves the applicable PUBLISHED grade-sheet
+	// (outcome-matrix) template binding on (job_category_id, price_schedule_id,
+	// document_purpose='outcome_matrix') and returns its storage bytes (resolver ∘
+	// storage download, built in the app container). Returns (nil, nil) on ANY
+	// miss — BUT the outcome_matrix PDF handler treats nil bytes as FAIL-LOUD
+	// ("no template configured", 503), asymmetric to ResolveTemplateBytes (which
+	// falls back to an embedded template) BY DESIGN (Q1 / entities.html §5). Nil
+	// when the app did not wire the resolver → the same fail-loud 503.
+	ResolveSheetTemplateBytes func(ctx context.Context, jobCategoryID, priceScheduleID string) ([]byte, error)
+
 	// Report-card template settings (TB3) artifact closures, sourced from the app
 	// AppContext (ctx.UploadTemplate / ctx.ListDocTemplates / ctx.CreateDocTemplate,
 	// same as GenerateDoc/ResolveTemplateBytes). All optional/nil-safe — a nil

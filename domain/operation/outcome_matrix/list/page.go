@@ -21,6 +21,7 @@ import (
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	outcomecriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
@@ -65,6 +66,35 @@ type PageViewDeps struct {
 	// identity, fail-closed). Wired via the module Deps (grade_sheet.go's
 	// resolveStaff precedent), never raw SQL from the view.
 	ResolveStaff func(ctx context.Context) (string, error)
+
+	// --- Grade-sheet PDF render context (20260720 P5) ---
+	//
+	// ReadJobTemplate resolves the template's job_category_id (proto field 32) +
+	// name for the PDF render context (the category axis keys the template
+	// binding; the name headers the sheet + filenames). Sourced from the espyna
+	// job_template ReadJobTemplate use case via the block seam (the ListJobs
+	// precedent) — never raw SQL. Optional/nil-safe: nil → a format=pdf export
+	// fails loud (no category to resolve a binding), never a 500.
+	ReadJobTemplate func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)
+
+	// ResolveSheetTemplateBytes resolves the applicable PUBLISHED grade-sheet
+	// template binding (FindApplicableJobTemplateDocumentTemplate on
+	// job_category_id + price_schedule_id + document_purpose='outcome_matrix') and
+	// downloads its storage bytes. Built in the app container (resolver ∘ storage
+	// download); ANY miss returns (nil, nil). Asymmetric to the report-card
+	// ResolveTemplateBytes BY DESIGN (Q1 / entities.html §5): the grade-sheet
+	// handler treats nil bytes as FAIL-LOUD ("no template configured", 503), never
+	// an embedded fallback. Nil closure → the same fail-loud 503.
+	ResolveSheetTemplateBytes func(ctx context.Context, jobCategoryID, priceScheduleID string) ([]byte, error)
+
+	// GenerateDoc / GeneratePDF wrap the injected fycha DocumentService closures
+	// (template bytes + data map → .docx / → .pdf via LibreOffice). fayna does NOT
+	// import fycha — these are bare-signature closures threaded from the app
+	// container through the block Infra (the report-card GenerateDoc precedent).
+	// The PDF export uses GeneratePDF (which renders the DOCX then converts in one
+	// soffice call). Nil GeneratePDF → the format=pdf export 503s (not configured).
+	GenerateDoc func(templateData []byte, data map[string]any) ([]byte, error)
+	GeneratePDF func(templateData []byte, data map[string]any) ([]byte, error)
 
 	// ListClients hydrates the roster's display names. GetOutcomeMatrix
 	// deliberately returns an OPAQUE client_id as ClientLabel (espyna

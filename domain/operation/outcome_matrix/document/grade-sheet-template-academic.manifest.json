@@ -1,0 +1,24 @@
+{
+  "scalars": [
+    "sheet_title",
+    "section_name",
+    "academic_year",
+    "name_label",
+    "period1_label",
+    "period2_label",
+    "final_label",
+    "printed_by",
+    "printed_at"
+  ],
+  "loops": {
+    "students": {
+      "scalars": [
+        "name",
+        "period1",
+        "period2",
+        "final"
+      ],
+      "loops": {}
+    }
+  }
+}

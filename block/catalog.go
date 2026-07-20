@@ -615,6 +615,14 @@ func OutcomeMatrixUnit(uc *UseCases, infra *Infra, options outcome_matrix.Option
 			deps.ListDocumentTemplates = infra.ListDocTemplates
 			deps.CreateDocumentTemplate = infra.CreateDocTemplate
 			deps.DeleteDocumentTemplate = infra.DeleteDocTemplate
+			// Grade-sheet PDF render closures (Wave D / P5) — the SAME injected fycha
+			// closures the report-card download consumes (generateDoc/generatePDF)
+			// plus the sheet-family binding resolver. Optional/nil-safe: a nil
+			// GeneratePDF / ResolveSheetTemplateBytes fails the format=pdf export loud
+			// with a 503 (Q1: no embedded fallback), never a panic.
+			deps.GenerateDoc = infra.GenerateDoc
+			deps.GeneratePDF = infra.GeneratePDF
+			deps.ResolveSheetTemplateBytes = infra.ResolveSheetTemplateBytes
 		}
 		// Header breadcrumb back-link to the job list (the matrix's parent
 		// surface): the job unit's RESOLVED routes/labels carry the tier's

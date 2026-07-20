@@ -144,6 +144,11 @@ func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 		infra.ComputeJobOutcome, _ = ctx.ComputeJobOutcome.(func(context.Context, string) (bool, error))
 		infra.RecomputeEligibility, _ = ctx.RecomputeEligibility.(func(context.Context, string) (bool, map[string]bool, error))
 		infra.ResolveTemplateBytes, _ = ctx.ResolveTemplateBytes.(func(context.Context, string) ([]byte, error))
+		// Grade-sheet (outcome-matrix) PDF binding resolver (P5). A THIRD injected
+		// closure asserted with its exact bare signature (two-axis key: category +
+		// schedule) so no fayna→espyna dependency is introduced; nil-safe when
+		// unwired (the pdf export fails loud with a 503, no embedded fallback).
+		infra.ResolveSheetTemplateBytes, _ = ctx.ResolveSheetTemplateBytes.(func(context.Context, string, string) ([]byte, error))
 		// TB3 template settings artifact closures (upload + document_template CRUD).
 		infra.UploadTemplate, _ = ctx.UploadTemplate.(func(context.Context, string, string, []byte, string) error)
 		infra.ListDocTemplates, _ = ctx.ListDocTemplates.(func(context.Context, *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error))

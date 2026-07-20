@@ -7,6 +7,7 @@ package list
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -30,11 +31,11 @@ func TestPeriodKnown(t *testing.T) {
 		period string
 		want   bool
 	}{
-		{"", true},        // all
-		{"final", true},   // reserved composite
-		{"s1", true},      // phase code
-		{"s2", true},      // phase code
-		{"s3", false},     // unknown code → 400
+		{"", true},      // all
+		{"final", true}, // reserved composite
+		{"s1", true},    // phase code
+		{"s2", true},    // phase code
+		{"s3", false},   // unknown code → 400
 		{"garbage", false},
 		{"p1", false}, // a phase ID is NOT a period token (codes only)
 	}
@@ -248,5 +249,178 @@ func TestWriteFinalCompositeCSV_ScopePassthrough(t *testing.T) {
 	writeFinalCompositeCSV(context.Background(), rec3, closed, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE)
 	if rec3.Code != 404 {
 		t.Fatalf("MINE non-staff (zero rows): status = %d, want 404", rec3.Code)
+	}
+}
+
+// --- format=pdf branch (P5) --------------------------------------------------
+
+// pdfMatrixResp is the minimal GetOutcomeMatrix response the pdf branch reads
+// (job_template_name fallback for the header/filename).
+func pdfMatrixResp() *matrixpb.GetOutcomeMatrixResponse {
+	return &matrixpb.GetOutcomeMatrixResponse{JobTemplateName: "Arts"}
+}
+
+// pdfRoster is a 1-student roster (s1/s2 + year final) for the happy path.
+func pdfRoster() *matrixpb.GetOutcomeSummaryRosterResponse {
+	return &matrixpb.GetOutcomeSummaryRosterResponse{
+		Rows: []*matrixpb.OutcomeSummaryRosterRow{{
+			ClientId:    "c1",
+			ClientLabel: "c1",
+			Phases: []*matrixpb.OutcomeSummaryPhaseEntry{
+				{JobTemplatePhaseId: "p1", Label: "Semester 1", SequenceOrder: 1, ScaledLabel: "6"},
+				{JobTemplatePhaseId: "p2", Label: "Semester 2", SequenceOrder: 2, ScaledLabel: "7"},
+			},
+			YearFinalLabel: "7",
+		}},
+	}
+}
+
+// libreOfficeAbsentErr is a stub satisfying the structural fycha sentinel contract
+// (LibreOfficeUnavailable() bool) so the handler maps it to 503, proving the
+// errors.As idiom without importing fycha.
+type libreOfficeAbsentErr struct{}
+
+func (libreOfficeAbsentErr) Error() string                { return "soffice not found" }
+func (libreOfficeAbsentErr) LibreOfficeUnavailable() bool { return true }
+
+// TestGradeSheetPDF_FailLoud_NoTemplate proves the Q1 fail-loud contract: a nil
+// resolver, a resolver miss (nil bytes), and a nil GeneratePDF all 503 with the
+// lyngua NoTemplateError body — never an embedded fallback, never a 200.
+func TestGradeSheetPDF_FailLoud_NoTemplate(t *testing.T) {
+	labels := outcome_matrix.DefaultLabels()
+	wantBody := labels.Export.NoTemplateError
+
+	// (a) GeneratePDF wired, but ResolveSheetTemplateBytes is nil → 503.
+	deps := &PageViewDeps{
+		Labels:      labels,
+		GeneratePDF: func(_ []byte, _ map[string]any) ([]byte, error) { return []byte("pdf"), nil },
+	}
+	rec := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	if rec.Code != 503 || !strings.Contains(rec.Body.String(), wantBody) {
+		t.Fatalf("nil resolver: status=%d body=%q, want 503 + %q", rec.Code, rec.Body.String(), wantBody)
+	}
+
+	// (b) Resolver present but returns nil bytes (miss) → 503 fail-loud.
+	deps2 := &PageViewDeps{
+		Labels:                    labels,
+		GeneratePDF:               func(_ []byte, _ map[string]any) ([]byte, error) { return []byte("pdf"), nil },
+		ResolveSheetTemplateBytes: func(_ context.Context, _, _ string) ([]byte, error) { return nil, nil },
+	}
+	rec2 := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec2, deps2, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	if rec2.Code != 503 || !strings.Contains(rec2.Body.String(), wantBody) {
+		t.Fatalf("resolver miss: status=%d body=%q, want 503 + %q", rec2.Code, rec2.Body.String(), wantBody)
+	}
+
+	// (c) Nil GeneratePDF (render not configured) → 503.
+	deps3 := &PageViewDeps{Labels: labels}
+	rec3 := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec3, deps3, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	if rec3.Code != 503 || !strings.Contains(rec3.Body.String(), wantBody) {
+		t.Fatalf("nil GeneratePDF: status=%d body=%q, want 503 + %q", rec3.Code, rec3.Body.String(), wantBody)
+	}
+}
+
+// TestGradeSheetPDF_SofficeUnavailable proves the soffice-503 mapping: a wired
+// GeneratePDF returning the structural LibreOffice-unavailable sentinel is a 503
+// (not a 500), and a generic error is a 500.
+func TestGradeSheetPDF_SofficeUnavailable(t *testing.T) {
+	labels := outcome_matrix.DefaultLabels()
+	base := func(gen func([]byte, map[string]any) ([]byte, error)) *PageViewDeps {
+		return &PageViewDeps{
+			Labels:                    labels,
+			GeneratePDF:               gen,
+			ResolveSheetTemplateBytes: func(_ context.Context, _, _ string) ([]byte, error) { return []byte("TPL"), nil },
+			GetOutcomeSummaryRoster: func(_ context.Context, _ *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error) {
+				return pdfRoster(), nil
+			},
+		}
+	}
+
+	// Structural sentinel → 503.
+	rec := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec, base(func(_ []byte, _ map[string]any) ([]byte, error) {
+		return nil, libreOfficeAbsentErr{}
+	}), pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	if rec.Code != 503 {
+		t.Fatalf("soffice sentinel: status = %d, want 503", rec.Code)
+	}
+
+	// Substring fallback (typed wrapper dropped) → 503.
+	rec2 := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec2, base(func(_ []byte, _ map[string]any) ([]byte, error) {
+		return nil, errors.New("conversion failed: LibreOffice is not installed")
+	}), pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	if rec2.Code != 503 {
+		t.Fatalf("soffice substring: status = %d, want 503", rec2.Code)
+	}
+
+	// Generic error → 500 (not misclassified as unavailable).
+	rec3 := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec3, base(func(_ []byte, _ map[string]any) ([]byte, error) {
+		return nil, errors.New("template parse error")
+	}), pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	if rec3.Code != 500 {
+		t.Fatalf("generic error: status = %d, want 500", rec3.Code)
+	}
+}
+
+// TestGradeSheetPDF_HappyPath proves a wired pipeline streams the PDF with the
+// nosniff header + a .pdf attachment disposition, and that the builder passed the
+// template bytes + a students loop through to GeneratePDF.
+func TestGradeSheetPDF_HappyPath(t *testing.T) {
+	var gotTpl []byte
+	var gotData map[string]any
+	deps := &PageViewDeps{
+		Labels:                    outcome_matrix.DefaultLabels(),
+		ResolveSheetTemplateBytes: func(_ context.Context, _, _ string) ([]byte, error) { return []byte("TPL"), nil },
+		GetOutcomeSummaryRoster: func(_ context.Context, _ *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error) {
+			return pdfRoster(), nil
+		},
+		GeneratePDF: func(tpl []byte, data map[string]any) ([]byte, error) {
+			gotTpl, gotData = tpl, data
+			return []byte("%PDF-1.7 fake"), nil
+		},
+	}
+	rec := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Error("missing nosniff header")
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/pdf" {
+		t.Errorf("Content-Type = %q, want application/pdf", ct)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, ".pdf") || !strings.Contains(cd, "attachment") {
+		t.Errorf("Content-Disposition = %q, want attachment .pdf", cd)
+	}
+	if string(gotTpl) != "TPL" {
+		t.Errorf("template bytes not threaded to GeneratePDF: %q", gotTpl)
+	}
+	students, ok := gotData["students"].([]any)
+	if !ok || len(students) != 1 {
+		t.Fatalf("students loop = %v, want 1 item", gotData["students"])
+	}
+}
+
+// TestGradeSheetPDF_ZeroRoster404 proves a zero-row roster (foreign/empty template
+// or MINE non-staff) 404s — never an empty PDF (composite-CSV IDOR parity).
+func TestGradeSheetPDF_ZeroRoster404(t *testing.T) {
+	deps := &PageViewDeps{
+		Labels:                    outcome_matrix.DefaultLabels(),
+		GeneratePDF:               func(_ []byte, _ map[string]any) ([]byte, error) { return []byte("pdf"), nil },
+		ResolveSheetTemplateBytes: func(_ context.Context, _, _ string) ([]byte, error) { return []byte("TPL"), nil },
+		GetOutcomeSummaryRoster: func(_ context.Context, _ *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error) {
+			return &matrixpb.GetOutcomeSummaryRosterResponse{Success: true}, nil
+		},
+	}
+	rec := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	if rec.Code != 404 {
+		t.Fatalf("zero roster: status = %d, want 404", rec.Code)
 	}
 }

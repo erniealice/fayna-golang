@@ -259,6 +259,18 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.JobOutcomeSummaryDocumentTemplate.PublishJobOutcomeSummaryDocumentTemplate = b.PublishJobOutcomeSummaryDocumentTemplate.Execute
 		}
 
+		// JobTemplateDocumentTemplate — sheet-family (grade-sheet) template binding
+		// (20260720 Wave C). The JOSDT sibling; backs the outcome-matrix template
+		// settings page. Optional/nil-safe: a nil aggregate leaves the closures nil
+		// → the settings surface renders "not configured".
+		if op.JobTemplateDocumentTemplate != nil {
+			b := op.JobTemplateDocumentTemplate
+			result.Operation.JobTemplateDocumentTemplate.ListJobTemplateDocumentTemplates = b.ListJobTemplateDocumentTemplates.Execute
+			result.Operation.JobTemplateDocumentTemplate.CreateJobTemplateDocumentTemplate = b.CreateJobTemplateDocumentTemplate.Execute
+			result.Operation.JobTemplateDocumentTemplate.DeleteJobTemplateDocumentTemplate = b.DeleteJobTemplateDocumentTemplate.Execute
+			result.Operation.JobTemplateDocumentTemplate.PublishJobTemplateDocumentTemplate = b.PublishJobTemplateDocumentTemplate.Execute
+		}
+
 		if op.JobTemplatePhase != nil {
 			result.Operation.JobTemplatePhase.CreateJobTemplatePhase = op.JobTemplatePhase.CreateJobTemplatePhase.Execute
 			result.Operation.JobTemplatePhase.ReadJobTemplatePhase = op.JobTemplatePhase.ReadJobTemplatePhase.Execute

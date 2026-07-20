@@ -8,15 +8,21 @@ import (
 	outcomematrixpkg "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	outcomematrixaction "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix/action"
 	outcomematrixlist "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix/list"
+	outcomematrixtemplatesettings "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix/template_settings"
 
 	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	sheetbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_document_template"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
+	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
@@ -32,6 +38,8 @@ type OutcomeMatrixModuleDeps struct {
 	Routes       outcomematrixpkg.Routes
 	Labels       outcomematrixpkg.Labels
 	CommonLabels pyeza.CommonLabels
+	// TableLabels back the grade-sheet template-settings list table (Wave C / P4).
+	TableLabels types.TableLabels
 
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
 
@@ -104,6 +112,26 @@ type OutcomeMatrixModuleDeps struct {
 	// render no breadcrumb (header falls back to the title-only crumb).
 	JobListURL   string // job list route pattern, "{status}" placeholder intact
 	JobListLabel string // the job list's active-status heading
+
+	// --- Grade-sheet template settings (Wave C / P4) ---
+	//
+	// The document_template artifact + storage closures come from the app
+	// AppContext (via infra, the GenerateDoc precedent); the binding lifecycle
+	// closures come from the espyna job_template_document_template use cases via
+	// the block seam. The category + schedule dropdown reads back the same
+	// closures the grid + job list already consume. All optional/nil-safe — a nil
+	// write closure degrades the settings surface to "not configured" (never a
+	// panic); the list page still renders.
+	ListJobCategories      func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
+	ListPriceSchedules     func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
+	UploadTemplate         func(ctx context.Context, bucket, key string, content []byte, contentType string) error
+	ListDocumentTemplates  func(ctx context.Context, req *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error)
+	CreateDocumentTemplate func(ctx context.Context, req *documenttemplatepb.CreateDocumentTemplateRequest) (*documenttemplatepb.CreateDocumentTemplateResponse, error)
+	DeleteDocumentTemplate func(ctx context.Context, req *documenttemplatepb.DeleteDocumentTemplateRequest) (*documenttemplatepb.DeleteDocumentTemplateResponse, error)
+	ListTemplateBindings   func(ctx context.Context, req *sheetbindingpb.ListJobTemplateDocumentTemplatesRequest) (*sheetbindingpb.ListJobTemplateDocumentTemplatesResponse, error)
+	CreateTemplateBinding  func(ctx context.Context, req *sheetbindingpb.CreateJobTemplateDocumentTemplateRequest) (*sheetbindingpb.CreateJobTemplateDocumentTemplateResponse, error)
+	DeleteTemplateBinding  func(ctx context.Context, req *sheetbindingpb.DeleteJobTemplateDocumentTemplateRequest) (*sheetbindingpb.DeleteJobTemplateDocumentTemplateResponse, error)
+	PublishTemplateBinding func(ctx context.Context, req *sheetbindingpb.PublishJobTemplateDocumentTemplateRequest) (*sheetbindingpb.PublishJobTemplateDocumentTemplateResponse, error)
 }
 
 // OutcomeMatrixModule holds the constructed outcome matrix views.
@@ -122,6 +150,12 @@ type OutcomeMatrixModule struct {
 	// is still wrapped with the ViewAdapter's RBAC context at registration
 	// (same shape as outcome_summary's SectionExport).
 	Export http.HandlerFunc
+
+	// Grade-sheet template settings surface (Wave C / P4 — JOSDT parity).
+	TemplateSettings view.View // GET — list page
+	TemplateUpload   view.View // GET form / POST create-draft
+	TemplatePublish  view.View // POST — publish draft
+	TemplateDelete   view.View // POST — delete draft
 }
 
 // NewOutcomeMatrixModule creates the outcome matrix module with all views wired.
@@ -189,6 +223,35 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		Publish:  outcomematrixaction.NewPublishAction(transitionDeps),
 		Return:   outcomematrixaction.NewReturnAction(transitionDeps),
 		Export:   outcomematrixlist.NewExportHandler(pageDeps),
+
+		// Grade-sheet template settings (Wave C / P4). All four views share one
+		// nil-safe Deps (the JOSDT registration parity). templateSettingsDeps maps
+		// the module deps onto the view deps.
+		TemplateSettings: outcomematrixtemplatesettings.NewListView(outcomeMatrixTemplateSettingsDeps(deps)),
+		TemplateUpload:   outcomematrixtemplatesettings.NewUploadAction(outcomeMatrixTemplateSettingsDeps(deps)),
+		TemplatePublish:  outcomematrixtemplatesettings.NewPublishAction(outcomeMatrixTemplateSettingsDeps(deps)),
+		TemplateDelete:   outcomematrixtemplatesettings.NewDeleteAction(outcomeMatrixTemplateSettingsDeps(deps)),
+	}
+}
+
+// outcomeMatrixTemplateSettingsDeps maps the module deps onto the
+// template-settings view deps (Wave C / P4). All closures are optional/nil-safe.
+func outcomeMatrixTemplateSettingsDeps(deps *OutcomeMatrixModuleDeps) *outcomematrixtemplatesettings.Deps {
+	return &outcomematrixtemplatesettings.Deps{
+		Routes:                 deps.Routes,
+		Labels:                 deps.Labels,
+		CommonLabels:           deps.CommonLabels,
+		TableLabels:            deps.TableLabels,
+		ListJobCategories:      deps.ListJobCategories,
+		ListPriceSchedules:     deps.ListPriceSchedules,
+		UploadTemplate:         deps.UploadTemplate,
+		ListDocumentTemplates:  deps.ListDocumentTemplates,
+		CreateDocumentTemplate: deps.CreateDocumentTemplate,
+		DeleteDocumentTemplate: deps.DeleteDocumentTemplate,
+		ListTemplateBindings:   deps.ListTemplateBindings,
+		CreateTemplateBinding:  deps.CreateTemplateBinding,
+		DeleteTemplateBinding:  deps.DeleteTemplateBinding,
+		PublishTemplateBinding: deps.PublishTemplateBinding,
 	}
 }
 
@@ -230,5 +293,24 @@ func (m *OutcomeMatrixModule) RegisterRoutes(r view.RouteRegistrar) {
 		} else {
 			log.Printf("outcome matrix: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.ExportURL)
 		}
+	}
+
+	// Grade-sheet template settings (Wave C / P4): list page + upload drawer (GET
+	// form / POST create) + publish (POST) + delete (POST). Gated inside each view
+	// (list → :list, mutations → :create/:update/:delete). JOSDT registration
+	// parity. The settings GET stays OUTSIDE /action/ (safe method); the mutations
+	// live under /action/ so they inherit the CSRF + signed-workspace guards.
+	if m.TemplateSettings != nil && m.routes.TemplateSettingsURL != "" {
+		r.GET(m.routes.TemplateSettingsURL, m.TemplateSettings)
+	}
+	if m.TemplateUpload != nil && m.routes.TemplateUploadURL != "" {
+		r.GET(m.routes.TemplateUploadURL, m.TemplateUpload)
+		r.POST(m.routes.TemplateUploadURL, m.TemplateUpload)
+	}
+	if m.TemplatePublish != nil && m.routes.TemplatePublishURL != "" {
+		r.POST(m.routes.TemplatePublishURL, m.TemplatePublish)
+	}
+	if m.TemplateDelete != nil && m.routes.TemplateDeleteURL != "" {
+		r.POST(m.routes.TemplateDeleteURL, m.TemplateDelete)
 	}
 }

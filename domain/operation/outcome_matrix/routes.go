@@ -35,6 +35,33 @@ const (
 	VerifyURL  = "/action/outcome-matrix/{id}/verify"
 	PublishURL = "/action/outcome-matrix/{id}/publish"
 	ReturnURL  = "/action/outcome-matrix/{id}/return"
+
+	// TemplateSettingsURL is the standalone grade-sheet template management page
+	// (Wave C / P4): a list of workspace→document_template bindings (scoped by
+	// job_category + optional price_schedule) + upload/publish/delete. A dedicated
+	// settings surface (Q5), NOT a tab on the grid. GET only — no mutation, so it
+	// stays OUTSIDE /action/ (safe method). Education overrides it to
+	// /grade-sheet/templates via education/route.json. Mirrors the JOSDT
+	// outcome_summary.TemplateSettingsURL shape.
+	TemplateSettingsURL = "/outcome-matrix/templates"
+	// The three template MUTATIONS live under /action/* so they inherit the CSRF
+	// validator + signed workspace-form guard (both default-scoped to /action/ in
+	// espyna's middleware chain). Registering them elsewhere silently bypasses both
+	// guards (JOSDT B4 precedent). Education keeps its /grade-sheet/templates
+	// display vocabulary UNDER the /action/ prefix (see education/route.json).
+	//
+	// TemplateUploadURL is the upload drawer (GET = form, POST = create a DRAFT
+	// binding + its document_template artifact). Education →
+	// /action/grade-sheet/templates/upload.
+	TemplateUploadURL = "/action/outcome-matrix/templates/upload"
+	// TemplatePublishURL publishes a DRAFT binding (id in ?id= query, appended by
+	// the table row-action JS) via the controlled publish transaction. Flat (no
+	// path param) so it composes with the generic "activate" row action.
+	// Education → /action/grade-sheet/templates/publish.
+	TemplatePublishURL = "/action/outcome-matrix/templates/publish"
+	// TemplateDeleteURL deletes a DRAFT binding (POST, id in form). Education →
+	// /action/grade-sheet/templates/delete.
+	TemplateDeleteURL = "/action/outcome-matrix/templates/delete"
 )
 
 // Routes holds all route paths for the outcome matrix view.
@@ -53,6 +80,12 @@ type Routes struct {
 	VerifyURL  string `json:"verify_url"`
 	PublishURL string `json:"publish_url"`
 	ReturnURL  string `json:"return_url"`
+
+	// Grade-sheet template settings (P4 management surface).
+	TemplateSettingsURL string `json:"template_settings_url"`
+	TemplateUploadURL   string `json:"template_upload_url"`
+	TemplatePublishURL  string `json:"template_publish_url"`
+	TemplateDeleteURL   string `json:"template_delete_url"`
 }
 
 // DefaultRoutes returns a Routes populated from the package-level route
@@ -71,6 +104,11 @@ func DefaultRoutes() Routes {
 		VerifyURL:  VerifyURL,
 		PublishURL: PublishURL,
 		ReturnURL:  ReturnURL,
+
+		TemplateSettingsURL: TemplateSettingsURL,
+		TemplateUploadURL:   TemplateUploadURL,
+		TemplatePublishURL:  TemplatePublishURL,
+		TemplateDeleteURL:   TemplateDeleteURL,
 	}
 }
 
@@ -85,5 +123,10 @@ func (r Routes) RouteMap() map[string]string {
 		"outcome_matrix.verify":          r.VerifyURL,
 		"outcome_matrix.publish":         r.PublishURL,
 		"outcome_matrix.return":          r.ReturnURL,
+
+		"outcome_matrix.template_settings": r.TemplateSettingsURL,
+		"outcome_matrix.template_upload":   r.TemplateUploadURL,
+		"outcome_matrix.template_publish":  r.TemplatePublishURL,
+		"outcome_matrix.template_delete":   r.TemplateDeleteURL,
 	}
 }

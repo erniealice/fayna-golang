@@ -52,6 +52,7 @@ import (
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	sheetbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_document_template"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
@@ -137,10 +138,16 @@ type OperationUseCases struct {
 	// espyna binding CRUD + publish use cases. OPTIONAL / nil-able — a nil closure
 	// degrades the settings surface to empty/"not configured".
 	JobOutcomeSummaryDocumentTemplate JobOutcomeSummaryDocumentTemplateUseCases
-	JobTemplatePhase                  JobTemplatePhaseUseCases
-	JobTemplateTask                   JobTemplateTaskUseCases
-	OutcomeCriteria                   OutcomeCriteriaUseCases
-	TaskOutcome                       TaskOutcomeUseCases
+	// JobTemplateDocumentTemplate — sheet-family (grade-sheet) template binding
+	// (20260720 Wave C). The JOSDT sibling: backs the outcome-matrix template
+	// settings page (list/upload/publish/delete) via the espyna binding CRUD +
+	// publish use cases. OPTIONAL / nil-able — a nil closure degrades the settings
+	// surface to empty/"not configured".
+	JobTemplateDocumentTemplate JobTemplateDocumentTemplateUseCases
+	JobTemplatePhase            JobTemplatePhaseUseCases
+	JobTemplateTask             JobTemplateTaskUseCases
+	OutcomeCriteria             OutcomeCriteriaUseCases
+	TaskOutcome                 TaskOutcomeUseCases
 	// OutcomeMatrix — the generic principal-scoped grading grid (read) + the
 	// acting-staff resolver its read-only + IDOR gates depend on. Sourced from
 	// espyna's SERVICE aggregate (service/operation/outcome_matrix), surfaced
@@ -278,6 +285,18 @@ type JobOutcomeSummaryDocumentTemplateUseCases struct {
 	CreateJobOutcomeSummaryDocumentTemplate  func(context.Context, *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error)
 	DeleteJobOutcomeSummaryDocumentTemplate  func(context.Context, *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error)
 	PublishJobOutcomeSummaryDocumentTemplate func(context.Context, *bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse, error)
+}
+
+// JobTemplateDocumentTemplateUseCases — sheet-family (grade-sheet) template
+// binding lifecycle (list/create/delete + the controlled publish transaction).
+// The JOSDT sibling: backs the outcome-matrix template settings page. OPTIONAL /
+// nil-able (NOT in RequireFor): a nil closure degrades the settings surface to
+// "not configured".
+type JobTemplateDocumentTemplateUseCases struct {
+	ListJobTemplateDocumentTemplates   func(context.Context, *sheetbindingpb.ListJobTemplateDocumentTemplatesRequest) (*sheetbindingpb.ListJobTemplateDocumentTemplatesResponse, error)
+	CreateJobTemplateDocumentTemplate  func(context.Context, *sheetbindingpb.CreateJobTemplateDocumentTemplateRequest) (*sheetbindingpb.CreateJobTemplateDocumentTemplateResponse, error)
+	DeleteJobTemplateDocumentTemplate  func(context.Context, *sheetbindingpb.DeleteJobTemplateDocumentTemplateRequest) (*sheetbindingpb.DeleteJobTemplateDocumentTemplateResponse, error)
+	PublishJobTemplateDocumentTemplate func(context.Context, *sheetbindingpb.PublishJobTemplateDocumentTemplateRequest) (*sheetbindingpb.PublishJobTemplateDocumentTemplateResponse, error)
 }
 
 // JobTemplatePhaseUseCases — JobTemplatePhase CRUD + ListByJobTemplate.

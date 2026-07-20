@@ -596,7 +596,9 @@ func OutcomeMatrixUnit(uc *UseCases, infra *Infra, options outcome_matrix.Option
 			Routes:       *r,
 			Labels:       *l,
 			CommonLabels: mc.Common,
-			Options:      options,
+			// TableLabels back the grade-sheet template-settings list (Wave C / P4).
+			TableLabels: mc.Table,
+			Options:     options,
 		}
 		// Inline grade recompute (W2, Q-GSE-5) — the record action calls these
 		// after a successful academic cell write. Optional/nil-safe: a nil closure
@@ -605,6 +607,14 @@ func OutcomeMatrixUnit(uc *UseCases, infra *Infra, options outcome_matrix.Option
 			deps.ComputePhaseOutcome = infra.ComputePhaseOutcome
 			deps.ComputeJobOutcome = infra.ComputeJobOutcome
 			deps.RecomputeEligibility = infra.RecomputeEligibility
+			// Grade-sheet template settings artifact closures (Wave C / P4) — the
+			// SAME infra closures the report-card (JOSDT) settings surface consumes
+			// (upload + document_template CRUD). Optional/nil-safe: a nil write
+			// closure degrades the settings surface to "not configured".
+			deps.UploadTemplate = infra.UploadTemplate
+			deps.ListDocumentTemplates = infra.ListDocTemplates
+			deps.CreateDocumentTemplate = infra.CreateDocTemplate
+			deps.DeleteDocumentTemplate = infra.DeleteDocTemplate
 		}
 		// Header breadcrumb back-link to the job list (the matrix's parent
 		// surface): the job unit's RESOLVED routes/labels carry the tier's

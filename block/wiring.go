@@ -288,6 +288,23 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	// app's EngineBlock option). Nil-safe end to end.
 	deps.ListClientAttributes = u.Entity.ClientAttribute.ListClientAttributes
 	deps.ResolveAttributeIDByCode = u.Entity.ClientAttribute.ResolveAttributeIDByCode
+
+	// Grade-sheet template settings (Wave C / P4). The upload drawer's category +
+	// schedule selects reuse the SAME already-wired top-level closures the "/classes"
+	// tab-split + report-cards navigation already consume — no new espyna surface.
+	// Nil-safe (a nil closure offers only "Any" in the drawer).
+	deps.ListJobCategories = u.Operation.JobCategory.ListJobCategories
+	deps.ListPriceSchedules = u.Subscription.PriceSchedule.ListPriceSchedules
+
+	// The sheet-family template binding lifecycle (list/create/delete/publish),
+	// sourced from the espyna job_template_document_template use cases via the
+	// engineblock seam (the JOSDT binding seam shape). Nil-safe: a nil aggregate
+	// leaves the settings surface at "not configured".
+	binding := &u.Operation.JobTemplateDocumentTemplate
+	deps.ListTemplateBindings = binding.ListJobTemplateDocumentTemplates
+	deps.CreateTemplateBinding = binding.CreateJobTemplateDocumentTemplate
+	deps.DeleteTemplateBinding = binding.DeleteJobTemplateDocumentTemplate
+	deps.PublishTemplateBinding = binding.PublishJobTemplateDocumentTemplate
 }
 
 // ---------------------------------------------------------------------------

@@ -17,14 +17,65 @@ import (
 
 // Labels holds all translatable strings for the outcome matrix module.
 type Labels struct {
-	Page     PageLabels     `json:"page"`
-	Picker   PickerLabels   `json:"picker"`
-	Scope    ScopeLabels    `json:"scope"`
-	Grid     GridLabels     `json:"grid"`
-	Errors   ErrorLabels    `json:"errors"`
-	Approval ApprovalLabels `json:"approval"`
-	Columns  ColumnsLabels  `json:"columns"`
-	Export   ExportLabels   `json:"export"`
+	Page             PageLabels             `json:"page"`
+	Picker           PickerLabels           `json:"picker"`
+	Scope            ScopeLabels            `json:"scope"`
+	Grid             GridLabels             `json:"grid"`
+	Errors           ErrorLabels            `json:"errors"`
+	Approval         ApprovalLabels         `json:"approval"`
+	Columns          ColumnsLabels          `json:"columns"`
+	Export           ExportLabels           `json:"export"`
+	TemplateSettings TemplateSettingsLabels `json:"template_settings"`
+}
+
+// TemplateSettingsLabels — the grade-sheet template-management settings surface
+// (Wave C / P4): list table (Name/Category/Schedule/Version/Status/Validity —
+// Category is the NEW sheet-shape axis), upload drawer (category + schedule
+// selects), status badges, publish/delete confirms, and fail-closed error
+// strings. Mirrors the JOSDT outcome_summary.TemplateSettingsLabels 28-field
+// shape + the category axis. All wording lives in lyngua (snake_case keys);
+// education overrides only wording ("Grade Sheet …", "Academic Year").
+type TemplateSettingsLabels struct {
+	// Page heading.
+	Title    string `json:"title"`
+	Subtitle string `json:"subtitle"`
+	// List columns. CategoryColumn is the NEW sheet-shape axis (job_category);
+	// ScheduleColumn is relabeled "Academic Year" on the education tier.
+	NameColumn     string `json:"column_name"`
+	CategoryColumn string `json:"column_category"`
+	ScheduleColumn string `json:"column_schedule"`
+	VersionColumn  string `json:"column_version"`
+	StatusColumn   string `json:"column_status"`
+	ValidityColumn string `json:"column_validity"`
+	// Row / primary actions.
+	UploadAction  string `json:"upload_action"`
+	PublishAction string `json:"publish_action"`
+	DeleteAction  string `json:"delete_action"`
+	// Empty state.
+	EmptyTitle   string `json:"empty_title"`
+	EmptyMessage string `json:"empty_message"`
+	// Upload drawer. CategoryPlaceholder / SchedulePlaceholder are the blank
+	// "Any …" <option> labels (also the list-cell fallback for an unscoped
+	// binding). NotesLabel maps to the document_template description.
+	UploadTitle         string `json:"upload_title"`
+	NameLabel           string `json:"name_label"`
+	CategoryLabel       string `json:"category_label"`
+	CategoryPlaceholder string `json:"category_placeholder"`
+	ScheduleLabel       string `json:"schedule_label"`
+	SchedulePlaceholder string `json:"schedule_placeholder"`
+	FileLabel           string `json:"file_label"`
+	FileHint            string `json:"file_hint"`
+	NotesLabel          string `json:"notes_label"`
+	// Status badges (VersionStatus enum).
+	StatusDraft      string `json:"status_draft"`
+	StatusPublished  string `json:"status_published"`
+	StatusDeprecated string `json:"status_deprecated"`
+	// Confirms + fail-closed errors.
+	PublishConfirm string `json:"publish_confirm"`
+	DeleteConfirm  string `json:"delete_confirm"`
+	NotConfigured  string `json:"not_configured"`
+	InvalidFile    string `json:"invalid_file"`
+	UploadFailed   string `json:"upload_failed"`
 }
 
 // ColumnsLabels — the toolbar columns-selector dropdown strings. StateShown/
@@ -245,6 +296,38 @@ func DefaultLabels() Labels {
 			PDFPeriodHint:   "PDF prints the full sheet",
 			DownloadButton:  "Download",
 			NoTemplateError: "No sheet template is configured for this document",
+		},
+		TemplateSettings: TemplateSettingsLabels{
+			Title:               "Sheet Templates",
+			Subtitle:            "Manage the document templates used to print sheets",
+			NameColumn:          "Template",
+			CategoryColumn:      "Category",
+			ScheduleColumn:      "Schedule",
+			VersionColumn:       "Version",
+			StatusColumn:        "Status",
+			ValidityColumn:      "Validity",
+			UploadAction:        "Upload template",
+			PublishAction:       "Publish",
+			DeleteAction:        "Delete",
+			EmptyTitle:          "No templates yet",
+			EmptyMessage:        "Upload a .docx template to enable PDF downloads",
+			UploadTitle:         "Upload sheet template",
+			NameLabel:           "Template name",
+			CategoryLabel:       "Category",
+			CategoryPlaceholder: "Any category",
+			ScheduleLabel:       "Schedule",
+			SchedulePlaceholder: "Any schedule",
+			FileLabel:           "Template file (.docx)",
+			FileHint:            "Upload a .docx template (max 10 MB).",
+			NotesLabel:          "Notes",
+			StatusDraft:         "Draft",
+			StatusPublished:     "Published",
+			StatusDeprecated:    "Deprecated",
+			PublishConfirm:      "Publish this template version? The current published version's validity will close.",
+			DeleteConfirm:       "Delete this draft?",
+			NotConfigured:       "Sheet template management is not configured.",
+			InvalidFile:         "Only .docx files are accepted.",
+			UploadFailed:        "Failed to upload template.",
 		},
 	}
 }

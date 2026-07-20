@@ -246,6 +246,7 @@ func wireTaskOutcomeDeps(deps *operation.TaskOutcomeModuleDeps, u *UseCases) {
 func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases) {
 	om := &u.Operation.OutcomeMatrix
 	deps.GetOutcomeMatrix = om.GetOutcomeMatrix
+	deps.GetOutcomeSummaryRoster = om.GetOutcomeSummaryRoster
 	deps.ResolveStaff = om.ResolveStaff
 
 	// Per-phase approval transitions backing the approval bar (plan §4.2). These

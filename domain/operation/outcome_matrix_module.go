@@ -35,6 +35,12 @@ type OutcomeMatrixModuleDeps struct {
 
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
 
+	// GetOutcomeSummaryRoster — the roster-scoped composite read (20260720 P2)
+	// backing the CSV "Final" export. Sourced from espyna's Service aggregate
+	// (same seam as GetOutcomeMatrix). Optional/nil-safe: a nil closure 404s a
+	// period=final export (no composite source), never a 500.
+	GetOutcomeSummaryRoster func(ctx context.Context, req *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error)
+
 	// Per-phase approval transition use cases (plan §4.2). Back the approval-bar
 	// POST forms; each carries only the trusted sheet identity (actor + workspace
 	// from context). Optional/nil-safe: a nil closure fails the bar action closed.
@@ -102,13 +108,14 @@ type OutcomeMatrixModuleDeps struct {
 
 // OutcomeMatrixModule holds the constructed outcome matrix views.
 type OutcomeMatrixModule struct {
-	routes  outcomematrixpkg.Routes
-	Matrix  view.View // GET — the grid page
-	Record  view.View // POST — batch save
-	Submit  view.View // POST — approval: IN_PROGRESS → FOR_REVIEW
-	Verify  view.View // POST — approval: FOR_REVIEW → VERIFIED
-	Publish view.View // POST — approval: VERIFIED → PUBLISHED
-	Return  view.View // POST — approval: mixed/advanced → IN_PROGRESS
+	routes   outcomematrixpkg.Routes
+	Matrix   view.View // GET — the grid page
+	Record   view.View // POST — batch save
+	Download view.View // GET — export drawer form (safe method under /action/*)
+	Submit   view.View // POST — approval: IN_PROGRESS → FOR_REVIEW
+	Verify   view.View // POST — approval: FOR_REVIEW → VERIFIED
+	Publish  view.View // POST — approval: VERIFIED → PUBLISHED
+	Return   view.View // POST — approval: mixed/advanced → IN_PROGRESS
 
 	// Export is the sheet-level CSV download — a raw GET handler (not a
 	// view.View): it streams a file, so it bypasses the render pipeline but
@@ -124,6 +131,7 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		Labels:                       deps.Labels,
 		CommonLabels:                 deps.CommonLabels,
 		GetOutcomeMatrix:             deps.GetOutcomeMatrix,
+		GetOutcomeSummaryRoster:      deps.GetOutcomeSummaryRoster,
 		ResolveStaff:                 deps.ResolveStaff,
 		ListClients:                  deps.ListClients,
 		ListJobs:                     deps.ListJobs,
@@ -163,15 +171,24 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		Return:  deps.ReturnJobPhaseApproval,
 	}
 
+	// Export drawer GET view (20260720 Q3) — reuses the SAME GetOutcomeMatrix
+	// closure the grid + CSV handler use, so its period options match the export.
+	downloadView := outcomematrixaction.NewDownloadDrawer(&outcomematrixaction.DrawerDeps{
+		Routes:           deps.Routes,
+		Labels:           deps.Labels,
+		GetOutcomeMatrix: deps.GetOutcomeMatrix,
+	})
+
 	return &OutcomeMatrixModule{
-		routes:  deps.Routes,
-		Matrix:  matrixView,
-		Record:  recordView,
-		Submit:  outcomematrixaction.NewSubmitAction(transitionDeps),
-		Verify:  outcomematrixaction.NewVerifyAction(transitionDeps),
-		Publish: outcomematrixaction.NewPublishAction(transitionDeps),
-		Return:  outcomematrixaction.NewReturnAction(transitionDeps),
-		Export:  outcomematrixlist.NewExportHandler(pageDeps),
+		routes:   deps.Routes,
+		Matrix:   matrixView,
+		Record:   recordView,
+		Download: downloadView,
+		Submit:   outcomematrixaction.NewSubmitAction(transitionDeps),
+		Verify:   outcomematrixaction.NewVerifyAction(transitionDeps),
+		Publish:  outcomematrixaction.NewPublishAction(transitionDeps),
+		Return:   outcomematrixaction.NewReturnAction(transitionDeps),
+		Export:   outcomematrixlist.NewExportHandler(pageDeps),
 	}
 }
 
@@ -182,6 +199,12 @@ func (m *OutcomeMatrixModule) RegisterRoutes(r view.RouteRegistrar) {
 	}
 	if m.Record != nil {
 		r.POST(m.routes.RecordURL, m.Record)
+	}
+	if m.Download != nil && m.routes.DownloadDrawerURL != "" {
+		// GET (safe method) — registered with r.GET even though the path sits
+		// under /action/*: the CSRF + action-workspace guards constrain non-safe
+		// methods only, so no signed form is needed (routes.go documents this).
+		r.GET(m.routes.DownloadDrawerURL, m.Download)
 	}
 	if m.Submit != nil {
 		r.POST(m.routes.SubmitURL, m.Submit)

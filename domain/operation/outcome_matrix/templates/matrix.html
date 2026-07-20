@@ -50,12 +50,23 @@ populated on PageData for any non-template consumer that needs it. */}}
                 </div>
             </details>
             {{end}}
-            {{/* Sheet-level CSV download (Q3: same ?scope= + ?hide= as the view).
-                 A plain download anchor — GET, outside /action/*, hx-boost off so
-                 the browser downloads instead of HTMX-swapping (the same
-                 dlAnchor idiom as outcome_summary's report-card download). */}}
+            {{/* Export DRAWER trigger (20260720 Q3): replaces the bare CSV anchor
+                 with a Period × Format download form opened into #sheetContent.
+                 The attribute set is hand-copied from table-toolbar.html:294-306
+                 (the grid page has no TableConfig). The {{if .ExportURL}} leaf-count
+                 gate is kept: an unconfigured/empty matrix offers no download.
+                 DownloadDrawerURL carries the live ?scope=/?hide= so the drawer
+                 seeds its hidden inputs from the current view state. */}}
             {{if .ExportURL}}
-            <a class="btn btn-secondary om-export" href="{{.ExportURL}}" download hx-boost="false" data-testid="om-export-csv">{{.Labels.Export.CSVButton}}</a>
+            <button type="button" class="btn btn-secondary om-export"
+                    hx-get="{{.DownloadDrawerURL}}"
+                    hx-target="#sheetContent"
+                    hx-swap="innerHTML"
+                    hx-push-url="false"
+                    data-lf-action="sheet-open"
+                    data-lf-sheet-title="{{.Labels.Export.DrawerTitle}}"
+                    aria-haspopup="dialog"
+                    data-testid="outcome-matrix-download-open">{{.Labels.Export.DrawerButton}}</button>
             {{end}}
         </div>
     </div>

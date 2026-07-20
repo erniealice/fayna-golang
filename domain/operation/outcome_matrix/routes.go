@@ -17,6 +17,14 @@ const (
 	// SectionExportURL). Honors the same ?scope= and ?hide= as the HTML view.
 	ExportURL = "/outcome-matrix/{id}/export"
 
+	// Export drawer (20260720 Q3): the GET view rendering the download form
+	// (period + format selects + hidden scope/hide) into #sheetContent. It sits
+	// under /action/* for slug tidiness, but it is a GET (safe method): the CSRF
+	// hook and the action-workspace signature guard constrain NON-safe methods
+	// only, so a GET drawer needs no signed form (same trust model as the raw
+	// GET ExportURL). Registered with r.GET, not the action-POST path.
+	DownloadDrawerURL = "/action/outcome-matrix/{id}/download"
+
 	// Per-phase approval transition POST targets ({id} == job_template_id; the
 	// job_template_phase_id rides in the form body). Each is a real, query-free
 	// HTMX POST form signed by {{actionForm}} over its exact resolved path (the
@@ -35,9 +43,10 @@ type Routes struct {
 	ActiveNav    string `json:"active_nav"`
 	ActiveSubNav string `json:"active_sub_nav"`
 
-	MatrixURL string `json:"matrix_url"`
-	RecordURL string `json:"record_url"`
-	ExportURL string `json:"export_url"`
+	MatrixURL         string `json:"matrix_url"`
+	RecordURL         string `json:"record_url"`
+	ExportURL         string `json:"export_url"`
+	DownloadDrawerURL string `json:"download_drawer_url"`
 
 	// Per-phase approval transition routes.
 	SubmitURL  string `json:"submit_url"`
@@ -53,9 +62,10 @@ func DefaultRoutes() Routes {
 		ActiveNav:    "job",
 		ActiveSubNav: "outcome-matrix",
 
-		MatrixURL: MatrixURL,
-		RecordURL: RecordURL,
-		ExportURL: ExportURL,
+		MatrixURL:         MatrixURL,
+		RecordURL:         RecordURL,
+		ExportURL:         ExportURL,
+		DownloadDrawerURL: DownloadDrawerURL,
 
 		SubmitURL:  SubmitURL,
 		VerifyURL:  VerifyURL,
@@ -67,12 +77,13 @@ func DefaultRoutes() Routes {
 // RouteMap returns a map of dot-notation keys to route paths.
 func (r Routes) RouteMap() map[string]string {
 	return map[string]string{
-		"outcome_matrix.matrix":  r.MatrixURL,
-		"outcome_matrix.record":  r.RecordURL,
-		"outcome_matrix.export":  r.ExportURL,
-		"outcome_matrix.submit":  r.SubmitURL,
-		"outcome_matrix.verify":  r.VerifyURL,
-		"outcome_matrix.publish": r.PublishURL,
-		"outcome_matrix.return":  r.ReturnURL,
+		"outcome_matrix.matrix":          r.MatrixURL,
+		"outcome_matrix.record":          r.RecordURL,
+		"outcome_matrix.export":          r.ExportURL,
+		"outcome_matrix.download_drawer": r.DownloadDrawerURL,
+		"outcome_matrix.submit":          r.SubmitURL,
+		"outcome_matrix.verify":          r.VerifyURL,
+		"outcome_matrix.publish":         r.PublishURL,
+		"outcome_matrix.return":          r.ReturnURL,
 	}
 }

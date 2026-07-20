@@ -1,0 +1,79 @@
+{{/* Export drawer form (20260720 Q3) — loaded into #sheetContent via HTMX.
+
+     A NATIVE GET form (method="get" + hx-boost="false"): the app-shell body sets
+     hx-boost="true", so this is the FIRST form site opting out (the 3 prior
+     hx-boost="false" sites are all anchors). The browser streams ExportURL's
+     Content-Disposition attachment without navigating; the inline script closes
+     the sheet on submit. The two selects carry their data-testid on the control
+     itself (the shared form-group component only exposes a wrapper testid), and
+     label/for is wired manually to preserve the accessible association. */}}
+{{define "outcome-matrix-download-drawer-form"}}
+<form method="get" action="{{.ExportAction}}" hx-boost="false" data-testid="outcome-matrix-download-form">
+    <div class="sheet-body">
+        <div class="form-section">
+            <div class="form-row single">
+                <div class="form-group">
+                    <label class="form-label" for="om-download-period">{{.Labels.Export.PeriodLabel}}</label>
+                    <select id="om-download-period" name="period" class="form-select" data-testid="outcome-matrix-period-select">
+                        {{range .PeriodOptions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+                    </select>
+                    {{/* PDF period-lock hint — revealed by the inline script when
+                         format=pdf (text hint, never color alone). */}}
+                    <span class="form-hint" data-testid="outcome-matrix-pdf-hint" hidden>{{.Labels.Export.PDFPeriodHint}}</span>
+                </div>
+            </div>
+            <div class="form-row single">
+                <div class="form-group">
+                    <label class="form-label" for="om-download-format">{{.Labels.Export.FormatLabel}}</label>
+                    <select id="om-download-format" name="format" class="form-select" data-testid="outcome-matrix-format-select">
+                        {{range .FormatOptions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+                    </select>
+                </div>
+            </div>
+        </div>
+        {{/* Live view state carried forward so the download honors "export what
+             you see" (scope + hidden columns), same pair the grid round-trips. */}}
+        <input type="hidden" name="scope" value="{{.Scope}}">
+        <input type="hidden" name="hide" value="{{.Hide}}">
+    </div>
+    <div class="sheet-footer">
+        <button type="button" class="btn btn-secondary" data-lf-action="sheet-close">{{.CommonLabels.Buttons.Cancel}}</button>
+        <button type="submit" class="btn btn-primary" data-testid="outcome-matrix-download-submit">{{.Labels.Export.DownloadButton}}</button>
+    </div>
+</form>
+<script nonce="{{.Nonce}}">
+(function () {
+    var form = document.currentScript.previousElementSibling;
+    while (form && form.tagName !== 'FORM') { form = form.previousElementSibling; }
+    if (!form) { return; }
+
+    var period = form.querySelector('[data-testid="outcome-matrix-period-select"]');
+    var format = form.querySelector('[data-testid="outcome-matrix-format-select"]');
+    var hint = form.querySelector('[data-testid="outcome-matrix-pdf-hint"]');
+
+    // PDF renders the FULL sheet only (one artifact per shape, no conditional
+    // columns): disable + clear the period select (a disabled control is not
+    // submitted, so ExportURL sees no period) and surface the lyngua hint.
+    function applyFormat() {
+        var isPdf = format && format.value === 'pdf';
+        if (period) {
+            period.disabled = isPdf;
+            if (isPdf) { period.value = ''; }
+        }
+        if (hint) { hint.hidden = !isPdf; }
+    }
+    if (format) { format.addEventListener('change', applyFormat); }
+    applyFormat();
+
+    // Native GET submit streams the download without navigating; close the sheet
+    // one tick later so the browser has started the request first.
+    form.addEventListener('submit', function () {
+        setTimeout(function () {
+            if (window.lf && window.lf.ui && window.lf.ui.Sheet && typeof window.lf.ui.Sheet.close === 'function') {
+                window.lf.ui.Sheet.close();
+            }
+        }, 0);
+    });
+}());
+</script>
+{{end}}

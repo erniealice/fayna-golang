@@ -451,6 +451,12 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		uc.Service.OutcomeMatrix.GetOutcomeMatrix != nil {
 		result.Operation.OutcomeMatrix.GetOutcomeMatrix = uc.Service.OutcomeMatrix.GetOutcomeMatrix.Execute
 	}
+	// GetOutcomeSummaryRoster (P2 composite read) rides the SAME Service seam;
+	// wired independently so a build with only the matrix read still gets the grid.
+	if uc.Service != nil && uc.Service.OutcomeMatrix != nil &&
+		uc.Service.OutcomeMatrix.GetOutcomeSummaryRoster != nil {
+		result.Operation.OutcomeMatrix.GetOutcomeSummaryRoster = uc.Service.OutcomeMatrix.GetOutcomeSummaryRoster.Execute
+	}
 	// ResolveStaff maps the session user → active staff_id through the typed staff
 	// list use case (the read-only gate + record-action IDOR guard authority).
 	// Wired only when the staff list closure is present; "" fails those gates closed.

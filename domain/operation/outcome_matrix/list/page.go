@@ -54,6 +54,13 @@ type PageViewDeps struct {
 	// esqyma request/response). Wired via the module Deps, never raw SQL.
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
 
+	// GetOutcomeSummaryRoster — the roster-scoped composite read (P2) backing
+	// the CSV "Final" export (student · per-phase final · year final). Gates on
+	// job_outcome_summary:list inside the espyna use case; reads stored values
+	// verbatim (D8). Optional/nil-safe: nil → a period=final export 404s (no
+	// composite source), never a 500.
+	GetOutcomeSummaryRoster func(ctx context.Context, req *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error)
+
 	// ResolveStaff maps the acting session user → staff_id ("" == no staff
 	// identity, fail-closed). Wired via the module Deps (grade_sheet.go's
 	// resolveStaff precedent), never raw SQL from the view.
@@ -139,6 +146,12 @@ type PageData struct {
 	// ?hide= as the current view ("export what you see" — Q3). Empty hides the
 	// button (no route wired or no template).
 	ExportURL string
+
+	// DownloadDrawerURL is the export-drawer GET (hx-get target of the toolbar
+	// trigger), carrying the SAME ?scope= + ?hide= as ExportURL so the drawer
+	// seeds its hidden inputs from the live view state. Set alongside ExportURL
+	// under the same leaf-count gate.
+	DownloadDrawerURL string
 }
 
 // ApprovalPhase is one phase's approval-bar entry: the derived chip state + the
@@ -333,6 +346,13 @@ func NewView(deps *PageViewDeps) view.View {
 			if deps.Routes.ExportURL != "" && grid.LeafColumnCount() > 0 {
 				pageData.ExportURL = withParams(
 					route.ResolveURL(deps.Routes.ExportURL, "id", templateID), scopeActive, hideCSV)
+				// The drawer trigger is gated on ExportURL in matrix.html, so its
+				// hx-get target is resolved under the SAME leaf-count guard, with
+				// the SAME live ?scope=/?hide= carried through.
+				if deps.Routes.DownloadDrawerURL != "" {
+					pageData.DownloadDrawerURL = withParams(
+						route.ResolveURL(deps.Routes.DownloadDrawerURL, "id", templateID), scopeActive, hideCSV)
+				}
 			}
 		}
 

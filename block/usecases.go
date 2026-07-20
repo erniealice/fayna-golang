@@ -345,7 +345,13 @@ type TaskOutcomeUseCases struct {
 // the read-only + IDOR gates closed.
 type OutcomeMatrixUseCases struct {
 	GetOutcomeMatrix func(context.Context, *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
-	ResolveStaff     func(ctx context.Context) (string, error)
+	// GetOutcomeSummaryRoster reads the roster-scoped composite (per student:
+	// per-phase composite + stored year-final) for one job_template — espyna's
+	// service/operation/outcome_matrix roster read use case, backing the CSV
+	// "Final" export. OPTIONAL / nil-able: a nil closure 404s a period=final
+	// export.
+	GetOutcomeSummaryRoster func(context.Context, *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error)
+	ResolveStaff            func(ctx context.Context) (string, error)
 }
 
 // JobTemplateSummaryUseCases — the generic resolver-scoped, template-grain

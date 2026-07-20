@@ -40,9 +40,25 @@ type ColumnsLabels struct {
 	HiddenSuffix string `json:"hidden_suffix"` // sr-only after the count pip
 }
 
-// ExportLabels — sheet-level download actions in the toolbar.
+// ExportLabels — sheet-level download actions (toolbar trigger + drawer form).
+// The drawer replaces the bare CSV anchor with a Period × Format download form
+// (20260720 export drawer). Semester option LABELS come from phase rows
+// (PhaseColumn.Label, DB data) — lyngua mints only the reserved All/Final
+// options + chrome. CSVButton is retained for any plain-anchor fallback.
 type ExportLabels struct {
 	CSVButton string `json:"csv_button"`
+
+	DrawerButton    string `json:"drawer_button"`     // toolbar trigger text
+	DrawerTitle     string `json:"drawer_title"`      // sheet header
+	PeriodLabel     string `json:"period_label"`      // period select label
+	PeriodAll       string `json:"period_all"`        // "all periods" option
+	PeriodFinal     string `json:"period_final"`      // reserved "Final" option + composite column
+	FormatLabel     string `json:"format_label"`      // format select label
+	FormatCSV       string `json:"format_csv"`        // csv option
+	FormatPDF       string `json:"format_pdf"`        // pdf option
+	PDFPeriodHint   string `json:"pdf_period_hint"`   // shown when format=pdf (period locked)
+	DownloadButton  string `json:"download_button"`   // submit button text
+	NoTemplateError string `json:"no_template_error"` // 503 body when no PDF template configured
 }
 
 // ApprovalLabels holds the per-phase approval-bar strings (plan §4.5 / lyngua.md).
@@ -217,7 +233,18 @@ func DefaultLabels() Labels {
 			HiddenSuffix: "hidden",
 		},
 		Export: ExportLabels{
-			CSVButton: "Export CSV",
+			CSVButton:       "Export CSV",
+			DrawerButton:    "Download",
+			DrawerTitle:     "Download sheet",
+			PeriodLabel:     "Period",
+			PeriodAll:       "All periods",
+			PeriodFinal:     "Final",
+			FormatLabel:     "Format",
+			FormatCSV:       "CSV",
+			FormatPDF:       "PDF",
+			PDFPeriodHint:   "PDF prints the full sheet",
+			DownloadButton:  "Download",
+			NoTemplateError: "No sheet template is configured for this document",
 		},
 	}
 }

@@ -23,6 +23,26 @@ type Labels struct {
 	Grid     GridLabels     `json:"grid"`
 	Errors   ErrorLabels    `json:"errors"`
 	Approval ApprovalLabels `json:"approval"`
+	Columns  ColumnsLabels  `json:"columns"`
+	Export   ExportLabels   `json:"export"`
+}
+
+// ColumnsLabels — the toolbar columns-selector dropdown strings. StateShown/
+// StateHidden are visually-hidden state suffixes on each toggle link (the mark
+// glyph is aria-hidden — AT needs the state as text); HiddenSuffix follows the
+// trigger's hidden-count pip for the same reason.
+type ColumnsLabels struct {
+	Button       string `json:"button"`        // dropdown trigger text
+	Title        string `json:"title"`         // menu heading
+	ShowAll      string `json:"show_all"`      // clear-all-hiding link
+	StateShown   string `json:"state_shown"`   // sr-only toggle state
+	StateHidden  string `json:"state_hidden"`  // sr-only toggle state
+	HiddenSuffix string `json:"hidden_suffix"` // sr-only after the count pip
+}
+
+// ExportLabels — sheet-level download actions in the toolbar.
+type ExportLabels struct {
+	CSVButton string `json:"csv_button"`
 }
 
 // ApprovalLabels holds the per-phase approval-bar strings (plan §4.5 / lyngua.md).
@@ -187,6 +207,17 @@ func DefaultLabels() Labels {
 			NotStarted:     "Not started",
 			LockedHint:     "This phase is locked — return it to edit",
 			HardFrozenHint: "This phase is finalized and can no longer be edited",
+		},
+		Columns: ColumnsLabels{
+			Button:       "Columns",
+			Title:        "Show columns",
+			ShowAll:      "Show all",
+			StateShown:   "shown",
+			StateHidden:  "hidden",
+			HiddenSuffix: "hidden",
+		},
+		Export: ExportLabels{
+			CSVButton: "Export CSV",
 		},
 	}
 }

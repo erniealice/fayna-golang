@@ -10,6 +10,13 @@ const (
 	MatrixURL = "/outcome-matrix/{id}"
 	RecordURL = "/action/outcome-matrix/{id}/record"
 
+	// Sheet-level CSV download. A GET sibling of MatrixURL (NOT under /action/*
+	// — safe method, no state change, so neither the CSRF hook nor the
+	// action-workspace signature guard applies; the raw-handler registration
+	// wraps it with the ViewAdapter's RBAC context, same as outcome_summary's
+	// SectionExportURL). Honors the same ?scope= and ?hide= as the HTML view.
+	ExportURL = "/outcome-matrix/{id}/export"
+
 	// Per-phase approval transition POST targets ({id} == job_template_id; the
 	// job_template_phase_id rides in the form body). Each is a real, query-free
 	// HTMX POST form signed by {{actionForm}} over its exact resolved path (the
@@ -30,6 +37,7 @@ type Routes struct {
 
 	MatrixURL string `json:"matrix_url"`
 	RecordURL string `json:"record_url"`
+	ExportURL string `json:"export_url"`
 
 	// Per-phase approval transition routes.
 	SubmitURL  string `json:"submit_url"`
@@ -47,6 +55,7 @@ func DefaultRoutes() Routes {
 
 		MatrixURL: MatrixURL,
 		RecordURL: RecordURL,
+		ExportURL: ExportURL,
 
 		SubmitURL:  SubmitURL,
 		VerifyURL:  VerifyURL,
@@ -60,6 +69,7 @@ func (r Routes) RouteMap() map[string]string {
 	return map[string]string{
 		"outcome_matrix.matrix":  r.MatrixURL,
 		"outcome_matrix.record":  r.RecordURL,
+		"outcome_matrix.export":  r.ExportURL,
 		"outcome_matrix.submit":  r.SubmitURL,
 		"outcome_matrix.verify":  r.VerifyURL,
 		"outcome_matrix.publish": r.PublishURL,

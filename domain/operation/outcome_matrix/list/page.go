@@ -124,6 +124,21 @@ type PageData struct {
 	// template has no phase roll-up (mock build / no sheet).
 	ApprovalBar     []ApprovalPhase
 	ShowApprovalBar bool
+
+	// Columns selector (plan 20260720 Q1/Q2: server-prune, ?hide= URL-canonical).
+	// Cols is the FULL L1→L2→leaf tree with per-node hidden state + precomputed
+	// toggle URLs — the menu is pure links, so no client JS ever owns colspan or
+	// visibility state. The approval bar is intentionally NOT affected by hiding
+	// (it is a per-phase status/action surface, not a data column).
+	Cols            []ColsGroup
+	ShowCols        bool
+	ColsHiddenCount int    // effectively hidden leaf count (subtree + individual)
+	ColsShowAllURL  string // current view minus ?hide=
+
+	// ExportURL is the sheet-level CSV download carrying the SAME ?scope= +
+	// ?hide= as the current view ("export what you see" — Q3). Empty hides the
+	// button (no route wired or no template).
+	ExportURL string
 }
 
 // ApprovalPhase is one phase's approval-bar entry: the derived chip state + the
@@ -212,7 +227,13 @@ func NewView(deps *PageViewDeps) view.View {
 			}
 		}
 
-		grid := buildGrid(ctx, deps, perms, resp, effectiveAll, templateID, viewCtx)
+		// ?hide= — comma-separated L1 phase ids and/or leaf ColumnKeys. Resolved
+		// against the response tree (unknown tokens dropped, all-hidden fails
+		// safe to fully visible), then pruned server-side BEFORE render so every
+		// colspan/coord derivation stays correct by construction.
+		hidden := resolveHidden(viewCtx.Request.URL.Query().Get("hide"), resp)
+
+		grid := buildGrid(ctx, deps, perms, resp, effectiveAll, templateID, hidden, viewCtx)
 
 		subjectName := ""
 		if resp != nil {
@@ -251,6 +272,23 @@ func NewView(deps *PageViewDeps) view.View {
 			breadcrumbURL = route.ResolveURL(deps.JobListURL, "status", "active")
 		}
 
+		// Every navigation URL on the page carries the SAME ?scope= + ?hide=
+		// pair so the view state round-trips through scope toggles, selector
+		// toggles, and the export link ("," and ":" are legal query characters;
+		// html/template attribute-escapes on render).
+		matrixBase := route.ResolveURL(deps.Routes.MatrixURL, "id", templateID)
+		hideCSV := ""
+		if resp != nil {
+			hideCSV = hiddenCSV(hidden, resp.GetPhases())
+		}
+		withParams := func(base, scope, hide string) string {
+			u := base + "?scope=" + scope
+			if hide != "" {
+				u += "&hide=" + hide
+			}
+			return u
+		}
+
 		pageData := &PageData{
 			PageData: types.PageData{
 				CacheVersion:        viewCtx.CacheVersion,
@@ -270,14 +308,33 @@ func NewView(deps *PageViewDeps) view.View {
 			Labels:       l,
 			SubjectName:  subjectName,
 			ScopeActive:  scopeActive,
-			ScopeMineURL: route.ResolveURL(deps.Routes.MatrixURL, "id", templateID) + "?scope=mine",
-			ScopeAllURL:  route.ResolveURL(deps.Routes.MatrixURL, "id", templateID) + "?scope=all",
+			ScopeMineURL: withParams(matrixBase, "mine", hideCSV),
+			ScopeAllURL:  withParams(matrixBase, "all", hideCSV),
 			ShowScopeAll: canSeeAll,
 		}
 
 		bar := buildApprovalBar(deps, perms, resp, templateID)
 		pageData.ApprovalBar = bar
 		pageData.ShowApprovalBar = len(bar) > 0
+
+		if resp != nil {
+			fullCols := buildColumns(resp.GetPhases())
+			phases := resp.GetPhases()
+			cols, hiddenLeaves := buildColsSelector(fullCols, hidden, func(h map[string]bool) string {
+				return withParams(matrixBase, scopeActive, hiddenCSV(h, phases))
+			})
+			pageData.Cols = cols
+			pageData.ShowCols = len(fullCols) > 0
+			pageData.ColsHiddenCount = hiddenLeaves
+			pageData.ColsShowAllURL = withParams(matrixBase, scopeActive, "")
+			// Leaf-count gate: an unconfigured/empty matrix would render a
+			// button whose GET can only 404 (the handler rejects zero-leaf
+			// grids) — don't offer a download that cannot succeed.
+			if deps.Routes.ExportURL != "" && grid.LeafColumnCount() > 0 {
+				pageData.ExportURL = withParams(
+					route.ResolveURL(deps.Routes.ExportURL, "id", templateID), scopeActive, hideCSV)
+			}
+		}
 
 		return view.OK("outcome-matrix", pageData)
 	})
@@ -334,6 +391,7 @@ func buildGrid(
 	resp *matrixpb.GetOutcomeMatrixResponse,
 	effectiveAll bool,
 	templateID string,
+	hidden map[string]bool,
 	viewCtx *view.ViewContext,
 ) *types.CellGridConfig {
 	l := deps.Labels
@@ -397,7 +455,11 @@ func buildGrid(
 	// distinct referenced code; nothing configured → no fetch, nil map).
 	attrValues := fetchClientAttributeValues(ctx, deps, rosterIDs)
 
-	cfg.Columns = buildColumns(resp.GetPhases())
+	// Prune BEFORE assignAutoSaveCoords: the head/band colspans and the W2
+	// keyboard coords all derive from cfg.Columns, so removing subtrees here
+	// keeps every downstream computation correct by construction. `hidden` has
+	// already been resolved fail-safe (resolveHidden) — never empties the grid.
+	cfg.Columns = pruneColumns(buildColumns(resp.GetPhases()), hidden)
 	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames, phaseEditableFunc(resp))
 	applyRowOptions(cfg, deps.Options, attrValues, clientNames)
 	if cfg.AutoSave {

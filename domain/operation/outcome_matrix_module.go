@@ -2,6 +2,8 @@ package operation
 
 import (
 	"context"
+	"log"
+	"net/http"
 
 	outcomematrixpkg "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	outcomematrixaction "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix/action"
@@ -107,11 +109,17 @@ type OutcomeMatrixModule struct {
 	Verify  view.View // POST — approval: FOR_REVIEW → VERIFIED
 	Publish view.View // POST — approval: VERIFIED → PUBLISHED
 	Return  view.View // POST — approval: mixed/advanced → IN_PROGRESS
+
+	// Export is the sheet-level CSV download — a raw GET handler (not a
+	// view.View): it streams a file, so it bypasses the render pipeline but
+	// is still wrapped with the ViewAdapter's RBAC context at registration
+	// (same shape as outcome_summary's SectionExport).
+	Export http.HandlerFunc
 }
 
 // NewOutcomeMatrixModule creates the outcome matrix module with all views wired.
 func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule {
-	matrixView := outcomematrixlist.NewView(&outcomematrixlist.PageViewDeps{
+	pageDeps := &outcomematrixlist.PageViewDeps{
 		Routes:                       deps.Routes,
 		Labels:                       deps.Labels,
 		CommonLabels:                 deps.CommonLabels,
@@ -126,7 +134,8 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		ResolveAttributeIDByCode:     deps.ResolveAttributeIDByCode,
 		JobListURL:                   deps.JobListURL,
 		JobListLabel:                 deps.JobListLabel,
-	})
+	}
+	matrixView := outcomematrixlist.NewView(pageDeps)
 
 	recordView := outcomematrixaction.NewRecordAction(&outcomematrixaction.Deps{
 		Routes:               deps.Routes,
@@ -162,6 +171,7 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		Verify:  outcomematrixaction.NewVerifyAction(transitionDeps),
 		Publish: outcomematrixaction.NewPublishAction(transitionDeps),
 		Return:  outcomematrixaction.NewReturnAction(transitionDeps),
+		Export:  outcomematrixlist.NewExportHandler(pageDeps),
 	}
 }
 
@@ -184,5 +194,18 @@ func (m *OutcomeMatrixModule) RegisterRoutes(r view.RouteRegistrar) {
 	}
 	if m.Return != nil {
 		r.POST(m.routes.ReturnURL, m.Return)
+	}
+	if m.Export != nil && m.routes.ExportURL != "" {
+		// Raw (non-view) route — the registrar's HandleFunc path wraps it with
+		// the ViewAdapter's RBAC context injection (WrapHandler), so the
+		// handler's view.GetUserPermissions gate observes real permissions
+		// (same shape as outcome_summary's SectionExport registration).
+		if rr, ok := r.(interface {
+			HandleFunc(method, path string, handler http.HandlerFunc, middlewares ...string)
+		}); ok {
+			rr.HandleFunc("GET", m.routes.ExportURL, m.Export)
+		} else {
+			log.Printf("outcome matrix: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.ExportURL)
+		}
 	}
 }

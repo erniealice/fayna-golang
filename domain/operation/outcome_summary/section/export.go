@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
@@ -128,17 +129,21 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 }
 
 // csvSafe neutralizes spreadsheet formula/DDE injection: a cell whose text
-// begins with = + - @ (or a leading tab/CR that a client may trim onto one of
-// those) is evaluated as a formula by Excel/Sheets on open. encoding/csv
-// quoting does NOT prevent this. Prefix such values with a tab so the client
-// treats them as literal text (the OWASP-recommended neutralization; the tab
-// is invisible in the rendered cell). Empty values pass through untouched.
+// begins with a formula trigger is evaluated by Excel/Sheets on open.
+// encoding/csv quoting does NOT prevent this. Prefix such values with a tab so
+// the client treats them as literal text (the OWASP-recommended
+// neutralization; the tab is invisible in the rendered cell). Decodes the
+// first RUNE, not byte: the trigger set includes the full-width ＝＋－＠ forms
+// (U+FF1D/0B/0D/20) Excel also honors, plus LF alongside TAB/CR as trimmable
+// prefixes (current OWASP guidance; kept in sync with
+// outcome_matrix/list/export.go). Empty values pass through untouched.
 func csvSafe(s string) string {
 	if s == "" {
 		return s
 	}
-	switch s[0] {
-	case '=', '+', '-', '@', '\t', '\r':
+	r, _ := utf8.DecodeRuneInString(s)
+	switch r {
+	case '=', '+', '-', '@', '\t', '\r', '\n', '＝', '＋', '－', '＠':
 		return "\t" + s
 	}
 	return s

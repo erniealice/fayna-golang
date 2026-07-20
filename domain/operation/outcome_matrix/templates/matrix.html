@@ -14,6 +14,50 @@ populated on PageData for any non-template consumer that needs it. */}}
             <a href="{{.ScopeAllURL}}" class="om-scope{{if eq .ScopeActive "all"}} om-scope--active{{end}}" data-testid="om-scope-all">{{.Labels.Scope.All}}</a>
             {{end}}
         </div>
+        <div class="om-tools">
+            {{/* Columns selector (plan 20260720 Q1/Q2): every entry is a plain
+                 server-computed toggle link — the server prunes the column tree
+                 and re-renders, so no client JS owns colspans or visibility
+                 state. <details> gives native open/close + keyboard support. */}}
+            {{if .ShowCols}}
+            <details class="om-cols" data-testid="om-cols">
+                <summary class="btn btn-secondary om-cols__btn" data-testid="om-cols-toggle">{{.Labels.Columns.Button}}{{if .ColsHiddenCount}} <span class="om-cols__count" data-testid="om-cols-hidden-count">{{.ColsHiddenCount}}<span class="sr-only"> {{.Labels.Columns.HiddenSuffix}}</span></span>{{end}}</summary>
+                <div class="om-cols__menu" data-testid="om-cols-menu">
+                    <div class="om-cols__head">
+                        <span class="om-cols__title">{{.Labels.Columns.Title}}</span>
+                        {{if .ColsHiddenCount}}<a class="om-cols__showall" href="{{.ColsShowAllURL}}" data-testid="om-cols-show-all">{{.Labels.Columns.ShowAll}}</a>{{end}}
+                    </div>
+                    {{range .Cols}}
+                    <div class="om-cols__group">
+                        {{/* The mark glyph is presentational; the sr-only suffix carries
+                             the toggle STATE for AT (codex a11y finding — links have no
+                             aria-pressed, so state rides in the accessible name). */}}
+                        <a class="om-cols__item om-cols__item--l1{{if .Hidden}} om-cols__item--off{{end}}" href="{{.ToggleURL}}" data-testid="om-cols-l1-{{.Key}}">
+                            <span class="om-cols__mark" aria-hidden="true"></span>{{.Label}}<span class="sr-only"> — {{if .Hidden}}{{$.Labels.Columns.StateHidden}}{{else}}{{$.Labels.Columns.StateShown}}{{end}}</span>
+                        </a>
+                        {{if not .Hidden}}
+                        {{range .Tasks}}
+                        {{if .Label}}<div class="om-cols__task">{{.Label}}</div>{{end}}
+                        {{range .Leaves}}
+                        <a class="om-cols__item om-cols__item--leaf{{if .Hidden}} om-cols__item--off{{end}}" href="{{.ToggleURL}}" data-testid="om-cols-leaf-{{.Slug}}">
+                            <span class="om-cols__mark" aria-hidden="true"></span>{{.Label}}<span class="sr-only"> — {{if .Hidden}}{{$.Labels.Columns.StateHidden}}{{else}}{{$.Labels.Columns.StateShown}}{{end}}</span>
+                        </a>
+                        {{end}}
+                        {{end}}
+                        {{end}}
+                    </div>
+                    {{end}}
+                </div>
+            </details>
+            {{end}}
+            {{/* Sheet-level CSV download (Q3: same ?scope= + ?hide= as the view).
+                 A plain download anchor — GET, outside /action/*, hx-boost off so
+                 the browser downloads instead of HTMX-swapping (the same
+                 dlAnchor idiom as outcome_summary's report-card download). */}}
+            {{if .ExportURL}}
+            <a class="btn btn-secondary om-export" href="{{.ExportURL}}" download hx-boost="false" data-testid="om-export-csv">{{.Labels.Export.CSVButton}}</a>
+            {{end}}
+        </div>
     </div>
     {{if .ShowApprovalBar}}
     {{template "outcome-matrix-approval-bar" .}}
@@ -45,6 +89,10 @@ populated on PageData for any non-template consumer that needs it. */}}
                 <span class="pa-phase__count">{{.TargetLabel}}</span>
             </div>
             {{if .Hint}}<p class="pa-phase__hint" data-testid="pa-{{.Slug}}-hint">{{.Hint}}</p>{{end}}
+            {{/* Rendered only when ≥1 action is available: template conditionals leave
+                 whitespace text nodes, so a CSS :empty guard can never catch the no-action
+                 case, and the empty flex item would double the .pa-phase column gap. */}}
+            {{if or .CanSubmit .CanVerify .CanPublish .CanReturn}}
             <div class="pa-phase__actions">
                 {{if .CanSubmit}}
                 <form class="pa-form" hx-post="{{.SubmitPath}}" hx-confirm="{{.SubmitConfirm}}"
@@ -84,6 +132,7 @@ populated on PageData for any non-template consumer that needs it. */}}
                 </form>
                 {{end}}
             </div>
+            {{end}}
             <div id="pa-{{.Slug}}-result" class="form-result form-result--hidden" role="status" aria-live="polite" data-testid="pa-{{.Slug}}-result"></div>
         </div>
         {{end}}

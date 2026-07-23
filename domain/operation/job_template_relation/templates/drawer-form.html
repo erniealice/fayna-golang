@@ -1,0 +1,106 @@
+{{/*
+Job template relation drawer form — loaded into #sheetContent via HTMX.
+Used by both Add and Edit actions.
+Data: .ParentTemplateID, .ParentTemplateName, .ParentTemplateOptions,
+      .ChildTemplateID, .ChildTemplateOptions, .RelationType,
+      .RelationTypeOptions, .SequenceOrder, .Active, .ID, .Context,
+      .FormAction, .IsEdit, .CommonLabels, .Labels
+
+Context discriminator (see ui-drawer-form-template-anatomy § Context
+Discriminator Pattern): ContextTemplate opens from a job_template detail
+Spawn Graph tab (?parent_template_id=) — the Parent Template is locked (hidden
+input above sheet-body; read-only display row inside) and only the Child
+Template picker + relation fields are editable. ContextStandalone (the
+module's own list page) shows both Parent and Child pickers.
+*/}}
+{{define "job-template-relation-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="job-template-relation-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+    {{if eq .Context "Template"}}
+    <input type="hidden" name="parent_template_id" value="{{.ParentTemplateID}}">
+    {{end}}
+
+    <div class="sheet-body">
+        {{if eq .Context "Template"}}
+        {{template "form-section" (dict "Title" .Labels.Detail.ParentTemplateID)}}
+        <section data-testid="job-template-relation-parent-info-section" class="form-section">
+            <dl class="form-summary">
+                <dt>{{.Labels.Form.ParentTemplateID}}</dt><dd>{{.ParentTemplateName}}</dd>
+            </dl>
+        </section>
+        {{end}}
+
+        {{if eq .Context "Standalone"}}
+        {{/* --- Parent Template --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "select"
+                "Name"        "parent_template_id"
+                "Label"       .Labels.Form.ParentTemplateID
+                "Value"       .ParentTemplateID
+                "Required"    true
+                "Placeholder" .Labels.Form.ParentTemplatePlaceholder
+                "Info"        .Labels.Form.ParentTemplateIDInfo
+                "Options"     .ParentTemplateOptions
+                "TestId"      "job-template-relation-parent"
+            )}}
+        </div>
+        {{end}}
+
+        {{/* --- Child Template --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "select"
+                "Name"        "child_template_id"
+                "Label"       .Labels.Form.ChildTemplateID
+                "Value"       .ChildTemplateID
+                "Required"    true
+                "Placeholder" .Labels.Form.ChildTemplatePlaceholder
+                "Info"        .Labels.Form.ChildTemplateIDInfo
+                "Options"     .ChildTemplateOptions
+                "TestId"      "job-template-relation-child"
+            )}}
+        </div>
+
+        {{/* --- Relation Type --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"     "select"
+                "Name"     "relation_type"
+                "Label"    .Labels.Form.RelationType
+                "Value"    .RelationType
+                "Required" true
+                "Info"     .Labels.Form.RelationTypeInfo
+                "Options"  .RelationTypeOptions
+                "TestId"   "job-template-relation-type"
+            )}}
+        </div>
+
+        {{/* --- Sequence Order --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"     "number"
+                "Name"     "sequence_order"
+                "Label"    .Labels.Form.SequenceOrder
+                "Value"    .SequenceOrder
+                "Min"      "0"
+                "Info"     .Labels.Form.SequenceOrderInfo
+                "TestId"   "job-template-relation-sequence"
+            )}}
+        </div>
+
+        {{/* --- Active toggle (Edit only) --- */}}
+        {{if .IsEdit}}
+        <div class="form-row single">
+            <div class="form-group form-group-toggle">
+                <label class="form-label" for="active">{{.Labels.Form.Active}}</label>
+                {{template "toggle" (dict "Name" "active" "Checked" .Active "Value" "true")}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

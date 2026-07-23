@@ -24,7 +24,7 @@ import (
 
 	texttemplate "html/template"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
@@ -1228,46 +1228,12 @@ func applyRowPresentation(
 	}
 
 	// Partition into value bands (rows keep their sorted order within a band).
-	order := []string{}
-	seen := map[string]bool{}
-	buckets := map[string][]types.TableRow{}
-	for _, r := range rows {
-		v := vals[r.ID]
-		if !seen[v] {
-			seen[v] = true
-			order = append(order, v)
-		}
-		buckets[v] = append(buckets[v], r)
-	}
-	sort.SliceStable(order, func(i, j int) bool {
-		a, b := order[i], order[j]
-		if (a == "") != (b == "") {
-			return b == "" // no-value band last
-		}
-		ra, aListed := opts.Row.GroupValueRank(a)
-		rb, bListed := opts.Row.GroupValueRank(b)
-		if aListed != bListed {
-			return aListed // configured values lead
-		}
-		if aListed && bListed && ra != rb {
-			return ra < rb
-		}
-		return strings.ToLower(a) < strings.ToLower(b)
+	// Band order + no-value-last + testid shape are the shared pyeza contract;
+	// the rc-band-<slug> ID namespace is this surface's, supplied via GroupID.
+	table.Groups = types.GroupRowsByValue(rows, vals, types.GroupRowsByValueOptions{
+		LeadingOrder: opts.Row.GroupValueOrder,
+		GroupID:      func(v string) string { return "rc-band-" + slug(v) },
 	})
-	groups := make([]types.TableRowGroup, 0, len(order))
-	for _, v := range order {
-		title := v
-		if title == "" {
-			title = "—"
-		}
-		groups = append(groups, types.TableRowGroup{
-			ID:        "rc-band-" + slug(v),
-			Title:     title,
-			Rows:      buckets[v],
-			DataAttrs: map[string]string{"testid": "rc-band-" + slug(v)},
-		})
-	}
-	table.Groups = groups
 }
 
 // sortRows orders rows by the configured client-column SortField (only

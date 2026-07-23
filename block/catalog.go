@@ -24,6 +24,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/job_task"
 	"github.com/erniealice/fayna-golang/domain/operation/job_template"
 	"github.com/erniealice/fayna-golang/domain/operation/job_template_phase"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template_relation"
 	"github.com/erniealice/fayna-golang/domain/operation/job_template_task"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_criteria"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
@@ -137,6 +138,12 @@ func JobTemplateUnit(uc *UseCases, infra *Infra) compose.Unit {
 		}
 		if jttRoutes, ok := compose.RoutesOf[*job_template_task.Routes](mc, "operation.job_template_task"); ok {
 			deps.TaskRoutes = *jttRoutes
+		}
+		if ttcRoutes, ok := compose.RoutesOf[*template_task_criteria.Routes](mc, "operation.template_task_criteria"); ok {
+			deps.CriteriaRoutes = *ttcRoutes
+		}
+		if jtrRoutes, ok := compose.RoutesOf[*job_template_relation.Routes](mc, "operation.job_template_relation"); ok {
+			deps.RelationRoutes = *jtrRoutes
 		}
 		if infra.RefChecker != nil {
 			deps.GetInUseIDs = infra.RefChecker.GetJobTemplateInUseIDs
@@ -473,6 +480,25 @@ func TemplateTaskCriteriaUnit(uc *UseCases, _ *Infra) compose.Unit {
 		}
 		wireTemplateTaskCriteriaDeps(deps, uc)
 		operation.NewTemplateTaskCriteriaModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+func JobTemplateRelationUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := job_template_relation.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		r := u.Routes.(*job_template_relation.Routes)
+		l := u.Labels.(*job_template_relation.Labels)
+
+		deps := &operation.JobTemplateRelationModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireJobTemplateRelationDeps(deps, uc)
+		operation.NewJobTemplateRelationModule(deps).RegisterRoutes(mc.Routes)
 		return nil
 	}
 	return u
@@ -852,6 +878,7 @@ func AllUnits(uc *UseCases, infra *Infra, opts ...EngineOption) []compose.Unit {
 		JobTemplateUnit(uc, infra),
 		JobTemplatePhaseUnit(uc, infra),
 		JobTemplateTaskUnit(uc, infra),
+		JobTemplateRelationUnit(uc, infra),
 		JobActivityUnit(uc, infra),
 		JobPhaseUnit(uc, infra),
 		JobTaskUnit(uc, infra),

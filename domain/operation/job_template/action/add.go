@@ -10,6 +10,7 @@ import (
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
 
+	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 )
 
@@ -23,9 +24,13 @@ func NewAddAction(deps *Deps) view.View {
 
 		if viewCtx.Request.Method == http.MethodGet {
 			return view.OK("job-template-drawer-form", &jobtemplateform.Data{
-				FormAction:   deps.Routes.AddURL,
-				Labels:       deps.Labels,
-				CommonLabels: nil, // injected by ViewAdapter
+				FormAction:           deps.Routes.AddURL,
+				Labels:               deps.Labels,
+				CategoryOptions:      jobtemplateform.BuildCategoryOptions(ctx, deps.ListJobCategories, ""),
+				OutputProductOptions: jobtemplateform.BuildOutputProductOptions(ctx, deps.ListProducts, ""),
+				InitialStatusOptions: jobtemplateform.BuildInitialStatusOptions(""),
+				VersionStatusOptions: jobtemplateform.BuildVersionStatusOptions(""), // defaults to Draft
+				CommonLabels:         nil,                                           // injected by ViewAdapter
 			})
 		}
 
@@ -36,11 +41,28 @@ func NewAddAction(deps *Deps) view.View {
 
 		r := viewCtx.Request
 
+		data := &jobtemplatepb.JobTemplate{
+			Name:        r.FormValue("name"),
+			Description: strPtr(r.FormValue("description")),
+		}
+		if v := r.FormValue("job_category_id"); v != "" {
+			data.JobCategoryId = &v
+		}
+		if v := r.FormValue("output_product_id"); v != "" {
+			data.OutputProductId = &v
+		}
+		if v := r.FormValue("initial_status"); v != "" {
+			data.InitialStatus = &v
+		}
+		if v := r.FormValue("version_status"); v != "" {
+			if code, ok := enums.VersionStatus_value[v]; ok {
+				vs := enums.VersionStatus(code)
+				data.VersionStatus = &vs
+			}
+		}
+
 		resp, err := deps.CreateJobTemplate(ctx, &jobtemplatepb.CreateJobTemplateRequest{
-			Data: &jobtemplatepb.JobTemplate{
-				Name:        r.FormValue("name"),
-				Description: strPtr(r.FormValue("description")),
-			},
+			Data: data,
 		})
 		if err != nil {
 			log.Printf("Failed to create job template: %v", err)

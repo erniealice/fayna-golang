@@ -9,8 +9,8 @@ import (
 	fulfillmentdashboardview "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
 	jobdashboardview "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
-	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	"github.com/erniealice/espyna-golang/consumer"
 	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
@@ -301,6 +301,16 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.TemplateTaskCriteria.ListByTemplateTask = op.TemplateTaskCriteria.ListByTemplateTask.Execute
 		}
 
+		if op.JobTemplateRelation != nil {
+			result.Operation.JobTemplateRelation.CreateJobTemplateRelation = op.JobTemplateRelation.CreateJobTemplateRelation.Execute
+			result.Operation.JobTemplateRelation.ReadJobTemplateRelation = op.JobTemplateRelation.ReadJobTemplateRelation.Execute
+			result.Operation.JobTemplateRelation.UpdateJobTemplateRelation = op.JobTemplateRelation.UpdateJobTemplateRelation.Execute
+			result.Operation.JobTemplateRelation.DeleteJobTemplateRelation = op.JobTemplateRelation.DeleteJobTemplateRelation.Execute
+			// espyna exposes only the by-parent list today; the generic list and
+			// by-child closures stay nil (views nil-guard both).
+			result.Operation.JobTemplateRelation.ListByParent = op.JobTemplateRelation.ListByParent.Execute
+		}
+
 		if op.OutcomeCriteria != nil {
 			result.Operation.OutcomeCriteria.CreateOutcomeCriteria = op.OutcomeCriteria.CreateOutcomeCriteria.Execute
 			result.Operation.OutcomeCriteria.ReadOutcomeCriteria = op.OutcomeCriteria.ReadOutcomeCriteria.Execute
@@ -431,6 +441,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 	// resolution — optional; nil → deliverer column renders blank) -----------
 	if uc.Product != nil && uc.Product.ProductPlan != nil {
 		result.Product.ProductPlan.ListProductPlans = uc.Product.ProductPlan.ListProductPlans.Execute
+	}
+	if uc.Product != nil && uc.Product.Product != nil {
+		result.Product.ListProducts = uc.Product.Product.ListProducts.Execute
 	}
 
 	// -- Entity (drawer search pickers; optional → flat-filter fallback) ---------

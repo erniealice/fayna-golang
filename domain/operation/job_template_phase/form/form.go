@@ -3,8 +3,8 @@
 package form
 
 import (
-	job_template_phase "github.com/erniealice/fayna-golang/domain/operation/job_template_phase"
-	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template_phase"
+	"github.com/erniealice/pyeza-golang/types"
 )
 
 // Data is the template-facing form data for the job-template-phase drawer (Add + Edit).
@@ -42,12 +42,24 @@ type Data struct {
 	// Only shown on Edit (guarded by .IsEdit in the template).
 	PredecessorTemplatePhaseID string
 
+	// ScoringSchemeID is the optional FK to the grading/scoring scheme this
+	// phase's outcomes roll up under (education tier: "Grading Scheme" via
+	// lyngua). ScoringSchemeOptions is pre-built by BuildScoringSchemeOptions
+	// in options.go.
+	ScoringSchemeID      string
+	ScoringSchemeOptions []types.SelectOption
+
 	// ResourceSearchURL for the resource auto-complete (action mode).
 	ResourceSearchURL string
 
 	// Labels for the template.
 	Labels job_template_phase.Labels
 
-	// CommonLabels for the sheet-form-footer.
-	CommonLabels *pyeza.CommonLabels
+	// CommonLabels for the sheet-form-footer. Typed `any` (NOT a concrete
+	// pointer) to match the job_template form precedent: the app-side render
+	// pipeline (pyeza render.(*Pipeline).InjectPageData) injects the app's
+	// CommonLabels VALUE via reflection, and a mismatched concrete field type
+	// panics reflect.Value.Set on every drawer GET (found live 2026-07-21,
+	// AY-2627 Phase-3 canary grounding).
+	CommonLabels any
 }

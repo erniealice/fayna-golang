@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	"github.com/erniealice/espyna-golang/consumer"
 	pyeza "github.com/erniealice/pyeza-golang"
@@ -39,9 +39,11 @@ import (
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	sgppspb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_product_plan_staff"
 )
 
 const docxContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -100,14 +102,23 @@ type Deps struct {
 	// fallback. Optional/nil-safe — no download regression when unwired.
 	ResolveTemplateBytes func(ctx context.Context, priceScheduleID string) ([]byte, error)
 
-	ListSubscriptionGroups        func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
-	ListSubscriptionGroupMembers  func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
-	ListJobs                      func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
-	ListJobTemplates              func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
-	ListClients                   func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
-	ListJobOutcomeSummarys        func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
-	ListPhaseOutcomeSummarysByJob func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
-	ListJobPhases                 func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	ListSubscriptionGroups       func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
+	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+	// Class-edge derivation (D5 derive-on-read): the effective card teacher is
+	// COALESCE(job_task.assigned_to override, class-edge servicer). The class edge
+	// (subscription_group_product_plan_staff) is the UI-maintained "who services
+	// this cohort's offering" source of truth; ListProductPlans maps its
+	// product_plan_id to the product_id a job carries in output_product_id. BOTH
+	// optional/nil-safe — a missing closure leaves the teacher line on its prior
+	// (assignee-only) behavior, never a panic.
+	ListSubscriptionGroupProductPlanStaffs func(ctx context.Context, req *sgppspb.ListSubscriptionGroupProductPlanStaffsRequest) (*sgppspb.ListSubscriptionGroupProductPlanStaffsResponse, error)
+	ListProductPlans                       func(ctx context.Context, req *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error)
+	ListJobs                               func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	ListJobTemplates                       func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+	ListClients                            func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+	ListJobOutcomeSummarys                 func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
+	ListPhaseOutcomeSummarysByJob          func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
+	ListJobPhases                          func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
 	// ListJobTemplatePhasesByTemplate resolves a job_template's phases (with their
 	// stable `code`, projected by the specialized SQL) so the block tree can key
 	// per-phase leaves by phase code via job_phase.template_phase_id. Optional/

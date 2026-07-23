@@ -10,6 +10,9 @@ import (
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 
 	ttcdetail "github.com/erniealice/fayna-golang/domain/operation/template_task_criteria/detail"
@@ -29,6 +32,13 @@ type TemplateTaskCriteriaModuleDeps struct {
 	UpdateTemplateTaskCriteria func(ctx context.Context, req *ttcpb.UpdateTemplateTaskCriteriaRequest) (*ttcpb.UpdateTemplateTaskCriteriaResponse, error)
 	DeleteTemplateTaskCriteria func(ctx context.Context, req *ttcpb.DeleteTemplateTaskCriteriaRequest) (*ttcpb.DeleteTemplateTaskCriteriaResponse, error)
 	ListTemplateTaskCriterias  func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
+
+	// ListOutcomeCriterias + the phase/task walk back the drawer's Outcome
+	// Criteria and (template-scoped) Job Template Task pickers. All optional
+	// — nil-safe (falls back to raw-id text inputs).
+	ListOutcomeCriterias    func(ctx context.Context, req *criteriapb.ListOutcomeCriteriasRequest) (*criteriapb.ListOutcomeCriteriasResponse, error)
+	ListPhasesByJobTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListTasksByPhase        func(ctx context.Context, req *jobtemplateTaskpb.ListJobTemplateTasksByPhaseRequest) (*jobtemplateTaskpb.ListJobTemplateTasksByPhaseResponse, error)
 
 	// Audit history (optional — nil = history tab hidden/empty)
 	auditlog.AuditOps
@@ -68,6 +78,9 @@ func NewTemplateTaskCriteriaModule(deps *TemplateTaskCriteriaModuleDeps) *Templa
 		UpdateTemplateTaskCriteria: deps.UpdateTemplateTaskCriteria,
 		DeleteTemplateTaskCriteria: deps.DeleteTemplateTaskCriteria,
 		ListTemplateTaskCriterias:  deps.ListTemplateTaskCriterias,
+		ListOutcomeCriterias:       deps.ListOutcomeCriterias,
+		ListPhasesByJobTemplate:    deps.ListPhasesByJobTemplate,
+		ListTasksByPhase:           deps.ListTasksByPhase,
 	}
 
 	return &TemplateTaskCriteriaModule{

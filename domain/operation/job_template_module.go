@@ -11,14 +11,19 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	jobtemplaterelationpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_relation"
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	productpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product"
 
 	jobtemplateaction "github.com/erniealice/fayna-golang/domain/operation/job_template/action"
 	jobtemplatedetail "github.com/erniealice/fayna-golang/domain/operation/job_template/detail"
 	jobtemplatelist "github.com/erniealice/fayna-golang/domain/operation/job_template/list"
+	jtrpkg "github.com/erniealice/fayna-golang/domain/operation/job_template_relation"
+	ttcpkg "github.com/erniealice/fayna-golang/domain/operation/template_task_criteria"
 )
 
 // JobTemplateModuleDeps holds all dependencies for the job template module.
@@ -33,6 +38,14 @@ type JobTemplateModuleDeps struct {
 	// result in tabs with no CTA buttons (read-only view).
 	PhaseRoutes JobTemplatePhaseRoutes
 	TaskRoutes  JobTemplateTaskRoutes
+	// CriteriaRoutes supplies Add/Delete URLs for the Standards tab's
+	// "+ Add Standard" CTA and per-row remove actions. Optional — a zero-value
+	// struct results in a read-only Standards tab.
+	CriteriaRoutes ttcpkg.Routes
+	// RelationRoutes supplies Add/Delete URLs for the Spawn Graph tab's
+	// "+ Add Relation" CTA and per-row remove actions. Optional — a zero-value
+	// struct results in a read-only Spawn Graph tab.
+	RelationRoutes jtrpkg.Routes
 
 	// GetInUseIDs checks which job template IDs are referenced by jobs
 	// (via job.job_template_id). When non-nil, matched rows have their
@@ -47,6 +60,11 @@ type JobTemplateModuleDeps struct {
 	DeleteJobTemplate          func(ctx context.Context, req *jobtemplatepb.DeleteJobTemplateRequest) (*jobtemplatepb.DeleteJobTemplateResponse, error)
 	GetJobTemplateListPageData func(ctx context.Context, req *jobtemplatepb.GetJobTemplateListPageDataRequest) (*jobtemplatepb.GetJobTemplateListPageDataResponse, error)
 
+	// ListJobCategories / ListProducts populate the Category / Output Product
+	// pickers on the drawer form. Both optional — nil-safe (empty picker).
+	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
+	ListProducts      func(ctx context.Context, req *productpb.ListProductsRequest) (*productpb.ListProductsResponse, error)
+
 	// Phase list (for detail phases tab)
 	ListPhasesByJobTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
 
@@ -54,6 +72,10 @@ type JobTemplateModuleDeps struct {
 	// Nil is safe: the detail loaders render empty-state panels.
 	ListTasksByPhase   func(ctx context.Context, req *jobtemplateTaskpb.ListJobTemplateTasksByPhaseRequest) (*jobtemplateTaskpb.ListJobTemplateTasksByPhaseResponse, error)
 	ListCriteriaByTask func(ctx context.Context, req *templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskResponse, error)
+	// ListRelationsByParent backs the Spawn Graph tab's roster table
+	// (Q-TPL W4, NEW). Nil is safe: the tab loader renders an empty-state
+	// panel.
+	ListRelationsByParent func(ctx context.Context, req *jobtemplaterelationpb.ListJobTemplateRelationsByParentRequest) (*jobtemplaterelationpb.ListJobTemplateRelationsByParentResponse, error)
 
 	// Attachment operations
 	UploadFile       func(ctx context.Context, bucket, key string, content []byte, contentType string) error
@@ -90,10 +112,13 @@ func NewJobTemplateModule(deps *JobTemplateModuleDeps) *JobTemplateModule {
 		Routes:                  deps.Routes,
 		PhaseRoutes:             deps.PhaseRoutes,
 		TaskRoutes:              deps.TaskRoutes,
+		CriteriaRoutes:          deps.CriteriaRoutes,
+		RelationRoutes:          deps.RelationRoutes,
 		ReadJobTemplate:         deps.ReadJobTemplate,
 		ListPhasesByJobTemplate: deps.ListPhasesByJobTemplate,
 		ListTasksByPhase:        deps.ListTasksByPhase,
 		ListCriteriaByTask:      deps.ListCriteriaByTask,
+		ListRelationsByParent:   deps.ListRelationsByParent,
 		Labels:                  deps.Labels,
 		CommonLabels:            deps.CommonLabels,
 		TableLabels:             deps.TableLabels,
@@ -115,6 +140,8 @@ func NewJobTemplateModule(deps *JobTemplateModuleDeps) *JobTemplateModule {
 		ReadJobTemplate:   deps.ReadJobTemplate,
 		UpdateJobTemplate: deps.UpdateJobTemplate,
 		DeleteJobTemplate: deps.DeleteJobTemplate,
+		ListJobCategories: deps.ListJobCategories,
+		ListProducts:      deps.ListProducts,
 	}
 
 	return &JobTemplateModule{

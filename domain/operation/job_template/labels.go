@@ -56,6 +56,10 @@ type ActionLabels struct {
 	Add string `json:"add"`
 	// AddTask is the CTA label on the Tasks tab.
 	AddTask string `json:"add_task"`
+	// AddStandard is the CTA label on the Standards tab.
+	AddStandard string `json:"add_standard"`
+	// AddRelation is the CTA label on the Spawn Graph tab.
+	AddRelation string `json:"add_relation"`
 }
 
 type ErrorLabels struct {
@@ -74,6 +78,23 @@ type FormLabels struct {
 	Description     string `json:"description"`
 	DescPlaceholder string `json:"description_placeholder"`
 	Active          string `json:"active"`
+	// Category / OutputProduct — both optional FK pickers. Generic wording
+	// here; vertical vocabulary (e.g. "Subject" for OutputProduct in the
+	// education tier) lives in lyngua only.
+	Category                 string `json:"category"`
+	CategoryInfo             string `json:"category_info"`
+	CategoryPlaceholder      string `json:"category_placeholder"`
+	OutputProduct            string `json:"output_product"`
+	OutputProductInfo        string `json:"output_product_info"`
+	OutputProductPlaceholder string `json:"output_product_placeholder"`
+	// InitialStatus — the JobStatus a spawned Job takes at materialization.
+	InitialStatus            string `json:"initial_status"`
+	InitialStatusInfo        string `json:"initial_status_info"`
+	InitialStatusPlaceholder string `json:"initial_status_placeholder"`
+	// VersionStatus — the template's publication state (Draft/Published). No
+	// approval-ladder mechanics; Published is a plain operator choice.
+	VersionStatus     string `json:"version_status"`
+	VersionStatusInfo string `json:"version_status_info"`
 }
 
 type DetailLabels struct {
@@ -90,6 +111,7 @@ type TabLabels struct {
 	Phases      string `json:"phases"`
 	Tasks       string `json:"tasks"`
 	Standards   string `json:"standards"`
+	SpawnGraph  string `json:"spawn_graph"`
 	Attachments string `json:"attachments"`
 	AuditTrail  string `json:"audit_trail"`
 	History     string `json:"history"`
@@ -139,18 +161,31 @@ func DefaultLabels() Labels {
 			InactiveMessage: "Deactivated templates will appear here.",
 		},
 		Form: FormLabels{
-			Name:            "Template Name",
-			NamePlaceholder: "Enter template name",
-			Description:     "Description",
-			DescPlaceholder: "Enter template description...",
-			Active:          "Active",
+			Name:                     "Template Name",
+			NamePlaceholder:          "Enter template name",
+			Description:              "Description",
+			DescPlaceholder:          "Enter template description...",
+			Active:                   "Active",
+			Category:                 "Category",
+			CategoryInfo:             "Optional taxonomy used to group templates (e.g. for tab-split lists).",
+			CategoryPlaceholder:      "Select category...",
+			OutputProduct:            "Output Product",
+			OutputProductInfo:        "Optional product this template's spawned jobs deliver.",
+			OutputProductPlaceholder: "Select output product...",
+			InitialStatus:            "Initial Job Status",
+			InitialStatusInfo:        "The status a spawned job takes when this template materializes. Unset falls back to Planned.",
+			InitialStatusPlaceholder: "Default (Planned)",
+			VersionStatus:            "Version Status",
+			VersionStatusInfo:        "Draft templates are work-in-progress; Published templates are ready for use.",
 		},
 		Actions: ActionLabels{
-			View:    "View Template",
-			Edit:    "Edit Template",
-			Delete:  "Delete Template",
-			Add:     "+ Add Phase",
-			AddTask: "+ Add Task",
+			View:        "View Template",
+			Edit:        "Edit Template",
+			Delete:      "Delete Template",
+			Add:         "+ Add Phase",
+			AddTask:     "+ Add Task",
+			AddStandard: "+ Add Standard",
+			AddRelation: "+ Add Relation",
 		},
 		Detail: DetailLabels{
 			PageTitle:    "Job Template Details",
@@ -165,6 +200,7 @@ func DefaultLabels() Labels {
 			Phases:      "Phases",
 			Tasks:       "Tasks",
 			Standards:   "Standards",
+			SpawnGraph:  "Spawn Graph",
 			Attachments: "Attachments",
 			AuditTrail:  "Audit Trail",
 			History:     "History",

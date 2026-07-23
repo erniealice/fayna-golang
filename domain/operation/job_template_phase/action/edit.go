@@ -9,6 +9,7 @@ import (
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	jobtemplatephaseform "github.com/erniealice/fayna-golang/domain/operation/job_template_phase/form"
 
+	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
 )
 
@@ -53,7 +54,7 @@ func NewEditAction(deps *Deps) view.View {
 			}
 
 			return view.OK("job-template-phase-drawer-form", &jobtemplatephaseform.Data{
-				FormAction:                 deps.Routes.EditURL,
+				FormAction:                 route.ResolveURL(deps.Routes.EditURL, "id", id),
 				IsEdit:                     true,
 				ID:                         p.GetId(),
 				JobTemplateID:              p.GetJobTemplateId(),
@@ -63,8 +64,10 @@ func NewEditAction(deps *Deps) view.View {
 				EstimatedDurationMinutes:   estDuration,
 				ResourceID:                 resourceID,
 				PredecessorTemplatePhaseID: predecessorID,
+				ScoringSchemeID:            p.GetScoringSchemeId(),
 				ResourceSearchURL:          deps.ResourceSearchURL,
 				Labels:                     deps.Labels,
+				ScoringSchemeOptions:       jobtemplatephaseform.BuildScoringSchemeOptions(ctx, deps.ListScoringSchemes, p.GetScoringSchemeId()),
 			})
 		}
 
@@ -95,6 +98,9 @@ func NewEditAction(deps *Deps) view.View {
 		}
 		if v := r.FormValue("predecessor_template_phase_id"); v != "" {
 			phase.PredecessorTemplatePhaseId = &v
+		}
+		if v := r.FormValue("scoring_scheme_id"); v != "" {
+			phase.ScoringSchemeId = &v
 		}
 
 		if deps.UpdateJobTemplatePhase == nil {

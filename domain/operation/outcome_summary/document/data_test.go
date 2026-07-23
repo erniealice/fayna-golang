@@ -5,18 +5,20 @@ import (
 	"fmt"
 	"testing"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
-	userpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/user"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
+	userpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/user"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
+	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	sgppspb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_product_plan_staff"
 )
 
 // M4 (audit T5): the report-card .docx builder duplicates the client_card IDOR
@@ -271,5 +273,49 @@ func TestIsNonEnrolledPlaceholder(t *testing.T) {
 				t.Fatalf("isNonEnrolledPlaceholder(%+v, hasMarks=%v) = %v, want %v", c.row, c.hasMarks, got, c.want)
 			}
 		})
+	}
+}
+
+// CF-3: two active class edges can service one product_plan (the sgpps unique is
+// (group, product_plan, staff)). fetchClassEdgeTeachers must attribute a STABLE
+// teacher — newest date_created, id breaking ties — independent of the order the
+// adapter paginates the edges in (a plain last-write-wins map flipped the teacher).
+func TestFetchClassEdgeTeachers_DeterministicPickOnDuplicatePrimaries(t *testing.T) {
+	edge := func(id, staffID string, created int64) *sgppspb.SubscriptionGroupProductPlanStaff {
+		c := created
+		return &sgppspb.SubscriptionGroupProductPlanStaff{
+			Id: id, StaffId: staffID, ProductPlanId: "pp-1", SubscriptionGroupId: "sec-1",
+			Active: true, DateCreated: &c,
+		}
+	}
+	depsFor := func(edges []*sgppspb.SubscriptionGroupProductPlanStaff) *Deps {
+		return &Deps{
+			ListSubscriptionGroupProductPlanStaffs: func(context.Context, *sgppspb.ListSubscriptionGroupProductPlanStaffsRequest) (*sgppspb.ListSubscriptionGroupProductPlanStaffsResponse, error) {
+				return &sgppspb.ListSubscriptionGroupProductPlanStaffsResponse{Data: edges}, nil
+			},
+			ListProductPlans: func(context.Context, *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error) {
+				return &productplanpb.ListProductPlansResponse{Data: []*productplanpb.ProductPlan{{Id: "pp-1", ProductId: "prod-1"}}}, nil
+			},
+		}
+	}
+	prod := "prod-1"
+	job := &jobpb.Job{Id: "job-1", OutputProductId: &prod}
+
+	// (a) different date_created: the newer edge (staff-B) wins in EITHER list order.
+	older, newer := edge("e-old", "staff-A", 100), edge("e-new", "staff-B", 200)
+	for i, edges := range [][]*sgppspb.SubscriptionGroupProductPlanStaff{{older, newer}, {newer, older}} {
+		got := fetchClassEdgeTeachers(context.Background(), depsFor(edges), "sec-1", []*jobpb.Job{job})
+		if got["job-1"] != "staff-B" {
+			t.Fatalf("case a order %d: want newest-edge staff-B, got %q", i, got["job-1"])
+		}
+	}
+
+	// (b) equal date_created: the higher id (staff-Y on e-2) breaks the tie, stably.
+	e1, e2 := edge("e-1", "staff-X", 500), edge("e-2", "staff-Y", 500)
+	for i, edges := range [][]*sgppspb.SubscriptionGroupProductPlanStaff{{e1, e2}, {e2, e1}} {
+		got := fetchClassEdgeTeachers(context.Background(), depsFor(edges), "sec-1", []*jobpb.Job{job})
+		if got["job-1"] != "staff-Y" {
+			t.Fatalf("case b order %d: want id-tiebreak staff-Y, got %q", i, got["job-1"])
+		}
 	}
 }

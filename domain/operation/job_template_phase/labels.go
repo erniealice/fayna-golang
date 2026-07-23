@@ -35,6 +35,12 @@ type FormLabels struct {
 	ResourcePlaceholder    string `json:"resource_placeholder"`
 	PredecessorPhase       string `json:"predecessor_phase"`
 	PredecessorPlaceholder string `json:"predecessor_placeholder"`
+	// SectionScoring / ScoringScheme — generic wording here; the education
+	// tier overrides ScoringScheme to "Grading Scheme" via lyngua.
+	SectionScoring           string `json:"section_scoring"`
+	ScoringScheme            string `json:"scoring_scheme"`
+	ScoringSchemeInfo        string `json:"scoring_scheme_info"`
+	ScoringSchemePlaceholder string `json:"scoring_scheme_placeholder"`
 }
 
 type ActionLabels struct {
@@ -58,19 +64,23 @@ func DefaultLabels() Labels {
 			EstDuration: "Est. Duration (min)",
 		},
 		Form: FormLabels{
-			SectionPhase:           "Phase",
-			SectionResource:        "Resource",
-			SectionDependencies:    "Dependencies",
-			Name:                   "Phase Name",
-			NamePlaceholder:        "Enter phase name",
-			Code:                   "Code",
-			CodeHint:               "Optional stable key: lowercase letters, digits, underscore.",
-			PhaseOrder:             "Order",
-			EstDurationMinutes:     "Estimated Duration (min)",
-			Resource:               "Resource",
-			ResourcePlaceholder:    "Search resource...",
-			PredecessorPhase:       "Predecessor Phase",
-			PredecessorPlaceholder: "Select predecessor...",
+			SectionPhase:             "Phase",
+			SectionResource:          "Resource",
+			SectionDependencies:      "Dependencies",
+			Name:                     "Phase Name",
+			NamePlaceholder:          "Enter phase name",
+			Code:                     "Code",
+			CodeHint:                 "Optional stable key: lowercase letters, digits, underscore.",
+			PhaseOrder:               "Order",
+			EstDurationMinutes:       "Estimated Duration (min)",
+			Resource:                 "Resource",
+			ResourcePlaceholder:      "Search resource...",
+			PredecessorPhase:         "Predecessor Phase",
+			PredecessorPlaceholder:   "Select predecessor...",
+			SectionScoring:           "Scoring",
+			ScoringScheme:            "Scoring Scheme",
+			ScoringSchemeInfo:        "Optional. Scheme this phase's outcomes roll up under.",
+			ScoringSchemePlaceholder: "Select scoring scheme...",
 		},
 		Actions: ActionLabels{
 			Add:    "+ Add Phase",

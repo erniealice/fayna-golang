@@ -81,6 +81,7 @@ func loadTasksTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData,
 		if deps.TaskRoutes.DeleteURL != "" {
 			actions = append(actions, types.TableAction{
 				Type:     "delete",
+				Action:   "delete",
 				Label:    "Delete Task",
 				URL:      deps.TaskRoutes.DeleteURL,
 				ItemName: t.GetName(),

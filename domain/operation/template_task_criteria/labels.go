@@ -52,6 +52,7 @@ type FormLabels struct {
 	SequenceOrderInfo     string `json:"sequence_order_info"`
 	RequiredOverride      string `json:"required_override"`
 	RequiredOverrideInfo  string `json:"required_override_info"`
+	Active                string `json:"active"`
 }
 
 type ActionLabels struct {
@@ -125,6 +126,7 @@ func DefaultLabels() Labels {
 			SequenceOrderInfo:     "Display order of this criterion within the task.",
 			RequiredOverride:      "Required Override",
 			RequiredOverrideInfo:  "Override whether this criterion is required for the task.",
+			Active:                "Active",
 		},
 		Actions: ActionLabels{
 			View:   "View Link",

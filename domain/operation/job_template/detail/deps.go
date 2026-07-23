@@ -3,9 +3,11 @@ package detail
 import (
 	"context"
 
-	job_template "github.com/erniealice/fayna-golang/domain/operation/job_template"
-	job_template_phase "github.com/erniealice/fayna-golang/domain/operation/job_template_phase"
-	job_template_task "github.com/erniealice/fayna-golang/domain/operation/job_template_task"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template_phase"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template_relation"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template_task"
+	"github.com/erniealice/fayna-golang/domain/operation/template_task_criteria"
 
 	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/hybra-golang/views/auditlog"
@@ -14,6 +16,7 @@ import (
 
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	jobtemplaterelationpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_relation"
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 )
@@ -25,12 +28,21 @@ type DetailViewDeps struct {
 
 	Routes job_template.Routes
 	// PhaseRoutes and TaskRoutes supply Edit/Delete URLs for per-row CTAs
-	// and the Add CTA on the Phases / Tasks tabs.
-	PhaseRoutes job_template_phase.Routes
-	TaskRoutes  job_template_task.Routes
+	// and the Add CTA on the Phases / Tasks tabs. CriteriaRoutes supplies
+	// Add/Delete URLs for the Standards tab's "+ Add Standard" CTA and
+	// per-row remove actions. RelationRoutes supplies Add/Delete URLs for
+	// the Spawn Graph tab's "+ Add Relation" CTA and per-row remove actions.
+	PhaseRoutes    job_template_phase.Routes
+	TaskRoutes     job_template_task.Routes
+	CriteriaRoutes template_task_criteria.Routes
+	RelationRoutes job_template_relation.Routes
 
 	ReadJobTemplate         func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)
 	ListPhasesByJobTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	// ListRelationsByParent backs the Spawn Graph tab's roster table — the
+	// one job_template_relation closure that IS live in espyna today (see
+	// job_template_relation/deps.go). Nil is safe (empty-state panel).
+	ListRelationsByParent func(ctx context.Context, req *jobtemplaterelationpb.ListJobTemplateRelationsByParentRequest) (*jobtemplaterelationpb.ListJobTemplateRelationsByParentResponse, error)
 
 	// Tab data stubs — wired in P6.template-children when view modules land.
 	// Nil is safe: loaders no-op and render empty-state panels.

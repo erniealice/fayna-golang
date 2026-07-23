@@ -1,16 +1,41 @@
 {{/*
 Template task criteria drawer form — loaded into #sheetContent via HTMX.
 Used by both Add and Edit actions.
-Data: .JobTemplateTaskID, .OutcomeCriteriaID, .SequenceOrder, .ID, .FormAction, .IsEdit, .CommonLabels, .Labels
+Data: .JobTemplateTaskID, .TaskOptions, .OutcomeCriteriaID, .CriteriaOptions,
+      .SequenceOrder, .Active, .ID, .Context, .TemplateID, .FormAction,
+      .IsEdit, .CommonLabels, .Labels
+
+Context discriminator (see ui-drawer-form-template-anatomy): ContextTemplate
+opens from a job_template detail Standards tab (?job_template_id=) — the Job
+Template Task field becomes a picker scoped to that template's tasks and
+.TemplateID rides along as a hidden input (also used to route the
+post-success table refresh back to the Standards tab). ContextStandalone
+(the module's own list page) falls back to a raw-id text input — there is no
+template to scope a picker against.
 */}}
 {{define "template-task-criteria-drawer-form"}}
 <form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="template-task-criteria-form">
     {{actionForm .FormAction .WorkspaceID}}
     {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+    {{if eq .Context "Template"}}
+    <input type="hidden" name="job_template_id" value="{{.TemplateID}}">
+    {{end}}
 
     <div class="sheet-body">
-        {{/* --- Job Template Task ID --- */}}
+        {{/* --- Job Template Task --- */}}
         <div class="form-row single">
+            {{if .TaskOptions}}
+            {{template "form-group" (dict
+                "Type"        "select"
+                "Name"        "job_template_task_id"
+                "Label"       .Labels.Form.JobTemplateTaskID
+                "Value"       .JobTemplateTaskID
+                "Required"    true
+                "Info"        .Labels.Form.JobTemplateTaskIDInfo
+                "Options"     .TaskOptions
+                "TestId"      "template-task-criteria-task"
+            )}}
+            {{else}}
             {{template "form-group" (dict
                 "Type" "text"
                 "Name" "job_template_task_id"
@@ -18,11 +43,25 @@ Data: .JobTemplateTaskID, .OutcomeCriteriaID, .SequenceOrder, .ID, .FormAction, 
                 "Value" .JobTemplateTaskID
                 "Required" true
                 "Info" .Labels.Form.JobTemplateTaskIDInfo
+                "TestId" "template-task-criteria-task-id"
             )}}
+            {{end}}
         </div>
 
-        {{/* --- Outcome Criteria ID --- */}}
+        {{/* --- Outcome Criteria --- */}}
         <div class="form-row single">
+            {{if .CriteriaOptions}}
+            {{template "form-group" (dict
+                "Type"     "select"
+                "Name"     "outcome_criteria_id"
+                "Label"    .Labels.Form.OutcomeCriteriaID
+                "Value"    .OutcomeCriteriaID
+                "Required" true
+                "Info"     .Labels.Form.OutcomeCriteriaIDInfo
+                "Options"  .CriteriaOptions
+                "TestId"   "template-task-criteria-outcome"
+            )}}
+            {{else}}
             {{template "form-group" (dict
                 "Type" "text"
                 "Name" "outcome_criteria_id"
@@ -30,7 +69,9 @@ Data: .JobTemplateTaskID, .OutcomeCriteriaID, .SequenceOrder, .ID, .FormAction, 
                 "Value" .OutcomeCriteriaID
                 "Required" true
                 "Info" .Labels.Form.OutcomeCriteriaIDInfo
+                "TestId" "template-task-criteria-outcome-id"
             )}}
+            {{end}}
         </div>
 
         {{/* --- Sequence Order --- */}}
@@ -43,8 +84,19 @@ Data: .JobTemplateTaskID, .OutcomeCriteriaID, .SequenceOrder, .ID, .FormAction, 
                 "Required" false
                 "Min" 0
                 "Info" .Labels.Form.SequenceOrderInfo
+                "TestId" "template-task-criteria-sequence"
             )}}
         </div>
+
+        {{/* --- Active toggle (Edit only) --- */}}
+        {{if .IsEdit}}
+        <div class="form-row single">
+            <div class="form-group form-group-toggle">
+                <label class="form-label" for="active">{{.Labels.Form.Active}}</label>
+                {{template "toggle" (dict "Name" "active" "Checked" .Active "Value" "true")}}
+            </div>
+        </div>
+        {{end}}
     </div>
 
     {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}

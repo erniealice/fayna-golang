@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	job_template "github.com/erniealice/fayna-golang/domain/operation/job_template"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template"
 
 	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/hybra-golang/views/auditlog"
@@ -30,16 +30,19 @@ type PageData struct {
 	PhasesTable     *types.TableConfig
 	TasksTable      *types.TableConfig
 	StandardsTable  *types.TableConfig
+	SpawnGraphTable *types.TableConfig
 	AttachmentTable *types.TableConfig
 	// Audit history tab
 	AuditEntries    []auditlog.AuditEntryView
 	AuditHasNext    bool
 	AuditNextCursor string
 	AuditHistoryURL string
-	// Add CTAs for the Phases and Tasks tabs.
+	// Add CTAs for the Phases, Tasks, Standards, and Spawn Graph tabs.
 	// Pre-formatted with the job_template_id query parameter.
-	PhasesAddURL string
-	TasksAddURL  string
+	PhasesAddURL     string
+	TasksAddURL      string
+	StandardsAddURL  string
+	SpawnGraphAddURL string
 }
 
 // jobTemplateToMap converts a JobTemplate protobuf to a map[string]any for template use.
@@ -143,6 +146,7 @@ func buildTabItems(l job_template.Labels, id string, routes job_template.Routes)
 		{Key: "phases", Label: cmpLabelOrDefault(l.Tabs.Phases, "Phases"), Href: base + "?tab=phases", HxGet: action + "phases", Icon: "icon-list"},
 		{Key: "tasks", Label: cmpLabelOrDefault(l.Tabs.Tasks, "Tasks"), Href: base + "?tab=tasks", HxGet: action + "tasks", Icon: "icon-check-square"},
 		{Key: "standards", Label: cmpLabelOrDefault(l.Tabs.Standards, "Standards"), Href: base + "?tab=standards", HxGet: action + "standards", Icon: "icon-target"},
+		{Key: "spawn-graph", Label: cmpLabelOrDefault(l.Tabs.SpawnGraph, "Spawn Graph"), Href: base + "?tab=spawn-graph", HxGet: action + "spawn-graph", Icon: "icon-git-branch"},
 		{Key: "attachments", Label: cmpLabelOrDefault(l.Tabs.Attachments, "Attachments"), Href: base + "?tab=attachments", HxGet: action + "attachments", Icon: "icon-paperclip"},
 		{Key: "audit-history", Label: cmpLabelOrDefault(l.Tabs.History, "History"), Href: base + "?tab=audit-history", HxGet: action + "audit-history", Icon: "icon-clock"},
 	}
@@ -158,6 +162,8 @@ func loadTabData(ctx context.Context, deps *DetailViewDeps, pageData *PageData, 
 		loadTasksTab(ctx, deps, pageData, id)
 	case "standards":
 		loadStandardsTab(ctx, deps, pageData, id)
+	case "spawn-graph":
+		loadSpawnGraphTab(ctx, deps, pageData, id)
 	case "attachments":
 		if deps.ListAttachments != nil {
 			cfg := attachmentConfig(deps)
@@ -213,6 +219,7 @@ func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData
 		if deps.PhaseRoutes.DeleteURL != "" {
 			actions = append(actions, types.TableAction{
 				Type:     "delete",
+				Action:   "delete",
 				Label:    "Delete Phase",
 				URL:      deps.PhaseRoutes.DeleteURL,
 				ItemName: p.GetName(),

@@ -9,6 +9,7 @@ import (
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	jobtemplateTaskform "github.com/erniealice/fayna-golang/domain/operation/job_template_task/form"
 
+	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
 )
 
@@ -49,7 +50,7 @@ func NewEditAction(deps *Deps) view.View {
 			}
 
 			return view.OK("job-template-task-drawer-form", &jobtemplateTaskform.Data{
-				FormAction:               deps.Routes.EditURL,
+				FormAction:               route.ResolveURL(deps.Routes.EditURL, "id", id),
 				IsEdit:                   true,
 				ID:                       t.GetId(),
 				JobTemplatePhaseID:       t.GetJobTemplatePhaseId(),

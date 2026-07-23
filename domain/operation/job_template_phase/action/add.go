@@ -25,11 +25,12 @@ func NewAddAction(deps *Deps) view.View {
 		if viewCtx.Request.Method == http.MethodGet {
 			jobTemplateID := viewCtx.Request.URL.Query().Get("job_template_id")
 			return view.OK("job-template-phase-drawer-form", &jobtemplatephaseform.Data{
-				FormAction:        deps.Routes.AddURL,
-				IsEdit:            false,
-				JobTemplateID:     jobTemplateID,
-				ResourceSearchURL: deps.ResourceSearchURL,
-				Labels:            deps.Labels,
+				FormAction:           deps.Routes.AddURL,
+				IsEdit:               false,
+				JobTemplateID:        jobTemplateID,
+				ResourceSearchURL:    deps.ResourceSearchURL,
+				Labels:               deps.Labels,
+				ScoringSchemeOptions: jobtemplatephaseform.BuildScoringSchemeOptions(ctx, deps.ListScoringSchemes, ""),
 			})
 		}
 
@@ -59,6 +60,9 @@ func NewAddAction(deps *Deps) view.View {
 		}
 		if v := r.FormValue("predecessor_template_phase_id"); v != "" {
 			phase.PredecessorTemplatePhaseId = &v
+		}
+		if v := r.FormValue("scoring_scheme_id"); v != "" {
+			phase.ScoringSchemeId = &v
 		}
 
 		if deps.CreateJobTemplatePhase == nil {

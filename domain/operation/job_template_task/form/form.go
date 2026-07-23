@@ -3,8 +3,7 @@
 package form
 
 import (
-	job_template_task "github.com/erniealice/fayna-golang/domain/operation/job_template_task"
-	pyeza "github.com/erniealice/pyeza-golang"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template_task"
 )
 
 // Data is the template-facing form data for the job-template-task drawer (Add + Edit).
@@ -44,6 +43,11 @@ type Data struct {
 	// Labels for the template.
 	Labels job_template_task.Labels
 
-	// CommonLabels for the sheet-form-footer.
-	CommonLabels *pyeza.CommonLabels
+	// CommonLabels for the sheet-form-footer. Typed `any` (NOT a concrete
+	// pointer) to match the job_template form precedent: the app-side render
+	// pipeline (pyeza render.(*Pipeline).InjectPageData) injects the app's
+	// CommonLabels VALUE via reflection, and a mismatched concrete field type
+	// panics reflect.Value.Set on every drawer GET (found live 2026-07-21,
+	// AY-2627 Phase-3 canary grounding).
+	CommonLabels any
 }

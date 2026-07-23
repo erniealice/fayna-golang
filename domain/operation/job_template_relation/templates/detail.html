@@ -1,0 +1,60 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "job-template-relation-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "job-template-relation-detail-content"}}
+<div class="page-content jtr-detail-layout">
+    {{/* --- Tabs --- */}}
+    <div class="jtr-detail-tabs">
+        {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "jtr-tabs")}}
+    </div>
+
+    {{/* --- Tab Body --- */}}
+    <div id="tabContent" class="jtr-detail-body" role="tabpanel" aria-labelledby="tab-{{.ActiveTab}}">
+        {{if eq .ActiveTab "info"}}
+        {{template "job-template-relation-tab-info" .}}
+        {{else if eq .ActiveTab "audit-history"}}
+        {{template "audit-history-tab" .}}
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{/* Information Tab */}}
+{{define "job-template-relation-tab-info"}}
+<div class="tab-scroll" aria-label="{{.Labels.Tabs.Info}}">
+    <h4 class="jtr-section-title">{{.Labels.Tabs.Info}}</h4>
+    <div class="jtr-info-grid">
+        <div class="jtr-info-item">
+            <span class="jtr-info-label">{{.Labels.Detail.ParentTemplateID}}</span>
+            <span class="jtr-info-value">{{index .Record "parent_template_id"}}</span>
+        </div>
+        <div class="jtr-info-item">
+            <span class="jtr-info-label">{{.Labels.Detail.ChildTemplateID}}</span>
+            <span class="jtr-info-value">{{index .Record "child_template_id"}}</span>
+        </div>
+        <div class="jtr-info-item">
+            <span class="jtr-info-label">{{.Labels.Detail.RelationType}}</span>
+            <span class="jtr-info-value">{{index .Record "relation_type"}}</span>
+        </div>
+        <div class="jtr-info-item">
+            <span class="jtr-info-label">{{.Labels.Detail.SequenceOrder}}</span>
+            <span class="jtr-info-value">{{index .Record "sequence_order"}}</span>
+        </div>
+        <div class="jtr-info-item">
+            <span class="jtr-info-label">{{.Labels.Detail.Status}}</span>
+            <span>
+                <span class="badge badge--{{index .Record "status_variant"}}">
+                    {{index .Record "status"}}
+                </span>
+            </span>
+        </div>
+        <div class="jtr-info-item">
+            <span class="jtr-info-label">{{.Labels.Detail.CreatedDate}}</span>
+            <span class="jtr-info-value">{{index .Record "date_created_string"}}</span>
+        </div>
+    </div>
+</div>
+{{end}}

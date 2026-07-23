@@ -9,6 +9,7 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	scoringschemepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_scheme"
 
 	jobtemplatephaseaction "github.com/erniealice/fayna-golang/domain/operation/job_template_phase/action"
 )
@@ -24,6 +25,10 @@ type JobTemplatePhaseModuleDeps struct {
 	ReadJobTemplatePhase   func(ctx context.Context, req *jobtemplatephasepb.ReadJobTemplatePhaseRequest) (*jobtemplatephasepb.ReadJobTemplatePhaseResponse, error)
 	UpdateJobTemplatePhase func(ctx context.Context, req *jobtemplatephasepb.UpdateJobTemplatePhaseRequest) (*jobtemplatephasepb.UpdateJobTemplatePhaseResponse, error)
 	DeleteJobTemplatePhase func(ctx context.Context, req *jobtemplatephasepb.DeleteJobTemplatePhaseRequest) (*jobtemplatephasepb.DeleteJobTemplatePhaseResponse, error)
+
+	// ListScoringSchemes populates the Scoring/Grading Scheme picker. Optional
+	// — nil-safe (empty picker).
+	ListScoringSchemes func(ctx context.Context, req *scoringschemepb.ListScoringSchemesRequest) (*scoringschemepb.ListScoringSchemesResponse, error)
 }
 
 // JobTemplatePhaseModule holds all constructed job_template_phase views.
@@ -44,6 +49,7 @@ func NewJobTemplatePhaseModule(deps *JobTemplatePhaseModuleDeps) *JobTemplatePha
 		ReadJobTemplatePhase:   deps.ReadJobTemplatePhase,
 		UpdateJobTemplatePhase: deps.UpdateJobTemplatePhase,
 		DeleteJobTemplatePhase: deps.DeleteJobTemplatePhase,
+		ListScoringSchemes:     deps.ListScoringSchemes,
 		ResourceSearchURL:      deps.Routes.ResourceSearchURL,
 	}
 

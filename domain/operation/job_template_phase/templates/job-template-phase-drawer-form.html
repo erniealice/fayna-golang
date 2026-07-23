@@ -55,6 +55,20 @@ Data: .FormAction, .IsEdit, .ID, .JobTemplateID, .Name, .Code, .PhaseOrder,
             )}}
         </div>
 
+        {{template "form-section" (dict "Title" .Labels.Form.SectionScoring)}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "select"
+                "Name"        "scoring_scheme_id"
+                "Label"       .Labels.Form.ScoringScheme
+                "Value"       .ScoringSchemeID
+                "Placeholder" .Labels.Form.ScoringSchemePlaceholder
+                "Info"        .Labels.Form.ScoringSchemeInfo
+                "Options"     .ScoringSchemeOptions
+                "TestId"      "jtp-phase-scoring-scheme"
+            )}}
+        </div>
+
         {{template "form-section" (dict "Title" .Labels.Form.SectionResource)}}
         {{if .ResourceSearchURL}}
         <div class="form-row single">

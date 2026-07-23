@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
@@ -24,9 +24,11 @@ import (
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	sgppspb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_product_plan_staff"
 )
 
 const (
@@ -324,9 +326,17 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	// template_task_criteria.sequence_order.
 	transcripts := fetchTranscripts(ctx, d, jobByPhase, phaseOrder)
 
+	// Class-edge servicer per job (D5 derive-on-read): the effective card teacher
+	// is COALESCE(job_task.assigned_to override, class-edge teacher via sgpps ⋈
+	// membership ⋈ subject). Nil-safe → an empty map, so the teacher line stays on
+	// its prior assignee-only behavior. Built over ALL of this card's subscription
+	// jobs (academic + deportment + group) so both the subject line and the group
+	// lead can fall back to the class edge.
+	classStaff := fetchClassEdgeTeachers(ctx, d, sectionID, jobs)
+
 	// Display enrichment lookups (all optional/nil-safe → blank fields).
 	critNames := fetchCriterionNames(ctx, d, transcripts)
-	staffNames := fetchStaffNames(ctx, d, transcripts)
+	staffNames := fetchStaffNames(ctx, d, transcripts, classStaffIDs(classStaff))
 
 	// Rotation-pair merge (G1): a canonical subject (e.g. "Arts") whose
 	// conduct-category strands ("Arts: Visual Arts", "Arts: Music") identify the
@@ -442,7 +452,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		}
 		// block-layout enrichments (blank-safe when sources are unwired).
 		row.ItemTitle = merged.titleFor(display)
-		row.StaffLine = staffLine(d.Labels.Student, tr, staffNames)
+		row.StaffLine = staffLine(d.Labels.Student, tr, staffNames, classStaff[e.jobID])
 		row.Criteria, row.Sem1Total, row.Sem2Total = tr.criterionRows(critNames)
 		rows = append(rows, row)
 		academicRows = append(academicRows, academicTreeRow{jobID: e.jobID, row: row})
@@ -464,7 +474,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	// feeding the FROZEN v1/v2 "adviser" key (its historical first-job behavior).
 	groupLead := ""
 	if groupJob != nil {
-		groupLead = groupLeadName(transcripts[groupJob.GetId()], staffNames)
+		groupLead = groupLeadName(transcripts[groupJob.GetId()], staffNames, classStaff[groupJob.GetId()])
 	}
 	// Block-layout root alias (lead_staff_name_display, used on the cover/headers)
 	// projects ONLY when the group category has EXACTLY one job — matching the
@@ -1264,7 +1274,7 @@ func fetchCriterionNames(ctx context.Context, d *Deps, transcripts map[string]*t
 // transcripts to display names via the User-hydrating staff read
 // (GetStaffListPageData — the bare ListStaffs never populates Staff.User).
 // Nil-safe — a missing closure yields an empty map and staff lines stay blank.
-func fetchStaffNames(ctx context.Context, d *Deps, transcripts map[string]*transcript) map[string]string {
+func fetchStaffNames(ctx context.Context, d *Deps, transcripts map[string]*transcript, extraIDs []string) map[string]string {
 	out := map[string]string{}
 	if d.GetStaffListPageData == nil {
 		return out
@@ -1282,6 +1292,14 @@ func fetchStaffNames(ctx context.Context, d *Deps, transcripts map[string]*trans
 					ids = append(ids, sid)
 				}
 			}
+		}
+	}
+	// Also resolve the class-edge servicer ids (the COALESCE fallback), which never
+	// appear in a task-assignee tally when a subject has no per-task override.
+	for _, sid := range extraIDs {
+		if sid != "" && !seen[sid] {
+			seen[sid] = true
+			ids = append(ids, sid)
 		}
 	}
 	if len(ids) == 0 {
@@ -1350,16 +1368,26 @@ func topAssignee(tally map[string]int, avoid string) string {
 	return best
 }
 
-// staffLine composes the per-item staff line: one distinct assignee →
+// staffLine composes the per-item staff line: one distinct servicer →
 // "Teacher: X" (e.g.); two (the rotation pair, phase-1 first) →
 // "Teachers: X / Y". Wording comes from the lyngua-backed labels; blank when
 // nothing resolves.
-func staffLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[string]string) string {
-	if tr == nil {
-		return ""
+//
+// D5 COALESCE(job_task.assigned_to override, class-edge teacher): a per-task
+// assignee is the override and wins whenever ANY period carries one; with NO
+// assignee on either period the servicer is DERIVED from the class edge
+// (classFallbackID, resolved to a name in `names`). classFallbackID "" leaves the
+// line blank exactly as before.
+func staffLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[string]string, classFallbackID string) string {
+	var s1, s2 string
+	if tr != nil {
+		s1 = topAssignee(tr.teachers[1], "")
+		s2 = topAssignee(tr.teachers[2], s1)
 	}
-	s1 := topAssignee(tr.teachers[1], "")
-	s2 := topAssignee(tr.teachers[2], s1)
+	if s1 == "" && s2 == "" {
+		// No per-task override on either period → derive from the class edge.
+		s1 = strings.TrimSpace(classFallbackID)
+	}
 	n1, n2 := strings.TrimSpace(names[s1]), strings.TrimSpace(names[s2])
 	if n1 == n2 {
 		n2 = ""
@@ -1378,18 +1406,175 @@ func staffLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[st
 }
 
 // groupLeadName resolves the group-category job's modal assignee (across every
-// period) to a display name — the document's "Adviser" line.
-func groupLeadName(tr *transcript, names map[string]string) string {
-	if tr == nil {
-		return ""
-	}
+// period) to a display name — the document's "Adviser" line. D5 COALESCE: the
+// per-task assignee is the override and wins; with none, the lead is DERIVED from
+// the class edge (classFallbackID). classFallbackID "" keeps the prior blank.
+func groupLeadName(tr *transcript, names map[string]string, classFallbackID string) string {
 	merged := map[string]int{}
-	for _, tally := range tr.teachers {
-		for sid, n := range tally {
-			merged[sid] += n
+	if tr != nil {
+		for _, tally := range tr.teachers {
+			for sid, n := range tally {
+				merged[sid] += n
+			}
 		}
 	}
-	return strings.TrimSpace(names[topAssignee(merged, "")])
+	top := topAssignee(merged, "")
+	if top == "" {
+		top = strings.TrimSpace(classFallbackID)
+	}
+	return strings.TrimSpace(names[top])
+}
+
+// classStaffIDs returns the DISTINCT class-edge servicer ids in a jobID→staffID
+// map — the extra id set fetchStaffNames must resolve so the COALESCE fallback
+// renders a name (a class-edge servicer never appears in a task-assignee tally).
+func classStaffIDs(byJob map[string]string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(byJob))
+	for _, sid := range byJob {
+		if sid != "" && !seen[sid] {
+			seen[sid] = true
+			out = append(out, sid)
+		}
+	}
+	return out
+}
+
+// fetchClassEdgeTeachers derives the class-edge servicer for each of the card's
+// jobs, keyed by job id — the read half of the D5 derive-on-read model. The class
+// edge (subscription_group_product_plan_staff, "sgpps") is the UI-maintained "who
+// services this cohort's offering" source of truth. Resolution (GENERIC, no
+// vertical nouns):
+//
+//   - active sgpps for THIS section → product_plan_id → staff_id;
+//   - the referenced product_plans → product_plan_id → product_id;
+//   - a job matches its subject on job.output_product_id == product_plan.product_id
+//     (NO job_template hop — spawn copies output_product_id onto the job).
+//
+// Fully nil-safe: a missing closure (or an empty section / job set) yields an empty
+// map and the teacher line falls back to blank exactly as before. Only ACTIVE
+// edges for THIS section are honored (defense-in-depth against an adapter that
+// ignores the filter — a stale or foreign-cohort edge must never attribute a
+// teacher).
+func fetchClassEdgeTeachers(ctx context.Context, d *Deps, sectionID string, jobs []*jobpb.Job) map[string]string {
+	out := map[string]string{}
+	if d.ListSubscriptionGroupProductPlanStaffs == nil || d.ListProductPlans == nil || sectionID == "" || len(jobs) == 0 {
+		return out
+	}
+
+	// Active class edges for this section: product_plan_id → staff_id.
+	//
+	// CF-3: the sgpps unique is (group, product_plan, staff), so >1 active edge can
+	// service one product_plan. A plain last-write-wins map assignment would flip the
+	// derived teacher with pagination order — pick ONE deterministically instead
+	// (newest date_created, id breaks ties), the SAME rule the courses-list dd
+	// branch uses (ORDER BY date_created DESC, id DESC LIMIT 1) so both surfaces agree.
+	type edgePick struct {
+		created int64
+		id      string
+	}
+	planStaff := map[string]string{}
+	bestEdge := map[string]edgePick{} // product_plan_id → winning edge
+	planIDs := []string{}
+	seenPlan := map[string]bool{}
+	for page := int32(1); page <= maxPages; page++ {
+		resp, err := d.ListSubscriptionGroupProductPlanStaffs(ctx, &sgppspb.ListSubscriptionGroupProductPlanStaffsRequest{
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", sectionID)}},
+			Pagination: &commonpb.PaginationRequest{
+				Limit:  int32(pageLimit),
+				Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
+			},
+		})
+		if err != nil {
+			log.Printf("report card doc: list class edges: %v", err)
+			break
+		}
+		data := resp.GetData()
+		for _, e := range data {
+			if !e.GetActive() || e.GetSubscriptionGroupId() != sectionID {
+				continue
+			}
+			pp := strings.TrimSpace(e.GetProductPlanId())
+			sid := strings.TrimSpace(e.GetStaffId())
+			if pp == "" || sid == "" {
+				continue
+			}
+			// Deterministic pick: keep the edge with the greatest (date_created, id).
+			cand := edgePick{created: e.GetDateCreated(), id: e.GetId()}
+			if cur, ok := bestEdge[pp]; ok {
+				if cand.created < cur.created || (cand.created == cur.created && cand.id <= cur.id) {
+					continue // the existing pick wins (newer, or the id tie-break)
+				}
+			}
+			bestEdge[pp] = cand
+			planStaff[pp] = sid
+			if !seenPlan[pp] {
+				seenPlan[pp] = true
+				planIDs = append(planIDs, pp)
+			}
+		}
+		if len(data) < pageLimit {
+			break
+		}
+	}
+	if len(planIDs) == 0 {
+		return out
+	}
+
+	// The referenced product_plans → product_plan_id → product_id.
+	productByPlan := map[string]string{}
+	for start := 0; start < len(planIDs); start += pageLimit {
+		end := start + pageLimit
+		if end > len(planIDs) {
+			end = len(planIDs)
+		}
+		chunk := planIDs[start:end]
+		resp, err := d.ListProductPlans(ctx, &productplanpb.ListProductPlansRequest{
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("id", chunk)}},
+		})
+		if err != nil {
+			log.Printf("report card doc: list product plans: %v", err)
+			continue
+		}
+		want := map[string]bool{}
+		for _, id := range chunk {
+			want[id] = true
+		}
+		for _, pp := range resp.GetData() {
+			id := pp.GetId()
+			// Keep only rows we asked for (defense-in-depth vs an ignored id filter).
+			if id == "" || !want[id] {
+				continue
+			}
+			if prod := strings.TrimSpace(pp.GetProductId()); prod != "" {
+				productByPlan[id] = prod
+			}
+		}
+	}
+
+	// product_id → staff_id (the class servicer for that subject/offering).
+	staffByProduct := map[string]string{}
+	for planID, sid := range planStaff {
+		if prod := productByPlan[planID]; prod != "" {
+			staffByProduct[prod] = sid
+		}
+	}
+	if len(staffByProduct) == 0 {
+		return out
+	}
+
+	// Each job → its class servicer via job.output_product_id.
+	for _, j := range jobs {
+		jid := j.GetId()
+		prod := strings.TrimSpace(j.GetOutputProductId())
+		if jid == "" || prod == "" {
+			continue
+		}
+		if sid := staffByProduct[prod]; sid != "" {
+			out[jid] = sid
+		}
+	}
+	return out
 }
 
 // fetchSchedulePeriod resolves the section's price_schedule display period —

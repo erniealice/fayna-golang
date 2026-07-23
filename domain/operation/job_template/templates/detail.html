@@ -25,6 +25,9 @@
         {{if eq .ActiveTab "standards"}}
         {{template "jt-tab-standards" .}}
         {{end}}
+        {{if eq .ActiveTab "spawn-graph"}}
+        {{template "jt-tab-spawn-graph" .}}
+        {{end}}
         {{if eq .ActiveTab "attachments"}}
         {{template "attachment-tab" .}}
         {{end}}
@@ -122,19 +125,61 @@
 </div>
 {{end}}
 
-{{/* Standards Tab — pinning UI deferred to a follow-up phase.
-     TODO: Standards pinning UI (multi-select OutcomeCriteria ↔ JobTemplateTask)
-     lands in a follow-up phase. It requires a multi-select across criteria and tasks,
-     which is more complex than the basic Add/Edit/Delete CTAs shipped here.
-*/}}
+{{/* Standards Tab — pins OutcomeCriteria to JobTemplateTask via the
+     template_task_criteria module (see job_template/detail/standards.go). */}}
 {{define "jt-tab-standards"}}
 <div class="tab-scroll">
+    {{/* Add Standard CTA — shown when CriteriaRoutes.AddURL is wired and the
+         operator holds template_task_criteria:create (permission-reflection
+         gate applied server-side in loadStandardsTab). */}}
+    {{if .StandardsAddURL}}
+    <div class="tab-toolbar">
+        <a class="btn btn-primary btn-sm"
+           hx-get="{{.StandardsAddURL}}"
+           hx-target="#sheetContent"
+           hx-swap="innerHTML"
+           data-lf-action="sheet-open"
+           data-testid="add-standard-cta">
+            {{.Labels.Actions.AddStandard}}
+        </a>
+    </div>
+    {{end}}
     {{if .StandardsTable}}
         {{template "table-card" .StandardsTable}}
     {{else}}
         <div class="coming-soon-panel">
             <div class="coming-soon-title">No standards pinned</div>
             <p class="coming-soon-text">Outcome criteria pinned to tasks will appear here once tasks are defined for this template.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/* Spawn Graph Tab — parent/child job_template_relation edges for this
+     template (this template as PARENT). Child-list roster tab flavor. */}}
+{{define "jt-tab-spawn-graph"}}
+<div class="tab-scroll">
+    {{/* Add Relation CTA — shown when RelationRoutes.AddURL is wired and the
+         operator holds job_template_relation:create (permission-reflection
+         gate applied server-side in loadSpawnGraphTab). */}}
+    {{if .SpawnGraphAddURL}}
+    <div class="tab-toolbar">
+        <a class="btn btn-primary btn-sm"
+           hx-get="{{.SpawnGraphAddURL}}"
+           hx-target="#sheetContent"
+           hx-swap="innerHTML"
+           data-lf-action="sheet-open"
+           data-testid="add-relation-cta">
+            {{.Labels.Actions.AddRelation}}
+        </a>
+    </div>
+    {{end}}
+    {{if .SpawnGraphTable}}
+        {{template "table-card" .SpawnGraphTable}}
+    {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">No spawn relations</div>
+            <p class="coming-soon-text">Child templates spawned under this template will appear here once relations are added.</p>
         </div>
     {{end}}
 </div>

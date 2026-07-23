@@ -88,6 +88,14 @@ func wireJobTemplateDeps(deps *operation.JobTemplateModuleDeps, u *UseCases) {
 	// P6.template-children — wire when present; nil is safe (empty-state panels).
 	deps.ListTasksByPhase = u.Operation.JobTemplateTask.ListByPhase
 	deps.ListCriteriaByTask = u.Operation.TemplateTaskCriteria.ListByTemplateTask
+
+	// Category / Output Product drawer pickers (Q-TPL W1). Both optional —
+	// nil-safe (empty picker).
+	deps.ListJobCategories = u.Operation.JobCategory.ListJobCategories
+	deps.ListProducts = u.Product.ListProducts
+
+	// Spawn Graph tab roster (Q-TPL W4, NEW). Nil-safe (empty-state panel).
+	deps.ListRelationsByParent = u.Operation.JobTemplateRelation.ListByParent
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +177,24 @@ func wireScoringComponentDeps(deps *operation.ScoringComponentModuleDeps, u *Use
 	deps.ListScoringComponents = sc.ListScoringComponents
 }
 
+// ---------------------------------------------------------------------------
+// JobTemplateRelation module wiring (Q-TPL W4, NEW)
+// ---------------------------------------------------------------------------
+
+func wireJobTemplateRelationDeps(deps *operation.JobTemplateRelationModuleDeps, u *UseCases) {
+	jtr := &u.Operation.JobTemplateRelation
+	deps.CreateJobTemplateRelation = jtr.CreateJobTemplateRelation
+	deps.ReadJobTemplateRelation = jtr.ReadJobTemplateRelation
+	deps.UpdateJobTemplateRelation = jtr.UpdateJobTemplateRelation
+	deps.DeleteJobTemplateRelation = jtr.DeleteJobTemplateRelation
+	deps.ListJobTemplateRelations = jtr.ListJobTemplateRelations
+	deps.ListByParent = jtr.ListByParent
+
+	// Parent/Child Template drawer pickers. Optional — nil-safe (empty picker).
+	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
+	deps.ReadJobTemplate = u.Operation.JobTemplate.ReadJobTemplate
+}
+
 func wireTemplateTaskCriteriaDeps(deps *operation.TemplateTaskCriteriaModuleDeps, u *UseCases) {
 	ttc := &u.Operation.TemplateTaskCriteria
 	deps.CreateTemplateTaskCriteria = ttc.CreateTemplateTaskCriteria
@@ -176,6 +202,12 @@ func wireTemplateTaskCriteriaDeps(deps *operation.TemplateTaskCriteriaModuleDeps
 	deps.UpdateTemplateTaskCriteria = ttc.UpdateTemplateTaskCriteria
 	deps.DeleteTemplateTaskCriteria = ttc.DeleteTemplateTaskCriteria
 	deps.ListTemplateTaskCriterias = ttc.ListTemplateTaskCriterias
+
+	// Outcome Criteria + Job Template Task drawer pickers (Q-TPL W3). Both
+	// optional — nil-safe (falls back to raw-id text inputs).
+	deps.ListOutcomeCriterias = u.Operation.OutcomeCriteria.ListOutcomeCriterias
+	deps.ListPhasesByJobTemplate = u.Operation.JobTemplatePhase.ListByJobTemplate
+	deps.ListTasksByPhase = u.Operation.JobTemplateTask.ListByPhase
 }
 
 func wireScoringComponentCriteriaDeps(deps *operation.ScoringComponentCriteriaModuleDeps, u *UseCases) {
@@ -465,6 +497,9 @@ func wireJobTemplatePhaseDeps(deps *operation.JobTemplatePhaseModuleDeps, u *Use
 	deps.ReadJobTemplatePhase = jtp.ReadJobTemplatePhase
 	deps.UpdateJobTemplatePhase = jtp.UpdateJobTemplatePhase
 	deps.DeleteJobTemplatePhase = jtp.DeleteJobTemplatePhase
+
+	// Grading/Scoring Scheme drawer picker (Q-TPL W2). Optional — nil-safe.
+	deps.ListScoringSchemes = u.Operation.ScoringScheme.ListScoringSchemes
 }
 
 // ---------------------------------------------------------------------------

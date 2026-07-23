@@ -35,6 +35,62 @@ Data: .Name, .Description, .Active, .ID, .FormAction, .IsEdit, .CommonLabels, .L
             )}}
         </div>
 
+        {{/* --- Category (optional) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "select"
+                "Name"        "job_category_id"
+                "Label"       .Labels.Form.Category
+                "Value"       .CategoryID
+                "Placeholder" .Labels.Form.CategoryPlaceholder
+                "Info"        .Labels.Form.CategoryInfo
+                "Options"     .CategoryOptions
+                "TestId"      "job-template-category"
+            )}}
+        </div>
+
+        {{/* --- Output Product (optional; select fallback — no product-search
+             endpoint is reachable from fayna's wiring today) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "select"
+                "Name"        "output_product_id"
+                "Label"       .Labels.Form.OutputProduct
+                "Value"       .OutputProductID
+                "Placeholder" .Labels.Form.OutputProductPlaceholder
+                "Info"        .Labels.Form.OutputProductInfo
+                "Options"     .OutputProductOptions
+                "TestId"      "job-template-output-product"
+            )}}
+        </div>
+
+        {{/* --- Initial Job Status (optional; NULL falls back to Planned at spawn time) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "select"
+                "Name"        "initial_status"
+                "Label"       .Labels.Form.InitialStatus
+                "Value"       .InitialStatus
+                "Placeholder" .Labels.Form.InitialStatusPlaceholder
+                "Info"        .Labels.Form.InitialStatusInfo
+                "Options"     .InitialStatusOptions
+                "TestId"      "job-template-initial-status"
+            )}}
+        </div>
+
+        {{/* --- Version Status (Draft/Published; defaults to Draft on create) --- */}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type"        "select"
+                "Name"        "version_status"
+                "Label"       .Labels.Form.VersionStatus
+                "Value"       .VersionStatus
+                "Info"        .Labels.Form.VersionStatusInfo
+                "Options"     .VersionStatusOptions
+                "TestId"      "job-template-version-status"
+            )}}
+        </div>
+
         {{/* --- Active toggle (Edit only) --- */}}
         {{if .IsEdit}}
         <div class="form-row single">

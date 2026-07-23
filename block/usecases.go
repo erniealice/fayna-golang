@@ -54,6 +54,7 @@ import (
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	sheetbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_document_template"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	jobtemplaterelationpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_relation"
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phaseoutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
@@ -65,6 +66,7 @@ import (
 	scoringschemepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_scheme"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	productpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
@@ -168,8 +170,14 @@ type OperationUseCases struct {
 	JobListTabSupport JobListTabSupportUseCases
 	// TemplateTaskCriteria — JobTemplate detail criteria-by-task list.
 	TemplateTaskCriteria TemplateTaskCriteriaUseCases
-	JobOutcomeSummary    JobOutcomeSummaryUseCases
-	PhaseOutcomeSummary  PhaseOutcomeSummaryUseCases
+	// JobTemplateRelation — the spawn-graph parent/child edges (Q-TPL W4,
+	// NEW). OPTIONAL / nil-able (NOT in RequireFor): espyna currently ships
+	// only ListByParent (see job_template_relation/deps.go); the view module
+	// degrades gracefully (empty tables, "not available" on write) until the
+	// remaining CRUD use cases land.
+	JobTemplateRelation JobTemplateRelationUseCases
+	JobOutcomeSummary   JobOutcomeSummaryUseCases
+	PhaseOutcomeSummary PhaseOutcomeSummaryUseCases
 
 	// OPTIONAL — NOT in RequireFor (leave nil-able). These sibling charge-detail
 	// use cases are not yet in espyna's OperationUseCases (TODO P5); they
@@ -325,6 +333,24 @@ type TemplateTaskCriteriaUseCases struct {
 	DeleteTemplateTaskCriteria func(context.Context, *templatetaskcriteriapb.DeleteTemplateTaskCriteriaRequest) (*templatetaskcriteriapb.DeleteTemplateTaskCriteriaResponse, error)
 	ListTemplateTaskCriterias  func(context.Context, *templatetaskcriteriapb.ListTemplateTaskCriteriasRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasResponse, error)
 	ListByTemplateTask         func(context.Context, *templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskResponse, error)
+}
+
+// JobTemplateRelationUseCases — JobTemplateRelation CRUD + list + the two
+// directional list extras (ListByParent backs the job_template detail Spawn
+// Graph tab; ListByChild is unused by the view today but wired for parity
+// with the proto service). Closures are typed against the full
+// JobTemplateRelationDomainService contract; see block/usecases.go's
+// JobTemplateRelation field doc for espyna's current rollout state (only
+// ListByParent ships as of this build — Create/Read/Update/Delete/List/
+// ListByChild are landing in a parallel wave).
+type JobTemplateRelationUseCases struct {
+	CreateJobTemplateRelation func(context.Context, *jobtemplaterelationpb.CreateJobTemplateRelationRequest) (*jobtemplaterelationpb.CreateJobTemplateRelationResponse, error)
+	ReadJobTemplateRelation   func(context.Context, *jobtemplaterelationpb.ReadJobTemplateRelationRequest) (*jobtemplaterelationpb.ReadJobTemplateRelationResponse, error)
+	UpdateJobTemplateRelation func(context.Context, *jobtemplaterelationpb.UpdateJobTemplateRelationRequest) (*jobtemplaterelationpb.UpdateJobTemplateRelationResponse, error)
+	DeleteJobTemplateRelation func(context.Context, *jobtemplaterelationpb.DeleteJobTemplateRelationRequest) (*jobtemplaterelationpb.DeleteJobTemplateRelationResponse, error)
+	ListJobTemplateRelations  func(context.Context, *jobtemplaterelationpb.ListJobTemplateRelationsRequest) (*jobtemplaterelationpb.ListJobTemplateRelationsResponse, error)
+	ListByParent              func(context.Context, *jobtemplaterelationpb.ListJobTemplateRelationsByParentRequest) (*jobtemplaterelationpb.ListJobTemplateRelationsByParentResponse, error)
+	ListByChild               func(context.Context, *jobtemplaterelationpb.ListJobTemplateRelationsByChildRequest) (*jobtemplaterelationpb.ListJobTemplateRelationsByChildResponse, error)
 }
 
 // OutcomeCriteriaUseCases — OutcomeCriteria CRUD + list.
@@ -654,6 +680,12 @@ type SubscriptionGroupMemberUseCases struct {
 // ProductUseCases — cross-domain product reads.
 type ProductUseCases struct {
 	ProductPlan ProductPlanUseCases
+	// ListProducts backs the job_template drawer's Output Product picker
+	// (Q-TPL W1). OPTIONAL / nil-able — no product-search endpoint is
+	// reachable from fayna's wiring today, so the picker is a plain select
+	// (see job_template/form/options.go BuildOutputProductOptions); a nil
+	// closure renders the picker with no options.
+	ListProducts func(context.Context, *productpb.ListProductsRequest) (*productpb.ListProductsResponse, error)
 }
 
 // ProductPlanUseCases — bare list (ground truth: 43 rows, one call is

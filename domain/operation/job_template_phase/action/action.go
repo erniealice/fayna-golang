@@ -7,7 +7,8 @@ import (
 	"context"
 
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
-	job_template_phase "github.com/erniealice/fayna-golang/domain/operation/job_template_phase"
+	scoringschemepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_scheme"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template_phase"
 )
 
 // Deps holds dependencies shared across all job_template_phase action handlers.
@@ -20,6 +21,10 @@ type Deps struct {
 	ReadJobTemplatePhase   func(ctx context.Context, req *jobtemplatephasepb.ReadJobTemplatePhaseRequest) (*jobtemplatephasepb.ReadJobTemplatePhaseResponse, error)
 	UpdateJobTemplatePhase func(ctx context.Context, req *jobtemplatephasepb.UpdateJobTemplatePhaseRequest) (*jobtemplatephasepb.UpdateJobTemplatePhaseResponse, error)
 	DeleteJobTemplatePhase func(ctx context.Context, req *jobtemplatephasepb.DeleteJobTemplatePhaseRequest) (*jobtemplatephasepb.DeleteJobTemplatePhaseResponse, error)
+
+	// ListScoringSchemes populates the Grading/Scoring Scheme picker (optional
+	// FK). Nil-safe: the picker renders with no options.
+	ListScoringSchemes func(ctx context.Context, req *scoringschemepb.ListScoringSchemesRequest) (*scoringschemepb.ListScoringSchemesResponse, error)
 
 	// ResourceSearchURL for the resource picker in the Add/Edit drawer.
 	ResourceSearchURL string

@@ -8,15 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
-	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
+	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
@@ -143,8 +143,14 @@ func TestDownload_Forbidden_BothFormats(t *testing.T) {
 func TestDownload_IDOR_ForeignSection_404_BothFormats(t *testing.T) {
 	for _, f := range []string{"docx", "pdf"} {
 		d := fullCardDeps(
-			func([]byte, map[string]any) ([]byte, error) { t.Fatalf("generator must not run for a foreign section"); return nil, nil },
-			func([]byte, map[string]any) ([]byte, error) { t.Fatalf("generator must not run for a foreign section"); return nil, nil },
+			func([]byte, map[string]any) ([]byte, error) {
+				t.Fatalf("generator must not run for a foreign section")
+				return nil, nil
+			},
+			func([]byte, map[string]any) ([]byte, error) {
+				t.Fatalf("generator must not run for a foreign section")
+				return nil, nil
+			},
 		)
 		d.ListSubscriptionGroups = groupsFn() // foreign / missing → no rows
 		h := NewDownloadHandler(d)
@@ -159,7 +165,10 @@ func TestDownload_IDOR_ForeignSection_404_BothFormats(t *testing.T) {
 func TestDownload_DOCX_Unchanged(t *testing.T) {
 	h := NewDownloadHandler(fullCardDeps(
 		func([]byte, map[string]any) ([]byte, error) { return stubDocBytes, nil },
-		func([]byte, map[string]any) ([]byte, error) { t.Fatalf("PDF closure must not run for docx"); return nil, nil },
+		func([]byte, map[string]any) ([]byte, error) {
+			t.Fatalf("PDF closure must not run for docx")
+			return nil, nil
+		},
 	))
 	// Omitted format defaults to docx.
 	w := httptest.NewRecorder()
@@ -181,7 +190,10 @@ func TestDownload_DOCX_Unchanged(t *testing.T) {
 
 func TestDownload_PDF_ContentTypeAndFilename(t *testing.T) {
 	h := NewDownloadHandler(fullCardDeps(
-		func([]byte, map[string]any) ([]byte, error) { t.Fatalf("DOCX closure must not run for pdf"); return nil, nil },
+		func([]byte, map[string]any) ([]byte, error) {
+			t.Fatalf("DOCX closure must not run for pdf")
+			return nil, nil
+		},
 		func([]byte, map[string]any) ([]byte, error) { return stubPDFBytes, nil },
 	))
 	w := httptest.NewRecorder()
@@ -242,8 +254,8 @@ func TestDownload_PDF_LibreOfficeUnavailable_503(t *testing.T) {
 // here. This is what proves the preferred interface path works independently.
 type stubLibreOfficeUnavailableErr struct{}
 
-func (stubLibreOfficeUnavailableErr) Error() string                 { return "soffice binary absent on host" }
-func (stubLibreOfficeUnavailableErr) LibreOfficeUnavailable() bool  { return true }
+func (stubLibreOfficeUnavailableErr) Error() string                { return "soffice binary absent on host" }
+func (stubLibreOfficeUnavailableErr) LibreOfficeUnavailable() bool { return true }
 
 func TestDownload_PDF_LibreOfficeUnavailable_InterfacePath_503(t *testing.T) {
 	// PREFERRED PATH: a typed error implementing LibreOfficeUnavailable() bool, whose

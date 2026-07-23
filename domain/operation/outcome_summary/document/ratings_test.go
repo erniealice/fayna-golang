@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 )
@@ -173,19 +173,31 @@ func TestStaffLine(t *testing.T) {
 		1: {"sP": 1},
 		2: {"sP": 1, "sC": 1}, // tie → prefer the non-period-1 assignee
 	}}
-	if got := staffLine(labels, pair, names); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
+	// classFallbackID "" — a per-task assignee is present, so the class-edge
+	// fallback is never consulted (the assignee override wins).
+	if got := staffLine(labels, pair, names, ""); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
 		t.Fatalf("pair line = %q", got)
 	}
 
 	single := &transcript{teachers: map[int32]map[string]int{
 		1: {"sP": 1}, 2: {"sP": 1},
 	}}
-	if got := staffLine(labels, single, names); got != "Teacher: Alexis Purisima" {
+	if got := staffLine(labels, single, names, ""); got != "Teacher: Alexis Purisima" {
 		t.Fatalf("single line = %q", got)
 	}
 
-	if got := staffLine(labels, nil, names); got != "" {
+	if got := staffLine(labels, nil, names, ""); got != "" {
 		t.Fatalf("nil transcript line = %q", got)
+	}
+
+	// D5 COALESCE: with NO per-task assignee, the servicer is DERIVED from the
+	// class edge (classFallbackID resolved via names).
+	if got := staffLine(labels, nil, names, "sC"); got != "Teacher: Darianne Cabornay" {
+		t.Fatalf("class-edge fallback line = %q", got)
+	}
+	// The per-task assignee override still wins over any class-edge fallback.
+	if got := staffLine(labels, single, names, "sC"); got != "Teacher: Alexis Purisima" {
+		t.Fatalf("override-wins line = %q", got)
 	}
 }
 

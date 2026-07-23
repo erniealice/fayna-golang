@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
-	activity_expense "github.com/erniealice/fayna-golang/domain/operation/activity_expense"
+	"github.com/erniealice/fayna-golang/domain/operation/activity_expense"
 	activityexpenseform "github.com/erniealice/fayna-golang/domain/operation/activity_expense/form"
 
 	activityexpensepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_expense"

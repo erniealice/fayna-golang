@@ -51,15 +51,15 @@ func recordToMap(c *ttcpb.TemplateTaskCriteria) map[string]any {
 		}
 	}
 	return map[string]any{
-		"id":                    c.GetId(),
-		"job_template_task_id":  c.GetJobTemplateTaskId(),
-		"outcome_criteria_id":   c.GetOutcomeCriteriaId(),
-		"sequence_order":        c.GetSequenceOrder(),
-		"required_override":     requiredOverride,
-		"active":                c.GetActive(),
-		"status":                activeStatus,
-		"status_variant":        statusVariant,
-		"date_created_string":   c.GetDateCreatedString(),
+		"id":                   c.GetId(),
+		"job_template_task_id": c.GetJobTemplateTaskId(),
+		"outcome_criteria_id":  c.GetOutcomeCriteriaId(),
+		"sequence_order":       c.GetSequenceOrder(),
+		"required_override":    requiredOverride,
+		"active":               c.GetActive(),
+		"status":               activeStatus,
+		"status_variant":       statusVariant,
+		"date_created_string":  c.GetDateCreatedString(),
 	}
 }
 

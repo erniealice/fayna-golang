@@ -3,7 +3,7 @@ package detail
 import (
 	"context"
 
-	job_outcome_line "github.com/erniealice/fayna-golang/domain/operation/job_outcome_line"
+	"github.com/erniealice/fayna-golang/domain/operation/job_outcome_line"
 
 	"github.com/erniealice/hybra-golang/views/auditlog"
 	pyeza "github.com/erniealice/pyeza-golang"

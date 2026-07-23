@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	activity_labor "github.com/erniealice/fayna-golang/domain/operation/activity_labor"
+	"github.com/erniealice/fayna-golang/domain/operation/activity_labor"
 	activitylaborform "github.com/erniealice/fayna-golang/domain/operation/activity_labor/form"
 
 	activitylaborpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_labor"

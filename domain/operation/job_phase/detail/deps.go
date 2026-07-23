@@ -3,7 +3,7 @@ package detail
 import (
 	"context"
 
-	job_phase "github.com/erniealice/fayna-golang/domain/operation/job_phase"
+	"github.com/erniealice/fayna-golang/domain/operation/job_phase"
 
 	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/hybra-golang/views/auditlog"

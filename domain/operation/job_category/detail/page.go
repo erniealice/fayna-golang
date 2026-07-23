@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	job_category "github.com/erniealice/fayna-golang/domain/operation/job_category"
+	"github.com/erniealice/fayna-golang/domain/operation/job_category"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"

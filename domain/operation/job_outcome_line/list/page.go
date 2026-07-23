@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	job_outcome_line "github.com/erniealice/fayna-golang/domain/operation/job_outcome_line"
+	"github.com/erniealice/fayna-golang/domain/operation/job_outcome_line"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"

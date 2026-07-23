@@ -6,7 +6,7 @@ import (
 	"log"
 
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
-	job_activity "github.com/erniealice/fayna-golang/domain/operation/job_activity"
+	"github.com/erniealice/fayna-golang/domain/operation/job_activity"
 
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"

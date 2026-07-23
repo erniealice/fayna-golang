@@ -15,8 +15,8 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
-	job_activity "github.com/erniealice/fayna-golang/domain/operation/job_activity"
-	job_template "github.com/erniealice/fayna-golang/domain/operation/job_template"
+	"github.com/erniealice/fayna-golang/domain/operation/job_activity"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template"
 
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"

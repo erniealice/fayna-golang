@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	job_activity "github.com/erniealice/fayna-golang/domain/operation/job_activity"
+	"github.com/erniealice/fayna-golang/domain/operation/job_activity"
 
 	jobactivitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_activity"
 )

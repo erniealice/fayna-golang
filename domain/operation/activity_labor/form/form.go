@@ -2,7 +2,7 @@
 // No Deps, no repo imports, no context.Context parameters (drawer-form-subpackage-convention.md).
 package form
 
-import activity_labor "github.com/erniealice/fayna-golang/domain/operation/activity_labor"
+import "github.com/erniealice/fayna-golang/domain/operation/activity_labor"
 
 // Data is the template-facing data shape for the activity labor drawer form.
 // Used by both Add (FormAction = AddURL, IsEdit = false) and

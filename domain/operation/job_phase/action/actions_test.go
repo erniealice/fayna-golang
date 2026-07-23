@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	job_phase "github.com/erniealice/fayna-golang/domain/operation/job_phase"
+	"github.com/erniealice/fayna-golang/domain/operation/job_phase"
 
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"

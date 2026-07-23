@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	"github.com/erniealice/pyeza-golang/types"
 
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"

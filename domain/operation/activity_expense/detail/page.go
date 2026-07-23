@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 
-	activity_expense "github.com/erniealice/fayna-golang/domain/operation/activity_expense"
+	"github.com/erniealice/fayna-golang/domain/operation/activity_expense"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )

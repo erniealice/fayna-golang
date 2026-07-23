@@ -2,7 +2,7 @@
 // No Deps, no repo imports, no context.Context parameters (drawer-form-subpackage-convention.md).
 package form
 
-import activity_expense "github.com/erniealice/fayna-golang/domain/operation/activity_expense"
+import "github.com/erniealice/fayna-golang/domain/operation/activity_expense"
 
 // Data is the template-facing data shape for the activity expense drawer form.
 // Used by both Add (FormAction = AddURL, IsEdit = false) and

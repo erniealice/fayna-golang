@@ -3,7 +3,7 @@ package detail
 import (
 	"context"
 
-	outcome_criteria "github.com/erniealice/fayna-golang/domain/operation/outcome_criteria"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_criteria"
 
 	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/hybra-golang/views/auditlog"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	scoring_component "github.com/erniealice/fayna-golang/domain/operation/scoring_component"
+	"github.com/erniealice/fayna-golang/domain/operation/scoring_component"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"

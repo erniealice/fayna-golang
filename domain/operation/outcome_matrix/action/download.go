@@ -18,7 +18,7 @@ import (
 	"sort"
 	"strings"
 
-	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 
 	"github.com/erniealice/pyeza-golang/route"
 	pyezatypes "github.com/erniealice/pyeza-golang/types"

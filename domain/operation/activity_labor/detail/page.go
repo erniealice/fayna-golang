@@ -9,7 +9,7 @@ import (
 	"log"
 	"time"
 
-	activity_labor "github.com/erniealice/fayna-golang/domain/operation/activity_labor"
+	"github.com/erniealice/fayna-golang/domain/operation/activity_labor"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"

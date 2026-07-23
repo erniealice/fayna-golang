@@ -3,10 +3,10 @@ package detail
 import (
 	"context"
 
-	activity_expense "github.com/erniealice/fayna-golang/domain/operation/activity_expense"
-	activity_labor "github.com/erniealice/fayna-golang/domain/operation/activity_labor"
-	activity_material "github.com/erniealice/fayna-golang/domain/operation/activity_material"
-	job_activity "github.com/erniealice/fayna-golang/domain/operation/job_activity"
+	"github.com/erniealice/fayna-golang/domain/operation/activity_expense"
+	"github.com/erniealice/fayna-golang/domain/operation/activity_labor"
+	"github.com/erniealice/fayna-golang/domain/operation/activity_material"
+	"github.com/erniealice/fayna-golang/domain/operation/job_activity"
 
 	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/hybra-golang/views/auditlog"

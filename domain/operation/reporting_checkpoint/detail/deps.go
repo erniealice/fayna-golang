@@ -3,7 +3,7 @@ package detail
 import (
 	"context"
 
-	reporting_checkpoint "github.com/erniealice/fayna-golang/domain/operation/reporting_checkpoint"
+	"github.com/erniealice/fayna-golang/domain/operation/reporting_checkpoint"
 
 	"github.com/erniealice/hybra-golang/views/auditlog"
 	pyeza "github.com/erniealice/pyeza-golang"

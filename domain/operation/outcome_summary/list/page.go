@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	"github.com/erniealice/espyna-golang/consumer"
 	entityid "github.com/erniealice/espyna-golang/registry/entityid"

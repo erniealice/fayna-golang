@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	evaluation_cycle "github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
+	"github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"

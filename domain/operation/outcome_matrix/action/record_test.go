@@ -15,7 +15,7 @@ import (
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 
-	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 )
 
 // ── test fixtures ───────────────────────────────────────────────────────────
@@ -64,16 +64,16 @@ func numericMatrix(recorded bool) *matrixpb.GetOutcomeMatrixResponse {
 }
 
 type recorder struct {
-	createCalls int
-	updateCalls int
-	order       []string // recompute call order ("phase:<id>", "job:<id>")
-	phaseErr    error
+	createCalls   int
+	updateCalls   int
+	order         []string // recompute call order ("phase:<id>", "job:<id>")
+	phaseErr      error
 	jobRecomputed bool
-	jobErr      error
-	phaseNil    bool
-	jobNil      bool
-	readOwner   string             // RecordedBy the ReadTaskOutcome fixture returns (default staffID)
-	readCT      enums.CriteriaType // CriteriaType the stored record reports (default NUMERIC_SCORE)
+	jobErr        error
+	phaseNil      bool
+	jobNil        bool
+	readOwner     string             // RecordedBy the ReadTaskOutcome fixture returns (default staffID)
+	readCT        enums.CriteriaType // CriteriaType the stored record reports (default NUMERIC_SCORE)
 
 	// recompute-eligibility fixture (wired only when wireElig): eligible + the
 	// scheme's in-scope criterion set. Unwired → the action falls back to

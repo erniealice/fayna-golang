@@ -1,6 +1,6 @@
 package form
 
-import job_activity "github.com/erniealice/fayna-golang/domain/operation/job_activity"
+import "github.com/erniealice/fayna-golang/domain/operation/job_activity"
 
 // Data is the template-facing data shape for the job activity drawer form.
 // Used by both Create (FormAction = AddURL, IsEdit = false) and

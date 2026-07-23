@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"

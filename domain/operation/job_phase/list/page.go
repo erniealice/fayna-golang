@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 
-	job_phase "github.com/erniealice/fayna-golang/domain/operation/job_phase"
+	"github.com/erniealice/fayna-golang/domain/operation/job_phase"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	evaluation_template "github.com/erniealice/fayna-golang/domain/operation/evaluation_template"
+	"github.com/erniealice/fayna-golang/domain/operation/evaluation_template"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
@@ -13,8 +13,8 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	evalpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation"
-	itempb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template_item"
 	templatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template"
+	itempb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template_item"
 )
 
 // ListViewDeps holds view dependencies for the evaluation template list.
@@ -252,10 +252,10 @@ func buildTableRows(
 				{Type: "text", Value: t.GetDateCreatedString()},
 			},
 			DataAttrs: map[string]string{
-				"name":          name,
-				"status":        st,
-				"version":       version,
-				"deprecatable":  boolAttr(st == "active"),
+				"name":         name,
+				"status":       st,
+				"version":      version,
+				"deprecatable": boolAttr(st == "active"),
 			},
 			Actions: actions,
 		})

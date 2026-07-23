@@ -17,7 +17,7 @@ import (
 	"sort"
 	"strings"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/pyeza-golang/types"
 
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"

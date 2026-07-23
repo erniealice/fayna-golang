@@ -7,7 +7,7 @@ import (
 	"math"
 
 	espynahttp "github.com/erniealice/espyna-golang/contrib/http"
-	job_template "github.com/erniealice/fayna-golang/domain/operation/job_template"
+	"github.com/erniealice/fayna-golang/domain/operation/job_template"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"

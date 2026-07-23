@@ -6,18 +6,18 @@ import (
 	"log"
 	"sort"
 
-	evaluation_template "github.com/erniealice/fayna-golang/domain/operation/evaluation_template"
+	"github.com/erniealice/fayna-golang/domain/operation/evaluation_template"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
-	evalpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
+	evalpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation"
+	templatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template"
 	itempb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template_item"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
-	templatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_template"
 )
 
 // DetailViewDeps holds view dependencies for the evaluation template detail.

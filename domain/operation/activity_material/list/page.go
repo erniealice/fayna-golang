@@ -8,7 +8,7 @@ import (
 	"context"
 	"log"
 
-	activity_material "github.com/erniealice/fayna-golang/domain/operation/activity_material"
+	"github.com/erniealice/fayna-golang/domain/operation/activity_material"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"

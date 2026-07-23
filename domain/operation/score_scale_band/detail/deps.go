@@ -3,7 +3,7 @@ package detail
 import (
 	"context"
 
-	score_scale_band "github.com/erniealice/fayna-golang/domain/operation/score_scale_band"
+	"github.com/erniealice/fayna-golang/domain/operation/score_scale_band"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"

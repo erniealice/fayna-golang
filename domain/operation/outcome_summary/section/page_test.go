@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	outcome_summary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/pyeza-golang/types"
 
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"

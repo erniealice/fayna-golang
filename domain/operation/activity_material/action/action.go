@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	activity_material "github.com/erniealice/fayna-golang/domain/operation/activity_material"
+	"github.com/erniealice/fayna-golang/domain/operation/activity_material"
 	activitymaterialform "github.com/erniealice/fayna-golang/domain/operation/activity_material/form"
 
 	activitymaterialpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/activity_material"

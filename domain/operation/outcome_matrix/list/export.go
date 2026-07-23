@@ -20,7 +20,7 @@ import (
 	"unicode/utf8"
 
 	deliverygroup "github.com/erniealice/fayna-golang/domain/operation/deliverygroup"
-	outcome_matrix "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	sheetdoc "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix/document"
 	"github.com/erniealice/pyeza-golang/view"
 

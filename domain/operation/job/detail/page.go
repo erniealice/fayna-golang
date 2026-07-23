@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
-	job_activity "github.com/erniealice/fayna-golang/domain/operation/job_activity"
+	"github.com/erniealice/fayna-golang/domain/operation/job_activity"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 
 	"github.com/erniealice/hybra-golang/views/attachment"

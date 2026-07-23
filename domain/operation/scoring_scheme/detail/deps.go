@@ -3,7 +3,7 @@ package detail
 import (
 	"context"
 
-	scoring_scheme "github.com/erniealice/fayna-golang/domain/operation/scoring_scheme"
+	"github.com/erniealice/fayna-golang/domain/operation/scoring_scheme"
 
 	"github.com/erniealice/hybra-golang/views/auditlog"
 	pyeza "github.com/erniealice/pyeza-golang"

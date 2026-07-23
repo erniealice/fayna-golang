@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	reporting_checkpoint "github.com/erniealice/fayna-golang/domain/operation/reporting_checkpoint"
+	"github.com/erniealice/fayna-golang/domain/operation/reporting_checkpoint"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"

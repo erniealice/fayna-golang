@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"log"
 
-	evaluation_cycle "github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
+	"github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	evalpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation"
 	cyclepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_cycle"
 	memberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation_cycle_member"
-	evalpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/evaluation"
 )
 
 // DetailViewDeps holds dependencies for the evaluation cycle detail view.
@@ -45,16 +45,16 @@ type PageData struct {
 	Banner *BannerData
 
 	// Members tab (count = Y, TEST-2).
-	Members      []map[string]any
-	MemberCount  int
+	Members     []map[string]any
+	MemberCount int
 }
 
 // BannerData feeds cycle-progress-banner.html. Computed (never materialized).
 type BannerData struct {
 	CycleID      string
 	CycleName    string
-	Completed    int    // X
-	Total        int    // Y (frozen member denominator)
+	Completed    int // X
+	Total        int // Y (frozen member denominator)
 	SignOffDue   string
 	CloseDate    string
 	ProgressText string // "X of Y complete"

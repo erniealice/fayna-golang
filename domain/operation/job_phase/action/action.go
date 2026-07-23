@@ -7,7 +7,7 @@ import (
 	"context"
 
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
-	job_phase "github.com/erniealice/fayna-golang/domain/operation/job_phase"
+	"github.com/erniealice/fayna-golang/domain/operation/job_phase"
 )
 
 // Deps holds dependencies shared across all job_phase action handlers.

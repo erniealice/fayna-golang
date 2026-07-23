@@ -4,7 +4,7 @@ import (
 	"context"
 
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
-	job_activity "github.com/erniealice/fayna-golang/domain/operation/job_activity"
+	"github.com/erniealice/fayna-golang/domain/operation/job_activity"
 
 	"github.com/erniealice/hybra-golang/views/attachment"
 	"github.com/erniealice/hybra-golang/views/auditlog"

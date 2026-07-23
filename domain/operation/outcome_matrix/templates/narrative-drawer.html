@@ -1,0 +1,61 @@
+{{/* Per-cell narrative drawer (N-1 LOCKED) — loaded into #sheetContent via HTMX.
+
+     Context header: the entity + column ("{name} — {column}") ride the labelled
+     dialog title (#sheetTitle, set client-side from the trigger's
+     data-lf-sheet-title; the sheet-form shell marks the dialog
+     aria-labelledby="sheetTitle"). So the student/criterion context is the
+     drawer's accessible name AND its visible heading — no name is placed in the
+     GET URL (keeps PII out of request logs). The icon's aria-label additionally
+     restates name + column + state for assistive tech.
+
+     Two server-resolved variants (the client NEVER decides editability):
+       - .Editable → an hx-post form: textarea + Save + Clear. Signed by
+         {{actionForm}} over the exact POST path + workspace id (the CSRF +
+         action-workspace guards apply because it POSTs under /action/*).
+       - read-only → the note rendered as text (or an empty-state), a read-only
+         hint, and a Close button. No form, no textarea, no Save.
+
+     Data: .FormAction .OutcomeID .Editable .Note .HasNote .Labels (NarrativeLabels)
+           .CommonLabels .WorkspaceID (injected). Reads/writes determination_note
+           only — text_value is never surfaced here. */}}
+{{define "outcome-matrix-narrative-drawer"}}
+{{if .Editable}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="om-note-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    <input type="hidden" name="outcome_id" value="{{.OutcomeID}}">
+    <div class="sheet-body">
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="om-narrative-note">{{.Labels.FieldLabel}}</label>
+                <textarea id="om-narrative-note" name="note" class="form-textarea" rows="6"
+                          placeholder="{{.Labels.Placeholder}}"
+                          data-testid="om-note-textarea">{{.Note}}</textarea>
+            </div>
+        </div>
+    </div>
+    <div class="sheet-footer">
+        {{/* Clear is a real submit carrying its own signal — the server forces an
+             empty note when clear=1, so clearing needs no client script. */}}
+        <button type="submit" name="clear" value="1" class="btn btn-secondary"
+                data-testid="om-note-clear">{{.Labels.ClearButton}}</button>
+        <button type="submit" class="btn btn-primary"
+                data-testid="om-note-save">{{.Labels.SaveButton}}</button>
+    </div>
+</form>
+{{else}}
+<div data-testid="om-note-readonly">
+    <div class="sheet-body">
+        <p class="form-hint" data-testid="om-note-readonly-hint">{{.Labels.ReadOnlyHint}}</p>
+        {{if .HasNote}}
+        <p class="om-narrative-text" data-testid="om-note-text">{{.Note}}</p>
+        {{else}}
+        <p class="om-narrative-empty" data-testid="om-note-empty">{{.Labels.EmptyText}}</p>
+        {{end}}
+    </div>
+    <div class="sheet-footer">
+        <button type="button" class="btn btn-secondary" data-lf-action="sheet-close"
+                data-testid="om-note-close">{{if .CommonLabels}}{{.CommonLabels.Buttons.Close}}{{else}}Close{{end}}</button>
+    </div>
+</div>
+{{end}}
+{{end}}

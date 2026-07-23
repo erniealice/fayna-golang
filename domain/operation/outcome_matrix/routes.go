@@ -36,6 +36,26 @@ const (
 	PublishURL = "/action/outcome-matrix/{id}/publish"
 	ReturnURL  = "/action/outcome-matrix/{id}/return"
 
+	// NarrativeURL is the per-cell narrative drawer (N-1 LOCKED 2026-07-23): a
+	// dedicated route serving GET (render the drawer form, editability resolved
+	// SERVER-SIDE by the shared authority core) + POST (save the cell's
+	// determination_note through the task_outcome:update use case). ONE path, two
+	// verbs — the TemplateUploadURL precedent, NOT an extension of the value
+	// record protocol. {id} == job_template_id (same sheet scope as RecordURL);
+	// the target cell's outcome_id rides in ?outcome_id= on the GET and in the
+	// signed form body on the POST (like the approval bar's job_template_phase_id).
+	//
+	// Path shape (C8 ServeMux): the trailing literal segment "narrative" keeps it
+	// unambiguous against every sibling route — it is a distinct final segment
+	// from the {id}/{record,submit,verify,publish,return} verbs, and the /action/
+	// prefix + {id} placeholder never collides with the literal
+	// /action/outcome-matrix/templates/* family (there is no templates/narrative).
+	// Under /action/* so the POST inherits the CSRF validator + signed
+	// action-workspace guard exactly as RecordURL does; the GET is a safe method
+	// (those guards constrain non-safe methods only), same trust model as the
+	// DownloadDrawerURL GET. Education overrides the display slug via route.json.
+	NarrativeURL = "/action/outcome-matrix/{id}/narrative"
+
 	// TemplateSettingsURL is the standalone grade-sheet template management page
 	// (Wave C / P4): a list of workspace→document_template bindings (scoped by
 	// job_category + optional price_schedule) + upload/publish/delete. A dedicated
@@ -81,6 +101,9 @@ type Routes struct {
 	PublishURL string `json:"publish_url"`
 	ReturnURL  string `json:"return_url"`
 
+	// Per-cell narrative drawer (GET form + POST save on one path).
+	NarrativeURL string `json:"narrative_url"`
+
 	// Grade-sheet template settings (P4 management surface).
 	TemplateSettingsURL string `json:"template_settings_url"`
 	TemplateUploadURL   string `json:"template_upload_url"`
@@ -105,6 +128,8 @@ func DefaultRoutes() Routes {
 		PublishURL: PublishURL,
 		ReturnURL:  ReturnURL,
 
+		NarrativeURL: NarrativeURL,
+
 		TemplateSettingsURL: TemplateSettingsURL,
 		TemplateUploadURL:   TemplateUploadURL,
 		TemplatePublishURL:  TemplatePublishURL,
@@ -123,6 +148,7 @@ func (r Routes) RouteMap() map[string]string {
 		"outcome_matrix.verify":          r.VerifyURL,
 		"outcome_matrix.publish":         r.PublishURL,
 		"outcome_matrix.return":          r.ReturnURL,
+		"outcome_matrix.narrative":       r.NarrativeURL,
 
 		"outcome_matrix.template_settings": r.TemplateSettingsURL,
 		"outcome_matrix.template_upload":   r.TemplateUploadURL,

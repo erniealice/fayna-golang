@@ -13,7 +13,6 @@ import (
 
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
-	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
 
 // resultEvent is the HX-Trigger custom-event name the pyeza cell-grid AutoSave
@@ -34,6 +33,7 @@ const resultEvent = "omcell-result"
 //   - new.{job_task_id}:{criteria_id}={v} → CREATE new (status=active/active=true)
 //   - save_mode=cell                      → opt into the per-cell ack response
 //     (absent → legacy aggregate formError/formSuccess response)
+//
 // The value's SHAPE never chooses the persisted column — the criterion's
 // criteria_type (re-derived from the server matrix, never the POST) does.
 //
@@ -52,26 +52,26 @@ const resultEvent = "omcell-result"
 //
 // Ack item fields (must match cell-grid.js handleResult verbatim):
 //   - key         the posted field name (cells.* / new.*) — the client keys its
-//                 live input by this to paint state.
+//     live input by this to paint state.
 //   - ok          the cell persisted.
 //   - outcomeId   the canonical task_outcome id. MANDATORY on a CREATE (and on a
-//                 lost-ack new.* retry resolved to an existing outcome): the
-//                 client renames the input new.{jt}:{cr} → cells.{outcomeId} IN
-//                 PLACE so the next save UPDATES instead of re-creating.
+//     lost-ack new.* retry resolved to an existing outcome): the
+//     client renames the input new.{jt}:{cr} → cells.{outcomeId} IN
+//     PLACE so the next save UPDATES instead of re-creating.
 //   - value       the normalized canonical stored value; becomes the client's
-//                 new saved-baseline (data-saved-value). pass_fail is normalized
-//                 to "true"/"false" so it round-trips the <select> option values.
+//     new saved-baseline (data-saved-value). pass_fail is normalized
+//     to "true"/"false" so it round-trips the <select> option values.
 //   - ratingFresh (Q-GSE-5 inline recompute) present only for cells that drive a
-//                 scaled-summary recompute (graph-derived, see below):
-//                 true  → the affected phase (and job) roll-up recomputed (or was
-//                         authoritative/frozen and correctly left pinned);
-//                 false → the grade PERSISTED but its summary recompute failed or
-//                         is unwired — the rating is stale + retryable, NEVER a
-//                         reason to report the saved cell as failed. Omitted for
-//                         cells that drive no scaled summary (no roll-up rating).
+//     scaled-summary recompute (graph-derived, see below):
+//     true  → the affected phase (and job) roll-up recomputed (or was
+//     authoritative/frozen and correctly left pinned);
+//     false → the grade PERSISTED but its summary recompute failed or
+//     is unwired — the rating is stale + retryable, NEVER a
+//     reason to report the saved cell as failed. Omitted for
+//     cells that drive no scaled summary (no roll-up rating).
 //   - ratingNotRecomputed  optional bounded reason string for observability when a
-//                 rating was deliberately not recomputed (authoritative_frozen /
-//                 not_applicable). The client ignores it; it documents the split.
+//     rating was deliberately not recomputed (authoritative_frozen /
+//     not_applicable). The client ignores it; it documents the split.
 //
 // ── New-id handshake + idempotent create-retry ─────────────────────────────
 // Because the response can be lost, a client may re-POST new.{jt}:{cr} for a cell
@@ -107,90 +107,33 @@ func NewRecordAction(deps *Deps) view.View {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
-		var actingStaff string
-		if deps.ResolveStaff != nil {
-			actingStaff, _ = deps.ResolveStaff(ctx)
-		}
-		if actingStaff == "" {
-			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
-		}
-
 		if err := viewCtx.Request.ParseForm(); err != nil {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 		cellMode := viewCtx.Request.Form.Get("save_mode") == "cell"
 
-		// Re-derive the acting principal's MINE-scoped matrix server-side and
-		// only accept cell addresses it contains. The POST body's outcome_id /
-		// job_task_id keys are attacker-controlled; the grid the server itself
-		// scopes to this principal is the ONLY authority on which cells are
-		// addressable (a forged job_task_id outside the principal's roster must
-		// never reach the create/update use cases).
+		// Re-derive the acting principal's MINE-scoped authority server-side (the
+		// shared core, byte-identical to the narrative drawer's gate). It resolves
+		// the acting staff, re-derives the MINE matrix, and builds the
+		// owned/editable cell maps — only cell addresses it contains are
+		// addressable. The POST body's outcome_id / job_task_id keys are
+		// attacker-controlled; the grid the server itself scopes to this principal
+		// is the ONLY authority on which cells are writable (a forged job_task_id
+		// outside the principal's roster must never reach the create/update use
+		// cases). A nil result is a fail-closed denial.
 		templateID := viewCtx.Request.PathValue("id")
-		if templateID == "" || deps.GetOutcomeMatrix == nil {
+		auth, ok := resolveCellAuthority(ctx, authorityDeps{
+			ResolveStaff:     deps.ResolveStaff,
+			GetOutcomeMatrix: deps.GetOutcomeMatrix,
+		}, templateID)
+		if !ok {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
-		matrix, err := deps.GetOutcomeMatrix(ctx, &matrixpb.GetOutcomeMatrixRequest{
-			JobTemplateId: templateID,
-			Scope:         matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE,
-		})
-		if err != nil || matrix == nil {
-			log.Printf("[outcome-matrix] scope re-derivation failed for template %s: %v", templateID, err)
-			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
-		}
-		// The column tree carries each criterion's enforcement entity — the
-		// criteria_type there (not the value's shape) decides which typed
-		// column a create writes, so a crafted value can never land in the
-		// wrong column.
-		typeByColKey := make(map[string]enums.CriteriaType)
-		for _, phase := range matrix.GetPhases() {
-			for _, task := range phase.GetTasks() {
-				for _, crit := range task.GetCriteria() {
-					typeByColKey[crit.GetColumnKey()] = crit.GetCriteria().GetCriteriaType()
-				}
-			}
-		}
-
-		allowedCreate := make(map[string]enums.CriteriaType) // "{job_task_id}:{criteria_id}" → criteria type
-		allowedUpdate := make(map[string]bool)               // outcome_id → updatable
-		byOutcome := make(map[string]srvCell)                // outcome_id → server cell (recompute keys)
-		byCreateAddr := make(map[string]srvCell)             // "{job_task_id}:{criteria_id}" → server cell
-		for _, row := range matrix.GetRows() {
-			// Cells are keyed by column_key "{job_template_task_id}:{criteria_id}";
-			// the criteria id half addresses the create, paired with the cell's
-			// own job_task instance id.
-			for colKey, cell := range row.GetCells() {
-				if !cell.GetEditable() {
-					continue
-				}
-				_, criteriaID, ok := splitCellAddr(colKey)
-				if !ok {
-					continue
-				}
-				sc := srvCell{
-					outcomeID:  cell.GetOutcomeId(),
-					jobTaskID:  cell.GetJobTaskId(),
-					criteriaID: criteriaID,
-					ct:         typeByColKey[colKey],
-					jobPhaseID: cell.GetJobPhaseId(),
-					jobID:      cell.GetJobId(),
-				}
-				if cell.GetOutcomeId() != "" {
-					allowedUpdate[cell.GetOutcomeId()] = true
-					byOutcome[cell.GetOutcomeId()] = sc
-					// A recorded cell's create-address maps back to its outcome so
-					// a lost-ack new.* retry resolves to an UPDATE, never a dup.
-					if cell.GetJobTaskId() != "" {
-						byCreateAddr[cell.GetJobTaskId()+":"+criteriaID] = sc
-					}
-					continue
-				}
-				if cell.GetJobTaskId() != "" {
-					allowedCreate[cell.GetJobTaskId()+":"+criteriaID] = typeByColKey[colKey]
-					byCreateAddr[cell.GetJobTaskId()+":"+criteriaID] = sc
-				}
-			}
-		}
+		actingStaff := auth.actingStaff
+		allowedCreate := auth.allowedCreate
+		allowedUpdate := auth.allowedUpdate
+		byOutcome := auth.byOutcome
+		byCreateAddr := auth.byCreateAddr
 
 		// Per-cell dispatch. Each addressed cell yields exactly one ack (cellMode)
 		// / counts toward saved|failed (legacy). A partial failure never aborts.

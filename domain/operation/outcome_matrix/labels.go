@@ -25,7 +25,35 @@ type Labels struct {
 	Approval         ApprovalLabels         `json:"approval"`
 	Columns          ColumnsLabels          `json:"columns"`
 	Export           ExportLabels           `json:"export"`
+	Narrative        NarrativeLabels        `json:"narrative"`
 	TemplateSettings TemplateSettingsLabels `json:"template_settings"`
+}
+
+// NarrativeLabels — the per-cell narrative drawer strings (N-1 LOCKED). The
+// drawer view (add/edit) and its read-only variant (other-grader / frozen) draw
+// from here; the icon affordance + its state-bearing aria are composed in the
+// view from the pyeza CellGridLabels, not here. All wording lives in lyngua
+// (snake_case keys); education overrides only wording. FIELD-LEVEL ONLY — no
+// vertical noun ("grade"/"student") belongs in a generic label default.
+type NarrativeLabels struct {
+	Title        string `json:"title"`          // drawer heading / fallback sheet title
+	FieldLabel   string `json:"field_label"`    // textarea label
+	Placeholder  string `json:"placeholder"`    // textarea placeholder (empty note)
+	SaveButton   string `json:"save_button"`    // primary submit
+	ClearButton  string `json:"clear_button"`   // secondary — clears the note (empty save)
+	EmptyText    string `json:"empty_text"`     // read-only variant, no note recorded
+	ReadOnlyHint string `json:"read_only_hint"` // why the drawer is view-only
+
+	// Icon + drawer-title composition templates. The view fills {name} (the
+	// resolved entity/row name) and {column} (the resolved leaf-column label) —
+	// GENERIC placeholder tokens, never vertical nouns; the pyeza component
+	// receives only the composed strings. The verb varies with editability +
+	// whether a narrative exists, so assistive tech hears the state (the glyph
+	// fill is invisible to a screen reader).
+	AriaAdd       string `json:"aria_add"`       // editable, no note:  "Add narrative for {name}, {column}"
+	AriaEdit      string `json:"aria_edit"`      // editable, has note: "Edit narrative for {name}, {column}"
+	AriaView      string `json:"aria_view"`      // read-only:          "View narrative for {name}, {column} (read only)"
+	TitleTemplate string `json:"title_template"` // dialog title:       "{name} — {column}"
 }
 
 // TemplateSettingsLabels — the grade-sheet template-management settings surface
@@ -296,6 +324,19 @@ func DefaultLabels() Labels {
 			PDFPeriodHint:   "PDF prints the full sheet",
 			DownloadButton:  "Download",
 			NoTemplateError: "No sheet template is configured for this document",
+		},
+		Narrative: NarrativeLabels{
+			Title:         "Narrative",
+			FieldLabel:    "Narrative",
+			Placeholder:   "Add a narrative for this cell…",
+			SaveButton:    "Save narrative",
+			ClearButton:   "Clear",
+			EmptyText:     "No narrative recorded.",
+			ReadOnlyHint:  "This cell is read only — you can view but not edit its narrative.",
+			AriaAdd:       "Add narrative for {name}, {column}",
+			AriaEdit:      "Edit narrative for {name}, {column}",
+			AriaView:      "View narrative for {name}, {column} (read only)",
+			TitleTemplate: "{name} — {column}",
 		},
 		TemplateSettings: TemplateSettingsLabels{
 			Title:               "Sheet Templates",

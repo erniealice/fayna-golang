@@ -3,6 +3,7 @@ package list
 import (
 	"context"
 	"log"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -510,7 +511,16 @@ func buildGrid(
 	// keeps every downstream computation correct by construction. `hidden` has
 	// already been resolved fail-safe (resolveHidden) — never empties the grid.
 	cfg.Columns = pruneColumns(buildColumns(resp.GetPhases()), hidden)
-	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames, phaseEditableFunc(resp))
+	// Per-cell narrative affordance: resolve the drawer route once ({id} filled)
+	// and index the leaf-column labels by colKey so buildRows can compose each
+	// icon's accessible name / dialog title. An unconfigured NarrativeURL leaves
+	// narrativeBase empty ⇒ buildRows emits no icon (the feature is off).
+	narrativeBase := ""
+	if deps.Routes.NarrativeURL != "" {
+		narrativeBase = route.ResolveURL(deps.Routes.NarrativeURL, "id", templateID)
+	}
+	criterionLabels := criterionLabelsByColKey(resp.GetPhases())
+	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames, phaseEditableFunc(resp), narrativeBase, criterionLabels, l.Narrative)
 	applyRowOptions(cfg, deps.Options, attrValues, clientNames)
 	if cfg.AutoSave {
 		// Populate the W2 edit-mode per-cell fields AFTER applyRowOptions has
@@ -1026,15 +1036,26 @@ func phaseEditableFunc(resp *matrixpb.GetOutcomeMatrixResponse) func(colKey stri
 // buildRows maps the proto rows into CellGridRows with the read-only gate applied.
 // allowEdit is the phase-status render mirror (phaseEditableFunc): a locked or
 // hard-frozen phase forces every cell read-only regardless of ownership.
-func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string, clientNames map[string]clientName, allowEdit func(colKey string) bool) []types.CellGridRow {
+//
+// narrativeBase (the drawer route with {id} already filled; "" ⇒ feature off),
+// criterionLabels (colKey → leaf-column label), and nl (the narrative label
+// templates) drive the per-cell narrative icon: it is emitted ONLY for a cell
+// with a recorded outcome (an outcome_id exists — nothing to annotate otherwise),
+// and its accessible name / dialog title are composed here so the generic pyeza
+// component stays vertical-neutral.
+func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string, clientNames map[string]clientName, allowEdit func(colKey string) bool, narrativeBase string, criterionLabels map[string]string, nl outcome_matrix.NarrativeLabels) []types.CellGridRow {
 	out := make([]types.CellGridRow, 0, len(rows))
 	for _, r := range rows {
 		clientID := r.GetClientId()
+		name := rowLabel(r, clientNames)
 		gr := types.CellGridRow{
-			ID:     clientID,
-			Label:  rowLabel(r, clientNames),
-			Cells:  make(map[string]types.CellGridCell, len(r.GetCells())),
-			TestID: "om-row-" + short(clientID),
+			ID:    clientID,
+			Label: name,
+			Cells: make(map[string]types.CellGridCell, len(r.GetCells())),
+			// Full clientID (not short()): UUIDv7 client ids share a tenant/time
+			// prefix, so short() collapsed every row in a tenant to ONE testid (F3).
+			// The full id discriminates per student → unique per row.
+			TestID: "om-row-" + clientID,
 		}
 		for colKey, cell := range r.GetCells() {
 			// Read-only when recorded by a different staff member. Honor the
@@ -1047,21 +1068,97 @@ func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string,
 				editable = false
 				readOnly = true
 			}
-			gr.Cells[colKey] = types.CellGridCell{
+			gc := types.CellGridCell{
 				OutcomeID:       cell.GetOutcomeId(),
 				JobTaskID:       cell.GetJobTaskId(),
 				CriteriaID:      criteriaIDFromColumnKey(colKey),
 				Value:           cellValue(cell),
-				TextValue:       cellSecondaryText(cell),
 				Editable:        editable,
 				ReadOnly:        readOnly,
 				ReadOnlyTooltip: readOnlyTooltip,
 				TestID:          cellTestID(clientID, colKey, readOnly),
 			}
+			// Narrative icon: recorded cells only (an outcome exists). The icon's
+			// verb (Add/Edit vs View) mirrors the grid's own editability so the
+			// accessible name agrees with what the server-authoritative drawer will
+			// present; the server re-resolves editability on GET/POST regardless.
+			if narrativeBase != "" && gc.OutcomeID != "" {
+				hasNote := cellHasNarrative(cell)
+				column := criterionLabels[colKey]
+				gc.NarrativeURL = narrativeBase + "?outcome_id=" + url.QueryEscape(gc.OutcomeID)
+				gc.HasNarrative = hasNote
+				gc.NarrativeAria = composeNarrativeAria(nl, name, column, editable, hasNote)
+				gc.NarrativeTitle = composeNarrativeTitle(nl, name, column)
+				// Full clientID (not short()): short() collapsed to the shared
+				// tenant/time prefix so every row in a column shared ONE testid (F3).
+				// clientID (unique per student) + colKey (unique per column) → a
+				// per-cell-unique data-testid; the om-note-* family shape is kept.
+				gc.NarrativeBtnID = "om-note-btn-" + clientID + "-" + slug(colKey)
+				gc.NarrativeTestID = "om-note-" + clientID + "-" + slug(colKey)
+			}
+			gr.Cells[colKey] = gc
 		}
 		out = append(out, gr)
 	}
 	return out
+}
+
+// criterionLabelsByColKey indexes the leaf-column (criterion) display labels by
+// their colKey ("{job_template_task_id}:{outcome_criteria_id}") so buildRows can
+// name each cell's column in the narrative icon's accessible name / dialog title
+// without threading the full column tree down.
+func criterionLabelsByColKey(phases []*matrixpb.PhaseColumn) map[string]string {
+	m := map[string]string{}
+	for _, ph := range phases {
+		for _, tk := range ph.GetTasks() {
+			for _, cr := range tk.GetCriteria() {
+				m[cr.GetColumnKey()] = criterionLabel(cr)
+			}
+		}
+	}
+	return m
+}
+
+// cellHasNarrative reports whether the cell carries a determination_note (f14) —
+// the ONE canonical narrative field (plan 20260723-grade-narrative-drawer, N-1c
+// LOCKED). It drives the icon's filled (has) vs outline (empty) state.
+//
+// The matrix response surfaces the note via the ADDITIVE OutcomeCell.determination_note
+// projection (esqyma f11), populated verbatim from task_outcome.determination_note
+// by the espyna loadRows SELECT. With those landed, the at-a-glance grid state is
+// now live: a recorded cell whose f14 is non-empty (the B1 backfill filled 19,948
+// rows) shows the filled glyph; an empty note shows the outline.
+func cellHasNarrative(c *matrixpb.OutcomeCell) bool {
+	return c.GetDeterminationNote() != ""
+}
+
+// composeNarrativeAria builds the icon button's accessible name from the label
+// templates + resolved names, selecting the verb by editability + presence of a
+// note (so assistive tech hears the state the glyph fill shows visually).
+func composeNarrativeAria(nl outcome_matrix.NarrativeLabels, name, column string, editable, hasNote bool) string {
+	var tmpl string
+	switch {
+	case !editable:
+		tmpl = nl.AriaView
+	case hasNote:
+		tmpl = nl.AriaEdit
+	default:
+		tmpl = nl.AriaAdd
+	}
+	return replaceNarrativeTokens(tmpl, name, column)
+}
+
+// composeNarrativeTitle builds the drawer's dialog title (surfaced via
+// data-lf-sheet-title, shown in the labelled #sheetTitle — the entity+column
+// context header) from the title template + resolved names.
+func composeNarrativeTitle(nl outcome_matrix.NarrativeLabels, name, column string) string {
+	return replaceNarrativeTokens(nl.TitleTemplate, name, column)
+}
+
+// replaceNarrativeTokens substitutes the generic {name}/{column} placeholder
+// tokens (never vertical nouns) with the resolved entity + leaf-column strings.
+func replaceNarrativeTokens(tmpl, name, column string) string {
+	return strings.NewReplacer("{name}", name, "{column}", column).Replace(tmpl)
 }
 
 // buildCellInput derives a CellInputDescriptor from the criterion's enforcement
@@ -1161,21 +1258,13 @@ func cellValue(c *matrixpb.OutcomeCell) string {
 	return ""
 }
 
-// cellSecondaryText returns the recorded text_value ONLY when it did not
-// already win cellValue()'s priority order (s7pre gap 5: "text ratings/
-// text_value invisible" — every criterion seeded in education1 is
-// NUMERIC_SCORE, so cellValue() always picks NumericValue and the
-// coexisting descriptor text was silently dropped, even though the espyna
-// adapter already forwards it on OutcomeCell.TextValue). For a genuinely
-// text-typed criterion, TextValue IS Value already — returning "" here
-// avoids rendering the same string twice. Read-only display only; write
-// semantics (record.go) are unaffected — this is a pure display concern.
-func cellSecondaryText(c *matrixpb.OutcomeCell) string {
-	if c.NumericValue == nil || c.TextValue == nil {
-		return ""
-	}
-	return c.GetTextValue()
-}
+// NOTE (plan 20260723-grade-narrative-drawer, N-1c LOCKED): the former
+// cellSecondaryText() — which read text_value (f9) as the under-grade
+// DESCRIPTOR/narrative — was removed here. determination_note (f14) is now the
+// ONE canonical narrative field (surfaced via the per-cell icon → drawer,
+// action/narrative.go). text_value stays inert provenance and is read ONLY as
+// the typed grade VALUE for a TEXT-typed criterion (cellValue above) — never for
+// a narrative. This is the grep-gate: zero narrative-purpose readers of f9.
 
 // criteriaIDFromColumnKey extracts the outcome_criteria_id from a
 // "{job_template_task_id}:{outcome_criteria_id}" column key.

@@ -152,14 +152,15 @@ type OutcomeMatrixModuleDeps struct {
 
 // OutcomeMatrixModule holds the constructed outcome matrix views.
 type OutcomeMatrixModule struct {
-	routes   outcomematrixpkg.Routes
-	Matrix   view.View // GET — the grid page
-	Record   view.View // POST — batch save
-	Download view.View // GET — export drawer form (safe method under /action/*)
-	Submit   view.View // POST — approval: IN_PROGRESS → FOR_REVIEW
-	Verify   view.View // POST — approval: FOR_REVIEW → VERIFIED
-	Publish  view.View // POST — approval: VERIFIED → PUBLISHED
-	Return   view.View // POST — approval: mixed/advanced → IN_PROGRESS
+	routes    outcomematrixpkg.Routes
+	Matrix    view.View // GET — the grid page
+	Record    view.View // POST — batch save
+	Download  view.View // GET — export drawer form (safe method under /action/*)
+	Narrative view.View // GET form / POST save — per-cell narrative drawer
+	Submit    view.View // POST — approval: IN_PROGRESS → FOR_REVIEW
+	Verify    view.View // POST — approval: FOR_REVIEW → VERIFIED
+	Publish   view.View // POST — approval: VERIFIED → PUBLISHED
+	Return    view.View // POST — approval: mixed/advanced → IN_PROGRESS
 
 	// Export is the sheet-level CSV download — a raw GET handler (not a
 	// view.View): it streams a file, so it bypasses the render pipeline but
@@ -177,17 +178,17 @@ type OutcomeMatrixModule struct {
 // NewOutcomeMatrixModule creates the outcome matrix module with all views wired.
 func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule {
 	pageDeps := &outcomematrixlist.PageViewDeps{
-		Routes:                       deps.Routes,
-		Labels:                       deps.Labels,
-		CommonLabels:                 deps.CommonLabels,
-		GetOutcomeMatrix:             deps.GetOutcomeMatrix,
-		GetOutcomeSummaryRoster:      deps.GetOutcomeSummaryRoster,
-		ResolveStaff:                 deps.ResolveStaff,
+		Routes:                  deps.Routes,
+		Labels:                  deps.Labels,
+		CommonLabels:            deps.CommonLabels,
+		GetOutcomeMatrix:        deps.GetOutcomeMatrix,
+		GetOutcomeSummaryRoster: deps.GetOutcomeSummaryRoster,
+		ResolveStaff:            deps.ResolveStaff,
 		// Grade-sheet PDF render context (P5).
-		ReadJobTemplate:           deps.ReadJobTemplate,
-		GenerateDoc:               deps.GenerateDoc,
-		GeneratePDF:               deps.GeneratePDF,
-		ResolveSheetTemplateBytes: deps.ResolveSheetTemplateBytes,
+		ReadJobTemplate:              deps.ReadJobTemplate,
+		GenerateDoc:                  deps.GenerateDoc,
+		GeneratePDF:                  deps.GeneratePDF,
+		ResolveSheetTemplateBytes:    deps.ResolveSheetTemplateBytes,
 		ListClients:                  deps.ListClients,
 		ListJobs:                     deps.ListJobs,
 		ListSubscriptionGroupMembers: deps.ListSubscriptionGroupMembers,
@@ -234,16 +235,30 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		GetOutcomeMatrix: deps.GetOutcomeMatrix,
 	})
 
+	// Per-cell narrative drawer (N-1 LOCKED): GET form + POST save on one route.
+	// Reuses the SAME ResolveStaff + GetOutcomeMatrix the record action gates on
+	// (byte-identical authority core) plus the task_outcome read/update use cases
+	// the module already wires — writes route through UpdateTaskOutcome, never SQL.
+	narrativeView := outcomematrixaction.NewNarrativeAction(&outcomematrixaction.NarrativeDeps{
+		Routes:            deps.Routes,
+		Labels:            deps.Labels,
+		GetOutcomeMatrix:  deps.GetOutcomeMatrix,
+		ResolveStaff:      deps.ResolveStaff,
+		ReadTaskOutcome:   deps.ReadTaskOutcome,
+		UpdateTaskOutcome: deps.UpdateTaskOutcome,
+	})
+
 	return &OutcomeMatrixModule{
-		routes:   deps.Routes,
-		Matrix:   matrixView,
-		Record:   recordView,
-		Download: downloadView,
-		Submit:   outcomematrixaction.NewSubmitAction(transitionDeps),
-		Verify:   outcomematrixaction.NewVerifyAction(transitionDeps),
-		Publish:  outcomematrixaction.NewPublishAction(transitionDeps),
-		Return:   outcomematrixaction.NewReturnAction(transitionDeps),
-		Export:   outcomematrixlist.NewExportHandler(pageDeps),
+		routes:    deps.Routes,
+		Matrix:    matrixView,
+		Record:    recordView,
+		Download:  downloadView,
+		Narrative: narrativeView,
+		Submit:    outcomematrixaction.NewSubmitAction(transitionDeps),
+		Verify:    outcomematrixaction.NewVerifyAction(transitionDeps),
+		Publish:   outcomematrixaction.NewPublishAction(transitionDeps),
+		Return:    outcomematrixaction.NewReturnAction(transitionDeps),
+		Export:    outcomematrixlist.NewExportHandler(pageDeps),
 
 		// Grade-sheet template settings (Wave C / P4). All four views share one
 		// nil-safe Deps (the JOSDT registration parity). templateSettingsDeps maps
@@ -289,6 +304,13 @@ func (m *OutcomeMatrixModule) RegisterRoutes(r view.RouteRegistrar) {
 		// under /action/*: the CSRF + action-workspace guards constrain non-safe
 		// methods only, so no signed form is needed (routes.go documents this).
 		r.GET(m.routes.DownloadDrawerURL, m.Download)
+	}
+	if m.Narrative != nil && m.routes.NarrativeURL != "" {
+		// One path, two verbs (TemplateUploadURL precedent): GET renders the
+		// drawer (safe method — no signed form needed), POST saves the note under
+		// /action/* so it inherits the CSRF + action-workspace signature guards.
+		r.GET(m.routes.NarrativeURL, m.Narrative)
+		r.POST(m.routes.NarrativeURL, m.Narrative)
 	}
 	if m.Submit != nil {
 		r.POST(m.routes.SubmitURL, m.Submit)

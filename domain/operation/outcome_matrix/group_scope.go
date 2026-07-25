@@ -9,11 +9,11 @@ import (
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
 
-// ErrSectionNotInTemplate is returned to the client as a 404 when {group_id}
+// ErrGroupNotInTemplate is returned to the client as a 404 when {group_id}
 // does not pair with {id}. Deliberately terse — it must not disclose whether the
 // section exists, belongs to another workspace, or merely delivers a different
 // template.
-var ErrSectionNotInTemplate = errors.New("not found")
+var ErrGroupNotInTemplate = errors.New("not found")
 
 // section_scope.go — the (template, section) pair guard for the Group* routes.
 //
@@ -35,22 +35,22 @@ var ErrSectionNotInTemplate = errors.New("not found")
 // silent cross-cohort data exposure inside the workspace. The pair must be
 // VALIDATED, and it must fail CLOSED.
 
-// SectionScope carries the validated section narrowing for one request.
+// GroupScope carries the validated section narrowing for one request.
 // GroupID is empty on the template-scoped routes, which keeps every existing
 // call site behaving exactly as before.
-type SectionScope struct {
+type GroupScope struct {
 	GroupID   string
 	GroupName string
 }
 
 // Scoped reports whether a section narrowing is in effect.
-func (s SectionScope) Scoped() bool { return s.GroupID != "" }
+func (s GroupScope) Scoped() bool { return s.GroupID != "" }
 
 // SummaryLister is the narrow read the guard needs. It matches the
 // ListJobTemplateSummaries closure threaded through the module deps.
 type SummaryLister func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 
-// ResolveSectionScope reads {group_id} off the request path and validates that
+// ResolveGroupScope reads {group_id} off the request path and validates that
 // the section actually delivers the given template.
 //
 // Returns (zero, true) when the route carries no {group_id} — the template-scoped
@@ -62,32 +62,32 @@ type SummaryLister func(ctx context.Context, req *summarypb.ListJobTemplateSumma
 //   - lister == nil        — no way to verify, so refuse rather than trust
 //   - lister returns error — same
 //   - no matching row      — the pair does not exist
-func ResolveSectionScope(ctx context.Context, r *http.Request, templateID string, lister SummaryLister) (SectionScope, bool) {
+func ResolveGroupScope(ctx context.Context, r *http.Request, templateID string, lister SummaryLister) (GroupScope, bool) {
 	if r == nil {
-		return SectionScope{}, true
+		return GroupScope{}, true
 	}
 	groupID := strings.TrimSpace(r.PathValue("group_id"))
 	if groupID == "" {
-		return SectionScope{}, true
+		return GroupScope{}, true
 	}
 	if templateID == "" || lister == nil {
-		return SectionScope{}, false
+		return GroupScope{}, false
 	}
 
 	// Narrow the aggregate to this section and look for the template among its
-	// deliveries. The aggregate is already at (template x section) grain and is
+	// deliveries. The aggregate is already at (template x group) grain and is
 	// workspace-bound by the use case, so a section from another workspace
 	// simply yields no rows — the same false this returns for a wrong pair.
 	resp, err := lister(ctx, &summarypb.ListJobTemplateSummariesRequest{
 		SubscriptionGroupId: &groupID,
 	})
 	if err != nil || resp == nil {
-		return SectionScope{}, false
+		return GroupScope{}, false
 	}
 	for _, s := range resp.GetSummaries() {
 		if s.GetJobTemplateId() == templateID {
-			return SectionScope{GroupID: groupID, GroupName: s.GetSubscriptionGroupName()}, true
+			return GroupScope{GroupID: groupID, GroupName: s.GetSubscriptionGroupName()}, true
 		}
 	}
-	return SectionScope{}, false
+	return GroupScope{}, false
 }

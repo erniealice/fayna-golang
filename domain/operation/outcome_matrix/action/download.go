@@ -77,9 +77,9 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 
 		// Section narrowing ({group_id}) — validated before any read, same guard
 		// as the grid view. Empty on the template-scoped route.
-		section, ok := outcome_matrix.ResolveSectionScope(ctx, viewCtx.Request, templateID, deps.ListJobTemplateSummaries)
+		section, ok := outcome_matrix.ResolveGroupScope(ctx, viewCtx.Request, templateID, deps.ListJobTemplateSummaries)
 		if !ok {
-			return view.ViewResult{Error: outcome_matrix.ErrSectionNotInTemplate, StatusCode: http.StatusNotFound}
+			return view.ViewResult{Error: outcome_matrix.ErrGroupNotInTemplate, StatusCode: http.StatusNotFound}
 		}
 
 		// Scope resolution — byte-identical to list/export.go (widened admin
@@ -107,7 +107,7 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 				Scope:         scope,
 			}
 			if section.Scoped() {
-				req.SectionId = &section.GroupID
+				req.SubscriptionGroupId = &section.GroupID
 			}
 			resp, _ = deps.GetOutcomeMatrix(ctx, req)
 		}

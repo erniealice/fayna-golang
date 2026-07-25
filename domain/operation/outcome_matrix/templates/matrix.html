@@ -98,67 +98,101 @@ populated on PageData for any non-template consumer that needs it. */}}
      → HX-Error-Message swapped into the per-phase form-result banner via the
      shared data-hx-on="form-result" handler (CSP-safe, no inline eval). */}}
 {{define "outcome-matrix-approval-bar"}}
-<section class="pa-bar" data-testid="pa-bar" aria-label="{{.Labels.Approval.Bar.Title}}">
-    <h2 class="pa-bar__title">{{.Labels.Approval.Bar.Title}}</h2>
-    <div class="pa-bar__phases">
+<section class="status-band" data-testid="pa-bar" aria-label="{{.Labels.Approval.Bar.Title}}">
+    <div class="status-band__rows">
         {{$root := .}}
         {{range .ApprovalBar}}
-        <div class="pa-phase" data-testid="pa-{{.Slug}}" data-status="{{.Status}}">
-            <div class="pa-phase__head">
-                <span class="pa-phase__label">{{.Label}}</span>
-                <span class="badge badge-{{.ChipVariant}}" data-testid="pa-{{.Slug}}-chip" aria-label="{{$root.Labels.Approval.Chip.Aria}}">{{.StatusLabel}}</span>
-                {{if .Mixed}}<span class="badge badge-warning" data-testid="pa-{{.Slug}}-mixed">{{$root.Labels.Approval.Mixed}}</span>{{end}}
-                {{if .NotStarted}}<span class="pa-phase__muted" data-testid="pa-{{.Slug}}-not-started">{{$root.Labels.Approval.NotStarted}}</span>{{end}}
-                <span class="pa-phase__count">{{.TargetLabel}}</span>
-            </div>
-            {{if .Hint}}<p class="pa-phase__hint" data-testid="pa-{{.Slug}}-hint">{{.Hint}}</p>{{end}}
-            {{/* Rendered only when ≥1 action is available: template conditionals leave
-                 whitespace text nodes, so a CSS :empty guard can never catch the no-action
-                 case, and the empty flex item would double the .pa-phase column gap. */}}
-            {{if or .CanSubmit .CanVerify .CanPublish .CanReturn}}
-            <div class="pa-phase__actions">
-                {{if .CanSubmit}}
-                <form class="pa-form" hx-post="{{.SubmitPath}}" hx-confirm="{{.SubmitConfirm}}"
-                      data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
-                      data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
-                    {{actionForm .SubmitPath $root.WorkspaceID}}
-                    <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
-                    <button type="submit" class="btn btn-primary pa-form__btn" data-testid="pa-{{.Slug}}-submit">{{$root.Labels.Approval.Actions.Submit}}</button>
-                </form>
-                {{end}}
-                {{if .CanVerify}}
-                <form class="pa-form" hx-post="{{.VerifyPath}}" hx-confirm="{{.VerifyConfirm}}"
-                      data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
-                      data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
-                    {{actionForm .VerifyPath $root.WorkspaceID}}
-                    <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
-                    <button type="submit" class="btn btn-action pa-form__btn" data-testid="pa-{{.Slug}}-verify">{{$root.Labels.Approval.Actions.Verify}}</button>
-                </form>
-                {{end}}
-                {{if .CanPublish}}
-                <form class="pa-form" hx-post="{{.PublishPath}}" hx-confirm="{{.PublishConfirm}}"
-                      data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
-                      data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
-                    {{actionForm .PublishPath $root.WorkspaceID}}
-                    <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
-                    <button type="submit" class="btn btn-action pa-form__btn" data-testid="pa-{{.Slug}}-publish">{{$root.Labels.Approval.Actions.Publish}}</button>
-                </form>
-                {{end}}
-                {{if .CanReturn}}
-                <form class="pa-form pa-form--return" hx-post="{{.ReturnPath}}" hx-confirm="{{.ReturnConfirm}}"
-                      data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
-                      data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
-                    {{actionForm .ReturnPath $root.WorkspaceID}}
-                    <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
-                    <input type="text" name="reason" class="pa-form__reason" placeholder="{{.ReturnReasonLabel}}"{{if .ReturnReasonRequired}} required{{end}} data-testid="pa-{{.Slug}}-return-reason">
-                    <button type="submit" class="btn btn-ghost pa-form__btn" data-testid="pa-{{.Slug}}-return">{{$root.Labels.Approval.Actions.Return}}</button>
-                </form>
-                {{end}}
-            </div>
+        <div class="status-row" data-testid="pa-{{.Slug}}" data-status="{{.Status}}">
+            {{if .Hint}}<p class="status-row__note" data-testid="pa-{{.Slug}}-hint">{{.Hint}}</p>{{end}}
+            {{/* Form HOSTS for the header-cell buttons. They live HERE — outside
+                 the grid's own <form class="cell-grid-form"> — because a form
+                 nested inside that one is invalid HTML and gets dropped by the
+                 parser. Each carries the signed {{actionForm}} pair, the phase
+                 id and (for return) its reason input; the buttons that submit
+                 them sit in the phase's column header via form="…". Rendered
+                 without visible controls, so the band shows only status. */}}
+            {{if .CanSubmit}}
+            <form id="pa-{{.Slug}}-submit-form" class="status-form status-form--host" hx-post="{{.SubmitPath}}" hx-confirm="{{.SubmitConfirm}}"
+                  data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
+                  data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
+                {{actionForm .SubmitPath $root.WorkspaceID}}
+                <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
+            </form>
+            {{end}}
+            {{if .CanVerify}}
+            <form id="pa-{{.Slug}}-verify-form" class="status-form status-form--host" hx-post="{{.VerifyPath}}" hx-confirm="{{.VerifyConfirm}}"
+                  data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
+                  data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
+                {{actionForm .VerifyPath $root.WorkspaceID}}
+                <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
+            </form>
+            {{end}}
+            {{if .CanPublish}}
+            <form id="pa-{{.Slug}}-publish-form" class="status-form status-form--host" hx-post="{{.PublishPath}}" hx-confirm="{{.PublishConfirm}}"
+                  data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
+                  data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
+                {{actionForm .PublishPath $root.WorkspaceID}}
+                <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
+            </form>
+            {{end}}
+            {{if .CanReturn}}
+            <form id="pa-{{.Slug}}-return-form" class="status-form status-form--return" hx-post="{{.ReturnPath}}" hx-confirm="{{.ReturnConfirm}}"
+                  data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
+                  data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
+                {{actionForm .ReturnPath $root.WorkspaceID}}
+                <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
+                <input type="text" name="reason" class="status-form__input" placeholder="{{.ReturnReasonLabel}}"{{if .ReturnReasonRequired}} required{{end}} data-testid="pa-{{.Slug}}-return-reason">
+            </form>
             {{end}}
             <div id="pa-{{.Slug}}-result" class="form-result form-result--hidden" role="status" aria-live="polite" data-testid="pa-{{.Slug}}-result"></div>
         </div>
         {{end}}
     </div>
 </section>
+{{end}}
+
+{{/* outcome-matrix-phase-actions — the per-phase controls, rendered by pyeza's
+     CellGridConfig.L1ActionsTemplate INSIDE that phase's L1 header cell.
+
+     Dot is types.CellGridSlot: .Actions is this package's PhaseActions, .Grid is
+     the CellGridConfig (where the render pipeline injects WorkspaceID, which
+     {{actionForm}} signs with).
+
+     WHY HERE AND NOT IN THE BAND ABOVE THE TABLE: the band scrolls away
+     vertically as soon as the operator moves down the roster, which is exactly
+     when they are working. The <thead> is sticky, so a control here stays put.
+     The known cost is horizontal: an L1 cell scrolls sideways with the grid, so
+     on a very wide sheet a phase's controls can scroll out of view — measured
+     off-screen at a simulated 2600px table width. Accepted deliberately: the
+     vertical case is the common one, and the top-of-page real estate the band
+     used to occupy is returned to the grid.
+
+     data-result-id still points at the band's per-phase banner, which remains
+     the swap target — the form and its result are no longer siblings, and the
+     shared form-result handler resolves the target by id, not by position. */}}
+{{define "outcome-matrix-phase-actions"}}
+{{/* BUTTONS ONLY — no <form> here, deliberately.
+
+     The grid's batch-save <form class="cell-grid-form"> wraps the whole table,
+     so any <form> inside a header cell is a NESTED form: illegal in HTML, and
+     the parser silently drops it. Measured before this fix: two phases rendered
+     two Submit buttons but only ONE surviving form, so the first phase's button
+     was inert.
+
+     Instead each button targets an out-of-table form by id via the standard
+     `form` attribute (outcome-matrix-approval-bar hosts them). A submit button
+     with form="x" fires that form's submit event, which is exactly what HTMX
+     binds to — so hx-post, the signed {{actionForm}} fields and the result
+     swap all keep working unchanged. */}}
+{{with .Actions}}
+{{$labels := .Labels}}
+{{with .Phase}}
+<span class="cell-grid-headactions" data-testid="pa-{{.Slug}}-actions">
+    {{if .CanSubmit}}<button type="submit" form="pa-{{.Slug}}-submit-form" class="btn btn-primary status-form__btn" data-testid="pa-{{.Slug}}-submit">{{$labels.Actions.Submit}}</button>{{end}}
+    {{if .CanVerify}}<button type="submit" form="pa-{{.Slug}}-verify-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-verify">{{$labels.Actions.Verify}}</button>{{end}}
+    {{if .CanPublish}}<button type="submit" form="pa-{{.Slug}}-publish-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-publish">{{$labels.Actions.Publish}}</button>{{end}}
+    {{if .CanReturn}}<button type="submit" form="pa-{{.Slug}}-return-form" class="btn btn-ghost status-form__btn" data-testid="pa-{{.Slug}}-return">{{$labels.Actions.Return}}</button>{{end}}
+</span>
+{{end}}
+{{end}}
 {{end}}

@@ -44,7 +44,7 @@ import (
 type templateSummaryRow struct {
 	TemplateID string
 	// GroupID is the row's subscription_group_id. The delivery aggregate is
-	// already at (template x section) grain — it was simply being discarded here,
+	// already at (template x group) grain — it was simply being discarded here,
 	// which is why three "Arts — Grade 10" rows (Palladium/Platinum/Tantalum,
 	// 29/28/30 students) all linked to the same template-scoped sheet.
 	GroupID       string
@@ -161,9 +161,15 @@ func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow) *
 		// Falls back to the template URL when either the route or the row's group
 		// id is absent (service-admin, or a template-grain row the delivery
 		// aggregate does not cover).
+		// Row-link grain is a DEPLOYMENT choice (Options.RowLink), not something
+		// this file decides from the data. Both URLs are valid surfaces: a
+		// workspace whose templates each serve one group gains nothing from the
+		// extra segment. Falls back to template grain when the app has not opted
+		// in, when the route is unconfigured, or when a row carries no group id
+		// (the template-grain fallback rows) — never a half-resolved path.
 		matrixURL := route.ResolveURL(deps.MatrixDetailURL, "id", r.TemplateID)
-		if deps.MatrixSectionDetailURL != "" && r.GroupID != "" {
-			matrixURL = route.ResolveURL(deps.MatrixSectionDetailURL, "id", r.TemplateID, "group_id", r.GroupID)
+		if deps.Options.RowLinkScopedByGroup() && deps.MatrixGroupDetailURL != "" && r.GroupID != "" {
+			matrixURL = route.ResolveURL(deps.MatrixGroupDetailURL, "id", r.TemplateID, "group_id", r.GroupID)
 		}
 		// Aggregate rows show their DISTINCT-job count; template-grain rows (a
 		// category the aggregate doesn't cover) have no count and render blank.

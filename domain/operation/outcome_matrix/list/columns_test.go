@@ -89,7 +89,7 @@ func TestResolveHidden(t *testing.T) {
 }
 
 func TestPruneColumns(t *testing.T) {
-	cols := buildColumns(twoPhaseResp().GetPhases())
+	cols := buildColumns(twoPhaseResp().GetPhases(), nil, nil)
 
 	t.Run("no-op on empty set", func(t *testing.T) {
 		if got := pruneColumns(cols, nil); len(got) != 2 {
@@ -143,7 +143,7 @@ func TestHiddenCSVStableOrder(t *testing.T) {
 }
 
 func TestBuildColsSelector(t *testing.T) {
-	full := buildColumns(twoPhaseResp().GetPhases())
+	full := buildColumns(twoPhaseResp().GetPhases(), nil, nil)
 	hidden := map[string]bool{"p2": true, "t1:c1": true}
 	urlFor := func(h map[string]bool) string {
 		return "?hide=" + hiddenCSV(h, twoPhaseResp().GetPhases())

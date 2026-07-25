@@ -69,7 +69,7 @@ func TestBuildApprovalBar(t *testing.T) {
 		},
 	}
 
-	bar := buildApprovalBar(deps, perms, resp, "tmpl-1", false)
+	bar := buildApprovalBar(deps, perms, resp, "tmpl-1", "")
 	if len(bar) != 6 {
 		t.Fatalf("expected 6 bar phases, got %d", len(bar))
 	}
@@ -136,7 +136,7 @@ func TestBuildApprovalBar_NoPermissions(t *testing.T) {
 		Phases:          []*matrixpb.PhaseColumn{phaseCol("pA", "Sem 1", "tA")},
 		ApprovalRollups: []*matrixpb.PhaseApprovalRollup{rollup("pA", sIP, false, true, false, 30, 0)},
 	}
-	bar := buildApprovalBar(deps, perms, resp, "tmpl-1", false)
+	bar := buildApprovalBar(deps, perms, resp, "tmpl-1", "")
 	if len(bar) != 1 {
 		t.Fatalf("want 1 phase, got %d", len(bar))
 	}

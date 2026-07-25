@@ -361,6 +361,20 @@ func (m *OutcomeMatrixModule) RegisterRoutes(r view.RouteRegistrar) {
 	// and e2e selectors keep resolving exactly as before.
 	//
 	// The four approval transitions get NO section form on purpose — see routes.go.
+	// Group forms of the four transitions — SAME handlers; each reads
+	// r.PathValue("group_id") and narrows the request when present.
+	if m.Submit != nil && m.routes.GroupSubmitURL != "" {
+		r.POST(m.routes.GroupSubmitURL, m.Submit)
+	}
+	if m.Verify != nil && m.routes.GroupVerifyURL != "" {
+		r.POST(m.routes.GroupVerifyURL, m.Verify)
+	}
+	if m.Publish != nil && m.routes.GroupPublishURL != "" {
+		r.POST(m.routes.GroupPublishURL, m.Publish)
+	}
+	if m.Return != nil && m.routes.GroupReturnURL != "" {
+		r.POST(m.routes.GroupReturnURL, m.Return)
+	}
 	if m.Matrix != nil && m.routes.GroupMatrixURL != "" {
 		r.GET(m.routes.GroupMatrixURL, m.Matrix)
 	}

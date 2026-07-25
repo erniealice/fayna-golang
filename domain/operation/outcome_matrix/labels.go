@@ -247,13 +247,16 @@ func DefaultLabels() Labels {
 		},
 		Grid: GridLabels{
 			CellGridLabels: pyezatypes.CellGridLabels{
-				ClientColumn:   "Client",
-				SaveButton:     "Save scores",
-				SavingButton:   "Saving…",
-				SavedBanner:    "Scores saved.",
-				ErrorBanner:    "Save failed — please try again.",
-				ReadOnlyMarker: "(read only)",
-				EmptyGrid:      "No rows to display.",
+				ClientColumn: "Client",
+				// Generic tier wording. Education overrides both via lyngua.
+				ClientTotal:         "{count} records",
+				BreakdownUnassigned: "not assigned",
+				SaveButton:          "Save scores",
+				SavingButton:        "Saving…",
+				SavedBanner:         "Scores saved.",
+				ErrorBanner:         "Save failed — please try again.",
+				ReadOnlyMarker:      "(read only)",
+				EmptyGrid:           "No rows to display.",
 				// W2 grade-sheet edit-mode (AutoSave) per-cell + notice strings.
 				CellSaving:  "Saving…",
 				CellSaved:   "Saved",

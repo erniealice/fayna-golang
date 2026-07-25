@@ -17,6 +17,37 @@ import "strings"
 type Options struct {
 	// Tab configures the list tabstrip (one tab per job_category row).
 	Tab TabOptions
+
+	// RowLink configures the GRAIN each row's detail link addresses.
+	RowLink RowLinkOptions
+}
+
+// RowLinkOptions — the grain of a summary row's detail URL.
+//
+// The delivery aggregate is already at (job_template × subscription_group)
+// grain, so a template delivered to several groups produces several rows. Which
+// of the two ids a row's link carries is a DEPLOYMENT choice, not a property of
+// the data: a workspace whose templates each serve one group gains nothing from
+// a second path segment, while one that reuses a template across groups needs it
+// or every such row links to the same page.
+//
+// Zero value = template grain, i.e. the pre-20260725 behaviour, so an app that
+// sets nothing (service-admin) is byte-unchanged.
+type RowLinkOptions struct {
+	// ScopeByField names the entity whose id EXTENDS the row's detail URL.
+	//   ""                   → "/outcome-matrix/{id}"
+	//   "subscription_group" → "/outcome-matrix/{id}/subscription-group/{group_id}"
+	//
+	// Fail-safe like TabOptions.GroupByField: an unrecognized ref, or a row with
+	// no group id, falls back to the template-grain URL rather than emitting a
+	// half-resolved path.
+	ScopeByField string
+}
+
+// RowLinkScopedByGroup reports whether rows should link at (template, group)
+// grain.
+func (o Options) RowLinkScopedByGroup() bool {
+	return strings.TrimSpace(o.RowLink.ScopeByField) == RowLinkEntitySubscriptionGroup
 }
 
 // TabOptions — list tabstrip. GroupByField names the entity whose rows each
@@ -33,6 +64,9 @@ const (
 	// TabEntityJobCategory is the entity ref that turns each job_category row
 	// into a list tab.
 	TabEntityJobCategory = "job_category"
+	// RowLinkEntitySubscriptionGroup is the entity ref that extends a summary
+	// row's detail URL with its delivery group.
+	RowLinkEntitySubscriptionGroup = "subscription_group"
 	// jobCategorySortOrderField is the entity-field ref suffix that selects the
 	// explicit sort_order tab ordering (NULLS LAST, name ASC fallback).
 	jobCategorySortOrderField = "sort_order"

@@ -70,6 +70,17 @@ const (
 	PublishURL = "/action/outcome-matrix/{id}/publish"
 	ReturnURL  = "/action/outcome-matrix/{id}/return"
 
+	// Delivery-group forms of the four transitions. A sheet narrowed to one group
+	// must TRANSITION that group only — posting to the template-scoped form above
+	// would flip every group under the template, i.e. act on students the page
+	// never displayed. The group rides the PATH (not the form body) so the signed
+	// action token covers it: {{actionForm}} signs the exact resolved path, so a
+	// tampered group id invalidates the signature instead of silently retargeting.
+	GroupSubmitURL  = "/action/outcome-matrix/{id}/subscription-group/{group_id}/submit"
+	GroupVerifyURL  = "/action/outcome-matrix/{id}/subscription-group/{group_id}/verify"
+	GroupPublishURL = "/action/outcome-matrix/{id}/subscription-group/{group_id}/publish"
+	GroupReturnURL  = "/action/outcome-matrix/{id}/subscription-group/{group_id}/return"
+
 	// NarrativeURL is the per-cell narrative drawer (N-1 LOCKED 2026-07-23): a
 	// dedicated route serving GET (render the drawer form, editability resolved
 	// SERVER-SIDE by the shared authority core) + POST (save the cell's
@@ -137,6 +148,10 @@ type Routes struct {
 	// section page renders its approval band READ-ONLY rather than offering a
 	// Submit that silently flips every section on the template.
 	GroupMatrixURL         string `json:"group_matrix_url"`
+	GroupSubmitURL         string `json:"group_submit_url"`
+	GroupVerifyURL         string `json:"group_verify_url"`
+	GroupPublishURL        string `json:"group_publish_url"`
+	GroupReturnURL         string `json:"group_return_url"`
 	GroupExportURL         string `json:"group_export_url"`
 	GroupDownloadDrawerURL string `json:"group_download_drawer_url"`
 
@@ -169,6 +184,10 @@ func DefaultRoutes() Routes {
 		DownloadDrawerURL: DownloadDrawerURL,
 
 		GroupMatrixURL:         GroupMatrixURL,
+		GroupSubmitURL:         GroupSubmitURL,
+		GroupVerifyURL:         GroupVerifyURL,
+		GroupPublishURL:        GroupPublishURL,
+		GroupReturnURL:         GroupReturnURL,
 		GroupExportURL:         GroupExportURL,
 		GroupDownloadDrawerURL: GroupDownloadDrawerURL,
 
@@ -200,6 +219,10 @@ func (r Routes) RouteMap() map[string]string {
 		"outcome_matrix.narrative":       r.NarrativeURL,
 
 		"outcome_matrix.group_matrix":          r.GroupMatrixURL,
+		"outcome_matrix.group_submit":          r.GroupSubmitURL,
+		"outcome_matrix.group_verify":          r.GroupVerifyURL,
+		"outcome_matrix.group_publish":         r.GroupPublishURL,
+		"outcome_matrix.group_return":          r.GroupReturnURL,
 		"outcome_matrix.group_export":          r.GroupExportURL,
 		"outcome_matrix.group_download_drawer": r.GroupDownloadDrawerURL,
 

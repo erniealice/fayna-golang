@@ -50,7 +50,7 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 		// Section narrowing ({group_id}) — validated before any read. Same
 		// fail-closed 404 text as the missing-template branch above, so a wrong
 		// pair is indistinguishable from a wrong id (no existence oracle).
-		section, ok := outcome_matrix.ResolveSectionScope(ctx, r, templateID, deps.ListJobTemplateSummaries)
+		section, ok := outcome_matrix.ResolveGroupScope(ctx, r, templateID, deps.ListJobTemplateSummaries)
 		if !ok {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -88,7 +88,7 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 			Scope:         scope,
 		}
 		if section.Scoped() {
-			matrixReq.SectionId = &section.GroupID
+			matrixReq.SubscriptionGroupId = &section.GroupID
 		}
 		resp, err := deps.GetOutcomeMatrix(ctx, matrixReq)
 		if err != nil || resp == nil {
@@ -138,8 +138,10 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 				hidden[t] = true
 			}
 		}
+		// nil bar: the CSV export needs the column TREE only. Header action
+		// controls are a rendered-page concern and have no CSV representation.
 		grid := buildGrid(ctx, deps, perms, resp, effectiveAll, templateID, hidden,
-			&view.ViewContext{Request: r})
+			&view.ViewContext{Request: r}, nil)
 		if grid.LeafColumnCount() == 0 {
 			http.Error(w, "not found", http.StatusNotFound)
 			return

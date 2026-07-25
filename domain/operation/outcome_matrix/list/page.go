@@ -248,9 +248,9 @@ func NewView(deps *PageViewDeps) view.View {
 		// read: an unvalidated section id renders a believable partial roster from
 		// another academic year rather than failing (section_scope.go). Empty on
 		// the template-scoped routes, which keeps their behaviour identical.
-		section, ok := outcome_matrix.ResolveSectionScope(ctx, viewCtx.Request, templateID, deps.ListJobTemplateSummaries)
+		section, ok := outcome_matrix.ResolveGroupScope(ctx, viewCtx.Request, templateID, deps.ListJobTemplateSummaries)
 		if !ok {
-			return view.ViewResult{Error: outcome_matrix.ErrSectionNotInTemplate, StatusCode: http.StatusNotFound}
+			return view.ViewResult{Error: outcome_matrix.ErrGroupNotInTemplate, StatusCode: http.StatusNotFound}
 		}
 
 		// Scope resolution. Explicit ?scope=all|mine is honored as requested. With
@@ -281,7 +281,7 @@ func NewView(deps *PageViewDeps) view.View {
 				Scope:         scope,
 			}
 			if section.Scoped() {
-				req.SectionId = &section.GroupID
+				req.SubscriptionGroupId = &section.GroupID
 			}
 			resp, err = deps.GetOutcomeMatrix(ctx, req)
 			if err != nil {
@@ -296,7 +296,12 @@ func NewView(deps *PageViewDeps) view.View {
 		// colspan/coord derivation stays correct by construction.
 		hidden := resolveHidden(viewCtx.Request.URL.Query().Get("hide"), resp)
 
-		grid := buildGrid(ctx, deps, perms, resp, effectiveAll, templateID, hidden, viewCtx)
+		// The approval bar is derived BEFORE the grid because each phase's
+		// controls now render inside its own L1 header cell (the band above the
+		// table scrolls away vertically; the header does not).
+		bar := buildApprovalBar(deps, perms, resp, templateID, section.GroupID)
+
+		grid := buildGrid(ctx, deps, perms, resp, effectiveAll, templateID, hidden, viewCtx, bar)
 
 		subjectName := ""
 		if resp != nil {
@@ -399,12 +404,11 @@ func NewView(deps *PageViewDeps) view.View {
 			ShowScopeAll: canSeeAll && !section.Scoped(),
 		}
 
-		bar := buildApprovalBar(deps, perms, resp, templateID, section.Scoped())
 		pageData.ApprovalBar = bar
 		pageData.ShowApprovalBar = len(bar) > 0
 
 		if resp != nil {
-			fullCols := buildColumns(resp.GetPhases())
+			fullCols := buildColumns(resp.GetPhases(), nil, nil)
 			phases := resp.GetPhases()
 			cols, hiddenLeaves := buildColsSelector(fullCols, hidden, func(h map[string]bool) string {
 				return withParams(matrixBase, scopeActive, hiddenCSV(h, phases))
@@ -486,6 +490,7 @@ func buildGrid(
 	templateID string,
 	hidden map[string]bool,
 	viewCtx *view.ViewContext,
+	bar []ApprovalPhase,
 ) *types.CellGridConfig {
 	l := deps.Labels
 
@@ -515,14 +520,26 @@ func buildGrid(
 		// on empty, so this is a clean removal, not a hidden feature loss.
 		FreezeFirstCol:   true,
 		FreezeHeaderRows: 3,
-		SaveURL:          route.ResolveURL(deps.Routes.RecordURL, "id", templateID),
-		SaveMode:         saveMode,
-		AutoSave:         canSave,
-		JobTemplateID:    templateID,
-		Scope:            scopeStr,
-		SaveDisabled:     !perms.Can("task_outcome", "create"),
-		Labels:           l.Grid.CellGridLabels,
-		CacheVersion:     viewCtx.CacheVersion,
+		// Left-align the two GROUPING header rows (phase, assessment). The leaf
+		// criterion row stays centred over its numeric columns. Opt-in through
+		// pyeza's existing CardClass rather than a new config flag — alignment
+		// is a presentation choice this consumer is making, not something the
+		// generic grid should decide or grow an API for.
+		CardClass: "cell-grid-card--head-left",
+		// Per-phase approval controls render at the far end of their OWN L1
+		// header cell (matrix.html defines the template). The header is sticky,
+		// so a control there survives scrolling down the roster — which is
+		// exactly when it is wanted — and the band above the table no longer has
+		// to reserve vertical space for buttons.
+		L1ActionsTemplate: "outcome-matrix-phase-actions",
+		SaveURL:           route.ResolveURL(deps.Routes.RecordURL, "id", templateID),
+		SaveMode:          saveMode,
+		AutoSave:          canSave,
+		JobTemplateID:     templateID,
+		Scope:             scopeStr,
+		SaveDisabled:      !perms.Can("task_outcome", "create"),
+		Labels:            l.Grid.CellGridLabels,
+		CacheVersion:      viewCtx.CacheVersion,
 	}
 
 	if resp == nil {
@@ -552,7 +569,7 @@ func buildGrid(
 	// keyboard coords all derive from cfg.Columns, so removing subtrees here
 	// keeps every downstream computation correct by construction. `hidden` has
 	// already been resolved fail-safe (resolveHidden) — never empties the grid.
-	cfg.Columns = pruneColumns(buildColumns(resp.GetPhases()), hidden)
+	cfg.Columns = pruneColumns(buildColumns(resp.GetPhases(), phaseChips(l.Approval, resp), phaseActions(bar, l, cfg.WorkspaceID)), hidden)
 	// Per-cell narrative affordance: resolve the drawer route once ({id} filled)
 	// and index the leaf-column labels by colKey so buildRows can compose each
 	// icon's accessible name / dialog title. An unconfigured NarrativeURL leaves
@@ -684,6 +701,19 @@ func applyRowOptions(cfg *types.CellGridConfig, opts outcome_matrix.Options, att
 	}
 
 	_, banded := valueFor(opts.RowGroupByField, "")
+
+	// Frozen corner caption stack. Built from the SAME attribute map the bands
+	// below use — no extra read. Deferred to the end of this function so the
+	// buckets follow the final band order.
+	defer func() {
+		var buckets []headBucket
+		if banded {
+			buckets = groupBuckets(cfg.Rows,
+				func(rowID string) string { v, _ := valueFor(opts.RowGroupByField, rowID); return v },
+				cfg.Labels.BreakdownUnassigned)
+		}
+		cfg.RowHeadHTML = buildRowHeadHTML(cfg.Labels, len(cfg.Rows), buckets)
+	}()
 
 	// Banded presentation implies the class-list name form "{last}, {first}"
 	// (prod report-card parity; the outcome_summary section grid does the
@@ -892,7 +922,7 @@ func clientDisplayName(c *clientpb.Client) string {
 // needs the four transition RPCs to carry a section and six espyna helpers to
 // stop keying on (templateID, phaseID). Until that lands, showing the counts
 // without the buttons is the only option that is not a scope lie.
-func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *matrixpb.GetOutcomeMatrixResponse, templateID string, sectionScoped bool) []ApprovalPhase {
+func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *matrixpb.GetOutcomeMatrixResponse, templateID, groupID string) []ApprovalPhase {
 	if resp == nil || templateID == "" {
 		return nil
 	}
@@ -909,15 +939,28 @@ func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *ma
 
 	// Layer-2 view gates cite the SAME job_phase:<verb> codes the use-case
 	// ActionGatekeeper.Check + strict authorizer verify (copya.md gate discipline).
-	canSubmit := perms.Can("job_phase", "submit") && !sectionScoped
-	canVerify := perms.Can("job_phase", "verify") && !sectionScoped
-	canPublish := perms.Can("job_phase", "publish") && !sectionScoped
-	canReturn := perms.Can("job_phase", "return") && !sectionScoped
+	// No longer downgraded on a group-scoped sheet: the transitions now carry the
+	// group, so a Submit here moves exactly the rows on screen.
+	canSubmit := perms.Can("job_phase", "submit")
+	canVerify := perms.Can("job_phase", "verify")
+	canPublish := perms.Can("job_phase", "publish")
+	canReturn := perms.Can("job_phase", "return")
 
+	// Group-scoped sheets post to the group forms, so a transition acts on the
+	// students actually displayed. The page's own scope IS the signal — a user
+	// only reaches a group URL when the list block is configured for that grain
+	// (job.Options.RowLink), so the config decides transitively and this view
+	// needs no second copy of it.
 	submitPath := route.ResolveURL(deps.Routes.SubmitURL, "id", templateID)
 	verifyPath := route.ResolveURL(deps.Routes.VerifyURL, "id", templateID)
 	publishPath := route.ResolveURL(deps.Routes.PublishURL, "id", templateID)
 	returnPath := route.ResolveURL(deps.Routes.ReturnURL, "id", templateID)
+	if groupID != "" && deps.Routes.GroupSubmitURL != "" {
+		submitPath = route.ResolveURL(deps.Routes.GroupSubmitURL, "id", templateID, "group_id", groupID)
+		verifyPath = route.ResolveURL(deps.Routes.GroupVerifyURL, "id", templateID, "group_id", groupID)
+		publishPath = route.ResolveURL(deps.Routes.GroupPublishURL, "id", templateID, "group_id", groupID)
+		returnPath = route.ResolveURL(deps.Routes.GroupReturnURL, "id", templateID, "group_id", groupID)
+	}
 
 	out := make([]ApprovalPhase, 0, len(rollups))
 	for _, ru := range rollups {
@@ -941,13 +984,12 @@ func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *ma
 			HardFrozen:  frozen,
 			HasData:     ru.GetHasData(),
 			TargetCount: ru.GetTargetCount(),
-			// Suppressed on a section page. TargetCount is the roll-up's target
-			// over the WHOLE template (87 job_phase rows across Palladium +
-			// Platinum + Tantalum); section_id does not narrow it. Rendering it
-			// beside a 29-row roster reads as "this section has 87 students".
-			// The status chip below still applies to the template and is honest
-			// on its own, because it carries no number.
-			TargetLabel:    targetLabel(l, ru.GetTargetCount(), sectionScoped),
+			// Shown again on a group-scoped sheet: the roll-up probes are now
+			// narrowed to the same group as the rows (espyna
+			// loadApprovalRollups), so this count describes the roster on screen
+			// rather than the whole template. It was suppressed while the two
+			// disagreed.
+			TargetLabel:    subCount(l.Chip.PublishedCount, ru.GetTargetCount()),
 			BlankCount:     ru.GetBlankRequiredCount(),
 			SubmitPath:     submitPath,
 			VerifyPath:     verifyPath,
@@ -1023,26 +1065,21 @@ func subCount(tmpl string, n int32) string {
 	return strings.Replace(tmpl, "{count}", strconv.FormatInt(int64(n), 10), 1)
 }
 
-// targetLabel renders the approval roll-up's target count, or nothing at all on
-// a section-scoped sheet where that count describes the template rather than the
-// section on screen. Blank rather than recomputed on purpose: the section's true
-// target is its own job_phase count, which the roll-up does not carry — deriving
-// it from the rendered row count would silently disagree whenever a student has
-// no job_phase for the period.
-func targetLabel(l outcome_matrix.ApprovalLabels, n int32, sectionScoped bool) string {
-	if sectionScoped {
-		return ""
-	}
-	return subCount(l.Chip.PublishedCount, n)
-}
-
 // buildColumns maps the proto phase→task→criterion tree into CellGridLevel1/2/3.
-func buildColumns(phases []*matrixpb.PhaseColumn) []types.CellGridLevel1 {
+func buildColumns(phases []*matrixpb.PhaseColumn, chips map[string]phaseChip, actions map[string]any) []types.CellGridLevel1 {
 	columns := make([]types.CellGridLevel1, 0, len(phases))
 	for _, ph := range phases {
 		l1 := types.CellGridLevel1{
 			Key:   ph.GetJobTemplatePhaseId(),
 			Label: ph.GetLabel(),
+			// Title + state badge in the header cell itself, so the phase's
+			// state is legible while scrolled down the roster — the approval
+			// band above scrolls away. Empty when the phase has no derived
+			// state, and pyeza then renders Label alone.
+			LabelHTML: buildPhaseLabelHTML(ph.GetLabel(), chips[ph.GetJobTemplatePhaseId()]),
+			// Per-phase controls, rendered by L1ActionsTemplate at the far end
+			// of this same cell. nil ⇒ no slot (see phaseActions).
+			Actions: actions[ph.GetJobTemplatePhaseId()],
 		}
 		for _, tk := range ph.GetTasks() {
 			l2 := types.CellGridLevel2{

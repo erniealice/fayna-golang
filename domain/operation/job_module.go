@@ -75,10 +75,10 @@ type JobModuleDeps struct {
 	// each summary row links to.
 	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 	MatrixDetailURL          string
-	// MatrixSectionDetailURL is the (template, section) form of MatrixDetailURL
+	// MatrixGroupDetailURL is the (template, section) form of MatrixDetailURL
 	// ("/outcome-matrix/{id}/subscription-group/{group_id}"). Preferred whenever
 	// the row carries a subscription_group_id; falls back to MatrixDetailURL.
-	MatrixSectionDetailURL string
+	MatrixGroupDetailURL string
 
 	// JobListOptions drives the "/classes" job_category tab-split (school-admin
 	// education tier). Zero value → flat list (service-admin backward-compat).
@@ -230,7 +230,7 @@ func NewJobModule(deps *JobModuleDeps) *JobModule {
 			// Template-grain delivery summary (education tier) — one server-side call.
 			ListJobTemplateSummaries: deps.ListJobTemplateSummaries,
 			MatrixDetailURL:          deps.MatrixDetailURL,
-			MatrixSectionDetailURL:   deps.MatrixSectionDetailURL,
+			MatrixGroupDetailURL:   deps.MatrixGroupDetailURL,
 			// "/classes" job_category tab-split.
 			Options:               deps.JobListOptions,
 			ListJobCategories:     deps.ListJobCategories,

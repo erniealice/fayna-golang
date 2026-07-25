@@ -25,7 +25,7 @@ func lister(templateIDs ...string) SummaryLister {
 	}
 }
 
-func TestResolveSectionScope(t *testing.T) {
+func TestResolveGroupScope(t *testing.T) {
 	const tmpl = "61b151bb"
 	const group = "019f82fb"
 
@@ -101,7 +101,7 @@ func TestResolveSectionScope(t *testing.T) {
 				r.SetPathValue("group_id", tc.groupID)
 			}
 
-			got, ok := ResolveSectionScope(context.Background(), r, tc.templateID, tc.lister)
+			got, ok := ResolveGroupScope(context.Background(), r, tc.templateID, tc.lister)
 			if ok != tc.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
 			}
@@ -130,8 +130,8 @@ func TestResolveSectionScope(t *testing.T) {
 
 // A nil request must not panic — the template-scoped call sites pass whatever
 // the view context holds.
-func TestResolveSectionScopeNilRequest(t *testing.T) {
-	got, ok := ResolveSectionScope(context.Background(), nil, "tmpl", lister("tmpl"))
+func TestResolveGroupScopeNilRequest(t *testing.T) {
+	got, ok := ResolveGroupScope(context.Background(), nil, "tmpl", lister("tmpl"))
 	if !ok {
 		t.Fatal("nil request should be treated as template-scoped, not refused")
 	}

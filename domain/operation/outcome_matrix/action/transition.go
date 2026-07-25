@@ -42,42 +42,60 @@ type TransitionDeps struct {
 
 // NewSubmitAction returns the IN_PROGRESS → FOR_REVIEW POST handler.
 func NewSubmitAction(deps *TransitionDeps) view.View {
-	return newTransitionAction(deps, "submit", func(ctx context.Context, templateID, phaseID, _ string) error {
+	return newTransitionAction(deps, "submit", func(ctx context.Context, templateID, phaseID, _, groupID string) error {
 		if deps.Submit == nil {
 			return errNotWired
 		}
-		_, err := deps.Submit(ctx, &jobphasepb.SubmitJobPhaseApprovalRequest{
+		req := &jobphasepb.SubmitJobPhaseApprovalRequest{
 			JobTemplateId:      templateID,
 			JobTemplatePhaseId: phaseID,
-		})
+		}
+		// Set ONLY when the route supplied a group. Absent ⇒ the whole template,
+		// i.e. the template-scoped page behaves exactly as it always has.
+		if groupID != "" {
+			req.SubscriptionGroupId = &groupID
+		}
+		_, err := deps.Submit(ctx, req)
 		return err
 	})
 }
 
 // NewVerifyAction returns the FOR_REVIEW → VERIFIED POST handler.
 func NewVerifyAction(deps *TransitionDeps) view.View {
-	return newTransitionAction(deps, "verify", func(ctx context.Context, templateID, phaseID, _ string) error {
+	return newTransitionAction(deps, "verify", func(ctx context.Context, templateID, phaseID, _, groupID string) error {
 		if deps.Verify == nil {
 			return errNotWired
 		}
-		_, err := deps.Verify(ctx, &jobphasepb.VerifyJobPhaseApprovalRequest{
+		req := &jobphasepb.VerifyJobPhaseApprovalRequest{
 			JobTemplateId:      templateID,
 			JobTemplatePhaseId: phaseID,
-		})
+		}
+		// Set ONLY when the route supplied a group. Absent ⇒ the whole template,
+		// i.e. the template-scoped page behaves exactly as it always has.
+		if groupID != "" {
+			req.SubscriptionGroupId = &groupID
+		}
+		_, err := deps.Verify(ctx, req)
 		return err
 	})
 }
 
 // NewPublishAction returns the VERIFIED → PUBLISHED POST handler.
 func NewPublishAction(deps *TransitionDeps) view.View {
-	return newTransitionAction(deps, "publish", func(ctx context.Context, templateID, phaseID, _ string) error {
+	return newTransitionAction(deps, "publish", func(ctx context.Context, templateID, phaseID, _, groupID string) error {
 		if deps.Publish == nil {
 			return errNotWired
 		}
-		_, err := deps.Publish(ctx, &jobphasepb.PublishJobPhaseApprovalRequest{
+		req := &jobphasepb.PublishJobPhaseApprovalRequest{
 			JobTemplateId:      templateID,
 			JobTemplatePhaseId: phaseID,
-		})
+		}
+		// Set ONLY when the route supplied a group. Absent ⇒ the whole template,
+		// i.e. the template-scoped page behaves exactly as it always has.
+		if groupID != "" {
+			req.SubscriptionGroupId = &groupID
+		}
+		_, err := deps.Publish(ctx, req)
 		return err
 	})
 }
@@ -86,7 +104,7 @@ func NewPublishAction(deps *TransitionDeps) view.View {
 // handler. The reason field is collected here; the server enforces the
 // published-return non-blank-reason requirement.
 func NewReturnAction(deps *TransitionDeps) view.View {
-	return newTransitionAction(deps, "return", func(ctx context.Context, templateID, phaseID, reason string) error {
+	return newTransitionAction(deps, "return", func(ctx context.Context, templateID, phaseID, reason, groupID string) error {
 		if deps.Return == nil {
 			return errNotWired
 		}
@@ -94,11 +112,15 @@ func NewReturnAction(deps *TransitionDeps) view.View {
 		if r := strings.TrimSpace(reason); r != "" {
 			reasonArg = &r
 		}
-		_, err := deps.Return(ctx, &jobphasepb.ReturnJobPhaseApprovalRequest{
+		req := &jobphasepb.ReturnJobPhaseApprovalRequest{
 			JobTemplateId:      templateID,
 			JobTemplatePhaseId: phaseID,
 			Reason:             reasonArg,
-		})
+		}
+		if groupID != "" {
+			req.SubscriptionGroupId = &groupID
+		}
+		_, err := deps.Return(ctx, req)
 		return err
 	})
 }
@@ -111,7 +133,7 @@ func (e *transitionError) Error() string { return e.msg }
 
 // newTransitionAction is the shared handler body: verb gate → parse sheet
 // identity → run → HX-Redirect reload on success / HTMXError banner on failure.
-func newTransitionAction(deps *TransitionDeps, verb string, run func(ctx context.Context, templateID, phaseID, reason string) error) view.View {
+func newTransitionAction(deps *TransitionDeps, verb string, run func(ctx context.Context, templateID, phaseID, reason, groupID string) error) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
 		// Layer-2 gate cites the SAME job_phase:<verb> the use case gates on.
@@ -126,16 +148,23 @@ func newTransitionAction(deps *TransitionDeps, verb string, run func(ctx context
 		if err := viewCtx.Request.ParseForm(); err != nil {
 			return view.HTMXError(deps.Labels.Approval.Errors.ActionFailed)
 		}
+		// Delivery group from the PATH (the Group* route forms). Empty on the
+		// template-scoped routes, so those are byte-identical to before. It comes
+		// from the path rather than the form body deliberately: {{actionForm}}
+		// signs the exact resolved path, so the signature covers the group and a
+		// tampered id fails the workspace-form guard instead of retargeting the
+		// transition at another group.
+		groupID := strings.TrimSpace(viewCtx.Request.PathValue("group_id"))
 		phaseID := strings.TrimSpace(viewCtx.Request.FormValue("job_template_phase_id"))
 		reason := viewCtx.Request.FormValue("reason")
 		if phaseID == "" {
 			return view.HTMXError(deps.Labels.Approval.Errors.ActionFailed)
 		}
 
-		if err := run(ctx, templateID, phaseID, reason); err != nil {
+		if err := run(ctx, templateID, phaseID, reason, groupID); err != nil {
 			// Fail closed: log the detail, surface only the generic lyngua'd
 			// message (never echo the raw server error — it could enumerate).
-			log.Printf("outcome matrix approval %s: template=%s phase=%s: %v", verb, templateID, phaseID, err)
+			log.Printf("outcome matrix approval %s: template=%s phase=%s group=%s: %v", verb, templateID, phaseID, groupID, err)
 			return view.HTMXError(deps.Labels.Approval.Errors.ActionFailed)
 		}
 

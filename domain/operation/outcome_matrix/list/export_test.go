@@ -137,7 +137,7 @@ func TestWriteFinalCompositeCSV(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	writeFinalCompositeCSV(context.Background(), rec, deps, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	writeFinalCompositeCSV(context.Background(), rec, deps, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, nil)
 
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -191,14 +191,14 @@ func TestWriteFinalCompositeCSV_ZeroRows404(t *testing.T) {
 		},
 	}
 	rec := httptest.NewRecorder()
-	writeFinalCompositeCSV(context.Background(), rec, deps, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	writeFinalCompositeCSV(context.Background(), rec, deps, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, nil)
 	if rec.Code != 404 {
 		t.Fatalf("empty roster: status = %d, want 404 (never an empty CSV)", rec.Code)
 	}
 
 	// Nil closure → 404 (no composite source), never a 500.
 	rec2 := httptest.NewRecorder()
-	writeFinalCompositeCSV(context.Background(), rec2, &PageViewDeps{Labels: outcome_matrix.DefaultLabels()}, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	writeFinalCompositeCSV(context.Background(), rec2, &PageViewDeps{Labels: outcome_matrix.DefaultLabels()}, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, nil)
 	if rec2.Code != 404 {
 		t.Fatalf("nil roster closure: status = %d, want 404", rec2.Code)
 	}
@@ -222,13 +222,13 @@ func TestWriteFinalCompositeCSV_ScopePassthrough(t *testing.T) {
 		},
 	}
 	rec := httptest.NewRecorder()
-	writeFinalCompositeCSV(context.Background(), rec, deps, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE)
+	writeFinalCompositeCSV(context.Background(), rec, deps, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE, nil)
 	if gotScope != matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE {
 		t.Fatalf("roster request scope = %v, want MINE (scope must pass through unchanged)", gotScope)
 	}
 
 	// (2) ALL request carries ALL scope through.
-	writeFinalCompositeCSV(context.Background(), httptest.NewRecorder(), deps, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	writeFinalCompositeCSV(context.Background(), httptest.NewRecorder(), deps, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, nil)
 	if gotScope != matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL {
 		t.Fatalf("roster request scope = %v, want ALL", gotScope)
 	}
@@ -246,7 +246,7 @@ func TestWriteFinalCompositeCSV_ScopePassthrough(t *testing.T) {
 		},
 	}
 	rec3 := httptest.NewRecorder()
-	writeFinalCompositeCSV(context.Background(), rec3, closed, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE)
+	writeFinalCompositeCSV(context.Background(), rec3, closed, "Arts", "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE, nil)
 	if rec3.Code != 404 {
 		t.Fatalf("MINE non-staff (zero rows): status = %d, want 404", rec3.Code)
 	}
@@ -422,5 +422,44 @@ func TestGradeSheetPDF_ZeroRoster404(t *testing.T) {
 	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
 	if rec.Code != 404 {
 		t.Fatalf("zero roster: status = %d, want 404", rec.Code)
+	}
+}
+
+// TestWriteFinalCompositeCSV_GroupNarrowing pins the 20260725 group-scoped
+// narrowing: the roster read cannot carry a group (template_id + scope only,
+// no proto field), so the handler passes the group-scoped matrix response's
+// client-id set and only those rows are written. An all-foreign set 404s
+// (never an empty CSV), matching the zero-row rule.
+func TestWriteFinalCompositeCSV_GroupNarrowing(t *testing.T) {
+	roster := &matrixpb.GetOutcomeSummaryRosterResponse{
+		Rows: []*matrixpb.OutcomeSummaryRosterRow{
+			{ClientId: "c-in", ClientLabel: "c-in", YearFinalLabel: "A"},
+			{ClientId: "c-out", ClientLabel: "c-out", YearFinalLabel: "B"},
+		},
+	}
+	deps := &PageViewDeps{
+		Labels: outcome_matrix.DefaultLabels(),
+		GetOutcomeSummaryRoster: func(ctx context.Context, req *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error) {
+			return roster, nil
+		},
+	}
+
+	rec := httptest.NewRecorder()
+	writeFinalCompositeCSV(context.Background(), rec, deps, "Arts", "tmpl-1",
+		matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, map[string]bool{"c-in": true})
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "c-in") || strings.Contains(body, "c-out") {
+		t.Errorf("group narrowing failed — body:\n%s", body)
+	}
+
+	// All-foreign narrowing set → zero kept rows → 404.
+	rec2 := httptest.NewRecorder()
+	writeFinalCompositeCSV(context.Background(), rec2, deps, "Arts", "tmpl-1",
+		matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, map[string]bool{"c-elsewhere": true})
+	if rec2.Code != 404 {
+		t.Fatalf("all-foreign narrowing: status = %d, want 404", rec2.Code)
 	}
 }

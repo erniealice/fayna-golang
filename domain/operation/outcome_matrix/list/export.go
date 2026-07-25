@@ -118,10 +118,23 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 		// year final) — bypasses the grid entirely (a summary read, not a column
 		// prune; the year-final has no matrix column).
 		if period == "final" {
+			// The roster read carries NO group narrowing (the request is
+			// template_id + scope only — no proto field, by design), so on a
+			// group-scoped export the row set is narrowed HERE to the client ids
+			// the (already group-scoped) matrix response carries — the same
+			// filter-by-rendered-rows rule the view's rating columns use. A
+			// template-scoped export passes nil and is byte-identical to before.
+			var onlyClients map[string]bool
+			if section.Scoped() {
+				onlyClients = make(map[string]bool, len(resp.GetRows()))
+				for _, row := range resp.GetRows() {
+					onlyClients[row.GetClientId()] = true
+				}
+			}
 			// Thread the ALREADY-RESOLVED scope (the same MINE/ALL the grid + the
 			// GetOutcomeMatrix call above use) into the roster read — MINE stays MINE
 			// so a non-admin never receives the full-workspace year-final roster.
-			writeFinalCompositeCSV(ctx, w, deps, resp.GetJobTemplateName(), templateID, scope)
+			writeFinalCompositeCSV(ctx, w, deps, resp.GetJobTemplateName(), templateID, scope, onlyClients)
 			return
 		}
 
@@ -284,7 +297,11 @@ func rosterPhaseColumns(rows []*matrixpb.OutcomeSummaryRosterRow) []rosterPhaseC
 // template id, workspace-scoped to empty, OR a MINE-scoped non-staff caller the
 // adapter fails closed) 404s — never an empty CSV. The scope is the SAME resolved
 // MINE/ALL the grid CSV path uses, so the composite mirrors the grid's row set.
-func writeFinalCompositeCSV(ctx context.Context, w http.ResponseWriter, deps *PageViewDeps, subjectName, templateID string, scope matrixpb.OutcomeMatrixScope) {
+//
+// onlyClients, when non-nil, keeps ONLY those roster rows — the group-scoped
+// export's narrowing (the roster read itself cannot carry a group; the caller
+// derives the set from the group-scoped matrix response). nil = no narrowing.
+func writeFinalCompositeCSV(ctx context.Context, w http.ResponseWriter, deps *PageViewDeps, subjectName, templateID string, scope matrixpb.OutcomeMatrixScope, onlyClients map[string]bool) {
 	if deps.GetOutcomeSummaryRoster == nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -293,16 +310,30 @@ func writeFinalCompositeCSV(ctx context.Context, w http.ResponseWriter, deps *Pa
 		JobTemplateId: templateID,
 		Scope:         scope,
 	})
-	if err != nil || roster == nil || len(roster.GetRows()) == 0 {
+	if err != nil || roster == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	rows := roster.GetRows()
+	if onlyClients != nil {
+		kept := make([]*matrixpb.OutcomeSummaryRosterRow, 0, len(rows))
+		for _, row := range rows {
+			if onlyClients[row.GetClientId()] {
+				kept = append(kept, row)
+			}
+		}
+		rows = kept
+	}
+	if len(rows) == 0 {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 
-	cols := rosterPhaseColumns(roster.GetRows())
+	cols := rosterPhaseColumns(rows)
 
 	// Roster name hydration (same closure + chunking the grid uses).
-	ids := make([]string, 0, len(roster.GetRows()))
-	for _, row := range roster.GetRows() {
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
 		ids = append(ids, row.GetClientId())
 	}
 	names := fetchClientNames(ctx, deps, ids)
@@ -328,7 +359,7 @@ func writeFinalCompositeCSV(ctx context.Context, w http.ResponseWriter, deps *Pa
 	}
 
 	record := make([]string, 0, len(header))
-	for _, row := range roster.GetRows() {
+	for _, row := range rows {
 		byPhase := make(map[string]string, len(row.GetPhases()))
 		for _, pe := range row.GetPhases() {
 			byPhase[pe.GetJobTemplatePhaseId()] = pe.GetScaledLabel()

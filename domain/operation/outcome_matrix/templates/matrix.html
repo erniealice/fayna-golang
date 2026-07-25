@@ -18,8 +18,18 @@ populated on PageData for any non-template consumer that needs it. */}}
          so without it the control degenerates to ONE always-active link that
          can neither widen nor narrow anything. Render the segment only when it
          actually offers a choice; every data-testid below is unchanged for the
-         permitted case. */}}
-    <div class="om-toolbar">
+         permitted case.
+
+         HIDDEN FOR NOW (20260725 owner request): --hidden displays:none the
+         whole band — the scope segment, the approval status band AND the
+         .om-tools cluster (Columns menu + Download drawer trigger). It still
+         RENDERS because the approval form HOSTS live in it: the phase-header
+         Submit/Verify/Publish/Return buttons submit them via form="…", and a
+         display:none form submits normally. The per-phase RESULT banners were
+         moved OUT to the visible .om-results strip below (a hidden aria-live
+         region announces nothing). Drop the modifier class to bring the band
+         back. */}}
+    <div class="om-toolbar om-toolbar--hidden">
         {{if .ShowScopeAll}}
         <div class="om-scope-toggle" data-testid="om-scope-toggle">
             <a href="{{.ScopeMineURL}}" class="om-scope{{if eq .ScopeActive "mine"}} om-scope--active{{end}}" data-testid="om-scope-mine">{{.Labels.Scope.Mine}}</a>
@@ -85,6 +95,17 @@ populated on PageData for any non-template consumer that needs it. */}}
             {{end}}
         </div>
     </div>
+    {{/* Visible landing strip for the per-phase approval result banners while
+         .om-toolbar is hidden: the forms resolve their banner by id
+         (data-result-id), never by position, so relocating the divs here keeps
+         success/error feedback visible. Ids are unchanged (pa-{slug}-result). */}}
+    {{if .ShowApprovalBar}}
+    <div class="om-results" data-testid="om-results">
+        {{range .ApprovalBar}}
+        <div id="pa-{{.Slug}}-result" class="form-result form-result--hidden" role="status" aria-live="polite" data-testid="pa-{{.Slug}}-result"></div>
+        {{end}}
+    </div>
+    {{end}}
     {{template "cell-grid-card" .Grid}}
 </div>
 {{end}}
@@ -144,7 +165,9 @@ populated on PageData for any non-template consumer that needs it. */}}
                 <input type="text" name="reason" class="status-form__input" placeholder="{{.ReturnReasonLabel}}"{{if .ReturnReasonRequired}} required{{end}} data-testid="pa-{{.Slug}}-return-reason">
             </form>
             {{end}}
-            <div id="pa-{{.Slug}}-result" class="form-result form-result--hidden" role="status" aria-live="polite" data-testid="pa-{{.Slug}}-result"></div>
+            {{/* The per-phase #pa-{slug}-result banner moved to the visible
+                 .om-results strip (outcome-matrix-content) — inside this
+                 now-hidden band it could never show feedback. */}}
         </div>
         {{end}}
     </div>
@@ -186,12 +209,22 @@ populated on PageData for any non-template consumer that needs it. */}}
      swap all keep working unchanged. */}}
 {{with .Actions}}
 {{$labels := .Labels}}
+{{$dlURL := .DownloadURL}}
+{{$dlAria := .DownloadAria}}
+{{$dlTestID := .DownloadTestID}}
 {{with .Phase}}
 <span class="cell-grid-headactions" data-testid="pa-{{.Slug}}-actions">
     {{if .CanSubmit}}<button type="submit" form="pa-{{.Slug}}-submit-form" class="btn btn-primary status-form__btn" data-testid="pa-{{.Slug}}-submit">{{$labels.Actions.Submit}}</button>{{end}}
     {{if .CanVerify}}<button type="submit" form="pa-{{.Slug}}-verify-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-verify">{{$labels.Actions.Verify}}</button>{{end}}
     {{if .CanPublish}}<button type="submit" form="pa-{{.Slug}}-publish-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-publish">{{$labels.Actions.Publish}}</button>{{end}}
     {{if .CanReturn}}<button type="submit" form="pa-{{.Slug}}-return-form" class="btn btn-ghost status-form__btn" data-testid="pa-{{.Slug}}-return">{{$labels.Actions.Return}}</button>{{end}}
+    {{/* Per-column CSV download (20260725): an icon-only GET link — no form, so
+         the nested-form trap does not apply. Background colour via btn-primary;
+         icon-only, so the accessible name rides aria-label (+ title tooltip).
+         The URL carries the page's live ?scope=/?hide= and THIS column's
+         period token; on a group-scoped page it is the group-scoped export
+         route, so the file matches the roster on screen. */}}
+    {{if $dlURL}}<a href="{{$dlURL}}" class="btn btn-primary om-dl-btn" download aria-label="{{$dlAria}}" title="{{$dlAria}}" data-testid="{{$dlTestID}}">{{template "icon-download"}}</a>{{end}}
 </span>
 {{end}}
 {{end}}

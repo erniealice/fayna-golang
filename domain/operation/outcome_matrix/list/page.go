@@ -374,6 +374,26 @@ func NewView(deps *PageViewDeps) view.View {
 			return u
 		}
 
+		// Derived read-only rating columns (per-phase composite + whole-row
+		// final, stored values verbatim) + the per-column header download
+		// affordances (ratings.go). View path ONLY — the export handler builds
+		// its own grid, so the grid CSV stays byte-identical; the composites
+		// already have their first-class export (period=final).
+		if resp != nil && len(grid.Rows) > 0 && grid.LeafColumnCount() > 0 {
+			exportBase := ""
+			if deps.Routes.ExportURL != "" {
+				exportBase = route.ResolveURL(deps.Routes.ExportURL, "id", templateID)
+				// A group-scoped page downloads through the group-scoped export
+				// route so the file matches the roster on screen (same handler,
+				// narrower row set — the pair is validated fail-closed there too).
+				if section.Scoped() && deps.Routes.GroupExportURL != "" {
+					exportBase = route.ResolveURL(deps.Routes.GroupExportURL,
+						"id", templateID, "group_id", section.GroupID)
+				}
+			}
+			augmentRatingColumns(ctx, deps, grid, resp, effectiveAll, exportBase, scopeActive, hideCSV)
+		}
+
 		pageData := &PageData{
 			PageData: types.PageData{
 				CacheVersion:        viewCtx.CacheVersion,

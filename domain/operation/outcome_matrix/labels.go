@@ -138,6 +138,10 @@ type ExportLabels struct {
 	PDFPeriodHint   string `json:"pdf_period_hint"`   // shown when format=pdf (period locked)
 	DownloadButton  string `json:"download_button"`   // submit button text
 	NoTemplateError string `json:"no_template_error"` // 503 body when no PDF template configured
+
+	// DownloadAria is the accessible-name template for the icon-only header
+	// download links ("{column}" = the phase label or the Final column label).
+	DownloadAria string `json:"download_aria"`
 }
 
 // ApprovalLabels holds the per-phase approval-bar strings (plan §4.5 / lyngua.md).
@@ -228,6 +232,13 @@ type GridLabels struct {
 	CriterionColumn string `json:"criterion_column"`
 	ScoreColumn     string `json:"score_column"`
 	ReadOnlyTooltip string `json:"read_only_tooltip"`
+
+	// Derived rating columns (20260725): the leaf-column header for the
+	// per-phase composite AND the trailing whole-row final (whose L1 header is
+	// Export.PeriodFinal), plus the read-only tooltip on those cells. Stored
+	// values rendered verbatim — see list/ratings.go.
+	RatingColumn  string `json:"rating_column"`
+	RatingTooltip string `json:"rating_tooltip"`
 }
 
 // ErrorLabels — generic permission-denied string.
@@ -268,6 +279,8 @@ func DefaultLabels() Labels {
 			CriterionColumn: "Criterion",
 			ScoreColumn:     "Score",
 			ReadOnlyTooltip: "Recorded by another staff member — read only",
+			RatingColumn:    "Rating",
+			RatingTooltip:   "Computed rating — read only",
 		},
 		Errors: ErrorLabels{
 			PermissionDenied: "You do not have permission to perform this action",
@@ -327,6 +340,7 @@ func DefaultLabels() Labels {
 			PDFPeriodHint:   "PDF prints the full sheet",
 			DownloadButton:  "Download",
 			NoTemplateError: "No sheet template is configured for this document",
+			DownloadAria:    "Download {column}",
 		},
 		Narrative: NarrativeLabels{
 			Title:         "Narrative",

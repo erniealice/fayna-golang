@@ -99,13 +99,25 @@ func phaseChips(l outcome_matrix.ApprovalLabels, resp *matrixpb.GetOutcomeMatrix
 type PhaseActions struct {
 	Phase  ApprovalPhase
 	Labels outcome_matrix.ApprovalLabels
+
+	// Download* wire the per-column CSV export affordance (20260725): an
+	// icon-only GET link to the sheet export carrying this column's period
+	// token (a phase's code, or the reserved "final" on the trailing composite
+	// column). Stamped by the view AUGMENTATION (ratings.go), not by
+	// phaseActions below — the export base depends on the route scope (group
+	// vs template), which only NewView resolves. A GET link needs no form, so
+	// the nested-form trap the approval buttons dodge does not apply here.
+	DownloadURL    string
+	DownloadAria   string // pre-composed accessible name (icon-only control)
+	DownloadTestID string
 }
 
 // Any reports whether this phase has at least one available control. Templates
 // use it to skip the wrapper entirely: a rendered-but-empty slot would still
 // consume the header cell's space-between gap.
 func (p PhaseActions) Any() bool {
-	return p.Phase.CanSubmit || p.Phase.CanVerify || p.Phase.CanPublish || p.Phase.CanReturn
+	return p.Phase.CanSubmit || p.Phase.CanVerify || p.Phase.CanPublish || p.Phase.CanReturn ||
+		p.DownloadURL != ""
 }
 
 // phaseActions indexes the already-derived approval bar by phase id, so each L1

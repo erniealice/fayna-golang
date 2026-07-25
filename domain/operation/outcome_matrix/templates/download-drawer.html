@@ -8,7 +8,7 @@
      itself (the shared form-group component only exposes a wrapper testid), and
      label/for is wired manually to preserve the accessible association. */}}
 {{define "outcome-matrix-download-drawer-form"}}
-<form method="get" action="{{.ExportAction}}" hx-boost="false" data-testid="outcome-matrix-download-form">
+<form method="get" action="{{.ExportAction}}" hx-boost="false" data-download-form data-testid="outcome-matrix-download-form">
     <div class="sheet-body">
         <div class="form-section">
             <div class="form-row single">

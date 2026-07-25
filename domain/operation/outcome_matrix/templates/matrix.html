@@ -123,7 +123,7 @@ populated on PageData for any non-template consumer that needs it. */}}
                       data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
                     {{actionForm .SubmitPath $root.WorkspaceID}}
                     <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
-                    <button type="submit" class="btn btn-action pa-form__btn" data-testid="pa-{{.Slug}}-submit">{{$root.Labels.Approval.Actions.Submit}}</button>
+                    <button type="submit" class="btn btn-primary pa-form__btn" data-testid="pa-{{.Slug}}-submit">{{$root.Labels.Approval.Actions.Submit}}</button>
                 </form>
                 {{end}}
                 {{if .CanVerify}}

@@ -26,6 +26,7 @@ import (
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
 
@@ -43,6 +44,17 @@ type OutcomeMatrixModuleDeps struct {
 	TableLabels types.TableLabels
 
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
+
+	// ListJobTemplateSummaries backs the (template, section) PAIR VALIDATION the
+	// section-scoped routes require (20260725). It is NOT an optimisation — the
+	// adapter's section predicate narrows by subscription_group_member with no
+	// academic-year term, and students hold active membership in a section in
+	// EVERY year, so an unvalidated foreign-AY section id renders a plausible
+	// non-empty PARTIAL roster rather than failing. Measured on "Arts — AY
+	// 2025-2026" (true roster: Grade 8 Mercury, 30): foreign section ids returned
+	// 14 / 9 / 8 / 7 / 7 / 4 students. Optional/nil-safe — a nil closure makes the
+	// section routes 404 (fail closed), never render unvalidated.
+	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 
 	// GetOutcomeSummaryRoster — the roster-scoped composite read (20260720 P2)
 	// backing the CSV "Final" export. Sourced from espyna's Service aggregate
@@ -178,12 +190,14 @@ type OutcomeMatrixModule struct {
 // NewOutcomeMatrixModule creates the outcome matrix module with all views wired.
 func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule {
 	pageDeps := &outcomematrixlist.PageViewDeps{
-		Routes:                  deps.Routes,
-		Labels:                  deps.Labels,
-		CommonLabels:            deps.CommonLabels,
-		GetOutcomeMatrix:        deps.GetOutcomeMatrix,
-		GetOutcomeSummaryRoster: deps.GetOutcomeSummaryRoster,
-		ResolveStaff:            deps.ResolveStaff,
+		Routes:           deps.Routes,
+		Labels:           deps.Labels,
+		CommonLabels:     deps.CommonLabels,
+		GetOutcomeMatrix: deps.GetOutcomeMatrix,
+		// Pair guard for the Group* routes (nil ⇒ they 404, fail closed).
+		ListJobTemplateSummaries: deps.ListJobTemplateSummaries,
+		GetOutcomeSummaryRoster:  deps.GetOutcomeSummaryRoster,
+		ResolveStaff:             deps.ResolveStaff,
 		// Grade-sheet PDF render context (P5).
 		ReadJobTemplate:              deps.ReadJobTemplate,
 		GenerateDoc:                  deps.GenerateDoc,
@@ -230,9 +244,10 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 	// Export drawer GET view (20260720 Q3) — reuses the SAME GetOutcomeMatrix
 	// closure the grid + CSV handler use, so its period options match the export.
 	downloadView := outcomematrixaction.NewDownloadDrawer(&outcomematrixaction.DrawerDeps{
-		Routes:           deps.Routes,
-		Labels:           deps.Labels,
-		GetOutcomeMatrix: deps.GetOutcomeMatrix,
+		Routes:                   deps.Routes,
+		Labels:                   deps.Labels,
+		GetOutcomeMatrix:         deps.GetOutcomeMatrix,
+		ListJobTemplateSummaries: deps.ListJobTemplateSummaries,
 	})
 
 	// Per-cell narrative drawer (N-1 LOCKED): GET form + POST save on one route.
@@ -335,6 +350,30 @@ func (m *OutcomeMatrixModule) RegisterRoutes(r view.RouteRegistrar) {
 			rr.HandleFunc("GET", m.routes.ExportURL, m.Export)
 		} else {
 			log.Printf("outcome matrix: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.ExportURL)
+		}
+	}
+
+	// Section-scoped siblings (20260725) — the SAME handlers, one extra path
+	// parameter. Each handler reads r.PathValue("group_id") and, when it is
+	// non-empty, validates the (template, section) pair and narrows the query.
+	// Registering the same handler on both patterns is what keeps this additive:
+	// the template-scoped routes above are untouched, so existing links, redirects
+	// and e2e selectors keep resolving exactly as before.
+	//
+	// The four approval transitions get NO section form on purpose — see routes.go.
+	if m.Matrix != nil && m.routes.GroupMatrixURL != "" {
+		r.GET(m.routes.GroupMatrixURL, m.Matrix)
+	}
+	if m.Download != nil && m.routes.GroupDownloadDrawerURL != "" {
+		r.GET(m.routes.GroupDownloadDrawerURL, m.Download)
+	}
+	if m.Export != nil && m.routes.GroupExportURL != "" {
+		if rr, ok := r.(interface {
+			HandleFunc(method, path string, handler http.HandlerFunc, middlewares ...string)
+		}); ok {
+			rr.HandleFunc("GET", m.routes.GroupExportURL, m.Export)
+		} else {
+			log.Printf("outcome matrix: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.GroupExportURL)
 		}
 	}
 

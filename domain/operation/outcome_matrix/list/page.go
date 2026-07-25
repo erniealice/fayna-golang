@@ -3,6 +3,7 @@ package list
 import (
 	"context"
 	"log"
+	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
@@ -55,6 +56,11 @@ type PageViewDeps struct {
 	// GetOutcomeMatrix — the new espyna use case (typed against the generated
 	// esqyma request/response). Wired via the module Deps, never raw SQL.
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
+
+	// ListJobTemplateSummaries backs the (template, section) pair guard on the
+	// Group* routes. See outcome_matrix/section_scope.go for why the section
+	// filter alone is not safe. nil ⇒ the section routes 404 (fail closed).
+	ListJobTemplateSummaries outcome_matrix.SummaryLister
 
 	// GetOutcomeSummaryRoster — the roster-scoped composite read (P2) backing
 	// the CSV "Final" export (student · per-phase final · year final). Gates on
@@ -238,6 +244,15 @@ func NewView(deps *PageViewDeps) view.View {
 
 		templateID := viewCtx.Request.PathValue("id")
 
+		// Section narrowing ({group_id}, Group* routes only). Validated BEFORE any
+		// read: an unvalidated section id renders a believable partial roster from
+		// another academic year rather than failing (section_scope.go). Empty on
+		// the template-scoped routes, which keeps their behaviour identical.
+		section, ok := outcome_matrix.ResolveSectionScope(ctx, viewCtx.Request, templateID, deps.ListJobTemplateSummaries)
+		if !ok {
+			return view.ViewResult{Error: outcome_matrix.ErrSectionNotInTemplate, StatusCode: http.StatusNotFound}
+		}
+
 		// Scope resolution. Explicit ?scope=all|mine is honored as requested. With
 		// NO explicit scope, an operator holding workspace:list defaults to ALL: a
 		// non-staff MINE view is zero rows by design, so an admin landing on the
@@ -261,10 +276,14 @@ func NewView(deps *PageViewDeps) view.View {
 			}
 
 			var err error
-			resp, err = deps.GetOutcomeMatrix(ctx, &matrixpb.GetOutcomeMatrixRequest{
+			req := &matrixpb.GetOutcomeMatrixRequest{
 				JobTemplateId: templateID,
 				Scope:         scope,
-			})
+			}
+			if section.Scoped() {
+				req.SectionId = &section.GroupID
+			}
+			resp, err = deps.GetOutcomeMatrix(ctx, req)
 			if err != nil {
 				log.Printf("Failed to load outcome matrix for template %s: %v", templateID, err)
 				resp = nil
@@ -299,8 +318,25 @@ func NewView(deps *PageViewDeps) view.View {
 			headerTitle = subjectName
 		}
 		groupName := ""
-		if originID := sampleOriginSubscription(ctx, deps, templateID); originID != "" {
+		if section.Scoped() {
+			// AUTHORITATIVE. The sampling fallback below assumes every job under a
+			// template shares one section — true for the 366 legacy AY-scoped
+			// templates (one per section x subject x AY), FALSE for the AY2026-27
+			// grade-scoped generation, where "Arts — Grade 10" spans Palladium +
+			// Platinum + Tantalum and the sample silently picks whichever section
+			// the first job happened to belong to. When the route names the
+			// section, use it and skip the sampling read entirely.
+			groupName = section.GroupName
+		} else if originID := sampleOriginSubscription(ctx, deps, templateID); originID != "" {
 			groupName, _ = deliverygroup.ResolveOne(ctx, deps.ListSubscriptionGroupMembers, deps.ListSubscriptionGroups, originID)
+		}
+
+		// Browser tab title. On a section-scoped sheet the template name alone is
+		// ambiguous — three tabs would all read "Arts — Grade 10" — so qualify it
+		// with the section. The on-page header keeps title + subtitle separate.
+		documentTitle := headerTitle
+		if section.Scoped() && groupName != "" {
+			documentTitle = headerTitle + " (" + groupName + ")"
 		}
 
 		scopeActive := "mine"
@@ -336,7 +372,7 @@ func NewView(deps *PageViewDeps) view.View {
 		pageData := &PageData{
 			PageData: types.PageData{
 				CacheVersion:        viewCtx.CacheVersion,
-				Title:               headerTitle,
+				Title:               documentTitle,
 				ContentTemplate:     "outcome-matrix-content",
 				CurrentPath:         viewCtx.CurrentPath,
 				ActiveNav:           deps.Routes.ActiveNav,
@@ -354,10 +390,16 @@ func NewView(deps *PageViewDeps) view.View {
 			ScopeActive:  scopeActive,
 			ScopeMineURL: withParams(matrixBase, "mine", hideCSV),
 			ScopeAllURL:  withParams(matrixBase, "all", hideCSV),
-			ShowScopeAll: canSeeAll,
+			// B3 — suppressed on a section-scoped sheet. "My students" vs "All
+			// students" is meaningless once the sheet IS one template x one
+			// section. Note this is an OPERATOR-facing control, not a teacher
+			// one: it renders only for principals holding workspace:list, so a
+			// teacher never saw it. It stays on the template-scoped union page,
+			// where it still distinguishes something.
+			ShowScopeAll: canSeeAll && !section.Scoped(),
 		}
 
-		bar := buildApprovalBar(deps, perms, resp, templateID)
+		bar := buildApprovalBar(deps, perms, resp, templateID, section.Scoped())
 		pageData.ApprovalBar = bar
 		pageData.ShowApprovalBar = len(bar) > 0
 
@@ -841,7 +883,16 @@ func clientDisplayName(c *clientpb.Client) string {
 // the state-gated transition affordances (permission-gated view mirror; the
 // espyna use-case ActionGatekeeper + strict authorizer are authoritative). The
 // action buttons render as real signed HTMX POST forms in the template.
-func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *matrixpb.GetOutcomeMatrixResponse, templateID string) []ApprovalPhase {
+//
+// sectionScoped makes the bar READ-ONLY. The roll-ups are derived over the FULL
+// sheet — the adapter computes them per (template, phase) and section_id does not
+// narrow them — so on a section page a live Submit would flip every section of the
+// template, not the 30 students on screen. Approval state itself lives on
+// job_phase (per student job), so section-grain approval IS representable; it
+// needs the four transition RPCs to carry a section and six espyna helpers to
+// stop keying on (templateID, phaseID). Until that lands, showing the counts
+// without the buttons is the only option that is not a scope lie.
+func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *matrixpb.GetOutcomeMatrixResponse, templateID string, sectionScoped bool) []ApprovalPhase {
 	if resp == nil || templateID == "" {
 		return nil
 	}
@@ -858,10 +909,10 @@ func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *ma
 
 	// Layer-2 view gates cite the SAME job_phase:<verb> codes the use-case
 	// ActionGatekeeper.Check + strict authorizer verify (copya.md gate discipline).
-	canSubmit := perms.Can("job_phase", "submit")
-	canVerify := perms.Can("job_phase", "verify")
-	canPublish := perms.Can("job_phase", "publish")
-	canReturn := perms.Can("job_phase", "return")
+	canSubmit := perms.Can("job_phase", "submit") && !sectionScoped
+	canVerify := perms.Can("job_phase", "verify") && !sectionScoped
+	canPublish := perms.Can("job_phase", "publish") && !sectionScoped
+	canReturn := perms.Can("job_phase", "return") && !sectionScoped
 
 	submitPath := route.ResolveURL(deps.Routes.SubmitURL, "id", templateID)
 	verifyPath := route.ResolveURL(deps.Routes.VerifyURL, "id", templateID)
@@ -879,18 +930,24 @@ func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *ma
 		mixed := ru.GetMixed()
 
 		ap := ApprovalPhase{
-			PhaseID:        ru.GetJobTemplatePhaseId(),
-			Label:          phaseLabel[ru.GetJobTemplatePhaseId()],
-			Status:         status.String(),
-			StatusLabel:    approvalStatusLabel(l, status),
-			ChipVariant:    approvalChipVariant(status),
-			Slug:           slug(ru.GetJobTemplatePhaseId()),
-			Mixed:          mixed,
-			NotStarted:     inProgress && !ru.GetHasData(),
-			HardFrozen:     frozen,
-			HasData:        ru.GetHasData(),
-			TargetCount:    ru.GetTargetCount(),
-			TargetLabel:    subCount(l.Chip.PublishedCount, ru.GetTargetCount()),
+			PhaseID:     ru.GetJobTemplatePhaseId(),
+			Label:       phaseLabel[ru.GetJobTemplatePhaseId()],
+			Status:      status.String(),
+			StatusLabel: approvalStatusLabel(l, status),
+			ChipVariant: approvalChipVariant(status),
+			Slug:        slug(ru.GetJobTemplatePhaseId()),
+			Mixed:       mixed,
+			NotStarted:  inProgress && !ru.GetHasData(),
+			HardFrozen:  frozen,
+			HasData:     ru.GetHasData(),
+			TargetCount: ru.GetTargetCount(),
+			// Suppressed on a section page. TargetCount is the roll-up's target
+			// over the WHOLE template (87 job_phase rows across Palladium +
+			// Platinum + Tantalum); section_id does not narrow it. Rendering it
+			// beside a 29-row roster reads as "this section has 87 students".
+			// The status chip below still applies to the template and is honest
+			// on its own, because it carries no number.
+			TargetLabel:    targetLabel(l, ru.GetTargetCount(), sectionScoped),
 			BlankCount:     ru.GetBlankRequiredCount(),
 			SubmitPath:     submitPath,
 			VerifyPath:     verifyPath,
@@ -964,6 +1021,19 @@ func approvalChipVariant(s jobphasepb.PhaseApprovalStatus) string {
 // subCount substitutes the "{count}" placeholder with n (once).
 func subCount(tmpl string, n int32) string {
 	return strings.Replace(tmpl, "{count}", strconv.FormatInt(int64(n), 10), 1)
+}
+
+// targetLabel renders the approval roll-up's target count, or nothing at all on
+// a section-scoped sheet where that count describes the template rather than the
+// section on screen. Blank rather than recomputed on purpose: the section's true
+// target is its own job_phase count, which the roll-up does not carry — deriving
+// it from the rendered row count would silently disagree whenever a student has
+// no job_phase for the period.
+func targetLabel(l outcome_matrix.ApprovalLabels, n int32, sectionScoped bool) string {
+	if sectionScoped {
+		return ""
+	}
+	return subCount(l.Chip.PublishedCount, n)
 }
 
 // buildColumns maps the proto phase→task→criterion tree into CellGridLevel1/2/3.

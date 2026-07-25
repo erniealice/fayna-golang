@@ -76,6 +76,10 @@ func JobUnit(uc *UseCases, infra *Infra, options job.Options) compose.Unit {
 		// row link ("/outcome-matrix/{id}", id=job_template_id).
 		if omRoutes, ok := compose.RoutesOf[*outcome_matrix.Routes](mc, "operation.outcome_matrix"); ok {
 			deps.MatrixDetailURL = omRoutes.MatrixURL
+			// Section-scoped sibling. Each summary row is already at
+			// (template x section) grain, so linking to the template alone made
+			// every section of a multi-section template share one URL.
+			deps.MatrixSectionDetailURL = omRoutes.GroupMatrixURL
 		}
 		if infra.RefChecker != nil {
 			deps.GetInUseIDs = infra.RefChecker.GetJobInUseIDs

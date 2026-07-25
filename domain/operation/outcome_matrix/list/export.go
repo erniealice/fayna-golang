@@ -47,6 +47,15 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 			return
 		}
 
+		// Section narrowing ({group_id}) — validated before any read. Same
+		// fail-closed 404 text as the missing-template branch above, so a wrong
+		// pair is indistinguishable from a wrong id (no existence oracle).
+		section, ok := outcome_matrix.ResolveSectionScope(ctx, r, templateID, deps.ListJobTemplateSummaries)
+		if !ok {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+
 		// format: "" / "csv" (default) → CSV; "pdf" → the P5 render (503 stub
 		// this wave); anything else → 400 (report-card handler idiom).
 		format := strings.TrimSpace(r.URL.Query().Get("format"))
@@ -74,10 +83,14 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 		if effectiveAll {
 			scope = matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL
 		}
-		resp, err := deps.GetOutcomeMatrix(ctx, &matrixpb.GetOutcomeMatrixRequest{
+		matrixReq := &matrixpb.GetOutcomeMatrixRequest{
 			JobTemplateId: templateID,
 			Scope:         scope,
-		})
+		}
+		if section.Scoped() {
+			matrixReq.SectionId = &section.GroupID
+		}
+		resp, err := deps.GetOutcomeMatrix(ctx, matrixReq)
 		if err != nil || resp == nil {
 			// Same fail-closed response for foreign and missing ids (no leak).
 			http.Error(w, "not found", http.StatusNotFound)

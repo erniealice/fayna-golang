@@ -281,6 +281,11 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	deps.GetOutcomeSummaryRoster = om.GetOutcomeSummaryRoster
 	deps.ResolveStaff = om.ResolveStaff
 
+	// (template, section) pair guard for the Group* routes — the SAME delivery
+	// aggregate the courses list reads, reused as a validator. Nil-safe: without
+	// it the section routes 404 rather than render an unvalidated narrowing.
+	deps.ListJobTemplateSummaries = u.Operation.JobTemplateSummary.ListJobTemplateSummaries
+
 	// Grade-sheet PDF render context (P5): the job_template read resolves the
 	// sheet's job_category_id (binding axis) + name (header). The same already-
 	// wired ReadJobTemplate use case the job/template modules consume — no new

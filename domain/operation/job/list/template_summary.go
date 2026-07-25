@@ -42,7 +42,12 @@ import (
 
 // templateSummaryRow is one job_template's aggregated delivery-summary row.
 type templateSummaryRow struct {
-	TemplateID    string
+	TemplateID string
+	// GroupID is the row's subscription_group_id. The delivery aggregate is
+	// already at (template x section) grain — it was simply being discarded here,
+	// which is why three "Arts — Grade 10" rows (Palladium/Platinum/Tantalum,
+	// 29/28/30 students) all linked to the same template-scoped sheet.
+	GroupID       string
 	TemplateName  string
 	GroupName     string
 	DelivererName string
@@ -152,7 +157,14 @@ func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow) *
 	columns := templateSummaryColumns(l)
 	tableRows := make([]types.TableRow, 0, len(rows))
 	for _, r := range rows {
+		// Prefer the section-scoped URL so each row addresses its OWN section.
+		// Falls back to the template URL when either the route or the row's group
+		// id is absent (service-admin, or a template-grain row the delivery
+		// aggregate does not cover).
 		matrixURL := route.ResolveURL(deps.MatrixDetailURL, "id", r.TemplateID)
+		if deps.MatrixSectionDetailURL != "" && r.GroupID != "" {
+			matrixURL = route.ResolveURL(deps.MatrixSectionDetailURL, "id", r.TemplateID, "group_id", r.GroupID)
+		}
 		// Aggregate rows show their DISTINCT-job count; template-grain rows (a
 		// category the aggregate doesn't cover) have no count and render blank.
 		itemValue := strconv.Itoa(r.ItemCount)
@@ -242,6 +254,7 @@ func buildTemplateSummaryRows(ctx context.Context, deps *ListViewDeps, status st
 	for _, s := range summaries {
 		rows = append(rows, templateSummaryRow{
 			TemplateID:    s.GetJobTemplateId(),
+			GroupID:       s.GetSubscriptionGroupId(),
 			TemplateName:  s.GetJobTemplateName(),
 			GroupName:     s.GetSubscriptionGroupName(),
 			DelivererName: joinDelivererNames(s.GetDeliverers()),

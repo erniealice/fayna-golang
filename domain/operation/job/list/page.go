@@ -50,6 +50,10 @@ type ListViewDeps struct {
 	// id=job_template_id) each summary row links to.
 	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 	MatrixDetailURL          string
+	// MatrixSectionDetailURL is the (template, section) form of MatrixDetailURL
+	// ("/outcome-matrix/{id}/subscription-group/{group_id}"). Preferred whenever
+	// the row carries a subscription_group_id; falls back to MatrixDetailURL.
+	MatrixSectionDetailURL string
 
 	// Options — app-configured presentation. When Options.Tab.Enabled() is true
 	// the list renders a job_category tabstrip above the table (the "/classes"

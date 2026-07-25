@@ -15,6 +15,7 @@ package action
 
 import (
 	"context"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -42,6 +43,10 @@ type DrawerDeps struct {
 	Labels outcome_matrix.Labels
 
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
+
+	// ListJobTemplateSummaries backs the (template, section) pair guard on the
+	// Group* routes. nil ⇒ those routes 404 (fail closed).
+	ListJobTemplateSummaries outcome_matrix.SummaryLister
 }
 
 // DrawerData is the template-facing shape for outcome-matrix-download-drawer-form.
@@ -70,6 +75,13 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 
 		templateID := viewCtx.Request.PathValue("id")
 
+		// Section narrowing ({group_id}) — validated before any read, same guard
+		// as the grid view. Empty on the template-scoped route.
+		section, ok := outcome_matrix.ResolveSectionScope(ctx, viewCtx.Request, templateID, deps.ListJobTemplateSummaries)
+		if !ok {
+			return view.ViewResult{Error: outcome_matrix.ErrSectionNotInTemplate, StatusCode: http.StatusNotFound}
+		}
+
 		// Scope resolution — byte-identical to list/export.go (widened admin
 		// default + server-side workspace:list re-check).
 		canSeeAll := perms.Can(drawerScopeEntity, drawerScopeAction)
@@ -90,10 +102,14 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 			if effectiveAll {
 				scope = matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL
 			}
-			resp, _ = deps.GetOutcomeMatrix(ctx, &matrixpb.GetOutcomeMatrixRequest{
+			req := &matrixpb.GetOutcomeMatrixRequest{
 				JobTemplateId: templateID,
 				Scope:         scope,
-			})
+			}
+			if section.Scoped() {
+				req.SectionId = &section.GroupID
+			}
+			resp, _ = deps.GetOutcomeMatrix(ctx, req)
 		}
 
 		data := &DrawerData{

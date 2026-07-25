@@ -7,13 +7,28 @@ name — set in list/page.go NewView). Removed; .SubjectName is still
 populated on PageData for any non-template consumer that needs it. */}}
 {{define "outcome-matrix-content"}}
 <div class="page-content page-content--grid" data-testid="outcome-matrix">
+    {{/* ONE page-chrome band (20260725 item c): the approval block and the
+         Columns + Download tools used to occupy two stacked bands above the
+         grid. .om-toolbar is now the single band — scope segment (when it has
+         more than one option), the approval block, then the right-aligned
+         tools. It keeps flex-wrap so a narrow viewport stacks the pieces
+         instead of overflowing the (overflow-clipped) .page-content--grid.
+
+         Scope segment gate: the "all" option requires the widening permission,
+         so without it the control degenerates to ONE always-active link that
+         can neither widen nor narrow anything. Render the segment only when it
+         actually offers a choice; every data-testid below is unchanged for the
+         permitted case. */}}
     <div class="om-toolbar">
+        {{if .ShowScopeAll}}
         <div class="om-scope-toggle" data-testid="om-scope-toggle">
             <a href="{{.ScopeMineURL}}" class="om-scope{{if eq .ScopeActive "mine"}} om-scope--active{{end}}" data-testid="om-scope-mine">{{.Labels.Scope.Mine}}</a>
-            {{if .ShowScopeAll}}
             <a href="{{.ScopeAllURL}}" class="om-scope{{if eq .ScopeActive "all"}} om-scope--active{{end}}" data-testid="om-scope-all">{{.Labels.Scope.All}}</a>
-            {{end}}
         </div>
+        {{end}}
+        {{if .ShowApprovalBar}}
+        {{template "outcome-matrix-approval-bar" .}}
+        {{end}}
         <div class="om-tools">
             {{/* Columns selector (plan 20260720 Q1/Q2): every entry is a plain
                  server-computed toggle link — the server prunes the column tree
@@ -70,9 +85,6 @@ populated on PageData for any non-template consumer that needs it. */}}
             {{end}}
         </div>
     </div>
-    {{if .ShowApprovalBar}}
-    {{template "outcome-matrix-approval-bar" .}}
-    {{end}}
     {{template "cell-grid-card" .Grid}}
 </div>
 {{end}}

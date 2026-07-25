@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/erniealice/pyeza-golang/view"
 
@@ -166,8 +168,8 @@ func NewRecordAction(deps *Deps) view.View {
 					acks = append(acks, cellAck{key: key, errMsg: "not_editable"})
 					continue
 				}
-				normVal, ok := updateCell(ctx, deps, actingStaff, outcomeID, raw)
 				sc := byOutcome[outcomeID]
+				normVal, ok := updateCell(ctx, deps, actingStaff, outcomeID, raw, sc.bounds)
 				acks = append(acks, cellAck{
 					key: key, ok: ok, outcomeID: outcomeID, value: normVal,
 					numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
@@ -185,9 +187,9 @@ func NewRecordAction(deps *Deps) view.View {
 					continue
 				}
 				createAddr := jobTaskID + ":" + criteriaID
+				sc := byCreateAddr[createAddr]
 				if ct, addressable := allowedCreate[createAddr]; hasCreate && addressable {
-					newID, normVal, done := createCell(ctx, deps, actingStaff, jobTaskID, criteriaID, ct, raw)
-					sc := byCreateAddr[createAddr]
+					newID, normVal, done := createCell(ctx, deps, actingStaff, jobTaskID, criteriaID, ct, raw, sc.bounds)
 					acks = append(acks, cellAck{
 						key: key, ok: done, outcomeID: newID, value: normVal,
 						numeric: isNumericCriteria(ct), criteriaID: criteriaID,
@@ -200,8 +202,8 @@ func NewRecordAction(deps *Deps) view.View {
 				// outcome owned by the acting staff (created by a prior batch whose
 				// ack was lost) → resolve to an UPDATE, return its id so the client
 				// renames new.* → cells.*. Never a duplicate insert.
-				if sc, ok := byCreateAddr[createAddr]; ok && sc.outcomeID != "" && hasUpdate && allowedUpdate[sc.outcomeID] {
-					normVal, done := updateCell(ctx, deps, actingStaff, sc.outcomeID, raw)
+				if sc.outcomeID != "" && hasUpdate && allowedUpdate[sc.outcomeID] {
+					normVal, done := updateCell(ctx, deps, actingStaff, sc.outcomeID, raw, sc.bounds)
 					acks = append(acks, cellAck{
 						key: key, ok: done, outcomeID: sc.outcomeID, value: normVal,
 						numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
@@ -266,6 +268,7 @@ type srvCell struct {
 	jobTaskID  string
 	criteriaID string
 	ct         enums.CriteriaType
+	bounds     cellBounds // the criterion's server-side value contract
 	jobPhaseID string
 	jobID      string
 }
@@ -470,7 +473,7 @@ func failMsg(ok bool, reason string) string {
 // updateCell applies the IDOR guard then routes through task_outcome:update.
 // Returns the normalized stored value + whether the write succeeded (false on
 // any guard/parse/use-case failure — counted as a failure).
-func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string) (string, bool) {
+func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, bounds cellBounds) (string, bool) {
 	if deps.ReadTaskOutcome == nil || deps.UpdateTaskOutcome == nil {
 		return "", false
 	}
@@ -504,8 +507,8 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 	// Fail-closed typed parse on update too (parity with create): a value that
 	// does not parse as the criterion's type is an item failure, never a silent
 	// no-op that reports success.
-	if !applyValueStrict(req.Data, ct, raw) {
-		log.Printf("[outcome-matrix] update rejected: value does not parse as %v for outcome %s", ct, outcomeID)
+	if !applyValueStrict(req.Data, ct, raw, bounds) {
+		log.Printf("[outcome-matrix] update rejected: value does not parse as %v (or violates the criterion's declared bounds) for outcome %s", ct, outcomeID)
 		return "", false
 	}
 
@@ -527,7 +530,7 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 // active). A value that does not parse as the criterion's type fails the cell.
 // Returns the new task_outcome id (for the client's new.*→cells.* rename
 // handshake) + the normalized stored value.
-func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteriaID string, ct enums.CriteriaType, raw string) (string, string, bool) {
+func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteriaID string, ct enums.CriteriaType, raw string, bounds cellBounds) (string, string, bool) {
 	if deps.CreateTaskOutcome == nil {
 		return "", "", false
 	}
@@ -539,10 +542,10 @@ func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteri
 			Active:            true,
 		},
 	}
-	if !applyValueStrict(req.Data, ct, raw) {
+	if !applyValueStrict(req.Data, ct, raw, bounds) {
 		// Do NOT log the raw value (it is user content); the type + criteria id
 		// are sufficient to diagnose a rejected create.
-		log.Printf("[outcome-matrix] create rejected: value does not parse as %v for criteria %s", ct, criteriaID)
+		log.Printf("[outcome-matrix] create rejected: value does not parse as %v (or violates the criterion's declared bounds) for criteria %s", ct, criteriaID)
 		return "", "", false
 	}
 
@@ -589,13 +592,44 @@ func normalizedValue(ct enums.CriteriaType, data *taskoutcomepb.TaskOutcome) str
 }
 
 // applyValueStrict sets exactly the typed field the criterion dictates and
-// reports whether the raw value parsed as that type. Unknown/unspecified
-// criteria types are rejected (fail-closed) — never inferred from the value.
-func applyValueStrict(data *taskoutcomepb.TaskOutcome, ct enums.CriteriaType, raw string) bool {
+// reports whether the raw value parsed as that type AND satisfies the
+// criterion's declared value contract (bounds). Unknown/unspecified criteria
+// types are rejected (fail-closed) — never inferred from the value.
+//
+// The bounds check is the SERVER half of the input attributes the view already
+// renders (list/page.go buildCellInput → min/max/maxlength/option-set). Before
+// this, those attributes were the ONLY gate: they live in the DOM, so a POST
+// that skipped the widget — or simply had the attribute removed — persisted
+// anything parseable. Measured on education1: an IB-MYP criterion declared
+// 0..8 accepted and stored 76.
+//
+// bounds is read from the SAME server-derived MINE matrix that granted the
+// write (authz.go resolveCellAuthority), so it can never be supplied or
+// widened by the request. A zero-value cellBounds constrains nothing, so a
+// criterion that declares no limits behaves exactly as before.
+//
+// Deliberately NOT enforced here: score_increment/decimal_places. Those are
+// presentation/step affordances, not validity assertions — rejecting an
+// off-step value would fail cells that the pre-existing data already contains
+// and that no criterion declares invalid. Range, option-set and text length
+// are the three axes the criterion states as a contract.
+func applyValueStrict(data *taskoutcomepb.TaskOutcome, ct enums.CriteriaType, raw string, bounds cellBounds) bool {
 	switch ct {
 	case enums.CriteriaType_CRITERIA_TYPE_NUMERIC_RANGE, enums.CriteriaType_CRITERIA_TYPE_NUMERIC_SCORE:
 		f, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
+			return false
+		}
+		// NaN/±Inf parse successfully but are not a score: they compare false
+		// against every bound, so an unbounded criterion would otherwise store
+		// them. Reject explicitly rather than relying on the bound existing.
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return false
+		}
+		if bounds.min != nil && f < *bounds.min {
+			return false
+		}
+		if bounds.max != nil && f > *bounds.max {
 			return false
 		}
 		data.NumericValue = &f
@@ -613,10 +647,24 @@ func applyValueStrict(data *taskoutcomepb.TaskOutcome, ct enums.CriteriaType, ra
 		}
 		return true
 	case enums.CriteriaType_CRITERIA_TYPE_CATEGORICAL:
+		// The criterion's allowed_determinations ARE the <option> set the view
+		// renders; a value outside it is not a category, it is free text in a
+		// categorical column. Only enforced when the criterion declares a set.
+		if len(bounds.allowed) > 0 && !bounds.allowed[raw] {
+			return false
+		}
 		v := raw
 		data.CategoricalValue = &v
 		return true
 	case enums.CriteriaType_CRITERIA_TYPE_TEXT:
+		// Rune count, matching how the column's max_text_length reads to a
+		// human (and to the storage column) rather than the UTF-16 code-unit
+		// count the HTML maxlength attribute happens to use. The two differ
+		// only for astral-plane characters, where rune counting is the more
+		// permissive — and therefore non-regressing — of the two.
+		if bounds.maxTextLen > 0 && utf8.RuneCountInString(raw) > bounds.maxTextLen {
+			return false
+		}
 		v := raw
 		data.TextValue = &v
 		return true

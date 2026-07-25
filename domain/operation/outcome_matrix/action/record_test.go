@@ -452,3 +452,103 @@ func TestLegacyBatch_Unchanged_PartialFailure(t *testing.T) {
 		t.Fatalf("legacy partial-failure must report formError, got %q", trig)
 	}
 }
+
+// ── criterion value-contract enforcement (20260725 V3) ──────────────────────
+//
+// The view renders the criterion's min/max/maxlength/option-set as INPUT
+// ATTRIBUTES. Those live in the DOM, so they gate nothing: a POST that skips
+// the widget persisted whatever parsed. Measured on education1 before the fix:
+// an IB-MYP criterion declared 0..8 accepted and stored 76.
+//
+// The bound is read from the SAME server-derived MINE matrix that grants the
+// write, so these tests drive it exactly the way the action does — through the
+// matrix fixture, never through a request field.
+
+// boundedMatrix is numericMatrix with a declared score range on the criterion.
+func boundedMatrix(recorded bool, min, max int32) *matrixpb.GetOutcomeMatrixResponse {
+	m := numericMatrix(recorded)
+	oc := m.GetPhases()[0].GetTasks()[0].GetCriteria()[0].GetCriteria()
+	oc.MinScore = &min
+	oc.MaxScore = &max
+	return m
+}
+
+func TestBounds_Update_RejectsAboveMax(t *testing.T) {
+	r := &recorder{}
+	res := invoke(t, r.deps(boundedMatrix(true, 0, 8)), "save_mode=cell&cells."+existingID+"=76", bothPerms)
+	got := cells(t, res)[0]
+	if got.OK {
+		t.Errorf("76 on a criterion declared 0..8 must be rejected")
+	}
+	if r.updateCalls != 0 {
+		t.Errorf("an out-of-range value must never reach UpdateTaskOutcome, got %d calls", r.updateCalls)
+	}
+}
+
+func TestBounds_Update_RejectsBelowMin(t *testing.T) {
+	r := &recorder{}
+	res := invoke(t, r.deps(boundedMatrix(true, 0, 8)), "save_mode=cell&cells."+existingID+"=-1", bothPerms)
+	if cells(t, res)[0].OK {
+		t.Errorf("-1 on a criterion declared 0..8 must be rejected")
+	}
+	if r.updateCalls != 0 {
+		t.Errorf("an out-of-range value must never reach UpdateTaskOutcome, got %d calls", r.updateCalls)
+	}
+}
+
+func TestBounds_Update_AcceptsInRangeAtBoundary(t *testing.T) {
+	// Inclusive on both ends — a criterion declared 0..8 grades 0 and 8.
+	for _, v := range []string{"0", "8", "5"} {
+		r := &recorder{}
+		res := invoke(t, r.deps(boundedMatrix(true, 0, 8)), "save_mode=cell&cells."+existingID+"="+v, bothPerms)
+		got := cells(t, res)[0]
+		if !got.OK {
+			t.Errorf("%s is inside 0..8 and must save (err=%q)", v, got.Error)
+		}
+		if r.updateCalls != 1 {
+			t.Errorf("%s: want 1 update call, got %d", v, r.updateCalls)
+		}
+	}
+}
+
+func TestBounds_Create_RejectsAboveMax(t *testing.T) {
+	// The create path is the one a blank grade sheet actually uses.
+	r := &recorder{}
+	res := invoke(t, r.deps(boundedMatrix(false, 0, 8)),
+		"save_mode=cell&new."+jobTaskID+":"+criteriaID+"=76", bothPerms)
+	got := cells(t, res)[0]
+	if got.OK {
+		t.Errorf("76 on a criterion declared 0..8 must be rejected on create")
+	}
+	if r.createCalls != 0 {
+		t.Errorf("an out-of-range value must never reach CreateTaskOutcome, got %d calls", r.createCalls)
+	}
+	if got.OutcomeID != "" {
+		t.Errorf("a rejected create must not hand the client an id to rename to, got %q", got.OutcomeID)
+	}
+}
+
+func TestBounds_Unconstrained_CriterionIsUnchanged(t *testing.T) {
+	// A criterion that declares no min/max keeps the pre-fix behavior verbatim —
+	// the gate is opt-in via the criterion entity, not a new global rule.
+	r := &recorder{}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=1000", bothPerms)
+	if !cells(t, res)[0].OK {
+		t.Errorf("a criterion declaring no range must still accept any parseable score")
+	}
+}
+
+func TestBounds_RejectsNonFiniteScore(t *testing.T) {
+	// NaN/Inf parse as float64 and compare false against every bound, so an
+	// unconstrained criterion would otherwise store them.
+	for _, v := range []string{"NaN", "Inf", "-Inf"} {
+		r := &recorder{}
+		res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"="+v, bothPerms)
+		if cells(t, res)[0].OK {
+			t.Errorf("%s is not a score and must be rejected", v)
+		}
+		if r.updateCalls != 0 {
+			t.Errorf("%s: must never reach UpdateTaskOutcome, got %d calls", v, r.updateCalls)
+		}
+	}
+}

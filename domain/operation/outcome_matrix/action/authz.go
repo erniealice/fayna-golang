@@ -30,8 +30,57 @@ import (
 	"log"
 
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
+	outcomecriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
+
+// cellBounds is one criterion's declared VALUE contract — the same enforcement
+// entity the view renders as the input's min/max/step/maxlength/option-set
+// attributes (list/page.go buildCellInput). Those attributes are a client-side
+// convenience only: a POST reaches the record action with whatever the caller
+// typed, and before this the action's typed parse accepted any parseable float,
+// so a criterion declared 0..8 happily persisted 76.
+//
+// It is read from the SAME server-derived MINE matrix that grants the write, so
+// the bound can never be supplied (or widened) by the request.
+//
+// Zero value = unconstrained: nil min/max, zero maxTextLen and a nil allow-list
+// all mean "this criterion declares no limit on that axis". A criterion that
+// declares nothing therefore behaves exactly as before.
+type cellBounds struct {
+	min        *float64
+	max        *float64
+	maxTextLen int             // 0 ⇒ unbounded
+	allowed    map[string]bool // categorical allow-list; empty ⇒ unconstrained
+}
+
+// boundsFromCriteria projects the criterion entity onto the value contract.
+// Mirrors list/page.go buildCellInput field-for-field so the server enforces
+// exactly what the client advertises — no second, divergent rule set.
+func boundsFromCriteria(oc *outcomecriteriapb.OutcomeCriteria) cellBounds {
+	var b cellBounds
+	if oc == nil {
+		return b
+	}
+	if oc.MinScore != nil {
+		v := float64(oc.GetMinScore())
+		b.min = &v
+	}
+	if oc.MaxScore != nil {
+		v := float64(oc.GetMaxScore())
+		b.max = &v
+	}
+	if oc.MaxTextLength != nil {
+		b.maxTextLen = int(oc.GetMaxTextLength())
+	}
+	if opts := oc.GetAllowedDeterminations(); len(opts) > 0 {
+		b.allowed = make(map[string]bool, len(opts))
+		for _, o := range opts {
+			b.allowed[o] = true
+		}
+	}
+	return b
+}
 
 // authorityDeps is the minimal seam resolveCellAuthority needs: the acting-staff
 // resolver and the MINE-scoped matrix re-derivation. Both the record Deps and the
@@ -98,12 +147,14 @@ func resolveCellAuthority(ctx context.Context, deps authorityDeps, templateID st
 	// a cell (addressed by column_key) can be tested against the hard-frozen set
 	// below.
 	typeByColKey := make(map[string]enums.CriteriaType)
-	phaseByColKey := make(map[string]string) // column_key → job_template_phase_id
+	phaseByColKey := make(map[string]string)      // column_key → job_template_phase_id
+	boundsByColKey := make(map[string]cellBounds) // column_key → value contract
 	for _, phase := range matrix.GetPhases() {
 		for _, task := range phase.GetTasks() {
 			for _, crit := range task.GetCriteria() {
 				typeByColKey[crit.GetColumnKey()] = crit.GetCriteria().GetCriteriaType()
 				phaseByColKey[crit.GetColumnKey()] = phase.GetJobTemplatePhaseId()
+				boundsByColKey[crit.GetColumnKey()] = boundsFromCriteria(crit.GetCriteria())
 			}
 		}
 	}
@@ -157,6 +208,7 @@ func resolveCellAuthority(ctx context.Context, deps authorityDeps, templateID st
 				jobTaskID:  cell.GetJobTaskId(),
 				criteriaID: criteriaID,
 				ct:         typeByColKey[colKey],
+				bounds:     boundsByColKey[colKey],
 				jobPhaseID: cell.GetJobPhaseId(),
 				jobID:      cell.GetJobId(),
 			}

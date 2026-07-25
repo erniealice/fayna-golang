@@ -1275,12 +1275,19 @@ func criteriaIDFromColumnKey(k string) string {
 	return k
 }
 
+// cellTestID composes the per-cell data-testid. It carries the FULL row id (not
+// short()): UUIDv7 row ids share a tenant/time prefix, so short() truncated every
+// row in a workspace to the SAME 8 characters and collapsed a whole COLUMN of
+// cells onto one testid (measured: one selector matched 74 elements) — an E2E
+// could never address a single row's cell. The same F3 fix already landed on the
+// om-row-* and om-note-* families (buildRows above); this is the last member.
+// clientID (unique per row) + colKey (unique per leaf column) ⇒ unique per cell.
 func cellTestID(clientID, colKey string, readOnly bool) string {
 	base := "om-cell-"
 	if readOnly {
 		base = "om-cell-ro-"
 	}
-	return base + short(clientID) + "-" + slug(colKey)
+	return base + clientID + "-" + slug(colKey)
 }
 
 // short truncates an opaque id for a testid suffix.

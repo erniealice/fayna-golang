@@ -296,7 +296,7 @@ func TestGradeSheetPDF_FailLoud_NoTemplate(t *testing.T) {
 		GeneratePDF: func(_ []byte, _ map[string]any) ([]byte, error) { return []byte("pdf"), nil },
 	}
 	rec := httptest.NewRecorder()
-	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, outcome_matrix.GroupScope{})
 	if rec.Code != 503 || !strings.Contains(rec.Body.String(), wantBody) {
 		t.Fatalf("nil resolver: status=%d body=%q, want 503 + %q", rec.Code, rec.Body.String(), wantBody)
 	}
@@ -308,7 +308,7 @@ func TestGradeSheetPDF_FailLoud_NoTemplate(t *testing.T) {
 		ResolveSheetTemplateBytes: func(_ context.Context, _, _ string) ([]byte, error) { return nil, nil },
 	}
 	rec2 := httptest.NewRecorder()
-	writeGradeSheetPDF(context.Background(), rec2, deps2, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	writeGradeSheetPDF(context.Background(), rec2, deps2, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, outcome_matrix.GroupScope{})
 	if rec2.Code != 503 || !strings.Contains(rec2.Body.String(), wantBody) {
 		t.Fatalf("resolver miss: status=%d body=%q, want 503 + %q", rec2.Code, rec2.Body.String(), wantBody)
 	}
@@ -316,7 +316,7 @@ func TestGradeSheetPDF_FailLoud_NoTemplate(t *testing.T) {
 	// (c) Nil GeneratePDF (render not configured) → 503.
 	deps3 := &PageViewDeps{Labels: labels}
 	rec3 := httptest.NewRecorder()
-	writeGradeSheetPDF(context.Background(), rec3, deps3, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	writeGradeSheetPDF(context.Background(), rec3, deps3, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, outcome_matrix.GroupScope{})
 	if rec3.Code != 503 || !strings.Contains(rec3.Body.String(), wantBody) {
 		t.Fatalf("nil GeneratePDF: status=%d body=%q, want 503 + %q", rec3.Code, rec3.Body.String(), wantBody)
 	}
@@ -342,7 +342,7 @@ func TestGradeSheetPDF_SofficeUnavailable(t *testing.T) {
 	rec := httptest.NewRecorder()
 	writeGradeSheetPDF(context.Background(), rec, base(func(_ []byte, _ map[string]any) ([]byte, error) {
 		return nil, libreOfficeAbsentErr{}
-	}), pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	}), pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, outcome_matrix.GroupScope{})
 	if rec.Code != 503 {
 		t.Fatalf("soffice sentinel: status = %d, want 503", rec.Code)
 	}
@@ -351,7 +351,7 @@ func TestGradeSheetPDF_SofficeUnavailable(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	writeGradeSheetPDF(context.Background(), rec2, base(func(_ []byte, _ map[string]any) ([]byte, error) {
 		return nil, errors.New("conversion failed: LibreOffice is not installed")
-	}), pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	}), pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, outcome_matrix.GroupScope{})
 	if rec2.Code != 503 {
 		t.Fatalf("soffice substring: status = %d, want 503", rec2.Code)
 	}
@@ -360,7 +360,7 @@ func TestGradeSheetPDF_SofficeUnavailable(t *testing.T) {
 	rec3 := httptest.NewRecorder()
 	writeGradeSheetPDF(context.Background(), rec3, base(func(_ []byte, _ map[string]any) ([]byte, error) {
 		return nil, errors.New("template parse error")
-	}), pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	}), pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, outcome_matrix.GroupScope{})
 	if rec3.Code != 500 {
 		t.Fatalf("generic error: status = %d, want 500", rec3.Code)
 	}
@@ -384,7 +384,7 @@ func TestGradeSheetPDF_HappyPath(t *testing.T) {
 		},
 	}
 	rec := httptest.NewRecorder()
-	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, outcome_matrix.GroupScope{})
 
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -419,9 +419,90 @@ func TestGradeSheetPDF_ZeroRoster404(t *testing.T) {
 		},
 	}
 	rec := httptest.NewRecorder()
-	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL)
+	writeGradeSheetPDF(context.Background(), rec, deps, pdfMatrixResp(), "tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, outcome_matrix.GroupScope{})
 	if rec.Code != 404 {
 		t.Fatalf("zero roster: status = %d, want 404", rec.Code)
+	}
+}
+
+// TestGradeSheetPDF_GroupNarrowing pins the 20260726 fix: the PDF's roster read
+// carries NO group axis, so a section-scoped export must narrow to the client
+// ids of the (already group-scoped) matrix response — exactly as the Final CSV
+// does via onlyClients.
+//
+// The defect this locks out was measured live: a 29-student section sheet
+// produced a PDF byte-identical (156,548 B) to the 87-student template one, and
+// titled with an arbitrary sampled section. It became reachable when the column
+// header triggers started opening the format-choosing drawer (.om-toolbar, the
+// only other download entry point, is display:none).
+func TestGradeSheetPDF_GroupNarrowing(t *testing.T) {
+	// Template-wide roster: 3 students. The section's matrix response carries 1.
+	roster := &matrixpb.GetOutcomeSummaryRosterResponse{
+		Rows: []*matrixpb.OutcomeSummaryRosterRow{
+			{ClientId: "c1", ClientLabel: "c1", YearFinalLabel: "7"},
+			{ClientId: "c-other", ClientLabel: "c-other", YearFinalLabel: "6"},
+			{ClientId: "c-third", ClientLabel: "c-third", YearFinalLabel: "5"},
+		},
+	}
+	newDeps := func(captured *map[string]any) *PageViewDeps {
+		return &PageViewDeps{
+			Labels:                    outcome_matrix.DefaultLabels(),
+			ResolveSheetTemplateBytes: func(_ context.Context, _, _ string) ([]byte, error) { return []byte("TPL"), nil },
+			GetOutcomeSummaryRoster: func(_ context.Context, req *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error) {
+				return roster, nil
+			},
+			GeneratePDF: func(_ []byte, data map[string]any) ([]byte, error) {
+				*captured = data
+				return []byte("%PDF-1.7 fake"), nil
+			},
+		}
+	}
+	// The group-scoped matrix response: ONE of the three students.
+	scopedResp := &matrixpb.GetOutcomeMatrixResponse{
+		JobTemplateName: "Arts",
+		Rows:            []*matrixpb.OutcomeRow{{ClientId: "c1"}},
+	}
+
+	// (a) Section-scoped → exactly the section's student, and the header carries
+	//     the VALIDATED scope's name, not a sampled one.
+	var scopedData map[string]any
+	rec := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec, newDeps(&scopedData), scopedResp, "tmpl-1",
+		matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL,
+		outcome_matrix.GroupScope{GroupID: "g1", GroupName: "Grade 10 Palladium (AY 2026-27)"})
+	if rec.Code != 200 {
+		t.Fatalf("section-scoped pdf: status = %d, want 200", rec.Code)
+	}
+	students, ok := scopedData["students"].([]any)
+	if !ok || len(students) != 1 {
+		t.Fatalf("section-scoped students = %v, want exactly 1 (the group-scoped roster)", scopedData["students"])
+	}
+	if got := scopedData["section_name"]; got != "Grade 10 Palladium (AY 2026-27)" {
+		t.Errorf("section_name = %v, want the validated scope's group name", got)
+	}
+
+	// (b) Template-scoped (zero GroupScope) → unchanged, all three students.
+	var wideData map[string]any
+	rec2 := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec2, newDeps(&wideData), pdfMatrixResp(), "tmpl-1",
+		matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL, outcome_matrix.GroupScope{})
+	if rec2.Code != 200 {
+		t.Fatalf("template-scoped pdf: status = %d, want 200", rec2.Code)
+	}
+	if s, ok := wideData["students"].([]any); !ok || len(s) != 3 {
+		t.Fatalf("template-scoped students = %v, want all 3 (no narrowing)", wideData["students"])
+	}
+
+	// (c) A section whose students are all absent from the roster → 404, never a
+	//     zero-student PDF (composite-CSV IDOR parity).
+	var emptyData map[string]any
+	rec3 := httptest.NewRecorder()
+	writeGradeSheetPDF(context.Background(), rec3, newDeps(&emptyData),
+		&matrixpb.GetOutcomeMatrixResponse{JobTemplateName: "Arts", Rows: []*matrixpb.OutcomeRow{{ClientId: "nobody"}}},
+		"tmpl-1", matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL,
+		outcome_matrix.GroupScope{GroupID: "g9", GroupName: "Empty"})
+	if rec3.Code != 404 {
+		t.Fatalf("section with no roster overlap: status = %d, want 404", rec3.Code)
 	}
 }
 

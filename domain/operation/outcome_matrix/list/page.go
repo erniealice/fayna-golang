@@ -182,12 +182,18 @@ type PageData struct {
 	// ExportURL is the sheet-level CSV download carrying the SAME ?scope= +
 	// ?hide= as the current view ("export what you see" — Q3). Empty hides the
 	// button (no route wired or no template).
+	//
+	// Today matrix.html only reads it as a {{if}} GATE — the visible trigger is
+	// DownloadDrawerURL. It is still resolved section-scoped when the page is, so
+	// a future consumer that DOES render it as a link cannot silently hand out a
+	// template-wide download from a section page (the trap that bit ExportAction
+	// and DownloadDrawerURL — see 20260726 in the plan's progress.md).
 	ExportURL string
 
 	// DownloadDrawerURL is the export-drawer GET (hx-get target of the toolbar
 	// trigger), carrying the SAME ?scope= + ?hide= as ExportURL so the drawer
 	// seeds its hidden inputs from the live view state. Set alongside ExportURL
-	// under the same leaf-count gate.
+	// under the same leaf-count gate, and section-scoped on a section page.
 	DownloadDrawerURL string
 }
 
@@ -380,18 +386,24 @@ func NewView(deps *PageViewDeps) view.View {
 		// its own grid, so the grid CSV stays byte-identical; the composites
 		// already have their first-class export (period=final).
 		if resp != nil && len(grid.Rows) > 0 && grid.LeafColumnCount() > 0 {
-			exportBase := ""
-			if deps.Routes.ExportURL != "" {
-				exportBase = route.ResolveURL(deps.Routes.ExportURL, "id", templateID)
-				// A group-scoped page downloads through the group-scoped export
-				// route so the file matches the roster on screen (same handler,
-				// narrower row set — the pair is validated fail-closed there too).
-				if section.Scoped() && deps.Routes.GroupExportURL != "" {
-					exportBase = route.ResolveURL(deps.Routes.GroupExportURL,
+			// The header triggers open the export DRAWER (20260726), not the CSV
+			// directly — the operator keeps the Period × Format choice that only
+			// the now-hidden toolbar button used to offer. So the base resolved
+			// here is the drawer route, and a column's ?period= token seeds the
+			// drawer's select rather than the export itself.
+			drawerBase := ""
+			if deps.Routes.DownloadDrawerURL != "" {
+				drawerBase = route.ResolveURL(deps.Routes.DownloadDrawerURL, "id", templateID)
+				// A group-scoped page downloads through the group-scoped drawer
+				// route, whose ExportAction is the group-scoped export, so the
+				// file matches the roster on screen (same handlers, narrower row
+				// set — the pair is validated fail-closed in both).
+				if section.Scoped() && deps.Routes.GroupDownloadDrawerURL != "" {
+					drawerBase = route.ResolveURL(deps.Routes.GroupDownloadDrawerURL,
 						"id", templateID, "group_id", section.GroupID)
 				}
 			}
-			augmentRatingColumns(ctx, deps, grid, resp, effectiveAll, exportBase, scopeActive, hideCSV)
+			augmentRatingColumns(ctx, deps, grid, resp, effectiveAll, drawerBase, scopeActive, hideCSV)
 		}
 
 		pageData := &PageData{
@@ -441,14 +453,25 @@ func NewView(deps *PageViewDeps) view.View {
 			// button whose GET can only 404 (the handler rejects zero-leaf
 			// grids) — don't offer a download that cannot succeed.
 			if deps.Routes.ExportURL != "" && grid.LeafColumnCount() > 0 {
-				pageData.ExportURL = withParams(
-					route.ResolveURL(deps.Routes.ExportURL, "id", templateID), scopeActive, hideCSV)
+				export := route.ResolveURL(deps.Routes.ExportURL, "id", templateID)
+				if section.Scoped() && deps.Routes.GroupExportURL != "" {
+					export = route.ResolveURL(deps.Routes.GroupExportURL,
+						"id", templateID, "group_id", section.GroupID)
+				}
+				pageData.ExportURL = withParams(export, scopeActive, hideCSV)
 				// The drawer trigger is gated on ExportURL in matrix.html, so its
 				// hx-get target is resolved under the SAME leaf-count guard, with
-				// the SAME live ?scope=/?hide= carried through.
+				// the SAME live ?scope=/?hide= carried through — and, on a
+				// section page, through the GROUP drawer route so its export
+				// action narrows to the rendered roster (the header triggers
+				// resolve the same base; see the drawerBase block above).
 				if deps.Routes.DownloadDrawerURL != "" {
-					pageData.DownloadDrawerURL = withParams(
-						route.ResolveURL(deps.Routes.DownloadDrawerURL, "id", templateID), scopeActive, hideCSV)
+					drawer := route.ResolveURL(deps.Routes.DownloadDrawerURL, "id", templateID)
+					if section.Scoped() && deps.Routes.GroupDownloadDrawerURL != "" {
+						drawer = route.ResolveURL(deps.Routes.GroupDownloadDrawerURL,
+							"id", templateID, "group_id", section.GroupID)
+					}
+					pageData.DownloadDrawerURL = withParams(drawer, scopeActive, hideCSV)
 				}
 			}
 		}

@@ -82,7 +82,7 @@ func TestAugmentRatingColumns(t *testing.T) {
 		t.Fatalf("pre-augment leaf count = %d, want 2", got)
 	}
 
-	base := "/outcome-matrix/tmpl-1/subscription-group/g1/export"
+	base := "/action/outcome-matrix/tmpl-1/subscription-group/g1/download"
 	augmentRatingColumns(context.Background(), deps, grid, resp, true, base, "all", "")
 
 	// Column tree: each phase gained ONE trailing rating leaf; one final L1.
@@ -139,15 +139,17 @@ func TestAugmentRatingColumns(t *testing.T) {
 		}
 	}
 
-	// Download stamping: per-phase period token on the group-scoped base;
-	// final header carries period=final. Aria composed from the label template.
+	// Download stamping: the trigger opens the DRAWER (never the CSV directly)
+	// on the group-scoped drawer base, carrying this phase's period token for
+	// the drawer to pre-select; the final header carries period=final. Aria
+	// composed from the label template.
 	paActions, ok := pA.Actions.(PhaseActions)
 	if !ok {
 		t.Fatalf("phase pA Actions = %T, want PhaseActions", pA.Actions)
 	}
 	wantURL := base + "?scope=all&period=s1"
-	if paActions.DownloadURL != wantURL {
-		t.Errorf("pA download URL = %q, want %q", paActions.DownloadURL, wantURL)
+	if paActions.DownloadDrawerURL != wantURL {
+		t.Errorf("pA download URL = %q, want %q", paActions.DownloadDrawerURL, wantURL)
 	}
 	if paActions.DownloadTestID != "om-dl-s1" {
 		t.Errorf("pA download testid = %q, want om-dl-s1", paActions.DownloadTestID)
@@ -159,8 +161,8 @@ func TestAugmentRatingColumns(t *testing.T) {
 	if !ok {
 		t.Fatalf("final Actions = %T, want PhaseActions", fin.Actions)
 	}
-	if want := base + "?scope=all&period=final"; finActions.DownloadURL != want {
-		t.Errorf("final download URL = %q, want %q", finActions.DownloadURL, want)
+	if want := base + "?scope=all&period=final"; finActions.DownloadDrawerURL != want {
+		t.Errorf("final download URL = %q, want %q", finActions.DownloadDrawerURL, want)
 	}
 	if finActions.DownloadTestID != "om-dl-final" {
 		t.Errorf("final download testid = %q", finActions.DownloadTestID)
@@ -180,7 +182,7 @@ func TestAugmentRatingColumns_NoRoster(t *testing.T) {
 	viewCtx := &view.ViewContext{Request: httptest.NewRequest("GET", "/outcome-matrix/tmpl-1", nil)}
 	grid := buildGrid(context.Background(), deps, perms, resp, true, "tmpl-1", nil, viewCtx, nil)
 
-	augmentRatingColumns(context.Background(), deps, grid, resp, true, "/outcome-matrix/tmpl-1/export", "mine", "h1")
+	augmentRatingColumns(context.Background(), deps, grid, resp, true, "/action/outcome-matrix/tmpl-1/download", "mine", "h1")
 
 	if got := grid.LeafColumnCount(); got != 2 {
 		t.Fatalf("leaf count = %d, want 2 (no rating columns without a roster read)", got)
@@ -189,15 +191,15 @@ func TestAugmentRatingColumns_NoRoster(t *testing.T) {
 		t.Fatalf("L1 count = %d, want 2 (no final column)", len(grid.Columns))
 	}
 	pa, ok := grid.Columns[0].Actions.(PhaseActions)
-	if !ok || pa.DownloadURL != "/outcome-matrix/tmpl-1/export?scope=mine&hide=h1&period=s1" {
+	if !ok || pa.DownloadDrawerURL != "/action/outcome-matrix/tmpl-1/download?scope=mine&hide=h1&period=s1" {
 		t.Errorf("download stamp = %+v ok=%v", pa, ok)
 	}
 }
 
-// TestAugmentRatingColumns_NoExportBase pins that an unwired export route
-// yields NO download affordances (a dead icon link is worse than none) while
+// TestAugmentRatingColumns_NoDrawerBase pins that an unwired drawer route
+// yields NO download affordances (a dead icon trigger is worse than none) while
 // the rating columns still build from the roster read.
-func TestAugmentRatingColumns_NoExportBase(t *testing.T) {
+func TestAugmentRatingColumns_NoDrawerBase(t *testing.T) {
 	resp := ratingsResp()
 	deps := &PageViewDeps{
 		Labels: outcome_matrix.DefaultLabels(),
@@ -217,10 +219,10 @@ func TestAugmentRatingColumns_NoExportBase(t *testing.T) {
 	if got := grid.LeafColumnCount(); got != 5 {
 		t.Fatalf("leaf count = %d, want 5", got)
 	}
-	if pa, ok := grid.Columns[0].Actions.(PhaseActions); ok && pa.DownloadURL != "" {
-		t.Errorf("unexpected download URL with no export base: %q", pa.DownloadURL)
+	if pa, ok := grid.Columns[0].Actions.(PhaseActions); ok && pa.DownloadDrawerURL != "" {
+		t.Errorf("unexpected download URL with no drawer base: %q", pa.DownloadDrawerURL)
 	}
 	if fin := grid.Columns[2]; fin.Actions != nil {
-		t.Errorf("final column should carry no action payload with no export base, got %+v", fin.Actions)
+		t.Errorf("final column should carry no action payload with no drawer base, got %+v", fin.Actions)
 	}
 }

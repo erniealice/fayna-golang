@@ -7,6 +7,17 @@ package action
 // options and seeds its current state; the actual file download is served by
 // list/export.go.
 //
+// TWO TRIGGERS, ONE DRAWER (20260726). The toolbar button opens it with no
+// ?period=, so it lands on "All periods". Each L1 column header ALSO opens it
+// (list/ratings.go), passing that column's period token — a phase CODE, or the
+// reserved "final" — which is PRE-SELECTED here. The header triggers used to
+// link straight at the CSV, which was the only download path left once
+// .om-toolbar went display:none and so made the PDF export unreachable.
+//
+// The token is matched, never echoed: an unknown ?period= simply selects
+// nothing extra and the browser falls back to the first option ("All"), the
+// same fail-safe shape as export.go's periodKnown 400 guard.
+//
 // Route: GET DownloadDrawerURL (/action/outcome-matrix/{id}/download). It lives
 // under /action/* for slug tidiness but is a GET (safe method): the CSRF hook +
 // action-workspace signature guard constrain non-safe methods only, so no signed
@@ -53,10 +64,10 @@ type DrawerDeps struct {
 // Nonce / CommonLabels / WorkspaceID are injected by the ViewAdapter via
 // reflection (the CSP nonce backs the inline close/format-lock script).
 type DrawerData struct {
-	ExportAction  string                    // native GET form action (ExportURL, {id} resolved)
+	ExportAction  string                    // native GET form action (Group/ExportURL, resolved)
 	Scope         string                    // live "mine"/"all" — hidden input
 	Hide          string                    // live ?hide= tokens — hidden input
-	PeriodOptions []pyezatypes.SelectOption // All + per-phase (code!="") + Final
+	PeriodOptions []pyezatypes.SelectOption // All + per-phase (code!="") + Final; one may be Selected
 	FormatOptions []pyezatypes.SelectOption // csv / pdf
 	Labels        outcome_matrix.Labels
 	CommonLabels  any    // injected by ViewAdapter
@@ -112,11 +123,22 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 			resp, _ = deps.GetOutcomeMatrix(ctx, req)
 		}
 
+		// A section-scoped drawer must submit to the section-scoped export, or
+		// the file would silently widen back to every student under the template
+		// (87 vs the 29 on screen for the AY2026-27 grade-scoped generation).
+		// The group route already reached this view; only its form action was
+		// still template-scoped.
+		exportAction := route.ResolveURL(deps.Routes.ExportURL, "id", templateID)
+		if section.Scoped() && deps.Routes.GroupExportURL != "" {
+			exportAction = route.ResolveURL(deps.Routes.GroupExportURL,
+				"id", templateID, "group_id", section.GroupID)
+		}
+
 		data := &DrawerData{
-			ExportAction:  route.ResolveURL(deps.Routes.ExportURL, "id", templateID),
+			ExportAction:  exportAction,
 			Scope:         scopeStr,
 			Hide:          strings.TrimSpace(viewCtx.Request.URL.Query().Get("hide")),
-			PeriodOptions: buildPeriodOptions(deps.Labels, resp),
+			PeriodOptions: buildPeriodOptions(deps.Labels, resp, strings.TrimSpace(viewCtx.Request.URL.Query().Get("period"))),
 			FormatOptions: buildFormatOptions(deps.Labels),
 			Labels:        deps.Labels,
 		}
@@ -128,7 +150,15 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 // carries a non-empty code (ordered by sequence_order, label from the phase's
 // display name) + the reserved Final. A zero-phase / codeless template yields
 // only All + Final (guard-rail: no bogus semester option).
-func buildPeriodOptions(l outcome_matrix.Labels, resp *matrixpb.GetOutcomeMatrixResponse) []pyezatypes.SelectOption {
+//
+// preset pre-selects the option whose Value matches it — the column-header
+// trigger's ?period= token. It is matched against the options this function
+// just built from the LIVE response, so an unknown, stale or hand-typed token
+// selects nothing and the browser lands on the first option ("All periods").
+// preset == "" is the toolbar trigger's no-token case, which selects All
+// explicitly rather than by browser default (they agree; being explicit keeps
+// the rendered <select> self-describing).
+func buildPeriodOptions(l outcome_matrix.Labels, resp *matrixpb.GetOutcomeMatrixResponse, preset string) []pyezatypes.SelectOption {
 	opts := []pyezatypes.SelectOption{{Value: "", Label: l.Export.PeriodAll}}
 
 	type phase struct {
@@ -149,6 +179,13 @@ func buildPeriodOptions(l outcome_matrix.Labels, resp *matrixpb.GetOutcomeMatrix
 	}
 
 	opts = append(opts, pyezatypes.SelectOption{Value: "final", Label: l.Export.PeriodFinal})
+
+	for i := range opts {
+		if opts[i].Value == preset {
+			opts[i].Selected = true
+			break
+		}
+	}
 	return opts
 }
 

@@ -1,5 +1,10 @@
 {{/* Export drawer form (20260720 Q3) — loaded into #sheetContent via HTMX.
 
+     TWO TRIGGERS (20260726): the toolbar's Download button (no ?period=, lands
+     on "All periods") and every L1 column header's icon button, which passes
+     that column's period token so the select opens PRE-SELECTED on that phase
+     (or Final). Both reach the same route; only the seeded state differs.
+
      A NATIVE GET form (method="get" + hx-boost="false"): the app-shell body sets
      hx-boost="true", so this is the FIRST form site opting out (the 3 prior
      hx-boost="false" sites are all anchors). The browser streams ExportURL's
@@ -14,8 +19,12 @@
             <div class="form-row single">
                 <div class="form-group">
                     <label class="form-label" for="om-download-period">{{.Labels.Export.PeriodLabel}}</label>
+                    {{/* One option may arrive Selected: the column-header trigger
+                         passes ?period=<phase code>|final and the view marks the
+                         match (an unknown token marks nothing, so the browser
+                         falls back to the first option, "All periods"). */}}
                     <select id="om-download-period" name="period" class="form-select" data-testid="outcome-matrix-period-select">
-                        {{range .PeriodOptions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+                        {{range .PeriodOptions}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
                     </select>
                     {{/* PDF period-lock hint — revealed by the inline script when
                          format=pdf (text hint, never color alone). */}}
@@ -51,14 +60,28 @@
     var format = form.querySelector('[data-testid="outcome-matrix-format-select"]');
     var hint = form.querySelector('[data-testid="outcome-matrix-pdf-hint"]');
 
+    // The period this form would submit right now. Seeded from the RENDERED
+    // select — i.e. the column trigger's server-side pre-selection, or "All
+    // periods" — then tracked on every manual change so a PDF round-trip can
+    // put it back. Before the header triggers existed, clearing on pdf could
+    // only discard a choice the operator had just made by hand; it would now
+    // also discard the phase they opened the drawer from.
+    var lastPeriod = period ? period.value : '';
+    if (period) {
+        period.addEventListener('change', function () {
+            if (!period.disabled) { lastPeriod = period.value; }
+        });
+    }
+
     // PDF renders the FULL sheet only (one artifact per shape, no conditional
     // columns): disable + clear the period select (a disabled control is not
     // submitted, so ExportURL sees no period) and surface the lyngua hint.
+    // Switching back to CSV restores lastPeriod.
     function applyFormat() {
         var isPdf = format && format.value === 'pdf';
         if (period) {
             period.disabled = isPdf;
-            if (isPdf) { period.value = ''; }
+            period.value = isPdf ? '' : lastPeriod;
         }
         if (hint) { hint.hidden = !isPdf; }
     }

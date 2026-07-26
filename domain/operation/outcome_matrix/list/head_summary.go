@@ -100,16 +100,25 @@ type PhaseActions struct {
 	Phase  ApprovalPhase
 	Labels outcome_matrix.ApprovalLabels
 
-	// Download* wire the per-column CSV export affordance (20260725): an
-	// icon-only GET link to the sheet export carrying this column's period
-	// token (a phase's code, or the reserved "final" on the trailing composite
-	// column). Stamped by the view AUGMENTATION (ratings.go), not by
-	// phaseActions below — the export base depends on the route scope (group
-	// vs template), which only NewView resolves. A GET link needs no form, so
-	// the nested-form trap the approval buttons dodge does not apply here.
-	DownloadURL    string
-	DownloadAria   string // pre-composed accessible name (icon-only control)
-	DownloadTestID string
+	// Download* wire the per-column download affordance (20260725), routed
+	// through the export DRAWER since 20260726: an icon-only trigger in this
+	// column's L1 header that opens the SAME Period × Format drawer the
+	// toolbar's (now hidden) Download button opens, with THIS column's period
+	// token pre-selected — a phase's code, or the reserved "final" on the
+	// trailing composite column.
+	//
+	// It used to link straight at the CSV. That silently denied the operator
+	// the format choice, which became the only download path once .om-toolbar
+	// went display:none — the PDF export was unreachable from the sheet.
+	//
+	// Stamped by the view AUGMENTATION (ratings.go), not by phaseActions below
+	// — the drawer base depends on the route scope (group vs template), which
+	// only NewView resolves. The trigger is a <button type="button"> carrying
+	// hx-get, so the nested-form trap the approval buttons dodge still does not
+	// apply: no <form> is introduced inside a header cell.
+	DownloadDrawerURL string
+	DownloadAria      string // accessible name AND the drawer's sheet title
+	DownloadTestID    string
 }
 
 // Any reports whether this phase has at least one available control. Templates
@@ -117,7 +126,7 @@ type PhaseActions struct {
 // consume the header cell's space-between gap.
 func (p PhaseActions) Any() bool {
 	return p.Phase.CanSubmit || p.Phase.CanVerify || p.Phase.CanPublish || p.Phase.CanReturn ||
-		p.DownloadURL != ""
+		p.DownloadDrawerURL != ""
 }
 
 // phaseActions indexes the already-derived approval bar by phase id, so each L1

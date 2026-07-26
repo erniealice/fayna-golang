@@ -110,7 +110,10 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 		// simply ignores it after the periodKnown 400 guard above). The resolved
 		// scope IS honored (the roster read is scope-threaded, MINE stays MINE).
 		if format == "pdf" {
-			writeGradeSheetPDF(ctx, w, deps, resp, templateID, scope)
+			// section is threaded through: like the Final CSV below, the PDF's
+			// roster read carries no group axis, so the narrowing has to happen
+			// inside against THIS response's client ids.
+			writeGradeSheetPDF(ctx, w, deps, resp, templateID, scope, section)
 			return
 		}
 
@@ -388,7 +391,13 @@ func writeFinalCompositeCSV(ctx context.Context, w http.ResponseWriter, deps *Pa
 // ErrLibreOfficeUnavailable sentinel). A zero-row roster (foreign/empty template,
 // or a MINE-scoped non-staff caller) 404s — never an empty PDF (composite-CSV
 // parity, IDOR-safe identical bodies).
-func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageViewDeps, resp *matrixpb.GetOutcomeMatrixResponse, templateID string, scope matrixpb.OutcomeMatrixScope) {
+// section narrows the artifact to ONE delivery group when the group-scoped route
+// was used. Like the Final CSV's onlyClients, the narrowing happens HERE and not
+// in the read: GetOutcomeSummaryRosterRequest carries only (template, scope), so
+// the group filter is the group-scoped MATRIX response's client id set. Measured
+// 2026-07-26, before this was threaded: a 29-student section sheet produced a
+// PDF byte-identical (156,548 B) to the 87-student template one.
+func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageViewDeps, resp *matrixpb.GetOutcomeMatrixResponse, templateID string, scope matrixpb.OutcomeMatrixScope, section outcome_matrix.GroupScope) {
 	// PDF wiring gate: the render closure must be present (a nil GeneratePDF is a
 	// narrower, format-specific 503 — fail-closed, "not configured").
 	if deps.GeneratePDF == nil {
@@ -426,6 +435,19 @@ func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageVi
 		gd := deliverygroup.ResolveOneDetail(ctx, deps.ListSubscriptionGroupMembers, deps.ListSubscriptionGroups, originID)
 		sectionName, academicYear, priceScheduleID = gd.GroupName, gd.ScheduleName, gd.PriceScheduleID
 	}
+	// The sampled job's group is an ARBITRARY one of the template's sections —
+	// page.go:328-341 records the same sampling as false for the AY2026-27
+	// grade-scoped generation, where "Arts — Grade 10" spans Palladium/Platinum/
+	// Tantalum. On a section-scoped export the authoritative name is the VALIDATED
+	// scope's own, or the PDF gets titled with a section the operator never opened.
+	//
+	// AcademicYear and PriceScheduleID stay sampled deliberately: they are
+	// template-wide (the template is AY-scoped), and priceScheduleID keys the
+	// document_template BINDING resolved just below — re-deriving it here would
+	// change WHICH template renders, which is not this fix's business.
+	if section.Scoped() && section.GroupName != "" {
+		sectionName = section.GroupName
+	}
 
 	// Template resolution — FAIL-LOUD on ANY miss (no embedded fallback, no
 	// cross-family template). A nil closure, a resolver error, or empty bytes all
@@ -462,10 +484,34 @@ func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageVi
 		return
 	}
 
-	cols := rosterPhaseColumns(roster.GetRows())
+	// Group narrowing — the same filter-by-rendered-rows rule writeFinalCompositeCSV
+	// applies via onlyClients. resp is ALREADY group-scoped (the handler passed
+	// SubscriptionGroupId), so its client ids are exactly the roster on screen.
+	rows := roster.GetRows()
+	if section.Scoped() {
+		only := make(map[string]bool, len(resp.GetRows()))
+		for _, r := range resp.GetRows() {
+			only[r.GetClientId()] = true
+		}
+		kept := make([]*matrixpb.OutcomeSummaryRosterRow, 0, len(only))
+		for _, row := range rows {
+			if only[row.GetClientId()] {
+				kept = append(kept, row)
+			}
+		}
+		rows = kept
+	}
+	// Zero rows after narrowing → 404, never an empty PDF (composite-CSV parity,
+	// IDOR-safe identical bodies).
+	if len(rows) == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 
-	ids := make([]string, 0, len(roster.GetRows()))
-	for _, row := range roster.GetRows() {
+	cols := rosterPhaseColumns(rows)
+
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
 		ids = append(ids, row.GetClientId())
 	}
 	names := fetchClientNames(ctx, deps, ids)
@@ -475,8 +521,8 @@ func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageVi
 		periodLabels = append(periodLabels, c.label)
 	}
 
-	students := make([]sheetdoc.SheetStudent, 0, len(roster.GetRows()))
-	for _, row := range roster.GetRows() {
+	students := make([]sheetdoc.SheetStudent, 0, len(rows))
+	for _, row := range rows {
 		byPhase := make(map[string]string, len(row.GetPhases()))
 		for _, pe := range row.GetPhases() {
 			byPhase[pe.GetJobTemplatePhaseId()] = pe.GetScaledLabel()

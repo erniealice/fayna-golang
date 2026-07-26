@@ -209,7 +209,7 @@ populated on PageData for any non-template consumer that needs it. */}}
      swap all keep working unchanged. */}}
 {{with .Actions}}
 {{$labels := .Labels}}
-{{$dlURL := .DownloadURL}}
+{{$dlURL := .DownloadDrawerURL}}
 {{$dlAria := .DownloadAria}}
 {{$dlTestID := .DownloadTestID}}
 {{with .Phase}}
@@ -218,13 +218,39 @@ populated on PageData for any non-template consumer that needs it. */}}
     {{if .CanVerify}}<button type="submit" form="pa-{{.Slug}}-verify-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-verify">{{$labels.Actions.Verify}}</button>{{end}}
     {{if .CanPublish}}<button type="submit" form="pa-{{.Slug}}-publish-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-publish">{{$labels.Actions.Publish}}</button>{{end}}
     {{if .CanReturn}}<button type="submit" form="pa-{{.Slug}}-return-form" class="btn btn-ghost status-form__btn" data-testid="pa-{{.Slug}}-return">{{$labels.Actions.Return}}</button>{{end}}
-    {{/* Per-column CSV download (20260725): an icon-only GET link — no form, so
-         the nested-form trap does not apply. Background colour via btn-primary;
-         icon-only, so the accessible name rides aria-label (+ title tooltip).
-         The URL carries the page's live ?scope=/?hide= and THIS column's
-         period token; on a group-scoped page it is the group-scoped export
-         route, so the file matches the roster on screen. */}}
-    {{if $dlURL}}<a href="{{$dlURL}}" class="btn btn-primary om-dl-btn" download aria-label="{{$dlAria}}" title="{{$dlAria}}" data-testid="{{$dlTestID}}">{{template "icon-download"}}</a>{{end}}
+    {{/* Per-column download (20260725; via the DRAWER since 20260726): an
+         icon-only trigger opening the SAME Period × Format sheet as the
+         toolbar's Download button, with THIS column's period pre-selected
+         server-side (?period=<phase code>|final). It was a bare <a download>
+         straight to the CSV, which — once .om-toolbar went display:none — left
+         no way to reach the PDF export at all.
+
+         The attribute set matches the toolbar trigger (.om-export) so both
+         triggers behave identically; the accessible name doubles as the sheet
+         title, so the operator sees WHICH column they are downloading in the
+         drawer header. No new label: "Download {column}" already reads as both.
+
+         type="button" + hx-params="none" are load-bearing HERE and not on the
+         toolbar trigger: this control sits INSIDE <form class="cell-grid-form">,
+         the grid's batch-save form holding one input per grade cell. type=button
+         keeps a click from submitting that form. htmx 1.9.10 already excludes
+         the enclosing form on GET (`if(t!=="get")` in getInputValues) and a
+         nameless button contributes no value of its own, so hx-params="none" is
+         belt-and-braces — but the failure mode it forecloses is thousands of
+         grades serialized into a query string, so it is stated explicitly
+         rather than left to an htmx default. Still no <form> introduced in a
+         header cell, so the nested-form trap above remains dodged. */}}
+    {{if $dlURL}}<button type="button" class="btn btn-primary om-dl-btn"
+            hx-get="{{$dlURL}}"
+            hx-target="#sheetContent"
+            hx-swap="innerHTML"
+            hx-push-url="false"
+            hx-params="none"
+            data-lf-action="sheet-open"
+            data-lf-sheet-title="{{$dlAria}}"
+            aria-haspopup="dialog"
+            aria-label="{{$dlAria}}" title="{{$dlAria}}"
+            data-testid="{{$dlTestID}}">{{template "icon-download"}}</button>{{end}}
 </span>
 {{end}}
 {{end}}

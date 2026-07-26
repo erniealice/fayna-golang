@@ -38,7 +38,8 @@ package list
 //   - the CSV export path (export.go) builds its own grid and never calls
 //     this augmentation, so the exported grid CSV is byte-identical to before;
 //     the composite values already have their own first-class export
-//     (period=final), which is exactly what the Final header's button links.
+//     (period=final), which is exactly what the Final header's button
+//     pre-selects in the download drawer.
 //   - the record action re-derives the full matrix per POST and never sees
 //     render-side columns; rating cells emit no inputs, so the batch/auto
 //     save POST body is unchanged.
@@ -78,14 +79,18 @@ const (
 // per-column download affordances onto the already-built grid. View path only
 // (NewView) — the export handler's buildGrid never calls it. Fail-safe: a nil
 // or failed roster read leaves the column tree exactly as built (downloads are
-// still stamped — the CSV export works independently of the composite read).
+// still stamped — the drawer works independently of the composite read).
+//
+// drawerBase is the RESOLVED download-drawer GET path (group-scoped when the
+// page is); each column's trigger appends the live ?scope=/?hide= pair plus its
+// own ?period= token, which the drawer pre-selects.
 func augmentRatingColumns(
 	ctx context.Context,
 	deps *PageViewDeps,
 	cfg *types.CellGridConfig,
 	resp *matrixpb.GetOutcomeMatrixResponse,
 	effectiveAll bool,
-	exportBase, scopeActive, hideCSV string,
+	drawerBase, scopeActive, hideCSV string,
 ) {
 	l := deps.Labels
 
@@ -96,11 +101,16 @@ func augmentRatingColumns(
 		labelByPhase[ph.GetJobTemplatePhaseId()] = ph.GetLabel()
 	}
 
-	// (a) Per-phase download buttons — an icon-only GET link in each phase's L1
-	// header slot, targeting the sheet export with THAT phase's period token.
-	// Phases with no stable code get no button (an empty period token would
-	// export the whole sheet — a mislabelled affordance, worse than none).
-	if exportBase != "" {
+	// (a) Per-phase download buttons — an icon-only trigger in each phase's L1
+	// header slot opening the export drawer with THAT phase's period token
+	// pre-selected, so the operator still chooses CSV vs PDF (20260726).
+	// Phases with no stable code get no button: an empty period token would
+	// pre-select "All periods" under a per-phase affordance — a mislabelled
+	// control, worse than none. It is also exactly the token set the drawer's
+	// own select and export.go's periodKnown guard recognise (phase CODE, never
+	// the phase id — ?hide= is the id-keyed axis), so the two agree by
+	// construction.
+	if drawerBase != "" {
 		for i := range cfg.Columns {
 			l1 := &cfg.Columns[i]
 			code := codeByPhase[l1.Key]
@@ -108,7 +118,7 @@ func augmentRatingColumns(
 				continue
 			}
 			stampDownload(l1, slug(l1.Key), l.Approval,
-				exportPeriodURL(exportBase, scopeActive, hideCSV, code),
+				drawerPeriodURL(drawerBase, scopeActive, hideCSV, code),
 				subColumn(l.Export.DownloadAria, labelByPhase[l1.Key]),
 				"om-dl-"+slug(code))
 		}
@@ -153,8 +163,8 @@ func augmentRatingColumns(
 	// controls — the payload's approval gates are all zero, so only the
 	// download anchor renders.
 	finalActions := PhaseActions{Phase: ApprovalPhase{Slug: finalSlug}, Labels: l.Approval}
-	if exportBase != "" {
-		finalActions.DownloadURL = exportPeriodURL(exportBase, scopeActive, hideCSV, "final")
+	if drawerBase != "" {
+		finalActions.DownloadDrawerURL = drawerPeriodURL(drawerBase, scopeActive, hideCSV, "final")
 		finalActions.DownloadAria = subColumn(l.Export.DownloadAria, l.Export.PeriodFinal)
 		finalActions.DownloadTestID = "om-dl-final"
 	}
@@ -241,23 +251,23 @@ func ratingCell(value, tooltip, testID string) types.CellGridCell {
 // PhaseActions so the header cell stays a single slot).
 func stampDownload(l1 *types.CellGridLevel1, phaseSlug string, al outcome_matrix.ApprovalLabels, dlURL, aria, testID string) {
 	if pa, ok := l1.Actions.(PhaseActions); ok {
-		pa.DownloadURL, pa.DownloadAria, pa.DownloadTestID = dlURL, aria, testID
+		pa.DownloadDrawerURL, pa.DownloadAria, pa.DownloadTestID = dlURL, aria, testID
 		l1.Actions = pa
 		return
 	}
 	l1.Actions = PhaseActions{
-		Phase:          ApprovalPhase{Slug: phaseSlug},
-		Labels:         al,
-		DownloadURL:    dlURL,
-		DownloadAria:   aria,
-		DownloadTestID: testID,
+		Phase:             ApprovalPhase{Slug: phaseSlug},
+		Labels:            al,
+		DownloadDrawerURL: dlURL,
+		DownloadAria:      aria,
+		DownloadTestID:    testID,
 	}
 }
 
-// exportPeriodURL composes the sheet-export GET target: the resolved base
+// drawerPeriodURL composes the download-drawer GET target: the resolved base
 // (group-scoped when the page is), the live ?scope=/?hide= pair the page's
-// other navigation URLs carry, and the period token.
-func exportPeriodURL(base, scope, hide, period string) string {
+// other navigation URLs carry, and the period token the drawer pre-selects.
+func drawerPeriodURL(base, scope, hide, period string) string {
 	u := base + "?scope=" + scope
 	if hide != "" {
 		u += "&hide=" + hide

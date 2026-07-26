@@ -169,7 +169,7 @@ func NewRecordAction(deps *Deps) view.View {
 					continue
 				}
 				sc := byOutcome[outcomeID]
-				normVal, ok := updateCell(ctx, deps, actingStaff, outcomeID, raw, sc.bounds)
+				normVal, ok := updateCell(ctx, deps, actingStaff, outcomeID, raw, sc.ct, sc.bounds)
 				acks = append(acks, cellAck{
 					key: key, ok: ok, outcomeID: outcomeID, value: normVal,
 					numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
@@ -203,7 +203,7 @@ func NewRecordAction(deps *Deps) view.View {
 				// ack was lost) → resolve to an UPDATE, return its id so the client
 				// renames new.* → cells.*. Never a duplicate insert.
 				if sc.outcomeID != "" && hasUpdate && allowedUpdate[sc.outcomeID] {
-					normVal, done := updateCell(ctx, deps, actingStaff, sc.outcomeID, raw, sc.bounds)
+					normVal, done := updateCell(ctx, deps, actingStaff, sc.outcomeID, raw, sc.ct, sc.bounds)
 					acks = append(acks, cellAck{
 						key: key, ok: done, outcomeID: sc.outcomeID, value: normVal,
 						numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
@@ -472,8 +472,14 @@ func failMsg(ok bool, reason string) string {
 
 // updateCell applies the IDOR guard then routes through task_outcome:update.
 // Returns the normalized stored value + whether the write succeeded (false on
-// any guard/parse/use-case failure — counted as a failure).
-func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, bounds cellBounds) (string, bool) {
+// any guard/parse/use-case failure — counted as a failure). colCT is the
+// column's SERVER-DERIVED criteria type (from the same matrix that authorized
+// the address): the stored row's own type wins when present, but a row with
+// CRITERIA_TYPE_UNSPECIFIED (grid-created rows historically never stamped it,
+// making them permanently un-editable — every value "failed to parse as
+// UNSPECIFIED") falls back to the column type, and the update re-stamps it so
+// the row self-heals.
+func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, colCT enums.CriteriaType, bounds cellBounds) (string, bool) {
 	if deps.ReadTaskOutcome == nil || deps.UpdateTaskOutcome == nil {
 		return "", false
 	}
@@ -498,10 +504,14 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 	}
 
 	ct := existing.GetCriteriaType()
+	if ct == enums.CriteriaType_CRITERIA_TYPE_UNSPECIFIED {
+		ct = colCT
+	}
 	req := &taskoutcomepb.UpdateTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{
 			Id:                outcomeID,
 			CriteriaVersionId: existing.GetCriteriaVersionId(),
+			CriteriaType:      ct,
 		},
 	}
 	// Fail-closed typed parse on update too (parity with create): a value that
@@ -538,8 +548,11 @@ func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteri
 		Data: &taskoutcomepb.TaskOutcome{
 			JobTaskId:         jobTaskID,
 			CriteriaVersionId: criteriaID,
-			RecordedBy:        actingStaff,
-			Active:            true,
+			// Stamp the column's criteria type — an untyped row is permanently
+			// un-editable (updateCell's strict parse has no type to parse as).
+			CriteriaType: ct,
+			RecordedBy:   actingStaff,
+			Active:       true,
 		},
 	}
 	if !applyValueStrict(req.Data, ct, raw, bounds) {

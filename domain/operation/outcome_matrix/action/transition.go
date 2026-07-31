@@ -2,6 +2,7 @@ package action
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -170,10 +171,58 @@ func newTransitionAction(deps *TransitionDeps, verb string, run func(ctx context
 
 		// Success → client-side redirect back to the matrix page so the bar chips
 		// + cell editability re-render from the new sheet state.
+		//
+		// Redirect to the SAME scope the transition was invoked from: a
+		// section-scoped (Group*) transition must return to the section sheet, not
+		// the template-wide one. Sending a section operator back to MatrixURL drops
+		// the group narrowing and dumps them on the all-sections sheet, losing their
+		// place after every submit/verify/publish/return.
+		//
+		// Guarded like the row-link grain decision (job/list/template_summary.go):
+		// fall back to template grain when the group route is unconfigured or the
+		// path carried no group id — never emit a half-resolved path. Deliberately
+		// NOT gated on job.Options.RowLinkScopedByGroup(): that option chooses where
+		// the job LIST links to, whereas this is "return where the request came
+		// from". The group matrix route is mounted whenever GroupMatrixURL is set
+		// (outcome_matrix_module.go), so an operator can reach the section sheet by
+		// link or bookmark even in a deployment whose list links at template grain —
+		// and bouncing them to another scope would still be wrong.
+		redirect := route.ResolveURL(deps.Routes.MatrixURL, "id", templateID)
+		if groupID != "" && deps.Routes.GroupMatrixURL != "" {
+			redirect = route.ResolveURL(deps.Routes.GroupMatrixURL, "id", templateID, "group_id", groupID)
+		}
+		// Re-render the sheet IN PLACE rather than reloading the browser.
+		// htmx 1.9.10 handles HX-Redirect by setting location.href — a full page
+		// reload, which is why the operator watches the OLD table paint again
+		// before the new state appears. HX-Location instead issues a client-side
+		// AJAX GET and swaps, keeping the app shell, the loading indicator and the
+		// scroll position, so the bar comes back already carrying the next verb.
+		//
+		// target ECHOES the request's HX-Target — the id htmx resolved from the
+		// form's own hx-target — so no layout constant ("#main-content") is baked
+		// into a domain package; the handler follows whatever the view is
+		// configured to swap. A non-htmx caller sends no HX-Target, so that path
+		// keeps the plain full-page redirect and still completes the transition.
+		//
+		// Deliberately NO "select": the matrix GET already answers an HX-Request
+		// with the bare content partial (<div class="page-content">…), not a full
+		// document, so there is no #main-content element inside the response to
+		// select — asking for one selects nothing and blanks the target.
+		if t := strings.TrimSpace(viewCtx.Request.Header.Get("HX-Target")); t != "" {
+			if loc, err := json.Marshal(map[string]string{
+				"path":   redirect,
+				"target": "#" + t,
+			}); err == nil {
+				return view.ViewResult{
+					StatusCode: http.StatusOK,
+					Headers:    map[string]string{"HX-Location": string(loc)},
+				}
+			}
+		}
 		return view.ViewResult{
 			StatusCode: http.StatusOK,
 			Headers: map[string]string{
-				"HX-Redirect": route.ResolveURL(deps.Routes.MatrixURL, "id", templateID),
+				"HX-Redirect": redirect,
 			},
 		}
 	})

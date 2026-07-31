@@ -1,22 +1,36 @@
 package list
 
-// ratings.go — the derived read-only RATING columns (20260725): one trailing
-// per-phase composite column under each phase header, plus one whole-row Final
-// column at the far right, plus the per-column download affordances stamped
-// onto the L1 header action slots.
+// ratings.go — the derived read-only SUMMARY columns (20260725/20260729): a
+// per-phase TOTAL + RATING pair appended under each phase header, plus one
+// whole-row Final column at the far right, plus the per-column download
+// affordances stamped onto the L1 header action slots.
 //
 // DATA SOURCE. Everything renders STORED values read VERBATIM from the P2
-// roster composite read (GetOutcomeSummaryRoster — phase_outcome_summary.
-// scaled_label per phase, job_outcome_summary.scaled_label for the year
-// final). Nothing here computes, derives or rounds; ComputePhaseOutcome /
-// ComputeJobOutcome own the write path and are not consulted.
+// roster composite read (GetOutcomeSummaryRoster — per phase both
+// phase_outcome_summary.summary_score (the raw composite the scoring scheme
+// combined, pre-transmutation) and phase_outcome_summary.scaled_label (that
+// composite after band transmutation), and job_outcome_summary.scaled_label
+// for the year final). Nothing here computes, derives, rounds or re-aggregates;
+// ComputePhaseOutcome / ComputeJobOutcome own the write path and are not
+// consulted. The total and the rating come off the SAME summary row written by
+// ONE upsert, so they can never be mutually inconsistent — which is also why
+// the existing freshness/ack machinery needs no extension: one row, one
+// staleness (the stale indicator attaches to the rating cell of the same row).
+//
+// ABSENCE vs ZERO (tandem-lock contract). summary_score is presence-tracked
+// (optional double): UNSET renders blank ("—"), a stored 0 renders "0". A
+// scheme with no transmutation scale stores a label but no composite, so its
+// phases render a populated Rating beside a blank Total — presence degrades
+// through the NULL-ness of DATA, never through a category or business-type
+// check in code.
 //
 // COLUMN-TREE DESIGN (deliberate; the alternative was a first-class pyeza
 // "trailer column" notion). The rating columns are SYNTHETIC LEAVES woven into
 // the existing 3-level tree in this CONSUMER:
-//   - a phase rating = one trailing L2+L3 pair appended to that phase's L1, so
+//   - a phase summary = two trailing L2+L3 pairs appended to that phase's L1
+//     (total first, then rating — raw composite before transmuted output), so
 //     the L1 colspan (summed in-template from len(Level3)) grows by exactly
-//     one and every colspan/BandColSpan/LeafColumnCount derivation stays
+//     two and every colspan/BandColSpan/LeafColumnCount derivation stays
 //     correct BY CONSTRUCTION;
 //   - the Final column = one synthetic trailing L1 ("rating-final") with a
 //     single L2+L3, whose header carries the period=final download slot.
@@ -29,11 +43,13 @@ package list
 // WHY THE OTHER WALKERS STAY CORRECT:
 //   - pruneColumns / resolveHidden run BEFORE this augmentation (inside
 //     buildGrid), and resolveHidden's known-token set comes from the proto
-//     response tree — a synthetic "rating:*" key can never be hidden, and a
-//     phase hidden via ?hide= is pruned before it can grow a rating leaf.
+//     response tree — a synthetic "rating:*"/"total:*" key can never be hidden
+//     and never appears in the columns menu (page.go builds that menu from a
+//     fresh proto-tree buildColumns, not from this augmented grid), and a
+//     phase hidden via ?hide= is pruned before it can grow either leaf.
 //   - assignAutoSaveCoords also ran inside buildGrid, so the W2 keyboard
-//     coordinates are IDENTICAL to the pre-rating grid; rating cells render as
-//     plain read-only value spans (Editable=false), never inputs, and
+//     coordinates are IDENTICAL to the pre-augment grid; total and rating cells
+//     render as plain read-only value spans (Editable=false), never inputs, and
 //     cell-grid.js only ever walks `.cell-grid-input` elements.
 //   - the CSV export path (export.go) builds its own grid and never calls
 //     this augmentation, so the exported grid CSV is byte-identical to before;
@@ -56,6 +72,7 @@ import (
 	"context"
 	"log"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
@@ -69,6 +86,11 @@ const (
 	// Collision-proof against real cell keys, which are always
 	// "{job_template_task_id}:{outcome_criteria_id}" (two UUIDs).
 	ratingKeyPrefix = "rating:"
+	// totalKeyPrefix namespaces the synthetic ColumnKeys of the RAW COMPOSITE
+	// leaf ("total:{phase_id}") that precedes each phase's rating leaf. Same
+	// collision-proofness as ratingKeyPrefix: real cell keys are always two
+	// UUIDs, and the ?hide= axis only ever knows phase ids and real cell keys.
+	totalKeyPrefix = "total:"
 	// finalColumnKey / finalL1Key address the trailing whole-row column.
 	finalColumnKey = "rating:final"
 	finalL1Key     = "rating-final"
@@ -135,7 +157,9 @@ func augmentRatingColumns(
 		byClient[row.GetClientId()] = row
 	}
 
-	// Trailing rating leaf per (visible) phase L1. testKey prefers the phase
+	// Trailing summary leaves per (visible) phase L1: TOTAL then RATING, in that
+	// fixed order — the raw composite sits between the last criterion column and
+	// the transmuted output it was transmuted into. testKey prefers the phase
 	// CODE ("s1") for a stable, readable testid; slug(id) is the fallback.
 	testKeyByPhase := map[string]string{}
 	for i := range cfg.Columns {
@@ -148,14 +172,23 @@ func augmentRatingColumns(
 			tk = slug(l1.Key)
 		}
 		testKeyByPhase[l1.Key] = slug(tk)
-		l1.Level2 = append(l1.Level2, types.CellGridLevel2{
-			Key: ratingKeyPrefix + l1.Key,
-			Level3: []types.CellGridLevel3{{
-				ColumnKey: ratingKeyPrefix + l1.Key,
-				Label:     l.Grid.RatingColumn,
-				CellInput: types.CellInputDescriptor{Type: "text"},
-			}},
-		})
+		l1.Level2 = append(l1.Level2,
+			types.CellGridLevel2{
+				Key: totalKeyPrefix + l1.Key,
+				Level3: []types.CellGridLevel3{{
+					ColumnKey: totalKeyPrefix + l1.Key,
+					Label:     l.Grid.TotalColumn,
+					CellInput: types.CellInputDescriptor{Type: "text"},
+				}},
+			},
+			types.CellGridLevel2{
+				Key: ratingKeyPrefix + l1.Key,
+				Level3: []types.CellGridLevel3{{
+					ColumnKey: ratingKeyPrefix + l1.Key,
+					Label:     l.Grid.RatingColumn,
+					CellInput: types.CellInputDescriptor{Type: "text"},
+				}},
+			})
 	}
 
 	// Trailing whole-row Final column, its header carrying the period=final
@@ -187,8 +220,9 @@ func augmentRatingColumns(
 	})
 
 	// Cells — attached by walking the RENDERED grid rows (the group-scoped
-	// roster filter, see the file comment). A student with no roster row, or a
-	// phase with no stored summary ("" scaled_label), renders the standard "—".
+	// roster filter, see the file comment). A client with no roster row, or a
+	// phase with no stored summary ("" scaled_label / unset summary_score),
+	// renders the standard "—".
 	for i := range cfg.Rows {
 		row := &cfg.Rows[i]
 		rr := byClient[row.ID]
@@ -201,6 +235,8 @@ func augmentRatingColumns(
 			if !isCol {
 				continue // phase pruned from this view (or unknown) — no column
 			}
+			row.Cells[totalKeyPrefix+phaseID] = ratingCell(
+				formatSummaryScore(pe), l.Grid.TotalTooltip, "om-total-"+row.ID+"-"+tk)
 			row.Cells[ratingKeyPrefix+phaseID] = ratingCell(
 				pe.GetScaledLabel(), l.Grid.RatingTooltip, "om-rating-"+row.ID+"-"+tk)
 		}
@@ -232,6 +268,24 @@ func fetchRatingRoster(ctx context.Context, deps *PageViewDeps, templateID strin
 		return nil
 	}
 	return roster
+}
+
+// formatSummaryScore renders the stored raw composite for display. PRESENCE,
+// not value, decides blankness: an UNSET summary_score returns "" (the
+// component renders the standard "—"), while a stored 0 returns "0" — the two
+// are semantically different (nothing computed vs a computed zero) and must
+// never collapse into each other.
+//
+// 'f' with precision -1 emits the shortest round-tripping decimal, so an
+// integral composite prints without a decimal tail (28 → "28") and a
+// non-integral one prints verbatim, with no rounding and no decimal-places
+// assumption. Rounding is a write-path duty of the scoring scheme, never a
+// display decision taken here.
+func formatSummaryScore(pe *matrixpb.OutcomeSummaryPhaseEntry) string {
+	if pe == nil || pe.SummaryScore == nil {
+		return ""
+	}
+	return strconv.FormatFloat(pe.GetSummaryScore(), 'f', -1, 64)
 }
 
 // ratingCell builds one derived read-only cell. Editable=false + no ReadOnly

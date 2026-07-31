@@ -239,6 +239,14 @@ type GridLabels struct {
 	// values rendered verbatim — see list/ratings.go.
 	RatingColumn  string `json:"rating_column"`
 	RatingTooltip string `json:"rating_tooltip"`
+
+	// Derived total column (20260729): the leaf-column header for the per-phase
+	// RAW COMPOSITE the scoring scheme combined, rendered immediately before the
+	// rating leaf (raw composite, then the transmuted output). Same stored row,
+	// same verbatim contract — see list/ratings.go. Generic wording here; a
+	// vertical's own term arrives through lyngua, never through this default.
+	TotalColumn  string `json:"total_column"`
+	TotalTooltip string `json:"total_tooltip"`
 }
 
 // ErrorLabels — generic permission-denied string.
@@ -281,6 +289,8 @@ func DefaultLabels() Labels {
 			ReadOnlyTooltip: "Recorded by another staff member — read only",
 			RatingColumn:    "Rating",
 			RatingTooltip:   "Computed rating — read only",
+			TotalColumn:     "Total",
+			TotalTooltip:    "Computed total — read only",
 		},
 		Errors: ErrorLabels{
 			PermissionDenied: "You do not have permission to perform this action",

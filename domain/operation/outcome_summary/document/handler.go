@@ -44,6 +44,7 @@ import (
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	sgppspb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_product_plan_staff"
+	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
 
 const docxContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -137,6 +138,16 @@ type Deps struct {
 	// criterion columns blank.
 	ListJobTasks     func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
 	ListTaskOutcomes func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
+	// GetPhaseApprovalGateRollup is the group-grain render-gate input port
+	// (espyna service/operation/outcome_matrix): one rollup per requested
+	// template phase, group-narrowed in SQL with the exact shared transition
+	// predicate and echoed with the applied group id. Implementations are
+	// registry-published fail-closed-by-absence (specialized-query builds
+	// only). Consumed ONLY when DocOptions.GateGrain selects the
+	// subscription-group grain; nil with that grain configured fails the gate
+	// CLOSED (503) — never a fallback to the template-grain walk. The unset
+	// grain never calls it.
+	GetPhaseApprovalGateRollup func(ctx context.Context, req *matrixpb.GetPhaseApprovalGateRollupRequest) (*matrixpb.GetPhaseApprovalGateRollupResponse, error)
 	// ListCodedTaskOutcomeValuesByJob is the ownership-joined latest-cell read
 	// (job → template ancestry) carrying phase/task/criterion codes for the
 	// coded-cell surface. Workspace-scoped from trusted context in the adapter;
@@ -212,14 +223,28 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			return
 		}
 
-		// D5 render gate (plan §4.4 / codex-p3-review §B4): a LIVE render must not
-		// re-issue a card drawn from a sheet whose grades have entered the approval
-		// workflow but are not yet fully PUBLISHED (mixed / returned / for-review /
-		// verified), evaluated over the FULL template-phase sheet S. Never-workflowed
-		// backfill sheets keep rendering; republish clears the gate. FAIL CLOSED: an
-		// unprovable sheet (nil dep / list error / permission denial) returns 503, a
-		// proven-unsafe sheet returns 409 — a document-issuance integrity boundary.
-		blocked, gateErr := reportRenderStatus(ctx, d, rc.JobIDs)
+		// D5 render gate (plan §4.4 / codex-p3-review §B4; sheet grain is the
+		// composition-time DocOptions.GateGrain declaration per
+		// docs/plan/20260729-report-card-render-gate-group-grain): a LIVE render
+		// must not re-issue a card drawn from a sheet whose grades have entered
+		// the approval workflow but are not yet fully PUBLISHED (mixed / returned
+		// / for-review / verified). The unset grain evaluates the FULL
+		// template-phase sheet S exactly as before this option existed; the
+		// subscription-group grain narrows S to this route group's own rows,
+		// proven through the fail-closed gate-rollup port. Never-workflowed
+		// backfill sheets keep rendering; republish clears the gate. FAIL
+		// CLOSED: an unprovable sheet (nil dep / list or rollup error / coverage
+		// or echo gap / permission denial) returns 503, a proven-unsafe sheet
+		// returns 409 — a document-issuance integrity boundary.
+		//
+		// sectionID IS the subscription_group_id: collectCard above resolved it
+		// through fetchSection (a subscription_group read by id) AND proved this
+		// client's own membership row in it (memberSubscription), returning
+		// !ok → 404 if either failed — so by here it is a proven-real group in
+		// this workspace with the card's client a proven member: the
+		// route-group pair validation the group-grain gate anchors on (the
+		// outcome_matrix ResolveGroupScope precedent).
+		blocked, gateErr := reportRenderStatus(ctx, d, rc.JobIDs, sectionID)
 		if gateErr != nil {
 			log.Printf("report render gate: cannot prove sheet safe: %v", gateErr)
 			http.Error(w, "report card cannot be generated right now — please retry", http.StatusServiceUnavailable)

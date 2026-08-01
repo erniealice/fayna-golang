@@ -396,7 +396,17 @@ type OutcomeMatrixUseCases struct {
 	// "Final" export. OPTIONAL / nil-able: a nil closure 404s a period=final
 	// export.
 	GetOutcomeSummaryRoster func(context.Context, *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error)
-	ResolveStaff            func(ctx context.Context) (string, error)
+	// GetPhaseApprovalGateRollup — the report-card render gate's group-grain
+	// input read (espyna service/operation/outcome_matrix): one rollup per
+	// requested template phase, group-narrowed in SQL with the exact shared
+	// transition predicate, echoed with the applied group id. OPTIONAL /
+	// nil-able (NOT in RequireFor): implementations are registry-published
+	// fail-closed-by-absence (specialized-query builds only), so a build
+	// without one leaves this nil and a document block configured at group
+	// grain fails its render gate CLOSED at runtime (503) — absence never
+	// degrades the gate to template grain.
+	GetPhaseApprovalGateRollup func(context.Context, *matrixpb.GetPhaseApprovalGateRollupRequest) (*matrixpb.GetPhaseApprovalGateRollupResponse, error)
+	ResolveStaff               func(ctx context.Context) (string, error)
 }
 
 // JobTemplateSummaryUseCases — the generic resolver-scoped, template-grain

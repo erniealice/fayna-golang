@@ -381,6 +381,11 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	// view-3 per-student card: maps each phase_outcome_summary to its Sem 1 / Sem 2
 	// column via job_phase.phase_order.
 	deps.ListJobPhases = u.Operation.JobPhase.ListJobPhases
+	// Group-grain render-gate rollup port (docs/plan/20260729-report-card-
+	// render-gate-group-grain). Optional: nil fails a group-grain-configured
+	// document gate CLOSED at runtime (503); the unset-grain gate never
+	// consumes it.
+	deps.GetPhaseApprovalGateRollup = u.Operation.OutcomeMatrix.GetPhaseApprovalGateRollup
 	// Block-layout report-card tree: resolves job_template_phase.code (projected by
 	// the specialized ListByJobTemplate SQL) so per-phase leaves key by phase code.
 	deps.ListJobTemplatePhasesByTemplate = u.Operation.JobTemplatePhase.ListByJobTemplate

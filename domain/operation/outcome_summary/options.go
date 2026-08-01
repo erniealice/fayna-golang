@@ -1,6 +1,9 @@
 package outcome_summary
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Options — app-configurable presentation for the outcome-summary surfaces,
 // set by the consuming app through the block's EngineBlock option (the view
@@ -75,6 +78,56 @@ type DocumentOptions struct {
 	// pages). The artifact CONTENT is operator template material; only the
 	// selection knob lives in code.
 	TemplateVariant string
+	// GateGrain declares the sheet grain of the document render gate (the
+	// document-issuance integrity boundary in document/render_gate.go) — a
+	// DEPLOYMENT declaration made at composition time. It is a deliberately
+	// SEPARATE knob from the job list's RowLinkOptions (adjacent in the app's
+	// option block): a navigation option must never double as an integrity
+	// switch.
+	//
+	//   - "" (zero value): the template-grain gate — the sheet is every active
+	//     phase sharing a template_phase_id, workspace-wide. The stricter,
+	//     over-blocking gate; byte-identical behavior to before this option
+	//     existed (apps that set no options are unaffected).
+	//   - GateGrainSubscriptionGroup: the (template_phase × subscription_group)
+	//     grain — the sheet is the route group's own rows, proven through the
+	//     fail-closed gate-rollup port.
+	//
+	// DELIBERATE DIVERGENCE from this file's fail-safe grammar ("an
+	// unrecognized reference is ignored"): an unrecognized GateGrain is a BOOT
+	// error (the block's EngineBlock refuses to mount via ValidateGateGrain),
+	// never a runtime guess and never a silent fallback to either grain — an
+	// integrity switch must not be typo-able into a different security
+	// posture. There is also NO runtime grain fallback: a configured group
+	// grain whose port is missing or unprovable fails the gate closed (503).
+	// (docs/plan/20260729-report-card-render-gate-group-grain/fayna.md)
+	GateGrain string
+}
+
+// GateGrainSubscriptionGroup is the DocumentOptions.GateGrain value that
+// evaluates the document render gate at (template_phase × subscription_group)
+// grain through the fail-closed gate-rollup port.
+const GateGrainSubscriptionGroup = "subscription_group"
+
+// GateGrainGroup reports whether the document render gate is configured at
+// subscription-group grain.
+func (d DocumentOptions) GateGrainGroup() bool {
+	return strings.TrimSpace(d.GateGrain) == GateGrainSubscriptionGroup
+}
+
+// ValidateGateGrain returns nil for the two recognized GateGrain values
+// ("" = template grain, GateGrainSubscriptionGroup = group grain) and a
+// descriptive error for anything else. Called by the block's EngineBlock
+// BEFORE mounting: an unrecognized grain is a boot error — the deliberate
+// divergence from the sibling options' fail-safe ignore grammar, documented
+// on the field.
+func (d DocumentOptions) ValidateGateGrain() error {
+	switch strings.TrimSpace(d.GateGrain) {
+	case "", GateGrainSubscriptionGroup:
+		return nil
+	}
+	return fmt.Errorf("outcome_summary: unrecognized DocumentOptions.GateGrain %q (want %q or %q)",
+		d.GateGrain, "", GateGrainSubscriptionGroup)
 }
 
 // TemplateVariantBlock selects the block-layout embedded template (the

@@ -41,6 +41,7 @@ import (
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
+	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
 
 // OutcomeSummaryModuleDeps holds all dependencies for the outcome summary module.
@@ -110,6 +111,13 @@ type OutcomeSummaryModuleDeps struct {
 	ListWorkspaceUsers                  func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
 	ListJobs                            func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 	ListJobPhases                       func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	// GetPhaseApprovalGateRollup — the group-grain render-gate input port
+	// (per-template-phase group rollup with the applied-group echo). Consumed
+	// ONLY when Options.Document.GateGrain selects the subscription-group
+	// grain; nil with that grain configured fails the document gate CLOSED
+	// (503) — never a fallback to the template-grain walk. Unset grain never
+	// calls it.
+	GetPhaseApprovalGateRollup func(ctx context.Context, req *matrixpb.GetPhaseApprovalGateRollupRequest) (*matrixpb.GetPhaseApprovalGateRollupResponse, error)
 	// ListJobTemplatePhasesByTemplate resolves a job_template's phases (with their
 	// stable `code`) so the report-card block tree can key per-phase leaves by
 	// phase code. Optional/nil-safe.
@@ -321,6 +329,7 @@ func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc 
 		ListJobOutcomeSummarys:                    deps.ListJobOutcomeSummarys,
 		ListPhaseOutcomeSummarysByJob:             deps.ListPhaseOutcomeSummarysByJob,
 		ListJobPhases:                             deps.ListJobPhases,
+		GetPhaseApprovalGateRollup:                deps.GetPhaseApprovalGateRollup,
 		ListJobTemplatePhasesByTemplate:           deps.ListJobTemplatePhasesByTemplate,
 		ListJobOutcomeLines:                       deps.ListJobOutcomeLines,
 		ListJobTasks:                              deps.ListJobTasks,

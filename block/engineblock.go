@@ -64,6 +64,20 @@ func WithJobListOptions(o job.Options) EngineOption {
 // operation + fulfillment domain modules via the compose engine.
 func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 	return func(ctx *consumerapp.AppContext) error {
+		// Boot-time gate-grain validation, BEFORE anything mounts. This is a
+		// deliberate divergence from the option structs' fail-safe "ignore an
+		// unrecognized reference" grammar: the document render gate's grain is
+		// an INTEGRITY switch, so a misspelled/unknown value must refuse boot —
+		// never a runtime guess, never a silent fallback to either grain.
+		// (docs/plan/20260729-report-card-render-gate-group-grain)
+		bootCfg := engineConfig{}
+		for _, o := range opts {
+			o(&bootCfg)
+		}
+		if err := bootCfg.outcomeSummaryOptions.Document.ValidateGateGrain(); err != nil {
+			return err
+		}
+
 		uc, err := consumerapp.RequireUseCases(ctx, "faynaEngineBlock")
 		if err != nil {
 			return err
@@ -486,6 +500,15 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 	if uc.Service != nil && uc.Service.OutcomeMatrix != nil &&
 		uc.Service.OutcomeMatrix.GetOutcomeSummaryRoster != nil {
 		result.Operation.OutcomeMatrix.GetOutcomeSummaryRoster = uc.Service.OutcomeMatrix.GetOutcomeSummaryRoster.Execute
+	}
+	// GetPhaseApprovalGateRollup (the report-card render gate's group-grain
+	// input read) rides the SAME Service seam; wired independently so builds
+	// whose composition lacks the specialized query keep the matrix read while
+	// this closure stays nil — a document block configured at group grain then
+	// fails its render gate CLOSED at runtime (503), never open.
+	if uc.Service != nil && uc.Service.OutcomeMatrix != nil &&
+		uc.Service.OutcomeMatrix.GetPhaseApprovalGateRollup != nil {
+		result.Operation.OutcomeMatrix.GetPhaseApprovalGateRollup = uc.Service.OutcomeMatrix.GetPhaseApprovalGateRollup.Execute
 	}
 	// ResolveStaff maps the session user → active staff_id through the typed staff
 	// list use case (the read-only gate + record-action IDOR guard authority).

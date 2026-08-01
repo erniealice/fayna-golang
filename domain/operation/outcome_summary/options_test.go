@@ -32,3 +32,46 @@ func TestGroupValueRank(t *testing.T) {
 		t.Errorf("empty GroupValueOrder must report every value unlisted")
 	}
 }
+
+// TestGateGrain pins the DocumentOptions.GateGrain contract: exactly two
+// recognized values ("" = template grain, the const = group grain); anything
+// else is a validation ERROR (the deliberate boot-error divergence from the
+// sibling options' fail-safe ignore grammar — an integrity switch must not be
+// typo-able into a different security posture).
+func TestGateGrain(t *testing.T) {
+	cases := []struct {
+		name      string
+		grain     string
+		wantGroup bool
+		wantValid bool
+	}{
+		{"zero_value_is_template_grain", "", false, true},
+		{"const_is_group_grain", GateGrainSubscriptionGroup, true, true},
+		{"const_literal", "subscription_group", true, true},
+		{"whitespace_only_is_zero", "   ", false, true},
+		{"padded_const_is_group_grain", "  subscription_group  ", true, true},
+		{"garbage_is_invalid", "sideways", false, false},
+		{"casing_is_invalid", "Subscription_Group", false, false},
+		{"navigation_ref_is_invalid", "subscription_group.name", false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := DocumentOptions{GateGrain: c.grain}
+			if got := d.GateGrainGroup(); got != c.wantGroup {
+				t.Errorf("GateGrainGroup() = %v, want %v", got, c.wantGroup)
+			}
+			err := d.ValidateGateGrain()
+			if c.wantValid && err != nil {
+				t.Errorf("ValidateGateGrain() = %v, want nil", err)
+			}
+			if !c.wantValid && err == nil {
+				t.Errorf("ValidateGateGrain() = nil, want error (unknown grain must be a boot error, never ignored)")
+			}
+		})
+	}
+
+	// An invalid grain must NEVER read as group grain (no runtime guess).
+	if (DocumentOptions{GateGrain: "sideways"}).GateGrainGroup() {
+		t.Errorf("an unrecognized grain must not report group grain")
+	}
+}

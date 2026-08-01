@@ -234,10 +234,6 @@ type ApprovalPhase struct {
 	PublishConfirm string
 	ReturnConfirm  string
 
-	// ReturnReasonRequired hints the UI (server is authoritative) that a return
-	// will require a non-blank reason because a member is/was published.
-	ReturnReasonRequired bool
-	ReturnReasonLabel    string
 }
 
 // NewView creates the outcome matrix GET view.
@@ -1011,7 +1007,6 @@ func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *ma
 		inProgress := status == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_IN_PROGRESS
 		forReview := status == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_FOR_REVIEW
 		verified := status == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_VERIFIED
-		published := status == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_PUBLISHED
 		frozen := ru.GetHardFrozen()
 		mixed := ru.GetMixed()
 
@@ -1058,15 +1053,6 @@ func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *ma
 		ap.CanPublish = canPublish && verified && !mixed && !frozen
 		ap.CanReturn = canReturn && !frozen && (mixed || !inProgress)
 
-		// A published sheet's return needs a reason (server enforces; UI marks the
-		// input required as a best-effort hint — a mixed/was-published case the
-		// roll-up cannot see is still enforced server-side, surfacing as a 422).
-		ap.ReturnReasonRequired = published
-		if ap.ReturnReasonRequired {
-			ap.ReturnReasonLabel = l.Actions.ReturnReasonRequired
-		} else {
-			ap.ReturnReasonLabel = l.Actions.ReturnReason
-		}
 
 		out = append(out, ap)
 	}

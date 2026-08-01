@@ -102,8 +102,8 @@ func NewPublishAction(deps *TransitionDeps) view.View {
 }
 
 // NewReturnAction returns the mixed/advanced → IN_PROGRESS normalizer POST
-// handler. The reason field is collected here; the server enforces the
-// published-return non-blank-reason requirement.
+// handler. A reason field is accepted and stored if a client sends one, but is
+// never required (the published-return non-blank rule was retired 2026-08-01).
 func NewReturnAction(deps *TransitionDeps) view.View {
 	return newTransitionAction(deps, "return", func(ctx context.Context, templateID, phaseID, reason, groupID string) error {
 		if deps.Return == nil {

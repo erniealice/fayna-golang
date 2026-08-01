@@ -162,9 +162,9 @@ populated on PageData for any non-template consumer that needs it. */}}
                   data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
                 {{actionForm .ReturnPath $root.WorkspaceID}}
                 <input type="hidden" name="job_template_phase_id" value="{{.PhaseID}}">
-                {{/* The reason input renders in the header actions via form=
-                     association — a required control inside this hidden band
-                     is unfocusable, so validation silently blocks the submit. */}}
+                {{/* No reason input: the return reason was retired 2026-08-01
+                     (owner decision) — server accepts and stores one if sent,
+                     but never requires it. */}}
             </form>
             {{end}}
             {{/* The per-phase #pa-{slug}-result banner moved to the visible
@@ -219,7 +219,7 @@ populated on PageData for any non-template consumer that needs it. */}}
     {{if .CanSubmit}}<button type="submit" form="pa-{{.Slug}}-submit-form" class="btn btn-primary status-form__btn" data-testid="pa-{{.Slug}}-submit">{{$labels.Actions.Submit}}</button>{{end}}
     {{if .CanVerify}}<button type="submit" form="pa-{{.Slug}}-verify-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-verify">{{$labels.Actions.Verify}}</button>{{end}}
     {{if .CanPublish}}<button type="submit" form="pa-{{.Slug}}-publish-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-publish">{{$labels.Actions.Publish}}</button>{{end}}
-    {{if .CanReturn}}<input type="text" form="pa-{{.Slug}}-return-form" name="reason" class="status-form__input" placeholder="{{.ReturnReasonLabel}}"{{if .ReturnReasonRequired}} required{{end}} data-testid="pa-{{.Slug}}-return-reason"><button type="submit" form="pa-{{.Slug}}-return-form" class="btn btn-ghost status-form__btn" data-testid="pa-{{.Slug}}-return">{{$labels.Actions.Return}}</button>{{end}}
+    {{if .CanReturn}}<button type="submit" form="pa-{{.Slug}}-return-form" class="btn btn-ghost status-form__btn" data-testid="pa-{{.Slug}}-return">{{$labels.Actions.Return}}</button>{{end}}
     {{/* Per-column download (20260725; via the DRAWER since 20260726): an
          icon-only trigger opening the SAME Period × Format sheet as the
          toolbar's Download button, with THIS column's period pre-selected

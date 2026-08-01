@@ -105,10 +105,10 @@ func TestBuildApprovalBar(t *testing.T) {
 		t.Errorf("pC unexpected: variant=%q publish=%v verify=%v return=%v", c.ChipVariant, c.CanPublish, c.CanVerify, c.CanReturn)
 	}
 
-	// pD: published — return only, reason required
+	// pD: published — return only (reason retired 2026-08-01, never required)
 	d := by["pD"]
-	if d.ChipVariant != "success" || !d.CanReturn || d.CanPublish || !d.ReturnReasonRequired {
-		t.Errorf("pD unexpected: variant=%q return=%v publish=%v reasonReq=%v", d.ChipVariant, d.CanReturn, d.CanPublish, d.ReturnReasonRequired)
+	if d.ChipVariant != "success" || !d.CanReturn || d.CanPublish {
+		t.Errorf("pD unexpected: variant=%q return=%v publish=%v", d.ChipVariant, d.CanReturn, d.CanPublish)
 	}
 
 	// pE: mixed (lowest in_progress) — submit blocked by mixed, return available

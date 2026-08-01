@@ -1,0 +1,184 @@
+{{/*
+  fayna home — the persona-aware home dashboard block surface
+  (docs/plan/20260801-persona-home-dashboard; Q1–Q7 locked 2026-08-01).
+
+  Template names are package-prefixed so they coexist with an app-local home
+  template set (Q6-B fork discipline — the app twin files are untouched):
+    {{define "fayna-home"}}         — full page (wraps app-shell)
+    {{define "fayna-home-ribbon"}}  — ribbon partial (60s HTMX self-refresh)
+    {{define "fayna-home-content"}} — content partial (HTMX navigation swap)
+
+  All user-facing strings resolve via lyngua .T keys; category tab labels are
+  job_category row DATA from the aggregate response. Per-page CSS is the
+  package-prefixed token-only file /assets/css/fayna/fayna-home.css.
+
+  Tab semantics (AD-2 ruling, recorded): the category tabs are JS-driven
+  hx-get buttons, so they keep TRUE tablist semantics (role="tablist"/"tab",
+  aria-selected, roving tabindex) — the pyeza tabs-component contract for
+  HxGet strips. Swaps target #main-content (the same target the page's own
+  refresh control already uses) with no hx-push-url (URL stays clean).
+*/}}
+
+{{define "fayna-home"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{define "fayna-home-ribbon"}}
+  <div class="fayna-home-ribbon" role="status" aria-live="polite" data-testid="home-ribbon"
+       hx-get='{{route "home.ribbon_url"}}' hx-trigger="load delay:60s" hx-target="this" hx-swap="outerHTML">
+    <span class="fayna-home-ribbon-pulse">
+      <span class="fayna-home-ribbon-dot" aria-hidden="true"></span>{{.T "home.ops_live"}}
+    </span>
+    <span class="fayna-home-ribbon-divider" aria-hidden="true"></span>
+    {{if .WorkspaceName}}<span class="fayna-home-ribbon-item">{{.WorkspaceName}}</span>{{end}}
+    <span class="fayna-home-ribbon-item" data-testid="home-businessday">{{.Today}}</span>
+  </div>
+{{end}}
+
+{{define "fayna-home-content"}}
+<section class="fayna-home" data-page-css="/assets/css/fayna/fayna-home.css?v={{.CacheVersion}}" data-testid="home-dashboard">
+
+  {{template "fayna-home-ribbon" .}}
+
+  <header class="fayna-home-titlebar">
+    <div class="fayna-home-titlebar-left">
+      <p class="fayna-home-eyebrow">{{.T "home.eyebrow"}}</p>
+      <h1 class="fayna-home-title">{{.T "home.title"}}</h1>
+      <p class="fayna-home-subtitle">
+        {{if .WorkspaceName}}{{.WorkspaceName}} <span aria-hidden="true">·</span> {{end}}{{.Today}}
+      </p>
+    </div>
+    <div class="fayna-home-titlebar-right">
+      <button type="button" class="btn-ghost" aria-label='{{.T "home.refresh"}}' data-testid="home-refresh"
+              hx-get='{{route "home.content_url"}}' hx-target="#main-content" hx-swap="innerHTML">
+        {{template "icon-refresh-cw" .}}
+      </button>
+    </div>
+  </header>
+
+  <div class="fayna-home-variant" data-testid="home-variant-{{.Slot}}">
+
+    {{if .TabsEnabled}}
+    <div class="tabs fayna-home-tabstrip" role="tablist" aria-label='{{.T "home.title"}}' data-testid="home-tabstrip">
+      {{range .Tabs}}
+      <button type="button"
+              class="tab{{if .Active}} active{{end}}"
+              role="tab"
+              id="{{.ID}}"
+              data-testid="{{.ID}}"
+              aria-selected="{{if .Active}}true{{else}}false{{end}}"
+              aria-controls="home-tabpanel"
+              tabindex="{{if .Active}}0{{else}}-1{{end}}"
+              hx-get='{{route "home.content_url"}}{{.Query}}'
+              hx-target="#main-content"
+              hx-swap="innerHTML">{{.Label}}</button>
+      {{end}}
+    </div>
+    {{end}}
+
+    <div class="fayna-home-grid" id="home-tabpanel" {{if .TabsEnabled}}role="tabpanel" aria-labelledby="home-tab-{{.ActiveTab}}"{{end}}>
+      {{range .Widgets}}{{template "fayna-home-widget" .}}{{end}}
+    </div>
+
+  </div>
+</section>
+{{end}}
+
+{{define "fayna-home-widget"}}
+{{if eq .State "denied"}}
+  <article class="fayna-home-widget fayna-home-widget--denied" data-testid="home-widget-{{.Ref}}-denied">
+    <h2 class="fayna-home-widget-title">{{.Title}}</h2>
+    <p class="fayna-home-denied-reason">{{.DeniedText}}</p>
+    <p class="fayna-home-denied-hint">{{.DeniedHint}}</p>
+  </article>
+{{else if eq .State "unavailable"}}
+  <article class="fayna-home-widget fayna-home-widget--unavailable" data-testid="home-widget-{{.Ref}}-unavailable">
+    <h2 class="fayna-home-widget-title">{{.Title}}</h2>
+    <p class="fayna-home-unavailable-reason">{{.UnavailableText}}</p>
+    <p class="fayna-home-unavailable-hint">{{.UnavailableHint}}</p>
+  </article>
+{{else if eq .State "empty"}}
+  <article class="fayna-home-widget fayna-home-widget--empty" data-testid="home-widget-{{.Ref}}-empty">
+    <h2 class="fayna-home-widget-title">{{.Title}}</h2>
+    <p class="fayna-home-empty-text">{{.EmptyText}}</p>
+  </article>
+{{else}}
+  <article class="fayna-home-widget" data-testid="home-widget-{{.Ref}}">
+    <header class="fayna-home-widget-head">
+      <h2 class="fayna-home-widget-title">{{.Title}}</h2>
+      {{if .Subtitle}}<p class="fayna-home-widget-subtitle">{{.Subtitle}}</p>{{end}}
+    </header>
+
+    {{if .Completion}}
+    <p class="fayna-home-scope-line">
+      <span data-testid="home-completion-scope">{{.Completion.ScopeText}}</span>
+      <span aria-hidden="true">·</span>
+      <span data-testid="home-completion-period">{{.Completion.PeriodText}}</span>
+    </p>
+    <div class="fayna-home-stats">
+      {{template "stat-card" (dict
+        "Color" "sage"
+        "Icon" "icon-check-circle"
+        "Value" .Completion.Recorded
+        "Label" .Completion.RecordedLabel
+        "TestID" "home-stat-recorded")}}
+      {{template "stat-card" (dict
+        "Color" "navy"
+        "Icon" "icon-bar-chart"
+        "Value" .Completion.Expected
+        "Label" .Completion.ExpectedLabel
+        "TestID" "home-stat-expected")}}
+      {{template "stat-card" (dict
+        "Color" "terracotta"
+        "Icon" "icon-trending-up"
+        "Value" .Completion.RatePct
+        "Label" .Completion.RateLabel
+        "TestID" "home-stat-rate")}}
+    </div>
+    <p class="fayna-home-unit-line">{{.Completion.RecordedSub}}</p>
+    {{if .Completion.ZeroText}}
+    <p class="fayna-home-zero-text" data-testid="home-completion-zero">{{.Completion.ZeroText}}</p>
+    {{end}}
+    {{end}}
+
+    {{if .Approval}}
+    <ul class="fayna-home-count-list">
+      {{range .Approval.Rows}}
+      <li class="fayna-home-count-row" data-testid="home-approval-{{.Key}}">
+        <span class="fayna-home-count-label">{{.Label}}</span>
+        <span class="fayna-home-count-value">{{.Value}}</span>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+
+    {{if .Attention}}
+    <table class="fayna-home-table">
+      <tbody>
+        {{range .Attention.Rows}}
+        <tr data-testid="home-attention-{{.CategoryID}}">
+          <th scope="row" class="fayna-home-table-name">{{.Name}}</th>
+          <td class="fayna-home-table-num">{{.Ratio}}</td>
+          <td class="fayna-home-table-num">{{.RatePct}}</td>
+        </tr>
+        {{end}}
+        <tr class="fayna-home-table-exceptions" data-testid="home-attention-exceptions">
+          <th scope="row" class="fayna-home-table-name">{{.Attention.ExceptionsLabel}}</th>
+          <td class="fayna-home-table-num" colspan="2">{{.Attention.ExceptionsValue}}</td>
+        </tr>
+      </tbody>
+    </table>
+    {{end}}
+
+    {{if eq .Ref "quick_links"}}
+    <ul class="fayna-home-links">
+      {{range .Links}}
+      <li>
+        <a class="fayna-home-link" href="{{if .ParamName}}{{routeWith .RouteKey .ParamName .ParamValue}}{{else}}{{route .RouteKey}}{{end}}">{{.Label}}</a>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  </article>
+{{end}}
+{{end}}

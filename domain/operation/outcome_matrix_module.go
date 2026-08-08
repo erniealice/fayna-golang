@@ -87,6 +87,7 @@ type OutcomeMatrixModuleDeps struct {
 
 	CreateTaskOutcome func(ctx context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, error)
 	UpdateTaskOutcome func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error)
+	DeleteTaskOutcome func(ctx context.Context, req *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error)
 	ReadTaskOutcome   func(ctx context.Context, req *taskoutcomepb.ReadTaskOutcomeRequest) (*taskoutcomepb.ReadTaskOutcomeResponse, error)
 
 	ResolveStaff func(ctx context.Context) (string, error)
@@ -220,6 +221,7 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		Labels:               deps.Labels,
 		CreateTaskOutcome:    deps.CreateTaskOutcome,
 		UpdateTaskOutcome:    deps.UpdateTaskOutcome,
+		DeleteTaskOutcome:    deps.DeleteTaskOutcome,
 		ReadTaskOutcome:      deps.ReadTaskOutcome,
 		GetOutcomeMatrix:     deps.GetOutcomeMatrix,
 		ResolveStaff:         deps.ResolveStaff,

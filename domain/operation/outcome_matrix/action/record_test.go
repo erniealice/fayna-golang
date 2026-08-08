@@ -3,6 +3,7 @@ package action
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -66,6 +67,7 @@ func numericMatrix(recorded bool) *matrixpb.GetOutcomeMatrixResponse {
 type recorder struct {
 	createCalls   int
 	updateCalls   int
+	deleteCalls   int
 	order         []string // recompute call order ("phase:<id>", "job:<id>")
 	phaseErr      error
 	jobRecomputed bool
@@ -74,6 +76,7 @@ type recorder struct {
 	jobNil        bool
 	readOwner     string             // RecordedBy the ReadTaskOutcome fixture returns (default staffID)
 	readCT        enums.CriteriaType // CriteriaType the stored record reports (default NUMERIC_SCORE)
+	deleteErr     error
 
 	// recompute-eligibility fixture (wired only when wireElig): eligible + the
 	// scheme's in-scope criterion set. Unwired → the action falls back to
@@ -115,6 +118,13 @@ func (r *recorder) deps(matrix *matrixpb.GetOutcomeMatrixResponse) *Deps {
 			r.createCalls++
 			return &taskoutcomepb.CreateTaskOutcomeResponse{Data: []*taskoutcomepb.TaskOutcome{{Id: "new-outcome-9"}}}, nil
 		},
+		DeleteTaskOutcome: func(_ context.Context, req *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error) {
+			r.deleteCalls++
+			if r.deleteErr != nil {
+				return nil, r.deleteErr
+			}
+			return &taskoutcomepb.DeleteTaskOutcomeResponse{}, nil
+		},
 	}
 	if !r.phaseNil {
 		d.ComputePhaseOutcome = func(_ context.Context, id string) (bool, error) {
@@ -140,6 +150,7 @@ type ackItem struct {
 	Key                 string `json:"key"`
 	OK                  bool   `json:"ok"`
 	OutcomeID           string `json:"outcomeId"`
+	NextKey             string `json:"nextKey"`
 	Value               string `json:"value"`
 	RatingFresh         *bool  `json:"ratingFresh"`
 	RatingNotRecomputed string `json:"ratingNotRecomputed"`
@@ -182,13 +193,13 @@ func byKey(items []ackItem, key string) (ackItem, bool) {
 	return ackItem{}, false
 }
 
-var bothPerms = []string{"task_outcome:create", "task_outcome:update"}
+var allPerms = []string{"task_outcome:create", "task_outcome:update", "task_outcome:delete"}
 
 // ── tests ────────────────────────────────────────────────────────────────────
 
 func TestCellMode_SingleUpdate(t *testing.T) {
 	r := &recorder{}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=86", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=86", allPerms)
 	items := cells(t, res)
 	if len(items) != 1 {
 		t.Fatalf("want 1 ack, got %d: %+v", len(items), items)
@@ -211,11 +222,106 @@ func TestCellMode_SingleUpdate(t *testing.T) {
 	}
 }
 
+func TestCellMode_ClearExisting_Success(t *testing.T) {
+	r := &recorder{}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=", allPerms)
+	items := cells(t, res)
+	if len(items) != 1 {
+		t.Fatalf("want 1 ack, got %d: %+v", len(items), items)
+	}
+	got := items[0]
+	if got.Key != "cells."+existingID {
+		t.Fatalf("clear delete must target the canonical outcome address: %+v", got)
+	}
+	if got.NextKey != "new."+jobTaskID+":"+criteriaID {
+		t.Fatalf("clear delete must return nextKey=%q, got %q", "new."+jobTaskID+":"+criteriaID, got.NextKey)
+	}
+	if !got.OK || got.OutcomeID != "" || got.Value != "" {
+		t.Fatalf("delete ack must return ok true + empty outcomeId/value: %+v", got)
+	}
+	if r.deleteCalls != 1 || r.updateCalls != 0 || r.createCalls != 0 {
+		t.Errorf("want 1 delete 0 update/create, got %d/%d/%d", r.deleteCalls, r.updateCalls, r.createCalls)
+	}
+}
+
+func TestCellMode_ClearExisting_WithoutDeletePermission(t *testing.T) {
+	r := &recorder{}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=", []string{"task_outcome:create"})
+	got := cells(t, res)[0]
+	if got.OK {
+		t.Fatalf("create-only permission must not clear an existing cell: %+v", got)
+	}
+	if got.Error != "not_editable" {
+		t.Fatalf("expected not_editable for clear without delete permission, got %q", got.Error)
+	}
+	if r.deleteCalls != 0 {
+		t.Errorf("blocked clear must not call DeleteTaskOutcome, got %d", r.deleteCalls)
+	}
+}
+
+func TestCellMode_ClearExisting_DeleteOnlyPermission(t *testing.T) {
+	r := &recorder{}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=", []string{"task_outcome:delete"})
+	got := cells(t, res)[0]
+	if !got.OK || got.OutcomeID != "" || got.Value != "" {
+		t.Fatalf("delete-only permission should still clear existing: %+v", got)
+	}
+	if r.deleteCalls != 1 {
+		t.Errorf("delete-only caller should perform exactly one delete, got %d", r.deleteCalls)
+	}
+}
+
+func TestCellMode_ClearExisting_ForgedOutcome_Blocked(t *testing.T) {
+	r := &recorder{}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells.forged-outcome-x=", allPerms)
+	got := cells(t, res)[0]
+	if got.OK {
+		t.Fatalf("forged outcome clear must be blocked")
+	}
+	if got.Error == "" {
+		t.Fatalf("forged outcome clear must carry a bounded error code: %+v", got)
+	}
+	if r.deleteCalls != 0 {
+		t.Errorf("forged outcome should never call DeleteTaskOutcome, got %d calls", r.deleteCalls)
+	}
+}
+
+func TestCellMode_ClearExisting_DeleteFailure(t *testing.T) {
+	r := &recorder{deleteErr: errors.New("delete failed")}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=", allPerms)
+	got := cells(t, res)[0]
+	if got.OK {
+		t.Fatalf("delete failure must fail the cell")
+	}
+	if got.NextKey != "" {
+		t.Fatalf("delete failure must not emit nextKey")
+	}
+	if got.Error != "delete_failed" {
+		t.Fatalf("want delete_failed on delete error, got %q", got.Error)
+	}
+	if r.deleteCalls != 1 {
+		t.Fatalf("want 1 delete call, got %d", r.deleteCalls)
+	}
+}
+
+func TestCellMode_ClearExisting_RecomputeClassified(t *testing.T) {
+	// A cleared numeric academic cell still drives the same recompute split.
+	r := &recorder{wireElig: true, eligible: true, inScope: map[string]bool{criteriaID: true}, jobRecomputed: true}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=", allPerms)
+	got := cells(t, res)[0]
+	if got.RatingFresh == nil || !*got.RatingFresh {
+		t.Fatalf("eligible numeric clear should recompute, got %+v", got)
+	}
+	if len(r.order) != 2 || r.order[0] != "phase:"+jobPhaseID || r.order[1] != "job:"+jobID {
+		t.Errorf("clear should still queue phase then job recompute, got %v", r.order)
+	}
+}
+
 func TestCellMode_MultiCell_CreateReturnsNewID(t *testing.T) {
 	// A matrix with BOTH an existing cell and an empty create cell would need two
 	// columns; simpler: create path alone verifies the new-id handshake.
 	r := &recorder{}
-	res := invoke(t, r.deps(numericMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=7", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=7", allPerms)
 	items := cells(t, res)
 	if len(items) != 1 {
 		t.Fatalf("want 1 ack, got %d", len(items))
@@ -241,7 +347,7 @@ func TestCellMode_CreateThenResubmit_Idempotent(t *testing.T) {
 	// action must UPDATE it (returning the existing id for the rename), never
 	// create a duplicate.
 	r := &recorder{}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=90", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=90", allPerms)
 	items := cells(t, res)
 	got, ok := byKey(items, "new."+jobTaskID+":"+criteriaID)
 	if !ok || !got.OK {
@@ -260,7 +366,7 @@ func TestCellMode_CreateThenResubmit_Idempotent(t *testing.T) {
 
 func TestCellMode_MalformedValue_FailsCellNotBatch(t *testing.T) {
 	r := &recorder{}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=not-a-number", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=not-a-number", allPerms)
 	items := cells(t, res)
 	if len(items) != 1 {
 		t.Fatalf("want 1 ack, got %d", len(items))
@@ -278,7 +384,7 @@ func TestCellMode_ComputeFailure_RatingFreshFalse(t *testing.T) {
 	// The grade persists but the phase recompute fails → ratingFresh:false
 	// (stale + retryable), never a failed cell.
 	r := &recorder{phaseErr: context.DeadlineExceeded}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", allPerms)
 	got := cells(t, res)[0]
 	if !got.OK {
 		t.Fatalf("cell must still report ok:true when only the recompute failed")
@@ -293,7 +399,7 @@ func TestCellMode_FrozenJob_NotStale(t *testing.T) {
 	// (false,nil). The grade saved, the pinned rating stands: ratingFresh:true
 	// with a ratingNotRecomputed reason, NOT stale.
 	r := &recorder{jobRecomputed: false} // phase recomputes ok (true), job skipped
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", allPerms)
 	got := cells(t, res)[0]
 	if got.RatingFresh == nil || !*got.RatingFresh {
 		t.Errorf("frozen job must stay fresh (not stale), got %v", got.RatingFresh)
@@ -309,7 +415,7 @@ func TestCellMode_NonAcademic_NoRatingFresh(t *testing.T) {
 	matrix := numericMatrix(true)
 	matrix.Phases[0].Tasks[0].Criteria[0].Criteria.CriteriaType = enums.CriteriaType_CRITERIA_TYPE_PASS_FAIL
 	r := &recorder{readCT: enums.CriteriaType_CRITERIA_TYPE_PASS_FAIL}
-	res := invoke(t, r.deps(matrix), "save_mode=cell&cells."+existingID+"=pass", bothPerms)
+	res := invoke(t, r.deps(matrix), "save_mode=cell&cells."+existingID+"=pass", allPerms)
 	got := cells(t, res)[0]
 	if !got.OK {
 		t.Fatalf("pass_fail update should succeed: %+v", got)
@@ -331,7 +437,7 @@ func TestCellMode_LedgerScheme_NotApplicable(t *testing.T) {
 	// not-applicable (ratingFresh omitted), and NEVER enqueues a roll-up that
 	// would fail loud.
 	r := &recorder{wireElig: true, eligible: false}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=21", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=21", allPerms)
 	got := cells(t, res)[0]
 	if !got.OK {
 		t.Fatalf("ledger cell must save ok: %+v", got)
@@ -354,7 +460,7 @@ func TestCellMode_EligiblePhase_CriterionOutsideGraph_NotApplicable(t *testing.T
 	// The phase IS score-scaled, but this criterion is not in the scheme's active
 	// component graph → the cell still drives no recompute.
 	r := &recorder{wireElig: true, eligible: true, inScope: map[string]bool{"some-other-criterion": true}}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", allPerms)
 	got := cells(t, res)[0]
 	if !got.OK {
 		t.Fatalf("out-of-graph cell must save ok: %+v", got)
@@ -374,7 +480,7 @@ func TestCellMode_EligiblePhase_InGraph_Recomputes(t *testing.T) {
 	// The phase is score-scaled and the criterion IS in the component graph → the
 	// cell drives the phase→job recompute and reports ratingFresh:true.
 	r := &recorder{wireElig: true, eligible: true, inScope: map[string]bool{criteriaID: true}, jobRecomputed: true}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", allPerms)
 	got := cells(t, res)[0]
 	if got.RatingFresh == nil || !*got.RatingFresh {
 		t.Fatalf("eligible in-graph cell must recompute → ratingFresh:true, got %+v", got)
@@ -386,7 +492,7 @@ func TestCellMode_EligiblePhase_InGraph_Recomputes(t *testing.T) {
 
 func TestCellMode_RecomputeOrder_PhaseThenJob(t *testing.T) {
 	r := &recorder{jobRecomputed: true}
-	invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", bothPerms)
+	invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", allPerms)
 	if len(r.order) != 2 || r.order[0] != "phase:"+jobPhaseID || r.order[1] != "job:"+jobID {
 		t.Fatalf("recompute must be phase THEN job, got %v", r.order)
 	}
@@ -394,7 +500,7 @@ func TestCellMode_RecomputeOrder_PhaseThenJob(t *testing.T) {
 
 func TestCellMode_NilComputeClosures_RatingFreshFalse(t *testing.T) {
 	r := &recorder{phaseNil: true, jobNil: true}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", allPerms)
 	got := cells(t, res)[0]
 	if !got.OK {
 		t.Fatalf("nil compute closures must not fail the save")
@@ -408,7 +514,7 @@ func TestCellMode_IDOR_ForgedOutcome_Blocked(t *testing.T) {
 	// An outcome id NOT in the server-derived allow-set is rejected before any
 	// use case runs.
 	r := &recorder{}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells.forged-outcome-x=80", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells.forged-outcome-x=80", allPerms)
 	got := cells(t, res)[0]
 	if got.OK {
 		t.Errorf("forged outcome must be blocked")
@@ -424,7 +530,7 @@ func TestCellMode_IDOR_OtherOwner_Blocked(t *testing.T) {
 	// blocks it. (The allow-set is built from a MINE matrix so this is a
 	// defense-in-depth backstop.)
 	r := &recorder{readOwner: "someone-else"}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", allPerms)
 	got := cells(t, res)[0]
 	if got.OK {
 		t.Errorf("cell owned by another staff must be blocked at update")
@@ -437,16 +543,32 @@ func TestCellMode_IDOR_OtherOwner_Blocked(t *testing.T) {
 func TestLegacyBatch_Unchanged_Success(t *testing.T) {
 	// No save_mode → the aggregate formSuccess/formError response (a11y fallback).
 	r := &recorder{}
-	res := invoke(t, r.deps(numericMatrix(true)), "cells."+existingID+"=80", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "cells."+existingID+"=80", allPerms)
 	trig := res.Headers["HX-Trigger"]
 	if trig != `{"formSuccess":true}` {
 		t.Fatalf("legacy success response changed: %q", trig)
+	}
+	if r.updateCalls != 1 {
+		t.Errorf("legacy non-cell batch should update editable cell: got %d calls", r.updateCalls)
+	}
+}
+
+func TestLegacyBatch_ClearExisting_Success(t *testing.T) {
+	// Legacy mode also supports clearing an existing cell to delete outcome record.
+	r := &recorder{}
+	res := invoke(t, r.deps(numericMatrix(true)), "cells."+existingID+"=", allPerms)
+	trig := res.Headers["HX-Trigger"]
+	if trig != `{"formSuccess":true}` {
+		t.Fatalf("legacy clear should still be aggregate success: %q", trig)
+	}
+	if r.deleteCalls != 1 {
+		t.Fatalf("want 1 delete in legacy clear, got %d", r.deleteCalls)
 	}
 }
 
 func TestLegacyBatch_Unchanged_PartialFailure(t *testing.T) {
 	r := &recorder{}
-	res := invoke(t, r.deps(numericMatrix(true)), "cells."+existingID+"=80&cells.forged=1", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "cells."+existingID+"=80&cells.forged=1", allPerms)
 	trig := res.Headers["HX-Trigger"]
 	if !strings.Contains(trig, "formError") {
 		t.Fatalf("legacy partial-failure must report formError, got %q", trig)
@@ -475,7 +597,7 @@ func boundedMatrix(recorded bool, min, max int32) *matrixpb.GetOutcomeMatrixResp
 
 func TestBounds_Update_RejectsAboveMax(t *testing.T) {
 	r := &recorder{}
-	res := invoke(t, r.deps(boundedMatrix(true, 0, 8)), "save_mode=cell&cells."+existingID+"=76", bothPerms)
+	res := invoke(t, r.deps(boundedMatrix(true, 0, 8)), "save_mode=cell&cells."+existingID+"=76", allPerms)
 	got := cells(t, res)[0]
 	if got.OK {
 		t.Errorf("76 on a criterion declared 0..8 must be rejected")
@@ -487,7 +609,7 @@ func TestBounds_Update_RejectsAboveMax(t *testing.T) {
 
 func TestBounds_Update_RejectsBelowMin(t *testing.T) {
 	r := &recorder{}
-	res := invoke(t, r.deps(boundedMatrix(true, 0, 8)), "save_mode=cell&cells."+existingID+"=-1", bothPerms)
+	res := invoke(t, r.deps(boundedMatrix(true, 0, 8)), "save_mode=cell&cells."+existingID+"=-1", allPerms)
 	if cells(t, res)[0].OK {
 		t.Errorf("-1 on a criterion declared 0..8 must be rejected")
 	}
@@ -500,7 +622,7 @@ func TestBounds_Update_AcceptsInRangeAtBoundary(t *testing.T) {
 	// Inclusive on both ends — a criterion declared 0..8 grades 0 and 8.
 	for _, v := range []string{"0", "8", "5"} {
 		r := &recorder{}
-		res := invoke(t, r.deps(boundedMatrix(true, 0, 8)), "save_mode=cell&cells."+existingID+"="+v, bothPerms)
+		res := invoke(t, r.deps(boundedMatrix(true, 0, 8)), "save_mode=cell&cells."+existingID+"="+v, allPerms)
 		got := cells(t, res)[0]
 		if !got.OK {
 			t.Errorf("%s is inside 0..8 and must save (err=%q)", v, got.Error)
@@ -515,7 +637,7 @@ func TestBounds_Create_RejectsAboveMax(t *testing.T) {
 	// The create path is the one a blank grade sheet actually uses.
 	r := &recorder{}
 	res := invoke(t, r.deps(boundedMatrix(false, 0, 8)),
-		"save_mode=cell&new."+jobTaskID+":"+criteriaID+"=76", bothPerms)
+		"save_mode=cell&new."+jobTaskID+":"+criteriaID+"=76", allPerms)
 	got := cells(t, res)[0]
 	if got.OK {
 		t.Errorf("76 on a criterion declared 0..8 must be rejected on create")
@@ -532,7 +654,7 @@ func TestBounds_Unconstrained_CriterionIsUnchanged(t *testing.T) {
 	// A criterion that declares no min/max keeps the pre-fix behavior verbatim —
 	// the gate is opt-in via the criterion entity, not a new global rule.
 	r := &recorder{}
-	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=1000", bothPerms)
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=1000", allPerms)
 	if !cells(t, res)[0].OK {
 		t.Errorf("a criterion declaring no range must still accept any parseable score")
 	}
@@ -543,7 +665,7 @@ func TestBounds_RejectsNonFiniteScore(t *testing.T) {
 	// unconstrained criterion would otherwise store them.
 	for _, v := range []string{"NaN", "Inf", "-Inf"} {
 		r := &recorder{}
-		res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"="+v, bothPerms)
+		res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"="+v, allPerms)
 		if cells(t, res)[0].OK {
 			t.Errorf("%s is not a score and must be rejected", v)
 		}

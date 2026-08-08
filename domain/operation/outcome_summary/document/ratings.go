@@ -158,21 +158,26 @@ func mergeRotationPairs(c *ratingContext, academicNames map[string]bool, inactiv
 		}
 		sem1, sem2 := a, b
 		aPos, bPos := c.pos[a], c.pos[b]
-		_, a1 := aPos[1]
-		_, a2 := aPos[2]
-		_, b1 := bPos[1]
-		_, b2 := bPos[2]
+		aOrder, aHas := earliestPopulatedPhase(aPos)
+		bOrder, bHas := earliestPopulatedPhase(bPos)
 		aInactive := inactiveNames[strings.ToLower(c.nameOf[a])]
 		bInactive := inactiveNames[strings.ToLower(c.nameOf[b])]
 		switch {
-		case a1 && !b1:
+		case aHas && !bHas:
 			sem1, sem2 = a, b
-		case b1 && !a1:
+		case bHas && !aHas:
 			sem1, sem2 = b, a
-		case b2 && !a2:
-			sem1, sem2 = a, b
-		case a2 && !b2:
-			sem1, sem2 = b, a
+		case aHas && bHas:
+			switch {
+			case aOrder < bOrder:
+				sem1, sem2 = a, b
+			case bOrder < aOrder:
+				sem1, sem2 = b, a
+			case aInactive && !bInactive:
+				sem1, sem2 = b, a
+			case bInactive && !aInactive:
+				sem1, sem2 = a, b
+			}
 		case aInactive && !bInactive:
 			sem1, sem2 = b, a
 		case bInactive && !aInactive:
@@ -184,6 +189,26 @@ func mergeRotationPairs(c *ratingContext, academicNames map[string]bool, inactiv
 		}
 	}
 	return m
+}
+
+// earliestPopulatedPhase returns the smallest positive phase_order that has a
+// nonblank value.
+// Absence returns (0,false).
+func earliestPopulatedPhase(pos map[int32]string) (int32, bool) {
+	orders := make([]int32, 0, len(pos))
+	for order, val := range pos {
+		if order <= 0 || strings.TrimSpace(val) == "" {
+			continue
+		}
+		orders = append(orders, order)
+	}
+	if len(orders) == 0 {
+		return 0, false
+	}
+	sort.Slice(orders, func(i, j int) bool {
+		return orders[i] < orders[j]
+	})
+	return orders[0], true
 }
 
 // deportRow is one canonical conduct (deportment) row of the item-rating

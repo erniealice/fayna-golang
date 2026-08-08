@@ -31,8 +31,9 @@ const resultEvent = "omcell-result"
 // ownership) is identical for both.
 //
 // ── Form encoding (both modes; unchanged from the batch contract) ──────────
-//   - cells.{outcome_id}={value}          → UPDATE existing (IDOR-guarded)
-//   - new.{job_task_id}:{criteria_id}={v} → CREATE new (status=active/active=true)
+//   - cells.{outcome_id}={value}          → UPDATE existing (task_outcome:update)
+//   - cells.{outcome_id}={""}             → DELETE existing (task_outcome:delete)
+//   - new.{job_task_id}:{criteria_id}={v} → CREATE new (task_outcome:create)
 //   - save_mode=cell                      → opt into the per-cell ack response
 //     (absent → legacy aggregate formError/formSuccess response)
 //
@@ -60,6 +61,9 @@ const resultEvent = "omcell-result"
 //     lost-ack new.* retry resolved to an existing outcome): the
 //     client renames the input new.{jt}:{cr} → cells.{outcomeId} IN
 //     PLACE so the next save UPDATES instead of re-creating.
+//   - nextKey     present only after a successful DELETE; the trusted
+//     new.{job_task_id}:{criteria_id} address that lets the client rename the
+//     live input back to CREATE mode without a page reload.
 //   - value       the normalized canonical stored value; becomes the client's
 //     new saved-baseline (data-saved-value). pass_fail is normalized
 //     to "true"/"false" so it round-trips the <select> option values.
@@ -100,12 +104,14 @@ const resultEvent = "omcell-result"
 func NewRecordAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
-		// Per-verb gates: update cells need task_outcome:update, new cells need
-		// task_outcome:create — an update-only save must not be denied for a
-		// missing create grant (and vice versa).
+		// Per-verb gates: update cells need task_outcome:update, delete cells
+		// need task_outcome:delete, new cells need task_outcome:create — an
+		// update-only save must not be denied for a missing create/delete grant
+		// (and vice versa).
 		hasCreate := perms.Can("task_outcome", "create")
 		hasUpdate := perms.Can("task_outcome", "update")
-		if !hasCreate && !hasUpdate {
+		hasDelete := perms.Can("task_outcome", "delete")
+		if !hasCreate && !hasUpdate && !hasDelete {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
@@ -152,15 +158,29 @@ func NewRecordAction(deps *Deps) view.View {
 				if outcomeID == "" {
 					continue
 				}
+				sc := byOutcome[outcomeID]
+				clearKey := "new." + sc.jobTaskID + ":" + sc.criteriaID
+				if clearKey == "new.:" {
+					clearKey = key
+				}
 				if raw == "" {
-					// Blank on an existing cell is "no change", never an
-					// overwrite — a blank pass/fail must not coerce to false.
-					// Persisted clear is deferred (Q-GSE-11); in cell mode surface
-					// an explicit item failure so the client doesn't hang on an
-					// unacked cell (rather than silently pretending to save).
-					if cellMode {
-						acks = append(acks, cellAck{key: key, errMsg: "clear_not_supported"})
+					// Blank on an existing cell is a clear request.
+					if !hasDelete || !allowedUpdate[outcomeID] {
+						log.Printf("[outcome-matrix] delete blocked: outcome %s not addressable for staff %s", outcomeID, actingStaff)
+						acks = append(acks, cellAck{key: key, errMsg: "not_editable"})
+						continue
 					}
+					deleted := deleteCell(ctx, deps, actingStaff, outcomeID)
+					nextKey := ""
+					if deleted {
+						nextKey = clearKey
+					}
+					acks = append(acks, cellAck{
+						key: key, ok: deleted, nextKey: nextKey, outcomeID: "", value: "",
+						numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
+						jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
+						errMsg: failMsg(deleted, "delete_failed"),
+					})
 					continue
 				}
 				if !hasUpdate || !allowedUpdate[outcomeID] {
@@ -168,7 +188,6 @@ func NewRecordAction(deps *Deps) view.View {
 					acks = append(acks, cellAck{key: key, errMsg: "not_editable"})
 					continue
 				}
-				sc := byOutcome[outcomeID]
 				normVal, ok := updateCell(ctx, deps, actingStaff, outcomeID, raw, sc.ct, sc.bounds)
 				acks = append(acks, cellAck{
 					key: key, ok: ok, outcomeID: outcomeID, value: normVal,
@@ -277,6 +296,7 @@ type srvCell struct {
 // into the omcell-result JSON (cellMode) or the saved/failed counts (legacy).
 type cellAck struct {
 	key        string
+	nextKey    string
 	ok         bool
 	outcomeID  string
 	value      string
@@ -393,6 +413,7 @@ func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult) view.Vi
 		Key                 string `json:"key"`
 		OK                  bool   `json:"ok"`
 		OutcomeID           string `json:"outcomeId,omitempty"`
+		NextKey             string `json:"nextKey,omitempty"`
 		Value               string `json:"value,omitempty"`
 		RatingFresh         *bool  `json:"ratingFresh,omitempty"`
 		RatingNotRecomputed string `json:"ratingNotRecomputed,omitempty"`
@@ -400,7 +421,7 @@ func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult) view.Vi
 	}
 	items := make([]item, 0, len(acks))
 	for _, a := range acks {
-		it := item{Key: a.key, OK: a.ok, OutcomeID: a.outcomeID, Value: a.value}
+		it := item{Key: a.key, OK: a.ok, NextKey: a.nextKey, OutcomeID: a.outcomeID, Value: a.value}
 		if !a.ok {
 			it.Error = a.errMsg
 			items = append(items, it)
@@ -527,6 +548,41 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 		return "", false
 	}
 	return normalizedValue(ct, req.Data), true
+}
+
+// deleteCell removes an editable outcome with a server-derived IDOR guard (staff-owned
+// outcomes only), then delegates to task_outcome:delete.
+func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) bool {
+	if deps.ReadTaskOutcome == nil || deps.DeleteTaskOutcome == nil {
+		return false
+	}
+	readResp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
+		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
+	})
+	if err != nil {
+		log.Printf("[outcome-matrix] read failed for outcome %s: %v", outcomeID, err)
+		return false
+	}
+	records := readResp.GetData()
+	if len(records) == 0 {
+		return false
+	}
+	existing := records[0]
+
+	// Defense in depth: delete only outcomes owned by the acting staff.
+	if existing.GetRecordedBy() != actingStaff {
+		log.Printf("[outcome-matrix] IDOR blocked: staff %s tried to delete outcome %s owned by %s",
+			actingStaff, outcomeID, existing.GetRecordedBy())
+		return false
+	}
+
+	if _, err := deps.DeleteTaskOutcome(ctx, &taskoutcomepb.DeleteTaskOutcomeRequest{
+		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
+	}); err != nil {
+		log.Printf("[outcome-matrix] delete failed for outcome %s: %v", outcomeID, err)
+		return false
+	}
+	return true
 }
 
 // createCell routes a new-cell value through task_outcome:create. The caller

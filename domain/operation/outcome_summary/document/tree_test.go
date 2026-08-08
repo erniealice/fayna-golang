@@ -61,9 +61,9 @@ func TestBuildReportCardData_ManifestBlankSeed(t *testing.T) {
 	data := buildReportCardData(reportCard{})
 
 	// A deep singleton scalar path with no data resolves to "" (not absent).
-	mustBlank(t, data, "job_categories.homeroom_deportment.job_template_phases.s1.job_template_tasks.m07.task_outcomes.days_present.numeric_value")
+	mustBlank(t, data, "job_categories.homeroom_attendance.job_template_phases.progress_report.job_template_tasks.m07.task_outcomes.days_present.numeric_value")
 	mustBlank(t, data, "job_categories.homeroom_deportment.job_template_phases.s2.phase_outcome_summary_scaled_label")
-	mustBlank(t, data, "job_categories.homeroom_deportment.task_outcomes.times_tardy.numeric_value_total_derived")
+	mustBlank(t, data, "job_categories.homeroom_attendance.task_outcomes.times_tardy.numeric_value_total_derived")
 	mustBlank(t, data, "client_attributes.lrn")
 	mustBlank(t, data, "lead_staff_name_display")
 
@@ -125,6 +125,7 @@ func TestBuildJobCategoriesTree_Shape(t *testing.T) {
 			"cat-acad": {name: "Academic", code: "academic"},
 			"cat-subj": {name: "Subject Deportment", code: "subject_deportment"},
 			"cat-home": {name: "Homeroom Deportment", code: "homeroom_deportment"},
+			"cat-att":  {name: "Homeroom Attendance", code: "homeroom_attendance"},
 		},
 		academicCat: "cat-acad",
 		academic: []academicTreeRow{
@@ -142,15 +143,18 @@ func TestBuildJobCategoriesTree_Shape(t *testing.T) {
 			"jA": {1: "s1", 2: "s2"},
 			"jS": {1: "s1", 2: "s2"},
 			"jH": {1: "s1", 2: "s2"},
+			"jT": {1: "progress_report", 2: "s1", 3: "s2"},
 		},
 		strictPhase: map[string]map[int32]string{
 			"jA": {1: "6", 2: "7"},
 			"jS": {1: "90", 2: "88"},
 			"jH": {1: "A", 2: "B"},
 		},
-		groupJob:   &jobpb.Job{Id: "jH"},
+		categoryJobs: map[string][]*jobpb.Job{
+			"cat-home": {{Id: "jH"}},
+			"cat-att":  {{Id: "jT"}},
+		},
 		groupCatID: "cat-home",
-		groupCount: 1,
 		groupLead:  "Adviser Y",
 	}
 	tree := buildJobCategoriesTree(context.Background(), d, in, map[string]string{"jA": "7"})
@@ -184,40 +188,125 @@ func TestBuildJobCategoriesTree_Shape(t *testing.T) {
 	assertLeaf(t, home, "job_template_phases.s1.job_template_tasks.m07.task_outcomes.school_days.numeric_value", "20")
 	assertLeaf(t, home, "task_outcomes.days_present.numeric_value_total_derived", "18")
 	assertLeaf(t, home, "task_outcomes.school_days.numeric_value_total_derived", "20")
+	attendance := tree["homeroom_attendance"].(map[string]any)
+	assertLeaf(t, attendance, "lead_staff_name_display", "")
+}
+
+func TestAcademicJobTreeItem_ThreePhaseOrderCodes(t *testing.T) {
+	row := itemRow{
+		Name:        "Mathematics",
+		ItemTitle:   "Algebra",
+		StaffLine:   "Teacher: Jordan",
+		YearFinal:   "A",
+		OrderTotals: map[int32]string{1: "21", 2: "18", 3: "15"},
+		Criteria: []criterionRow{
+			{Label: "A - Investigating", OrderMax: map[int32]string{1: "8", 3: "5"}},
+			{Label: "B - Developing", OrderMax: map[int32]string{2: "7", 3: "9"}},
+		},
+	}
+	out := academicJobTreeItem(row, map[int32]string{
+		1: "progress_report",
+		2: "s1",
+		3: "s2",
+	}, map[int32]string{
+		1: "A",
+		2: "B",
+		3: "C",
+	}, "A")
+
+	assertLeaf(t, out, "job_template_name_display", "Algebra")
+	assertLeaf(t, out, "staff_line_display", "Teacher: Jordan")
+	assertLeaf(t, out, "job_template_phases.progress_report.task_outcome_numeric_value_total_derived", "21")
+	assertLeaf(t, out, "job_template_phases.s1.task_outcome_numeric_value_total_derived", "18")
+	assertLeaf(t, out, "job_template_phases.s2.task_outcome_numeric_value_total_derived", "15")
+	assertLeaf(t, out, "job_template_phases.progress_report.phase_outcome_summary_scaled_label", "A")
+	assertLeaf(t, out, "job_template_phases.s1.phase_outcome_summary_scaled_label", "B")
+	assertLeaf(t, out, "job_template_phases.s2.phase_outcome_summary_scaled_label", "C")
+
+	criteria := out["outcome_criteria"].([]any)
+	if len(criteria) != 2 {
+		t.Fatalf("outcome_criteria = %d, want 2", len(criteria))
+	}
+	first := criteria[0].(map[string]any)
+	assertLeaf(t, first, "outcome_criteria_label_display", "A - Investigating")
+	assertLeaf(t, first, "job_template_phases.progress_report.task_outcome_numeric_value_max_derived", "8")
+	assertLeaf(t, first, "job_template_phases.s2.task_outcome_numeric_value_max_derived", "5")
+}
+
+func TestDeportRowTreeItem_ThreePhasesWithOrderCollision(t *testing.T) {
+	dr := deportRow{
+		title:    "Arts: Visual Arts / Arts: Music",
+		sem1Job:  "jva",
+		sem2Job:  "jmu",
+		showSem1: true,
+		showSem2: true,
+	}
+	out := deportRowTreeItem(dr,
+		map[string]map[int32]string{
+			"jva": {2: "s1", 3: "progress_report"},
+			"jmu": {1: "s2", 2: "s1", 3: "progress_report"},
+		},
+		map[string]map[int32]string{
+			"jva": {2: "100", 3: ""},
+			"jmu": {1: "P", 2: "98", 3: "95"},
+		},
+	)
+
+	assertLeaf(t, out, "job_template_name_display", "Arts: Visual Arts / Arts: Music")
+	assertLeaf(t, out, "job_template_phases.s2.phase_outcome_summary_scaled_label", "P")
+	// order-2 collision: first enrolled strand should win (100), regardless of sem2's 98.
+	assertLeaf(t, out, "job_template_phases.s1.phase_outcome_summary_scaled_label", "100")
+	// order-3 picks from second strand because first strand is blank at that order.
+	assertLeaf(t, out, "job_template_phases.progress_report.phase_outcome_summary_scaled_label", "95")
 }
 
 // --- singleton rule (0 / 1 / 2 jobs) --------------------------------------
 
 func TestBuildJobCategoriesTree_SingletonRule(t *testing.T) {
-	base := func(count int, gj *jobpb.Job) treeInputs {
+	base := func(jobs ...*jobpb.Job) treeInputs {
 		return treeInputs{
 			cats:         map[string]catInfo{"cat-home": {name: "Homeroom", code: "homeroom_deportment"}},
 			jobOrderCode: map[string]map[int32]string{"jH": {1: "s1", 2: "s2"}},
 			strictPhase:  map[string]map[int32]string{"jH": {1: "A"}},
-			groupJob:     gj,
+			categoryJobs: map[string][]*jobpb.Job{"cat-home": jobs},
 			groupCatID:   "cat-home",
-			groupCount:   count,
 			groupLead:    "Adviser Y",
 		}
 	}
 	d := &Deps{ListCodedTaskOutcomeValuesByJob: codedFn()}
 
 	// Exactly one → singleton projected.
-	one := buildJobCategoriesTree(context.Background(), d, base(1, &jobpb.Job{Id: "jH"}), nil)
+	one := buildJobCategoriesTree(context.Background(), d, base(&jobpb.Job{Id: "jH"}), nil)
 	if v, ok := resolvePath(one, "homeroom_deportment.lead_staff_name_display"); !ok || v != "Adviser Y" {
 		t.Fatalf("one-job singleton must project lead, got %#v ok=%v", v, ok)
 	}
 
 	// Zero → whole subtree blank (no singleton scalar emitted).
-	zero := buildJobCategoriesTree(context.Background(), d, base(0, nil), nil)
+	zero := buildJobCategoriesTree(context.Background(), d, base(), nil)
 	if _, ok := resolvePath(zero, "homeroom_deportment.lead_staff_name_display"); ok {
 		t.Fatalf("zero-job category must NOT project a singleton")
 	}
 
 	// Two → whole subtree blank (corrupt multiplicity is never first-wins).
-	two := buildJobCategoriesTree(context.Background(), d, base(2, &jobpb.Job{Id: "jH"}), nil)
+	two := buildJobCategoriesTree(context.Background(), d, base(&jobpb.Job{Id: "jH"}, &jobpb.Job{Id: "jH2"}), nil)
 	if _, ok := resolvePath(two, "homeroom_deportment.lead_staff_name_display"); ok {
 		t.Fatalf("two-job category must NOT project a singleton (blank + log)")
+	}
+}
+
+func TestBuildSingletonProjection_DuplicateTaskCodeAcrossPhasesContributesTwice(t *testing.T) {
+	d := &Deps{ListCodedTaskOutcomeValuesByJob: codedFn(
+		&taskoutcomepb.CodedTaskOutcomeValue{PhaseCode: "progress_report", TaskCode: "m10", CriteriaCode: "school_days", NumericValue: f64p(8)},
+		&taskoutcomepb.CodedTaskOutcomeValue{PhaseCode: "s1", TaskCode: "m10", CriteriaCode: "school_days", NumericValue: f64p(22)},
+	)}
+	out := buildSingletonProjection(context.Background(), d, &jobpb.Job{Id: "jT"}, "",
+		map[int32]string{1: "progress_report", 2: "s1", 3: "s2"}, nil, false)
+
+	assertLeaf(t, out, "job_template_phases.progress_report.job_template_tasks.m10.task_outcomes.school_days.numeric_value", "8")
+	assertLeaf(t, out, "job_template_phases.s1.job_template_tasks.m10.task_outcomes.school_days.numeric_value", "22")
+	assertLeaf(t, out, "task_outcomes.school_days.numeric_value_total_derived", "30")
+	if _, ok := resolvePath(out, "job_template_phases.s2.phase_outcome_summary_scaled_label"); !ok {
+		t.Fatalf("third configured phase must be projected even when its strict label is blank")
 	}
 }
 

@@ -20,13 +20,13 @@ contract"). Two axes are cleanly separated:
 Contract highlights baked into this layout:
   - ONE body-level loop only ({{#job_categories.<body_category_code>.jobs}}); the
     formation rating table is a ROOT-scope table row loop AFTER the body loop;
-    the group/homeroom row and the attendance grid read singleton-projection
-    root scalars. (Engine supports exactly one body loop; table row loops and
+    the group/homeroom row and the attendance grid read their own category's
+    singleton-projection root scalars. (Engine supports exactly one body loop; table row loops and
     scalars process once at root scope after it.)
   - The attendance grid cells carry real placeholders: each month cell is
-    {{job_categories.<singleton>.job_template_phases.<phase>.job_template_tasks.<task>.task_outcomes.<crit>.numeric_value}}
+    {{job_categories.<attendance_singleton>.job_template_phases.<phase>.job_template_tasks.<task>.task_outcomes.<crit>.numeric_value}}
     and each Total cell is
-    {{job_categories.<singleton>.task_outcomes.<crit>.numeric_value_total_derived}}.
+    {{job_categories.<attendance_singleton>.task_outcomes.<crit>.numeric_value_total_derived}}.
   - headers/footers process with root data; no conditionals — the Go builder
     seeds every referenced path blank before overlay (missing leaves leak).
 
@@ -105,12 +105,12 @@ EDUCATION_MMIS_PROFILE = {
     },
     # --- S2 grades ----------------------------------------------------------
     "grades_banner_title": "REPORT CARD",
-    "subject_headers": ["Assessment Criterion", "Highest Level", "Semester 1", "Semester 2"],
+    "subject_headers": ["Assessment Criterion", "Highest Level", "Term 1", "Term 2"],
     "criterion_max": "8",
     "summary_rows": {
         "criteria_total_label": "Criteria Total",
         "criteria_total_max": "32",
-        "progress_label": "Semestral Progress",
+        "progress_label": "Term Progress",
         "progress_max": "7",
         "final_label": "MYP Overall Achievement Grade",
         "final_max": "7",
@@ -158,8 +158,8 @@ EDUCATION_MMIS_PROFILE = {
     "rating_tables": {
         "subject_title": "Subject Deportment",
         "group_title": "Homeroom Deportment",
-        "phase1_header": "1st Semester",
-        "phase2_header": "2nd Semester",
+        "phase1_header": "Term 1",
+        "phase2_header": "Term 2",
         "group_row_label": "Grade",
     },
     # --- S4 formation: legend ----------------------------------------------
@@ -174,8 +174,13 @@ EDUCATION_MMIS_PROFILE = {
     ],
     # --- S4 formation: attendance ------------------------------------------
     "attendance_title": "Attendance",
-    "attendance_months": ["July", "August", "September", "October", "November", "December",
-                          "January", "February", "March", "April", "May", "Total"],
+    "attendance_phase_bands": [
+        {"label": "Progress Report", "span": 4},
+        {"label": "Term 1", "span": 3},
+        {"label": "Term 2", "span": 4},
+    ],
+    "attendance_months": ["July", "August", "September", "October", "October", "November",
+                          "December", "January", "February", "March", "April", "Total"],
     "attendance_rows": ["Days of School", "Days Present", "Times Tardy"],
     # --- S4 formation: certificate -----------------------------------------
     "certificate_title": "CERTIFICATE OF TRANSFER",
@@ -199,16 +204,19 @@ EDUCATION_MMIS_PROFILE = {
     "body_category_code": "academic",
     # The job_category code whose jobs fill the formation rating-table row loop.
     "row_category_code": "subject_deportment",
-    # The job_category code projected as a SINGLETON (exactly one job): the
-    # adviser/conduct/attendance surface. Its leaves are root scalars.
-    "singleton_category_code": "homeroom_deportment",
+    # job_category codes projected as SINGLETONS (exactly one job each). The
+    # group category carries adviser/conduct; attendance has its own root tree.
+    "group_singleton_category_code": "homeroom_deportment",
+    "attendance_singleton_category_code": "homeroom_attendance",
     # The ordered phase codes — one per semester column (positional: [0]=1st, [1]=2nd).
     "phase_codes": ["s1", "s2"],
     # The attendance month columns, in table order, as (phase_code, task_code)
     # slots. Length must equal len(attendance_months) - 1 (all months but Total).
     "attendance_slots": [
-        ("s1", "m07"), ("s1", "m08"), ("s1", "m09"), ("s1", "m10"), ("s1", "m11"), ("s1", "m12"),
-        ("s2", "m01"), ("s2", "m02"), ("s2", "m03"), ("s2", "m04"), ("s2", "m05"),
+        ("progress_report", "m07"), ("progress_report", "m08"),
+        ("progress_report", "m09"), ("progress_report", "m10"),
+        ("s1", "m10"), ("s1", "m11"), ("s1", "m12"),
+        ("s2", "m01"), ("s2", "m02"), ("s2", "m03"), ("s2", "m04"),
     ],
     # Attendance row-label -> criteria code. Keys MUST match attendance_rows.
     "attendance_row_criteria": {
@@ -230,7 +238,8 @@ PROFILE = EDUCATION_MMIS_PROFILE
 REF_CODE = PROFILE["reference_attribute_code"]
 BODY_CATEGORY = PROFILE["body_category_code"]
 ROW_CATEGORY = PROFILE["row_category_code"]
-SINGLETON_CATEGORY = PROFILE["singleton_category_code"]
+GROUP_SINGLETON_CATEGORY = PROFILE["group_singleton_category_code"]
+ATTENDANCE_SINGLETON_CATEGORY = PROFILE["attendance_singleton_category_code"]
 PHASES = PROFILE["phase_codes"]
 ATT_SLOTS = PROFILE["attendance_slots"]
 ATT_ROW_CRITERIA = PROFILE["attendance_row_criteria"]
@@ -252,20 +261,27 @@ def ph(phase_code, leaf):
     return "job_template_phases.%s.%s" % (phase_code, leaf)
 
 
-def singleton(*segments):
-    """A root-scope absolute path under the singleton category projection."""
-    return "job_categories.%s.%s" % (SINGLETON_CATEGORY, ".".join(segments))
+def singleton(category_code, *segments):
+    """A root-scope absolute path under one singleton category projection."""
+    return "job_categories.%s.%s" % (category_code, ".".join(segments))
+
+
+def group_singleton(*segments):
+    """Root path under the configured group/adviser singleton category."""
+    return singleton(GROUP_SINGLETON_CATEGORY, *segments)
 
 
 def attendance_cell(phase_code, task_code, criteria_code):
     """A month cell: singleton phase -> task -> criterion -> raw numeric_value."""
-    return singleton("job_template_phases", phase_code, "job_template_tasks",
-                     task_code, "task_outcomes", criteria_code, "numeric_value")
+    return singleton(ATTENDANCE_SINGLETON_CATEGORY, "job_template_phases", phase_code,
+                     "job_template_tasks", task_code, "task_outcomes", criteria_code,
+                     "numeric_value")
 
 
 def attendance_total(criteria_code):
     """The Total column cell: singleton criterion -> derived cross-phase total."""
-    return singleton("task_outcomes", criteria_code, "numeric_value_total_derived")
+    return singleton(ATTENDANCE_SINGLETON_CATEGORY, "task_outcomes", criteria_code,
+                     "numeric_value_total_derived")
 
 
 def tok(path):
@@ -292,7 +308,7 @@ _root_scalars = [
 ]
 # Singleton conduct-per-semester (homeroom group deportment row).
 for _p in PHASES:
-    _root_scalars.append(singleton("job_template_phases", _p, "phase_outcome_summary_scaled_label"))
+    _root_scalars.append(group_singleton("job_template_phases", _p, "phase_outcome_summary_scaled_label"))
 # Attendance: month cells + Total per criteria row.
 for _label, _crit in ATT_ROW_CRITERIA.items():
     for _phase, _task in ATT_SLOTS:
@@ -351,6 +367,19 @@ def xml_tokens(*xml_parts):
         for m in _TOKEN_RE.finditer(part):
             found.add("{{%s}}" % m.group(1).strip())
     return found
+
+
+# Pin the ZIP metadata to the first published block-v1 artifact. Using a fixed
+# DOS timestamp and mode keeps docx packaging deterministic and reproducible.
+_ZIP_DOS_DATETIME = (2026, 8, 6, 8, 53, 40)
+_ZIP_REPO_UNIX_MODE = 0o600 << 16
+
+
+def zip_entry(name):
+    info = zipfile.ZipInfo(name, date_time=_ZIP_DOS_DATETIME)
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.external_attr = _ZIP_REPO_UNIX_MODE
+    return info
 
 # ===========================================================================
 # Everything below is GENERIC LAYOUT — no vertical prose. Wording + codes are
@@ -453,11 +482,14 @@ def image(rid, w_pt, h_pt, doc_id):
     ) % {"cx": cx, "cy": cy, "id": doc_id, "rid": rid}
 
 
-def cell(paras, *, width=None, shade=None, valign="center", borders=None, no_margins=False):
+def cell(paras, *, width=None, shade=None, valign="center", borders=None,
+         no_margins=False, grid_span=None):
     """borders: dict side->(sz, color) or 'none' for an explicitly borderless side."""
     tcpr = []
     if width:
         tcpr.append('<w:tcW w:w="%d" w:type="dxa"/>' % width)
+    if grid_span:
+        tcpr.append('<w:gridSpan w:val="%d"/>' % grid_span)
     if borders is not None:
         sides = []
         for side in ("top", "left", "bottom", "right"):
@@ -761,8 +793,8 @@ body.append(para([run("", size=8)], after=120))
 homeroom_table = table([
     dep_header_row(RT["group_title"]),
     dep_data_row([RT["group_row_label"],
-                  tok(singleton("job_template_phases", PHASE_1, "phase_outcome_summary_scaled_label")),
-                  tok(singleton("job_template_phases", PHASE_2, "phase_outcome_summary_scaled_label"))]),
+                  tok(group_singleton("job_template_phases", PHASE_1, "phase_outcome_summary_scaled_label")),
+                  tok(group_singleton("job_template_phases", PHASE_2, "phase_outcome_summary_scaled_label"))]),
 ], grid=DEP_GRID, borders=None)
 body.append(homeroom_table)
 body.append(para([run("", size=8)], after=120))
@@ -792,7 +824,21 @@ ATT_GRID = [1611, 689, 689, 779, 689, 689, 689, 689, 689, 689, 689, 689, 692]
 # is served by the derived cross-phase total, not a slot.
 assert len(ATT_SLOTS) == len(MONTHS) - 1, "attendance slots must cover every month but Total"
 assert len(ATT_GRID) == len(MONTHS) + 1, "attendance grid is label + every month header"
-att_rows = [row(
+ATT_BANDS = PROFILE["attendance_phase_bands"]
+assert sum(b["span"] for b in ATT_BANDS) == len(ATT_SLOTS), \
+    "attendance phase bands must span every real month slot"
+band_cells = [cell(para([run("", size=14)], after=0), width=ATT_GRID[0], borders=red_bottom)]
+band_offset = 1
+for band in ATT_BANDS:
+    span = band["span"]
+    band_cells.append(cell(
+        para([run(band["label"], bold=True, size=14, color=RED)], align="center", after=0),
+        width=sum(ATT_GRID[band_offset:band_offset + span]), borders=red_bottom,
+        grid_span=span))
+    band_offset += span
+band_cells.append(cell(para([run("", size=14)], after=0),
+                       width=ATT_GRID[-1], borders=red_bottom))
+att_rows = [row(band_cells, height=284, hrule="atLeast"), row(
     [cell(para([run("", size=14)], after=0), width=ATT_GRID[0], borders=red_bottom)] +
     [cell(para([run(m, size=14)], align="center", after=0), width=ATT_GRID[i + 1], borders=red_bottom)
      for i, m in enumerate(MONTHS)],
@@ -932,21 +978,21 @@ if _expected != _actual:
 
 out = os.path.join(HERE, "outcome-summary-template-block.docx")
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-    z.writestr("[Content_Types].xml", content_types)
-    z.writestr("_rels/.rels", root_rels)
-    z.writestr("word/document.xml", document_xml)
-    z.writestr("word/_rels/document.xml.rels", doc_rels)
-    z.writestr("word/_rels/header2.xml.rels", header2_rels)
-    z.writestr("word/styles.xml", styles_xml)
-    z.writestr("word/header1.xml", header1_xml)
-    z.writestr("word/header2.xml", header2_xml)
-    z.writestr("word/header3.xml", header3_xml)
-    z.writestr("word/header4.xml", header4_xml)
-    z.writestr("word/footer1.xml", footer1_xml)
+    z.writestr(zip_entry("[Content_Types].xml"), content_types)
+    z.writestr(zip_entry("_rels/.rels"), root_rels)
+    z.writestr(zip_entry("word/document.xml"), document_xml)
+    z.writestr(zip_entry("word/_rels/document.xml.rels"), doc_rels)
+    z.writestr(zip_entry("word/_rels/header2.xml.rels"), header2_rels)
+    z.writestr(zip_entry("word/styles.xml"), styles_xml)
+    z.writestr(zip_entry("word/header1.xml"), header1_xml)
+    z.writestr(zip_entry("word/header2.xml"), header2_xml)
+    z.writestr(zip_entry("word/header3.xml"), header3_xml)
+    z.writestr(zip_entry("word/header4.xml"), header4_xml)
+    z.writestr(zip_entry("word/footer1.xml"), footer1_xml)
     with open(os.path.join(HERE, PROFILE["assets"]["logo_src"]), "rb") as f:
-        z.writestr("word/" + PROFILE["assets"]["logo_media"], f.read())
+        z.writestr(zip_entry("word/" + PROFILE["assets"]["logo_media"]), f.read())
     with open(os.path.join(HERE, PROFILE["assets"]["corner_src"]), "rb") as f:
-        z.writestr("word/" + PROFILE["assets"]["corner_media"], f.read())
+        z.writestr(zip_entry("word/" + PROFILE["assets"]["corner_media"]), f.read())
 
 manifest_out = os.path.join(HERE, "outcome-summary-template-block.manifest.json")
 with open(manifest_out, "w", encoding="utf-8") as f:

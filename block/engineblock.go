@@ -533,15 +533,14 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 	// -- Service/operation JobListTabSupport (tabstrip single-statement read) -----
 	//
 	// The 20260718 courses-list-perf Rank-1 read lives on espyna's SERVICE
-	// aggregate (service/operation/job_list_tab_support). Its Execute returns a
-	// proto-less *JobListTabSupportResponse carrying the two proto slices; adapt it
-	// to the block closure that returns them directly. Per-kind gates
-	// (job_category:list / job_template:list) are enforced inside Execute — a
-	// denied kind comes back as an empty slice. Nil-safe: a nil Service /
+	// aggregate (service/operation/job_list_tab_support). Its categories-only
+	// execution returns a proto-less *JobListTabSupportResponse; adapt its category
+	// slice to the block closure and deliberately leave templates empty. The
+	// job_category:list gate is enforced inside the use case. Nil-safe: a nil Service /
 	// JobListTabSupport leaves the closure nil → the list degrades to no tabs.
 	if uc.Service != nil && uc.Service.JobListTabSupport != nil &&
 		uc.Service.JobListTabSupport.ListJobListTabSupport != nil {
-		exec := uc.Service.JobListTabSupport.ListJobListTabSupport.Execute
+		exec := uc.Service.JobListTabSupport.ListJobListTabSupport.ExecuteCategoriesOnly
 		result.Operation.JobListTabSupport.ListJobListTabSupport = func(ctx context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error) {
 			resp, err := exec(ctx)
 			if err != nil {
@@ -550,7 +549,7 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			if resp == nil {
 				return nil, nil, nil
 			}
-			return resp.Categories, resp.Templates, nil
+			return resp.Categories, nil, nil
 		}
 	}
 

@@ -308,6 +308,7 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	to := &u.Operation.TaskOutcome
 	deps.CreateTaskOutcome = to.CreateTaskOutcome
 	deps.UpdateTaskOutcome = to.UpdateTaskOutcome
+	deps.DeleteTaskOutcome = to.DeleteTaskOutcome
 	deps.ReadTaskOutcome = to.ReadTaskOutcome
 
 	// NOTE: deps.ComputePhaseOutcome / deps.ComputeJobOutcome (inline grade

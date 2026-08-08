@@ -17,8 +17,8 @@ package document
 //	      outcome_criteria_label_display
 //	      job_template_phases.<phase_code>
 //	        task_outcome_numeric_value_max_derived
-//	  # Singleton projection (root scalars) — emitted ONLY when the configured
-//	  # group category has exactly one job for this client; zero/multiple leaves
+//	  # Singleton projection (root scalars) — emitted for each non-academic
+//	  # category having exactly one job for this client; zero/multiple leaves
 //	  # the whole subtree blank (manifest-seeded) plus one bounded log line.
 //	  lead_staff_name_display
 //	  job_template_phases.<phase_code>
@@ -39,6 +39,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 
@@ -277,16 +278,15 @@ type treeInputs struct {
 
 	academic []academicTreeRow // one per rendered academic subject (post-suppression)
 
-	deportJobs map[string]string // deport job id → job_category id (category resolution)
-	deportRows []deportRow       // canonical conduct rows (rotation pairs merged, non-enrolled suppressed)
+	deportJobs   map[string]string       // deport job id → job_category id (category resolution)
+	deportRows   []deportRow             // canonical conduct rows (rotation pairs merged, non-enrolled suppressed)
+	categoryJobs map[string][]*jobpb.Job // non-academic category id → collected jobs (singleton projection)
 
 	jobOrderCode map[string]map[int32]string // job id → phase_order → phase_code
 	strictPhase  map[string]map[int32]string // job id → phase_order → strict phase label
 
-	groupJob   *jobpb.Job // the configured group-category job (nil when absent)
-	groupCatID string     // the group category id
-	groupCount int        // number of jobs in the group category (singleton rule)
-	groupLead  string     // resolved group-lead ("Adviser") display name
+	groupCatID string // the configured group category id (lead alias only)
+	groupLead  string // resolved group-lead ("Adviser") display name
 
 	// historical is set when the card's section is inactive (a past academic
 	// year). A past card's job/phase/task ancestry is inactive, so the singleton
@@ -351,22 +351,31 @@ func buildJobCategoriesTree(ctx context.Context, d *Deps, in treeInputs, strictY
 		}
 	}
 
-	// Singleton projection for the configured group category — exactly-one-job
-	// rule (Q-T4): zero or 2+ jobs leaves the subtree blank (manifest-seeded) plus
-	// one bounded diagnostic.
-	groupCode := strings.TrimSpace(in.cats[in.groupCatID].code)
-	if groupCode != "" {
-		switch {
-		case in.groupCount == 1 && in.groupJob != nil:
-			singleton := buildSingletonProjection(ctx, d, in.groupJob, in.groupLead,
-				in.jobOrderCode[in.groupJob.GetId()], in.strictPhase[in.groupJob.GetId()], in.historical)
-			if m := catMap(groupCode); m != nil {
-				for k, v := range singleton {
-					m[k] = v
-				}
+	// Generic singleton projection — every collected non-academic category with
+	// exactly one job receives root scalars under its own category code. The
+	// configured group category remains special only for its adviser/lead alias.
+	// Zero or 2+ jobs leaves the subtree manifest-seeded and logs one bounded
+	// diagnostic; it never picks an arbitrary first job.
+	for catID, jobs := range in.categoryJobs {
+		code := strings.TrimSpace(in.cats[catID].code)
+		if code == "" {
+			continue
+		}
+		if len(jobs) != 1 || jobs[0] == nil {
+			log.Printf("report card doc: singleton category %q has %d job(s) (want exactly 1); projection left blank", code, len(jobs))
+			continue
+		}
+		job := jobs[0]
+		lead := ""
+		if catID == in.groupCatID {
+			lead = in.groupLead
+		}
+		singleton := buildSingletonProjection(ctx, d, job, lead,
+			in.jobOrderCode[job.GetId()], in.strictPhase[job.GetId()], in.historical)
+		if m := catMap(code); m != nil {
+			for k, v := range singleton {
+				m[k] = v
 			}
-		default:
-			log.Printf("report card doc: singleton category %q has %d job(s) (want exactly 1); projection left blank", groupCode, in.groupCount)
 		}
 	}
 
@@ -383,31 +392,64 @@ func academicJobTreeItem(row itemRow, orderCode map[int32]string, strictPhase ma
 		name = orBlank(row.Name)
 	}
 	phases := map[string]any{}
-	setPhase := func(order int32, total string) {
+	orders := make([]int32, 0, len(orderCode))
+	for order, code := range orderCode {
+		if order > 0 && strings.TrimSpace(code) != "" {
+			orders = append(orders, order)
+		}
+	}
+	sort.Slice(orders, func(i, j int) bool {
+		return orders[i] < orders[j]
+	})
+	for _, order := range orders {
 		code := codeForOrder(orderCode, order)
 		if code == "" {
-			return
+			continue
+		}
+		total := ""
+		if row.OrderTotals != nil {
+			total = row.OrderTotals[order]
+		} else {
+			// Frozen two-slot compatibility: older in-process callers/tests can
+			// still construct itemRow with only the legacy aliases populated.
+			switch order {
+			case 1:
+				total = row.Sem1Total
+			case 2:
+				total = row.Sem2Total
+			}
 		}
 		phases[code] = map[string]any{
 			"phase_outcome_summary_scaled_label":       phaseLabelAt(strictPhase, order),
 			"task_outcome_numeric_value_total_derived": orBlank(total),
 		}
 	}
-	setPhase(1, row.Sem1Total)
-	setPhase(2, row.Sem2Total)
 
 	criteria := make([]any, 0, len(row.Criteria))
 	for _, c := range row.Criteria {
 		critPhases := map[string]any{}
-		setCritPhase := func(order int32, mark string) {
+		orderMax := c.OrderMax
+		if orderMax == nil {
+			// Frozen two-slot compatibility; generic collection always supplies
+			// OrderMax, but sparse legacy callers may only populate Phase1/Phase2.
+			orderMax = map[int32]string{1: c.Phase1, 2: c.Phase2}
+		}
+		critOrders := make([]int32, 0, len(orderMax))
+		for order, mark := range orderMax {
+			if order > 0 && strings.TrimSpace(mark) != "" {
+				critOrders = append(critOrders, order)
+			}
+		}
+		sort.Slice(critOrders, func(i, j int) bool {
+			return critOrders[i] < critOrders[j]
+		})
+		for _, order := range critOrders {
 			code := codeForOrder(orderCode, order)
 			if code == "" {
-				return
+				continue
 			}
-			critPhases[code] = map[string]any{"task_outcome_numeric_value_max_derived": orBlank(mark)}
+			critPhases[code] = map[string]any{"task_outcome_numeric_value_max_derived": orBlank(orderMax[order])}
 		}
-		setCritPhase(1, c.Phase1)
-		setCritPhase(2, c.Phase2)
 		criteria = append(criteria, map[string]any{
 			"outcome_criteria_label_display": orBlank(c.Label),
 			"job_template_phases":            critPhases,
@@ -425,26 +467,74 @@ func academicJobTreeItem(row itemRow, orderCode map[int32]string, strictPhase ma
 
 // deportRowTreeItem builds one non-academic .jobs[] item from a canonical conduct
 // row: the merged/solo display title plus STRICT per-phase labels keyed by phase
-// code. A rotation pair reads period 1 from sem1Job and period 2 from sem2Job
-// (each strand's own phase code + its own strict summary); a solo strand reads
-// both periods from the one job. A period whose enrollment gate is off
-// (showSemN=false) is left absent — the manifest blank-guard seeds it.
+// code. For every configured phase in contributing enrolled strands/jobs, the
+// first nonblank strict label wins on collisions. A solo job contributes both
+// period values from its same row; a period whose enrollment gate is off is
+// skipped entirely.
 func deportRowTreeItem(dr deportRow, jobOrderCode map[string]map[int32]string, strictPhase map[string]map[int32]string) map[string]any {
 	phases := map[string]any{}
-	setPhase := func(jobID string, order int32, show bool) {
-		if !show || jobID == "" {
-			return
+	candidates := []struct {
+		id   string
+		show bool
+	}{
+		{id: dr.sem1Job, show: dr.showSem1},
+		{id: dr.sem2Job, show: dr.showSem2},
+	}
+	ordered := []string{}
+	showByID := map[string]bool{}
+	seen := map[string]bool{}
+	allOrders := map[int32]struct{}{}
+	for _, candidate := range candidates {
+		id := strings.TrimSpace(candidate.id)
+		if id == "" || !candidate.show {
+			continue
 		}
-		code := codeForOrder(jobOrderCode[jobID], order)
-		if code == "" {
-			return
+		if !seen[id] {
+			ordered = append(ordered, id)
+			seen[id] = true
 		}
-		phases[code] = map[string]any{
-			"phase_outcome_summary_scaled_label": phaseLabelAt(strictPhase[jobID], order),
+		showByID[id] = true
+		for order, code := range jobOrderCode[id] {
+			if order > 0 && strings.TrimSpace(code) != "" {
+				allOrders[order] = struct{}{}
+			}
 		}
 	}
-	setPhase(dr.sem1Job, 1, dr.showSem1)
-	setPhase(dr.sem2Job, 2, dr.showSem2)
+	orderByPhase := map[int32]string{}
+	for _, id := range ordered {
+		for order := range jobOrderCode[id] {
+			if order <= 0 || !showByID[id] {
+				continue
+			}
+			if _, assigned := orderByPhase[order]; assigned {
+				continue
+			}
+			if strings.TrimSpace(phaseLabelAt(strictPhase[id], order)) == "" {
+				continue
+			}
+			orderByPhase[order] = id
+		}
+	}
+	orderList := make([]int32, 0, len(allOrders))
+	for order := range allOrders {
+		orderList = append(orderList, order)
+	}
+	sort.Slice(orderList, func(i, j int) bool {
+		return orderList[i] < orderList[j]
+	})
+	for _, order := range orderList {
+		id, ok := orderByPhase[order]
+		if !ok {
+			continue
+		}
+		code := codeForOrder(jobOrderCode[id], order)
+		if code == "" {
+			continue
+		}
+		phases[code] = map[string]any{
+			"phase_outcome_summary_scaled_label": phaseLabelAt(strictPhase[id], order),
+		}
+	}
 	return map[string]any{
 		"job_template_name_display": orBlank(dr.title),
 		"job_template_phases":       phases,
@@ -472,8 +562,15 @@ func buildSingletonProjection(ctx context.Context, d *Deps, groupJob *jobpb.Job,
 		}
 		return m
 	}
-	// Per-phase strict labels (keyed by phase code).
-	for _, order := range []int32{1, 2} {
+	// Per-phase strict labels (keyed by phase code). Iterate every configured
+	// phase order: adding a leading phase must not make a later phase disappear.
+	orders := make([]int, 0, len(orderCode))
+	for order := range orderCode {
+		orders = append(orders, int(order))
+	}
+	sort.Ints(orders)
+	for _, rawOrder := range orders {
+		order := int32(rawOrder)
 		code := codeForOrder(orderCode, order)
 		if m := phaseMap(code); m != nil {
 			m["phase_outcome_summary_scaled_label"] = phaseLabelAt(strictPhase, order)

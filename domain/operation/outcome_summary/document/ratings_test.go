@@ -33,6 +33,30 @@ func TestMergeRotationPairsPeriodOrder(t *testing.T) {
 	}
 }
 
+// With only later/non-adjacent populated phases, the earliest populated phase still
+// controls the merged period-1 strand.
+func TestMergeRotationPairsThreePhaseOrderPreference(t *testing.T) {
+	c := &ratingContext{
+		nameOf: map[string]string{
+			"jva": "Arts: Visual Arts",
+			"jmu": "Arts: Music",
+		},
+		pos: map[string]map[int32]string{
+			"jva": {2: "100"},
+			"jmu": {4: "98"},
+		},
+		avg: map[string]string{"jva": "100", "jmu": "98"},
+	}
+	c.strandJobs = jobsFromNames(c.nameOf)
+
+	m := mergeRotationPairs(c, map[string]bool{"arts": true}, nil)
+	got := m.titleFor("Arts")
+	want := "Arts: Visual Arts / Arts: Music"
+	if got != want {
+		t.Fatalf("titleFor(Arts) = %q, want %q", got, want)
+	}
+}
+
 // Without conduct summaries the INACTIVE-academic-strand fallback decides the
 // period-2 strand.
 func TestMergeRotationPairsInactiveFallback(t *testing.T) {
@@ -163,6 +187,34 @@ func TestTranscriptCriterionRowsAndYearCollapse(t *testing.T) {
 	}
 }
 
+// The generic criterion row builder must keep every populated phase in-order and
+// return per-order totals for the full phase set.
+func TestTranscriptCriterionRowsByOrderThreePhases(t *testing.T) {
+	tr := &transcript{
+		marks: map[string]map[int32]float64{
+			"oc-investigating": {2: 7, 4: 4},
+			"oc-developing":    {1: 6, 4: 1},
+		},
+		seq: map[string]int32{
+			"oc-investigating": 1, "oc-developing": 2,
+		},
+	}
+	names := map[string]string{
+		"oc-investigating": "Investigating",
+		"oc-developing":    "Developing",
+	}
+	rows, totals := tr.criterionRowsByOrder(names)
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d", len(rows))
+	}
+	if rows[0].OrderMax[1] != "" || rows[0].OrderMax[2] != "7" || rows[0].OrderMax[4] != "4" {
+		t.Fatalf("row0 order max = %#v", rows[0].OrderMax)
+	}
+	if totals[1] != "6" || totals[2] != "7" || totals[4] != "5" {
+		t.Fatalf("totals = %#v, want 6/7/5", totals)
+	}
+}
+
 // The teacher line: rotation pair (tie in period 2 prefers the non-period-1
 // assignee) vs single-teacher subject.
 func TestStaffLine(t *testing.T) {
@@ -177,6 +229,14 @@ func TestStaffLine(t *testing.T) {
 	// fallback is never consulted (the assignee override wins).
 	if got := staffLine(labels, pair, names, ""); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
 		t.Fatalf("pair line = %q", got)
+	}
+	threePhase := &transcript{teachers: map[int32]map[string]int{
+		1: {"sP": 1},
+		2: {"sP": 1},
+		3: {"sC": 1},
+	}}
+	if got := staffLine(labels, threePhase, names, ""); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
+		t.Fatalf("three-phase pair line = %q", got)
 	}
 
 	single := &transcript{teachers: map[int32]map[string]int{

@@ -55,6 +55,9 @@ type criterionRow struct {
 	Label  string
 	Phase1 string
 	Phase2 string
+	// OrderMax keeps every configured phase_order value (order1/2/3+), so the
+	// block tree can render any configured phase-code leaf.
+	OrderMax map[int32]string
 }
 
 // itemRow is one row of the report card (one item / job — e.g. a school
@@ -78,6 +81,9 @@ type itemRow struct {
 	Criteria  []criterionRow // ordered criterion rows with per-phase marks
 	Sem1Total string         // Σ of the phase-1 per-criterion MAX; "" when no marks
 	Sem2Total string         // Σ of the phase-2 per-criterion MAX; "" when no marks
+	// OrderTotals holds generic per-phase-order criterion totals (order1/2/3+),
+	// while Sem1Total/Sem2Total remain as frozen phase-1/phase-2 aliases.
+	OrderTotals map[int32]string
 }
 
 // reportCard is one client's assembled card (meta + ordered subjects). Generic
@@ -357,6 +363,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	// summary reads carry NO score fallback — the converged raw leaves are STRICT.
 	allCatJobIDs := append([]string{}, jobIDs...)
 	deportJobCat := map[string]string{}
+	categoryJobs := map[string][]*jobpb.Job{}
 	deportTemplateIDs := []string{}
 	deportTmplSeen := map[string]bool{}
 	for _, j := range deportJobs {
@@ -366,6 +373,9 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		}
 		allCatJobIDs = append(allCatJobIDs, jid)
 		deportJobCat[jid] = j.GetJobCategoryId()
+		if catID := j.GetJobCategoryId(); catID != "" {
+			categoryJobs[catID] = append(categoryJobs[catID], j)
+		}
 		if tid != "" && !deportTmplSeen[tid] {
 			deportTmplSeen[tid] = true
 			deportTemplateIDs = append(deportTemplateIDs, tid)
@@ -387,12 +397,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	}
 	treeStrictPhase := fetchPhaseLabelsStrict(ctx, d, allCatJobIDs, treeOrder)
 	treeStrictYear := fetchYearLabelsStrict(ctx, d, jobIDs)
-	groupCount := 0
-	for _, j := range deportJobs {
-		if j.GetJobCategoryId() == groupCatID {
-			groupCount++
-		}
-	}
+	groupCount := len(categoryJobs[groupCatID])
 
 	// One row per subject (job), subject-name ASC — prod's canonical order.
 	type entry struct{ jobID, name string }
@@ -453,7 +458,12 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		// block-layout enrichments (blank-safe when sources are unwired).
 		row.ItemTitle = merged.titleFor(display)
 		row.StaffLine = staffLine(d.Labels.Student, tr, staffNames, classStaff[e.jobID])
-		row.Criteria, row.Sem1Total, row.Sem2Total = tr.criterionRows(critNames)
+		row.Criteria, row.OrderTotals = tr.criterionRowsByOrder(critNames)
+		row.Sem1Total, row.Sem2Total = "", ""
+		if row.OrderTotals != nil {
+			row.Sem1Total = row.OrderTotals[1]
+			row.Sem2Total = row.OrderTotals[2]
+		}
 		rows = append(rows, row)
 		academicRows = append(academicRows, academicTreeRow{jobID: e.jobID, row: row})
 	}
@@ -496,11 +506,10 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		academic:     academicRows,
 		deportJobs:   deportJobCat,
 		deportRows:   conductRows,
+		categoryJobs: categoryJobs,
 		jobOrderCode: jobOrderCode,
 		strictPhase:  treeStrictPhase,
-		groupJob:     groupJob,
 		groupCatID:   groupCatID,
-		groupCount:   groupCount,
 		groupLead:    groupLead,
 		historical:   historical,
 	}, treeStrictYear)
@@ -888,13 +897,19 @@ func (t *transcript) yearCriteria() (criteria, bool) {
 // + per-period marks) and the per-period criteria totals. A period with no
 // marks stays blank ("").
 func (t *transcript) criterionRows(names map[string]string) ([]criterionRow, string, string) {
+	rows, totals := t.criterionRowsByOrder(names)
+	return rows, totals[1], totals[2]
+}
+
+// criterionRowsByOrder builds the full per-criterion phase-order map and the per-order
+// criteria totals. The legacy return signature remains phase-1/phase-2 only.
+func (t *transcript) criterionRowsByOrder(names map[string]string) ([]criterionRow, map[int32]string) {
 	if t == nil || len(t.marks) == 0 {
-		return nil, "", ""
+		return nil, map[int32]string{}
 	}
 	ids := t.orderedCrits()
 	rows := make([]criterionRow, 0, len(ids))
 	sums := map[int32]float64{}
-	has := map[int32]bool{}
 	for i, cid := range ids {
 		display := strings.TrimSpace(names[cid])
 		if display == "" {
@@ -904,27 +919,40 @@ func (t *transcript) criterionRows(names map[string]string) ([]criterionRow, str
 		if i < 26 {
 			label = string(rune('A'+i)) + " - " + display
 		}
-		row := criterionRow{Label: label}
-		if v, ok := t.marks[cid][1]; ok {
-			row.Phase1 = fmtNum(v)
-			sums[1] += v
-			has[1] = true
+		row := criterionRow{
+			Label:    label,
+			OrderMax: map[int32]string{},
 		}
-		if v, ok := t.marks[cid][2]; ok {
-			row.Phase2 = fmtNum(v)
-			sums[2] += v
-			has[2] = true
+		orders := make([]int32, 0, len(t.marks[cid]))
+		for order := range t.marks[cid] {
+			if order > 0 {
+				orders = append(orders, order)
+			}
 		}
+		sort.Slice(orders, func(i, j int) bool {
+			return orders[i] < orders[j]
+		})
+		for _, order := range orders {
+			v := t.marks[cid][order]
+			row.OrderMax[order] = fmtNum(v)
+			sums[order] += v
+		}
+		row.Phase1 = row.OrderMax[1]
+		row.Phase2 = row.OrderMax[2]
 		rows = append(rows, row)
 	}
-	sem1, sem2 := "", ""
-	if has[1] {
-		sem1 = fmtNum(sums[1])
+	totals := map[int32]string{}
+	orders := make([]int32, 0, len(sums))
+	for order := range sums {
+		orders = append(orders, order)
 	}
-	if has[2] {
-		sem2 = fmtNum(sums[2])
+	sort.Slice(orders, func(i, j int) bool {
+		return orders[i] < orders[j]
+	})
+	for _, order := range orders {
+		totals[order] = fmtNum(sums[order])
 	}
-	return rows, sem1, sem2
+	return rows, totals
 }
 
 // fetchTranscripts loads the per-criterion marks AND the per-period task
@@ -1379,10 +1407,38 @@ func topAssignee(tally map[string]int, avoid string) string {
 // (classFallbackID, resolved to a name in `names`). classFallbackID "" leaves the
 // line blank exactly as before.
 func staffLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[string]string, classFallbackID string) string {
-	var s1, s2 string
+	ordered := []string{}
+	seen := map[string]bool{}
 	if tr != nil {
-		s1 = topAssignee(tr.teachers[1], "")
-		s2 = topAssignee(tr.teachers[2], s1)
+		orders := make([]int32, 0, len(tr.teachers))
+		for order := range tr.teachers {
+			if order > 0 {
+				orders = append(orders, order)
+			}
+		}
+		sort.Slice(orders, func(i, j int) bool {
+			return orders[i] < orders[j]
+		})
+		avoid := ""
+		for _, order := range orders {
+			sid := topAssignee(tr.teachers[order], avoid)
+			if sid == "" || seen[sid] {
+				continue
+			}
+			ordered = append(ordered, sid)
+			seen[sid] = true
+			avoid = sid
+			if len(ordered) >= 2 {
+				break
+			}
+		}
+	}
+	var s1, s2 string
+	if len(ordered) > 0 {
+		s1 = ordered[0]
+	}
+	if len(ordered) > 1 {
+		s2 = ordered[1]
 	}
 	if s1 == "" && s2 == "" {
 		// No per-task override on either period → derive from the class edge.

@@ -11,9 +11,9 @@ import (
 
 // Deps holds dependencies for the outcome matrix batch-save action handler.
 //
-// All writes route through the task_outcome:create / task_outcome:update use
-// cases (never raw SQL). ResolveStaff supplies the acting staff_id for the IDOR
-// guard (a cell may only be updated by its recorded_by owner).
+// All writes route through task_outcome:create / task_outcome:update / task_outcome:delete
+// use cases (never raw SQL). ResolveStaff supplies the acting staff_id for the IDOR
+// guard (a cell may only be updated or deleted by its recorded_by owner).
 type Deps struct {
 	Routes outcome_matrix.Routes
 	Labels outcome_matrix.Labels
@@ -21,6 +21,7 @@ type Deps struct {
 	CreateTaskOutcome func(ctx context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, error)
 	UpdateTaskOutcome func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error)
 	ReadTaskOutcome   func(ctx context.Context, req *taskoutcomepb.ReadTaskOutcomeRequest) (*taskoutcomepb.ReadTaskOutcomeResponse, error)
+	DeleteTaskOutcome func(ctx context.Context, req *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error)
 
 	// GetOutcomeMatrix re-derives the acting principal's MINE-scoped matrix on
 	// POST so the batch save only touches cells the server itself says are

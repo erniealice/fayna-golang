@@ -123,6 +123,69 @@ func NewView(deps *ListViewDeps) view.View {
 	})
 }
 
+// NewTableView returns ONLY the table-card partial for the job list. It is the
+// data-pagination-url / data-refresh-url target (Routes.TableURL) so a
+// server-pagination page request on the education-tier delivery summary swaps
+// just the table-card. Rendering the full ListURL page here (the pre-fix
+// behavior) made the JS full-card-swap re-render the entire page shell and nest
+// it inside the card. Mirrors centymo subscription list.NewTableView.
+//
+// The education tabbed path preserves the active job_category tab: the
+// pagination URL (summaryPaginationURL) carries ?jc=<id>, validated against the
+// fetched categories exactly as renderTabbed does so a stale/tampered id falls
+// back to the default category (never a dangling filter).
+func NewTableView(deps *ListViewDeps) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("job", "list") {
+			return view.Forbidden("job:list")
+		}
+
+		status := viewCtx.Request.PathValue("status")
+		if status == "" {
+			status = "active"
+		}
+
+		// Resolve the active job_category tab (tabbed lists only). Empty on the
+		// plain flat list — buildDeliverySummaryTable/buildJobTable treat an empty
+		// selection as "no category filter".
+		selected := ""
+		if deps.Options.Tab.Enabled() {
+			cats, _, err := loadJobListTabSupport(ctx, deps)
+			if err != nil {
+				log.Printf("Failed to load job list tab support: %v", err)
+				return view.Error(fmt.Errorf("failed to load job list tabs: %w", err))
+			}
+			sortJobCategories(cats, deps.Options.Tab)
+			selected = strings.TrimSpace(viewCtx.Request.URL.Query().Get("jc"))
+			if selected == "" || !categoryExists(cats, selected) {
+				selected = defaultCategory(cats)
+			}
+		}
+
+		var tableConfig *types.TableConfig
+		var err error
+		if deps.BusinessType == businessTypeEducation {
+			columns := templateSummaryColumns(deps.Labels)
+			p, parseErr := espynahttp.ParseTableParamsWithFilters(viewCtx.Request, types.SortableKeys(columns), types.FilterableKeys(columns), "group", "asc")
+			if parseErr != nil {
+				return view.Error(parseErr)
+			}
+			tableConfig, _, err = buildDeliverySummaryTable(ctx, deps, status, p, selected, deps.Options.Tab.Enabled())
+		} else if deps.Options.Tab.Enabled() {
+			tableConfig, _, err = buildJobTableTabbed(ctx, deps, status, selected, perms)
+		} else {
+			tableConfig, err = buildJobTable(ctx, deps, status, perms)
+		}
+		if err != nil {
+			log.Printf("Failed to build job table partial: %v", err)
+			return view.Error(fmt.Errorf("failed to load jobs: %w", err))
+		}
+
+		return view.OK("table-card", tableConfig)
+	})
+}
+
 // renderFlat renders the job list without a tabstrip (today's behavior — the
 // service-admin backward-compat path and the education list before the split).
 func renderFlat(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewContext, status string, perms *types.UserPermissions) view.ViewResult {

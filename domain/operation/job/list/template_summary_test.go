@@ -159,7 +159,10 @@ func TestBuildDeliverySummaryTable_forwardsServerPageContract(t *testing.T) {
 	if sp.CurrentPage != 3 || sp.TotalRows != 321 || sp.TotalPages != 4 || sp.PageSize != maxTemplateSummaryPageSize || sp.SearchQuery != "math" || sp.SortColumn != "name" || sp.SortDirection != "desc" {
 		t.Fatalf("server pagination = %+v", sp)
 	}
-	if got, want := sp.PaginationURL, "/jobs/list/completed?jc=cat%2Fa+b"; got != want {
-		t.Fatalf("pagination URL = %q, want %q", got, want)
+	// Pagination/refresh MUST target the table-only endpoint (Routes.TableURL),
+	// NOT the full-page ListURL. Pointing it at ListURL makes the JS full-card
+	// swap re-render the whole page shell and nest it inside the table-card.
+	if got, want := sp.PaginationURL, "/action/job/table/completed?jc=cat%2Fa+b"; got != want {
+		t.Fatalf("pagination URL = %q, want %q (table-only endpoint, not full-page ListURL)", got, want)
 	}
 }

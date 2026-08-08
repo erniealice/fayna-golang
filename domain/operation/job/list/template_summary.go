@@ -130,7 +130,15 @@ func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow, p
 	}
 	types.ApplyColumnStyles(columns, tableRows)
 
+	// data-refresh-url / data-pagination-url MUST point at the table-only endpoint
+	// (Routes.TableURL, list.NewTableView) so HTMX swaps just the table-card
+	// partial. Pointing at the full ListURL re-renders the whole page (app-shell +
+	// tabstrip) and the JS full-card-swap nests it inside the card. Falls back to
+	// ListURL only when TableURL is unset. Mirrors centymo subscription list.
 	refreshURL := route.ResolveURL(deps.Routes.ListURL, "status", status)
+	if deps.Routes.TableURL != "" {
+		refreshURL = route.ResolveURL(deps.Routes.TableURL, "status", status)
+	}
 	sp := &types.ServerPagination{
 		Enabled:       true,
 		Mode:          "offset",

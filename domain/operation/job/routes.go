@@ -11,7 +11,13 @@ const (
 	DashboardURL = "/jobs/dashboard"
 
 	// Job (operational activity) routes
-	ListURL             = "/jobs/list/{status}"
+	ListURL = "/jobs/list/{status}"
+	// TableURL returns ONLY the table-card partial (list.NewTableView) — the
+	// data-pagination-url / data-refresh-url target so a server-pagination page
+	// request (education-tier delivery summary) swaps just the table-card. Pointing
+	// pagination at the full ListURL re-renders the whole page shell and nests it
+	// inside the card. Mirrors centymo subscription's /action/subscription/table.
+	TableURL            = "/action/job/table/{status}"
 	DetailURL           = "/jobs/detail/{id}"
 	AddURL              = "/action/job/add"
 	EditURL             = "/action/job/edit/{id}"
@@ -47,6 +53,7 @@ type Routes struct {
 	DashboardURL string `json:"dashboard_url"`
 
 	ListURL          string `json:"list_url"`
+	TableURL         string `json:"table_url"`
 	DetailURL        string `json:"detail_url"`
 	AddURL           string `json:"add_url"`
 	EditURL          string `json:"edit_url"`
@@ -84,6 +91,7 @@ func DefaultRoutes() Routes {
 		DashboardURL: DashboardURL,
 
 		ListURL:          ListURL,
+		TableURL:         TableURL,
 		DetailURL:        DetailURL,
 		AddURL:           AddURL,
 		EditURL:          EditURL,
@@ -112,6 +120,7 @@ func (r Routes) RouteMap() map[string]string {
 	return map[string]string{
 		"job.dashboard":       r.DashboardURL,
 		"job.list":            r.ListURL,
+		"job.table":           r.TableURL,
 		"job.detail":          r.DetailURL,
 		"job.add":             r.AddURL,
 		"job.edit":            r.EditURL,

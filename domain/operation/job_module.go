@@ -145,6 +145,7 @@ type JobModuleDeps struct {
 type JobModule struct {
 	routes           jobpkg.Routes
 	List             view.View
+	Table            view.View
 	Detail           view.View
 	TabAction        view.View
 	Add              view.View
@@ -217,26 +218,32 @@ func NewJobModule(deps *JobModuleDeps) *JobModule {
 		GetDashboardPageData: deps.GetJobDashboardPageData,
 	}
 
+	// listDeps is shared by the full-page List view and the table-only Table view
+	// (list.NewTableView) — the data-pagination-url / data-refresh-url target that
+	// swaps just the table-card instead of nesting the whole page.
+	listDeps := &joblist.ListViewDeps{
+		Routes:       deps.Routes,
+		ListJobs:     deps.ListJobs,
+		GetInUseIDs:  deps.GetInUseIDs,
+		Labels:       deps.Labels,
+		CommonLabels: deps.CommonLabels,
+		TableLabels:  deps.TableLabels,
+		BusinessType: deps.BusinessType,
+		// Template-grain delivery summary (education tier) — one server-side call.
+		ListJobTemplateSummaries: deps.ListJobTemplateSummaries,
+		MatrixDetailURL:          deps.MatrixDetailURL,
+		MatrixGroupDetailURL:     deps.MatrixGroupDetailURL,
+		// "/classes" job_category tab-split.
+		Options:               deps.JobListOptions,
+		ListJobCategories:     deps.ListJobCategories,
+		ListJobTemplates:      deps.ListJobTemplates,
+		ListJobListTabSupport: deps.ListJobListTabSupport,
+	}
+
 	return &JobModule{
-		routes: deps.Routes,
-		List: joblist.NewView(&joblist.ListViewDeps{
-			Routes:       deps.Routes,
-			ListJobs:     deps.ListJobs,
-			GetInUseIDs:  deps.GetInUseIDs,
-			Labels:       deps.Labels,
-			CommonLabels: deps.CommonLabels,
-			TableLabels:  deps.TableLabels,
-			BusinessType: deps.BusinessType,
-			// Template-grain delivery summary (education tier) — one server-side call.
-			ListJobTemplateSummaries: deps.ListJobTemplateSummaries,
-			MatrixDetailURL:          deps.MatrixDetailURL,
-			MatrixGroupDetailURL:   deps.MatrixGroupDetailURL,
-			// "/classes" job_category tab-split.
-			Options:               deps.JobListOptions,
-			ListJobCategories:     deps.ListJobCategories,
-			ListJobTemplates:      deps.ListJobTemplates,
-			ListJobListTabSupport: deps.ListJobListTabSupport,
-		}),
+		routes:           deps.Routes,
+		List:             joblist.NewView(listDeps),
+		Table:            joblist.NewTableView(listDeps),
 		Detail:           jobdetail.NewView(detailDeps),
 		TabAction:        jobdetail.NewTabAction(detailDeps),
 		Add:              jobaction.NewAddAction(actionDeps),
@@ -260,6 +267,9 @@ func (m *JobModule) RegisterRoutes(r view.RouteRegistrar) {
 		r.GET(m.routes.DashboardURL, m.Dashboard)
 	}
 	r.GET(m.routes.ListURL, m.List)
+	if m.Table != nil && m.routes.TableURL != "" {
+		r.GET(m.routes.TableURL, m.Table)
+	}
 	r.GET(m.routes.DetailURL, m.Detail)
 	r.GET(m.routes.TabActionURL, m.TabAction)
 	r.GET(m.routes.AddURL, m.Add)

@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 
+	espynahttp "github.com/erniealice/espyna-golang/contrib/http"
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 
@@ -128,7 +129,12 @@ func renderFlat(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewConte
 	var tableConfig *types.TableConfig
 	var err error
 	if deps.BusinessType == businessTypeEducation {
-		tableConfig, err = buildDeliverySummaryTable(ctx, deps, status, perms)
+		columns := templateSummaryColumns(deps.Labels)
+		p, parseErr := espynahttp.ParseTableParamsWithFilters(viewCtx.Request, types.SortableKeys(columns), types.FilterableKeys(columns), "group", "asc")
+		if parseErr != nil {
+			return view.Error(parseErr)
+		}
+		tableConfig, _, err = buildDeliverySummaryTable(ctx, deps, status, p, "", false)
 	} else {
 		tableConfig, err = buildJobTable(ctx, deps, status, perms)
 	}
@@ -157,7 +163,7 @@ func renderTabbed(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCon
 	// categories (tab rows) + active template stubs (the template→category map +
 	// deportment fallback) in a single statement. Errors PROPAGATE — a failed read
 	// renders a real error state, not silently-partial tabs.
-	cats, templates, err := loadJobListTabSupport(ctx, deps)
+	cats, _, err := loadJobListTabSupport(ctx, deps)
 	if err != nil {
 		log.Printf("Failed to load job list tab support: %v", err)
 		return view.Error(fmt.Errorf("failed to load job list tabs: %w", err))
@@ -175,7 +181,12 @@ func renderTabbed(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCon
 	var tableConfig *types.TableConfig
 	var counts map[string]int
 	if deps.BusinessType == businessTypeEducation {
-		tableConfig, counts, err = buildDeliverySummaryTableTabbed(ctx, deps, status, selected, templates)
+		columns := templateSummaryColumns(deps.Labels)
+		p, parseErr := espynahttp.ParseTableParamsWithFilters(viewCtx.Request, types.SortableKeys(columns), types.FilterableKeys(columns), "group", "asc")
+		if parseErr != nil {
+			return view.Error(parseErr)
+		}
+		tableConfig, counts, err = buildDeliverySummaryTable(ctx, deps, status, p, selected, true)
 	} else {
 		tableConfig, counts, err = buildJobTableTabbed(ctx, deps, status, selected, perms)
 	}

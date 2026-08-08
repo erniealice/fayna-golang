@@ -15,6 +15,7 @@ package list
 
 import (
 	"context"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -128,10 +129,12 @@ func buildJobCategoryTabs(
 ) []pyeza.TabItem {
 	tabs := make([]pyeza.TabItem, 0, len(cats))
 	for _, c := range cats {
+		q := url.Values{}
+		q.Set("jc", c.GetId())
 		tabs = append(tabs, pyeza.TabItem{
 			Key:   tabKey(c.GetId()),
 			Label: c.GetName(),
-			Href:  listURL + "?jc=" + c.GetId(),
+			Href:  listURL + "?" + q.Encode(),
 			Count: counts[c.GetId()],
 		})
 	}

@@ -28,15 +28,17 @@ package list
 import (
 	"context"
 	"log"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 
+	espynahttp "github.com/erniealice/espyna-golang/contrib/http"
+	"github.com/erniealice/espyna-golang/shared/tableparams"
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 
-	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
 
@@ -66,93 +68,21 @@ type templateSummaryRow struct {
 // building, labels, links (outcome-matrix per row), and empty state are
 // unchanged from the pre-S6 view-side compose; only the data-assembly layer
 // moved server-side.
-func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status string, _ *types.UserPermissions) (*types.TableConfig, error) {
-	rows := buildTemplateSummaryRows(ctx, deps, status)
-	return templateSummaryTableConfig(deps, rows), nil
-}
-
-// buildDeliverySummaryTableTabbed is the tab-split education path. It reconciles
-// two data sources so EVERY job_category tab is populated:
-//
-//   - Delivery-summary aggregate (buildTemplateSummaryRows): one row per
-//     (template × section) with delivery columns. This is the ONLY source for a
-//     job_category the aggregate reaches (Academic) — its count and rows are the
-//     aggregate's, byte-for-byte unchanged from before the tab-split.
-//   - Active job_templates by category (activeTemplatesByCategory): the fallback
-//     for a job_category the aggregate NEVER reaches. Deportment templates are
-//     JOB_STATUS_COMPLETED conduct records with no active subscription_seat /
-//     product_plan match, so they fall out of the aggregate's inner joins; without
-//     this fallback their tabs render empty (the W4 gap). They surface at template
-//     grain instead (templateGrainRows).
-//
-// A category is aggregate-backed iff it has >=1 aggregate row; that discriminator
-// keeps Academic on the aggregate (110 rows) and routes the deportment categories
-// (0 aggregate rows) to their active templates. Counts follow the same split:
-// aggregate row count for aggregate-backed categories, active-template count
-// otherwise.
-func buildDeliverySummaryTableTabbed(ctx context.Context, deps *ListViewDeps, status, selected string, templates []*jobtemplatepb.JobTemplate) (*types.TableConfig, map[string]int, error) {
-	allRows := buildTemplateSummaryRows(ctx, deps, status)
-	catToTemplates, templateToCat := activeTemplatesByCategory(templates)
-
-	// aggCounts: aggregate summary rows per category (Academic's tab count/rows).
-	aggCounts := map[string]int{}
-	for _, r := range allRows {
-		aggCounts[templateToCat[r.TemplateID]]++
+// buildDeliverySummaryTable is the server-page education path. The service owns
+// selected-category filtering, fallback selection, counts, ordering, and paging;
+// the view only maps its response into Pyeza's table contract.
+func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status string, p tableparams.TableQueryParams, selected string, includeTemplateFallback bool) (*types.TableConfig, map[string]int, error) {
+	p = boundTemplateSummaryParams(p)
+	resp, err := listTemplateSummaries(ctx, deps, status, p, selected, includeTemplateFallback)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	// isActiveScope: does this URL status actually query ACTIVE jobs? Gate on the
-	// NORMALIZED status (jobStatusFilterValue), not the raw segment — an unknown/
-	// malformed segment normalizes to ACTIVE for the query, so it must also take
-	// the active-template path here (else a bogus URL would fetch active aggregates
-	// yet suppress the active fallback — codex red-team LOW #8).
-	isActiveScope := jobStatusFilterValue(status) == jobStatusFilterValue("active")
-
-	// Per-tab counts: active-template count by default, overridden by the
-	// aggregate row count for any category the aggregate reaches.
-	//
-	// The active-template seed is only valid on the active scope — activeTemplatesByCategory
-	// returns ACTIVE templates, so seeding it on a non-active status (e.g. "completed") would
-	// badge a tab with an active-template count that its rows (below) no longer render. On a
-	// non-active scope the count is the aggregate's alone (0 when the aggregate is empty there),
-	// so the badge matches the empty state. Keeps /active byte-unchanged.
-	counts := map[string]int{}
-	if isActiveScope {
-		for cat, tmpls := range catToTemplates {
-			counts[cat] = len(tmpls)
-		}
-	}
-	for cat, n := range aggCounts {
-		counts[cat] = n
-	}
-
-	// Render the selected tab. Aggregate-backed (or the no-selection default) →
-	// the delivery summary filtered to the category (Academic path unchanged). A
-	// category the aggregate never reaches → its active templates at template
-	// grain.
-	//
-	// The template-grain fallback's data source (activeTemplatesByCategory) is ACTIVE templates,
-	// so it is ONLY valid on the active scope. On a non-active status (e.g. "completed") an
-	// aggregate-eligible category (Academic) returns 0 aggregate rows — but its active templates
-	// must NOT be dumped under a "completed" filter (the blank-Teacher/Students/AY bug). Route any
-	// non-active scope through the aggregate path so an empty result renders the empty state, not
-	// active templates. Gated on the NORMALIZED status (isActiveScope) so a malformed URL segment
-	// is consistent with the jobs actually queried. (education1: active & COMPLETED are disjoint —
-	// completed classes are frozen historical imports; docs/plan/20260717-completed-courses-backfill/.)
-	if selected == "" || aggCounts[selected] > 0 || !isActiveScope {
-		filtered := make([]templateSummaryRow, 0, len(allRows))
-		for _, r := range allRows {
-			if selected == "" || templateToCat[r.TemplateID] == selected {
-				filtered = append(filtered, r)
-			}
-		}
-		return templateSummaryTableConfig(deps, filtered), counts, nil
-	}
-	return templateSummaryTableConfig(deps, templateGrainRows(catToTemplates[selected])), counts, nil
+	return templateSummaryTableConfig(deps, responseTemplateSummaryRows(resp), p, status, selected, resp), responseCategoryCounts(resp), nil
 }
 
 // templateSummaryTableConfig builds the template-grain TableConfig from an
 // already-fetched (and possibly category-filtered) summary-row slice.
-func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow) *types.TableConfig {
+func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow, p tableparams.TableQueryParams, status, selected string, resp *summarypb.ListJobTemplateSummariesResponse) *types.TableConfig {
 	l := deps.Labels
 	columns := templateSummaryColumns(l)
 	tableRows := make([]types.TableRow, 0, len(rows))
@@ -200,8 +130,25 @@ func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow) *
 	}
 	types.ApplyColumnStyles(columns, tableRows)
 
+	refreshURL := route.ResolveURL(deps.Routes.ListURL, "status", status)
+	sp := &types.ServerPagination{
+		Enabled:       true,
+		Mode:          "offset",
+		CurrentPage:   int(resp.GetPagination().GetCurrentPage()),
+		PageSize:      p.PageSize,
+		TotalRows:     int(resp.GetPagination().GetTotalItems()),
+		TotalPages:    int(resp.GetPagination().GetTotalPages()),
+		SearchQuery:   p.Search,
+		SortColumn:    p.SortColumn,
+		SortDirection: p.SortDir,
+		FiltersJSON:   p.FiltersRaw,
+		PaginationURL: summaryPaginationURL(refreshURL, selected),
+	}
+	sp.BuildDisplay()
+
 	tableConfig := &types.TableConfig{
 		ID:                   "job-template-summary-table",
+		RefreshURL:           refreshURL,
 		Columns:              columns,
 		Rows:                 tableRows,
 		ShowSearch:           true,
@@ -217,6 +164,7 @@ func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow) *
 			Title:   l.Empty.Title,
 			Message: l.Empty.Message,
 		},
+		ServerPagination: sp,
 	}
 	types.ApplyTableSettings(tableConfig)
 	return tableConfig
@@ -236,25 +184,61 @@ func templateSummaryColumns(l job.Labels) []types.TableColumn {
 	}
 }
 
-// buildTemplateSummaryRows issues the ONE server-side aggregate call (espyna
+// listTemplateSummaries issues the ONE server-side aggregate call (espyna
 // service/operation/job_template_summary) for the {status} segment and maps
 // each returned JobTemplateSummary to a view row. All aggregation, resolver-
 // scoping, status filtering, and group/deliverer/schedule/product resolution
-// happen server-side in a single GROUP-BY query. Rows already arrive ordered by
-// group then template name; we re-sort defensively to preserve the LOCKED order
-// even when a non-postgres provider returns them unordered.
-func buildTemplateSummaryRows(ctx context.Context, deps *ListViewDeps, status string) []templateSummaryRow {
+// happen server-side in a single GROUP-BY query. The server's response ordering
+// is retained verbatim so pagination and sorting remain consistent.
+func listTemplateSummaries(ctx context.Context, deps *ListViewDeps, status string, p tableparams.TableQueryParams, selected string, includeTemplateFallback bool) (*summarypb.ListJobTemplateSummariesResponse, error) {
 	if deps.ListJobTemplateSummaries == nil {
-		return nil
+		return &summarypb.ListJobTemplateSummariesResponse{}, nil
 	}
-	resp, err := deps.ListJobTemplateSummaries(ctx, &summarypb.ListJobTemplateSummariesRequest{
-		Status: jobStatusFilterValue(status),
-	})
+	listParams := espynahttp.ToListParams(p, templateSummarySearchFields)
+	// ToListParams appends the generic entity `id` as a stable tie-breaker. A
+	// summary row has no singular id: its adapter owns a complete composite
+	// identity (group, template, schedule, output product), so forwarding the
+	// synthetic field would either be rejected or weaken that grain contract.
+	if fields := listParams.Sort.GetFields(); len(fields) > 0 && fields[len(fields)-1].GetField() == "id" {
+		listParams.Sort.Fields = fields[:len(fields)-1]
+	}
+	req := &summarypb.ListJobTemplateSummariesRequest{
+		Status:     jobStatusFilterValue(status),
+		Pagination: listParams.Pagination,
+		Search:     listParams.Search,
+		Sort:       listParams.Sort,
+	}
+	if selected != "" {
+		req.JobCategoryId = &selected
+	}
+	if includeTemplateFallback {
+		req.IncludeTemplateFallback = &includeTemplateFallback
+	}
+	resp, err := deps.ListJobTemplateSummaries(ctx, req)
 	if err != nil {
 		log.Printf("Failed to list job template summaries: %v", err)
-		return nil
+		return nil, err
 	}
+	return resp, nil
+}
 
+var templateSummarySearchFields = []string{"name", "group", "deliverer", "items", "schedule"}
+
+const maxTemplateSummaryPageSize = 100
+
+func boundTemplateSummaryParams(p tableparams.TableQueryParams) tableparams.TableQueryParams {
+	if p.Page < 1 {
+		p.Page = 1
+	}
+	if p.PageSize < 1 {
+		p.PageSize = 25
+	} else if p.PageSize > maxTemplateSummaryPageSize {
+		p.PageSize = maxTemplateSummaryPageSize
+	}
+	return p
+}
+
+func responseTemplateSummaryRows(resp *summarypb.ListJobTemplateSummariesResponse) []templateSummaryRow {
 	summaries := resp.GetSummaries()
 	rows := make([]templateSummaryRow, 0, len(summaries))
 	for _, s := range summaries {
@@ -266,16 +250,32 @@ func buildTemplateSummaryRows(ctx context.Context, deps *ListViewDeps, status st
 			DelivererName: joinDelivererNames(s.GetDeliverers()),
 			ItemCount:     int(s.GetJobCount()),
 			ScheduleName:  s.GetPriceScheduleName(),
+			hideItemCount: s.GetTemplateGrainFallback(),
 		})
 	}
-
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].GroupName != rows[j].GroupName {
-			return rows[i].GroupName < rows[j].GroupName
-		}
-		return rows[i].TemplateName < rows[j].TemplateName
-	})
 	return rows
+}
+
+func responseCategoryCounts(resp *summarypb.ListJobTemplateSummariesResponse) map[string]int {
+	counts := make(map[string]int, len(resp.GetJobCategoryCounts()))
+	for _, count := range resp.GetJobCategoryCounts() {
+		counts[count.GetJobCategoryId()] = int(count.GetSummaryCount())
+	}
+	return counts
+}
+
+func summaryPaginationURL(listURL, selected string) string {
+	if selected == "" {
+		return listURL
+	}
+	u, err := url.Parse(listURL)
+	if err != nil {
+		return listURL
+	}
+	q := u.Query()
+	q.Set("jc", selected)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // joinDelivererNames renders a template's deliverer column. A template can have

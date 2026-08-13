@@ -43,19 +43,20 @@
   <header class="fayna-home-titlebar">
     <div class="fayna-home-titlebar-left">
       <p class="fayna-home-eyebrow">{{.T "home.eyebrow"}}</p>
-      <h1 class="fayna-home-title">{{.T "home.title"}}</h1>
+      <h1 class="fayna-home-title">{{if .SectionTitle}}{{.SectionTitle}}{{else}}{{.T "home.title"}}{{end}}</h1>
       <p class="fayna-home-subtitle">
-        {{if .WorkspaceName}}{{.WorkspaceName}} <span aria-hidden="true">·</span> {{end}}{{.Today}}
+        {{if .SectionSubtitle}}{{.SectionSubtitle}} <span aria-hidden="true">·</span> {{end}}{{if .WorkspaceName}}{{.WorkspaceName}} <span aria-hidden="true">·</span> {{end}}{{.Today}}
       </p>
     </div>
     <div class="fayna-home-titlebar-right">
       <button type="button" class="btn-ghost" aria-label='{{.T "home.refresh"}}' data-testid="home-refresh"
-              hx-get='{{route "home.content_url"}}' hx-target="#main-content" hx-swap="innerHTML">
+              hx-get='{{route .RefreshRouteKey}}' hx-target="#main-content" hx-swap="innerHTML">
         {{template "icon-refresh-cw" .}}
       </button>
     </div>
   </header>
 
+  <div class="fayna-home-section" data-section="{{.Section}}" data-testid="home-section-{{.Section}}">
   <div class="fayna-home-variant" data-testid="home-variant-{{.Slot}}">
 
     {{if .TabsEnabled}}
@@ -80,6 +81,7 @@
       {{range .Widgets}}{{template "fayna-home-widget" .}}{{end}}
     </div>
 
+  </div>
   </div>
 </section>
 {{end}}
@@ -153,7 +155,16 @@
     {{end}}
 
     {{if .Attention}}
-    <table class="fayna-home-table">
+    {{if .Attention.PeriodText}}<p class="fayna-home-scope-line"><span data-testid="home-attention-period">{{.Attention.PeriodText}}</span></p>{{end}}
+    <table class="fayna-home-table" data-testid="home-attention-table">
+      <caption class="sr-only">{{.Title}}</caption>
+      <thead>
+        <tr>
+          <th scope="col" data-testid="home-attention-column-category">{{.Attention.CategoryLabel}}</th>
+          <th scope="col" data-testid="home-attention-column-ratio">{{.Attention.RatioLabel}}</th>
+          <th scope="col" data-testid="home-attention-column-rate">{{.Attention.RateLabel}}</th>
+        </tr>
+      </thead>
       <tbody>
         {{range .Attention.Rows}}
         <tr data-testid="home-attention-{{.CategoryID}}">
@@ -162,10 +173,54 @@
           <td class="fayna-home-table-num">{{.RatePct}}</td>
         </tr>
         {{end}}
-        <tr class="fayna-home-table-exceptions" data-testid="home-attention-exceptions">
-          <th scope="row" class="fayna-home-table-name">{{.Attention.ExceptionsLabel}}</th>
-          <td class="fayna-home-table-num" colspan="2">{{.Attention.ExceptionsValue}}</td>
+      </tbody>
+    </table>
+    <p class="fayna-home-pipeline-returned" data-testid="home-attention-exceptions">
+      <span class="fayna-home-count-label">{{.Attention.ExceptionsLabel}}</span>
+      <span class="fayna-home-count-value">{{.Attention.ExceptionsValue}}</span>
+    </p>
+    {{end}}
+
+    {{if .Pipeline}}
+    {{if .Pipeline.PeriodText}}<p class="fayna-home-scope-line"><span data-testid="home-pipeline-period">{{.Pipeline.PeriodText}}</span></p>{{end}}
+    <ol class="fayna-home-pipeline">
+      {{range .Pipeline.Stages}}
+      <li class="fayna-home-pipeline-stage" data-testid="home-pipeline-{{.Key}}">
+        <span class="fayna-home-pipeline-label">{{.Label}}</span>
+        <span class="fayna-home-pipeline-value">{{.Value}}</span>
+      </li>
+      {{end}}
+    </ol>
+    <p class="fayna-home-pipeline-returned" data-testid="home-pipeline-returned">
+      <span class="fayna-home-count-label">{{.Pipeline.ReturnedLabel}}</span>
+      <span class="fayna-home-count-value">{{.Pipeline.ReturnedValue}}</span>
+    </p>
+    {{end}}
+
+    {{if .Performance}}
+    {{if .Performance.PeriodText}}
+    <p class="fayna-home-scope-line">
+      <span data-testid="home-performance-period">{{.Performance.PeriodText}}</span>
+      {{if .Performance.TargetPct}}<span aria-hidden="true">·</span> <span data-testid="home-performance-target">{{.Performance.TargetLabel}} {{.Performance.TargetPct}}</span>{{end}}
+    </p>
+    {{end}}
+    <table class="fayna-home-table">
+      <caption class="sr-only">{{.Title}}</caption>
+      <thead>
+        <tr>
+          <th scope="col" data-testid="home-performance-column-category">{{.Performance.CategoryLabel}}</th>
+          <th scope="col" data-testid="home-performance-column-ratio">{{.Performance.RatioLabel}}</th>
+          <th scope="col" data-testid="home-performance-column-rate">{{.Performance.RateLabel}}</th>
         </tr>
+      </thead>
+      <tbody>
+        {{range .Performance.Rows}}
+        <tr data-testid="home-performance-{{.CategoryID}}"{{if .BelowTarget}} class="fayna-home-below-target"{{end}}>
+          <th scope="row" class="fayna-home-table-name">{{.Name}}</th>
+          <td class="fayna-home-table-num">{{.Ratio}}</td>
+          <td class="fayna-home-table-num">{{.RatePct}}</td>
+        </tr>
+        {{end}}
       </tbody>
     </table>
     {{end}}

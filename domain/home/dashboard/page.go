@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -73,20 +74,40 @@ type Deps struct {
 	// widget deny (the T-9 observability half). Injected by the block so
 	// this package needs no espyna context accessors.
 	LogDeny func(ctx context.Context, permissionCode, widgetRef string)
+
+	// ResolveOverviewURL returns the WORKSPACE-QUALIFIED overview URL the bare
+	// /home redirect targets (20260809 D2/M5). Injected by the app's
+	// composition so this package never imports espyna's workspace-slug
+	// helpers (dependency-direction rule). Nil/empty ⇒ the bare Routes.OverviewURL.
+	ResolveOverviewURL func(ctx context.Context) string
 }
 
-// Module registers the three home routes.
+// Module registers the routed home surface and its retained partial endpoints.
 type Module struct{ deps *Deps }
 
 // NewModule creates the home dashboard module.
 func NewModule(deps *Deps) *Module { return &Module{deps: deps} }
 
-// RegisterRoutes registers GET dashboard / content / ribbon.
+// RegisterRoutes registers the routed-section surface (20260809):
+//   - GET /home            → workspace-aware 302 redirect to /home/overview
+//   - GET /home/{section}  → the four explicit section views
+//   - GET /home/content    → RETAINED overview-content compat endpoint (M4)
+//   - GET /action/home/ribbon → the ribbon self-refresh
+//
+// Section routes are EXPLICIT (no {section} wildcard): each handler is bound to
+// its own SectionKey. An unrecognized /home/{x} is simply unregistered → 404;
+// nothing links to it (legacy /home#pulse strips the fragment client-side to
+// /home, which redirects to overview).
 func (m *Module) RegisterRoutes(r pyeza.RouteRegistrar) {
 	m.deps.Routes = withRouteDefaults(m.deps.Routes)
-	r.GET(m.deps.Routes.DashboardURL, m.pageView())
-	r.GET(m.deps.Routes.ContentURL, m.contentView())
-	r.GET(m.deps.Routes.RibbonURL, m.ribbonView())
+	rt := m.deps.Routes
+	r.GET(rt.DashboardURL, m.redirectToOverview())
+	r.GET(rt.OverviewURL, m.sectionView(home.SectionOverview))
+	r.GET(rt.PulseURL, m.sectionView(home.SectionPulse))
+	r.GET(rt.PerformanceURL, m.sectionView(home.SectionPerformance))
+	r.GET(rt.AttentionURL, m.sectionView(home.SectionAttention))
+	r.GET(rt.ContentURL, m.contentView())
+	r.GET(rt.RibbonURL, m.ribbonView())
 }
 
 func withRouteDefaults(r home.Routes) home.Routes {
@@ -99,6 +120,18 @@ func withRouteDefaults(r home.Routes) home.Routes {
 	}
 	if r.RibbonURL == "" {
 		r.RibbonURL = d.RibbonURL
+	}
+	if r.OverviewURL == "" {
+		r.OverviewURL = d.OverviewURL
+	}
+	if r.PulseURL == "" {
+		r.PulseURL = d.PulseURL
+	}
+	if r.PerformanceURL == "" {
+		r.PerformanceURL = d.PerformanceURL
+	}
+	if r.AttentionURL == "" {
+		r.AttentionURL = d.AttentionURL
 	}
 	return r
 }
@@ -113,6 +146,18 @@ type PageData struct {
 	Today string
 	// Slot is the resolved persona slot (data-testid="home-variant-{slot}").
 	Slot int32
+
+	// Section is the resolved routed section key (data-testid="home-section-{key}").
+	Section string
+	// SectionTitle / SectionSubtitle are resolved in Go from the dynamic
+	// "home.section.{key}.title/subtitle" lyngua keys (20260809 L2 — a Go
+	// template cannot interpolate {key} inside a quoted .T argument).
+	SectionTitle    string
+	SectionSubtitle string
+	// RefreshRouteKey is the explicit route-map key for the resolved section.
+	// It keeps refreshes on that section instead of calling the retained
+	// overview-only /home/content compatibility endpoint.
+	RefreshRouteKey string
 
 	// TabsEnabled / Tabs / ActiveTab drive the Q2 category tabstrip.
 	TabsEnabled bool
@@ -134,15 +179,37 @@ type TabItemData struct {
 	Query string
 }
 
-func (m *Module) pageView() view.View {
+// redirectToOverview serves the bare /home route as a workspace-aware redirect
+// to /home/overview (20260809 D2). The target is resolved by the app-injected
+// ResolveOverviewURL closure (workspace-qualified — M5); it falls back to the
+// bare Routes.OverviewURL when unwired. The ViewAdapter emits HX-Redirect for
+// HTMX requests and a real 3xx otherwise.
+func (m *Module) redirectToOverview() view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
-		return view.OK("fayna-home", m.buildData(ctx, viewCtx))
+		target := ""
+		if m.deps.ResolveOverviewURL != nil {
+			target = m.deps.ResolveOverviewURL(ctx)
+		}
+		if target == "" {
+			target = m.deps.Routes.OverviewURL
+		}
+		return view.ViewResult{Redirect: target, StatusCode: http.StatusFound}
 	})
 }
 
+// sectionView renders one routed section as a full page (or, on an HTMX
+// main-content swap, its content partial — handled by the ViewAdapter).
+func (m *Module) sectionView(key home.SectionKey) view.View {
+	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
+		return view.OK("fayna-home", m.buildSectionData(ctx, viewCtx, key))
+	})
+}
+
+// contentView serves the retained /home/content compat endpoint as the
+// overview section's content (M4).
 func (m *Module) contentView() view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
-		return view.OK("fayna-home-content", m.buildData(ctx, viewCtx))
+		return view.OK("fayna-home-content", m.buildSectionData(ctx, viewCtx, home.SectionOverview))
 	})
 }
 
@@ -186,9 +253,16 @@ func (m *Module) baseData(ctx context.Context, viewCtx *view.ViewContext) *PageD
 	}
 }
 
-// buildData assembles the full dashboard payload: variant resolution, the
-// single aggregate read, tab selection/validation, and per-widget states.
+// buildData assembles the OVERVIEW section payload — the back-compat entry
+// point (contentView + older callers). New code uses buildSectionData.
 func (m *Module) buildData(ctx context.Context, viewCtx *view.ViewContext) *PageData {
+	return m.buildSectionData(ctx, viewCtx, home.SectionOverview)
+}
+
+// buildSectionData assembles one routed section's payload: variant→section
+// resolution, the single aggregate read, tab selection (section-gated), and
+// per-widget states.
+func (m *Module) buildSectionData(ctx context.Context, viewCtx *view.ViewContext, sectionKey home.SectionKey) *PageData {
 	deps := m.deps
 	data := m.baseData(ctx, viewCtx)
 
@@ -196,12 +270,16 @@ func (m *Module) buildData(ctx context.Context, viewCtx *view.ViewContext) *Page
 	if deps.ResolvePrincipalKind != nil {
 		kind = deps.ResolvePrincipalKind(ctx)
 	}
-	variant, slot, ok := deps.Options.VariantFor(kind)
+	section, slot, ok := deps.Options.SectionFor(kind, sectionKey)
 	data.Slot = slot
 	if !ok {
 		return data
 	}
-	roster := variant.KnownWidgets()
+	data.Section = string(section.Key)
+	data.SectionTitle = viewCtx.T("home.section." + string(section.Key) + ".title")
+	data.SectionSubtitle = viewCtx.T("home.section." + string(section.Key) + ".subtitle")
+	data.RefreshRouteKey = sectionRouteKey(section.Key)
+	roster := section.KnownWidgets()
 
 	perms := view.GetUserPermissions(ctx)
 
@@ -251,7 +329,7 @@ func (m *Module) buildData(ctx context.Context, viewCtx *view.ViewContext) *Page
 	if selected != "" {
 		data.ActiveTab = selected
 	}
-	if deps.Options.Tab.Enabled() && resp != nil {
+	if section.HasTabs && deps.Options.Tab.Enabled() && resp != nil {
 		data.TabsEnabled = true
 		data.Tabs = buildTabs(viewCtx, resp.GetCategoryRows(), selected)
 	}
@@ -263,6 +341,21 @@ func (m *Module) buildData(ctx context.Context, viewCtx *view.ViewContext) *Page
 		data.Widgets = append(data.Widgets, m.buildWidget(ctx, viewCtx, ref, perms, resp, row, slot, summaryDenied, summaryFailed))
 	}
 	return data
+}
+
+func sectionRouteKey(key home.SectionKey) string {
+	switch key {
+	case home.SectionOverview:
+		return "home.overview_url"
+	case home.SectionPulse:
+		return "home.pulse_url"
+	case home.SectionPerformance:
+		return "home.performance_url"
+	case home.SectionAttention:
+		return "home.attention_url"
+	default:
+		return ""
+	}
 }
 
 // bundleResolves reports whether EVERY code in the bundle is held (nil/empty
@@ -342,6 +435,10 @@ func (m *Module) buildWidget(
 		return buildApprovalWidget(viewCtx, row)
 	case home.WidgetAttention:
 		return buildAttentionWidget(viewCtx, resp)
+	case home.WidgetReviewPipeline:
+		return buildReviewPipelineWidget(viewCtx, row)
+	case home.WidgetPerformanceTable:
+		return buildPerformanceWidget(viewCtx, resp, m.deps.Options.PerformanceTargetBasisPoints)
 	case home.WidgetQuickLinks:
 		return buildQuickLinksWidget(viewCtx, m.deps.Options.QuickLinks, perms)
 	}
@@ -413,6 +510,10 @@ func widgetTitle(viewCtx *view.ViewContext, ref home.WidgetRef) string {
 		return viewCtx.T("home.widget.approval.title")
 	case home.WidgetAttention:
 		return viewCtx.T("home.widget.attention.title")
+	case home.WidgetReviewPipeline:
+		return viewCtx.T("home.widget.pipeline.title")
+	case home.WidgetPerformanceTable:
+		return viewCtx.T("home.widget.performance.title")
 	case home.WidgetQuickLinks:
 		return viewCtx.T("home.widget.quick.title")
 	}

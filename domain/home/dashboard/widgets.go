@@ -46,10 +46,12 @@ type WidgetData struct {
 	// Empty state text (per-widget lyngua key).
 	EmptyText string
 
-	Completion *CompletionData
-	Approval   *ApprovalData
-	Attention  *AttentionData
-	Links      []LinkData
+	Completion  *CompletionData
+	Approval    *ApprovalData
+	Attention   *AttentionData
+	Pipeline    *PipelineData
+	Performance *PerformanceData
+	Links       []LinkData
 }
 
 // CompletionData is the completion_summary payload, windowed to the A2
@@ -88,12 +90,16 @@ type CountRow struct {
 }
 
 // AttentionData is the admin-roster attention payload: categories ranked
-// lowest completion first, plus ONE operational-exceptions row (returned
-// phase rows — the most actionable exception state).
+// lowest completion first, plus one separately labelled operational-exceptions
+// count (returned phase rows — the most actionable exception state).
 type AttentionData struct {
 	Subtitle        string
+	PeriodText      string
+	CategoryLabel   string
+	RatioLabel      string
+	RateLabel       string
 	Rows            []AttentionRow
-	ExceptionsLabel string // the operational-exceptions row label
+	ExceptionsLabel string // the operational-exceptions summary label
 	ExceptionsValue string // returned-count across the workspace window
 }
 
@@ -116,6 +122,41 @@ type LinkData struct {
 	ParamValue string
 }
 
+// PipelineData is the review_pipeline (Pulse) payload: the review ladder as an
+// ordered funnel of forward stages plus the returned COUNT surfaced separately
+// (20260809 H1 — a count, not a queue of rows). Same aggregate as the other
+// data widgets.
+type PipelineData struct {
+	PeriodText    string     // visible window label
+	Stages        []CountRow // not_started → in_progress → for_review → verified → published (funnel order)
+	ReturnedLabel string
+	ReturnedValue string
+}
+
+// PerformanceData is the performance_table payload: per-category completion
+// rate scored at the common period (M3), ranked, against the app-supplied
+// target (H1). TargetPct is empty when the app declared no target.
+type PerformanceData struct {
+	PeriodText    string
+	TargetLabel   string
+	TargetPct     string // "" = no target line
+	CategoryLabel string
+	RatioLabel    string
+	RateLabel     string
+	Rows          []PerformanceRow
+}
+
+// PerformanceRow is one ranked category row (worst-first, like attention).
+type PerformanceRow struct {
+	CategoryID  string // testid: home-performance-{category_id}
+	Name        string
+	Ratio       string // "recorded / expected"
+	RatePct     string
+	BelowTarget bool
+
+	rateBP int32 // basis points, backs the ranking + target compare (never rendered)
+}
+
 // pickPeriodSlice implements the A2 structural window: the earliest
 // phase_order slice with unrecorded work (recorded < expected); when every
 // slice is fully recorded (or carries no expected cells), the latest slice.
@@ -131,6 +172,38 @@ func pickPeriodSlice(row *ocpb.OutcomeCompletionCategoryRow) *ocpb.OutcomeComple
 	}
 	slices := row.GetPeriodSlices()
 	return slices[len(slices)-1]
+}
+
+// pickCommonPeriodOrder resolves the ONE phase_order that cross-category views
+// (performance_table, expanded attention) must share (20260809 M3): the window
+// chosen from the All rollup. Ranking categories after selecting each row's own
+// period independently would compare one category's period 1 against another's
+// period 2, so every row is windowed to this single order instead. Returns
+// (order, true) when the rollup has slices; (0, false) otherwise (callers then
+// fall back to the row/rollup grain).
+func pickCommonPeriodOrder(resp *ocpb.GetOutcomeCompletionSummaryResponse) (int32, bool) {
+	if resp == nil {
+		return 0, false
+	}
+	slice := pickPeriodSlice(resp.GetAllRollup())
+	if slice == nil {
+		return 0, false
+	}
+	return slice.GetPhaseOrder(), true
+}
+
+// sliceForOrder returns the row's slice at the given phase_order, or nil when
+// the row has no slice for it (a category that does not run in that period).
+func sliceForOrder(row *ocpb.OutcomeCompletionCategoryRow, order int32) *ocpb.OutcomeCompletionPeriodSlice {
+	if row == nil {
+		return nil
+	}
+	for _, s := range row.GetPeriodSlices() {
+		if s.GetPhaseOrder() == order {
+			return s
+		}
+	}
+	return nil
 }
 
 // buildCompletionWidget maps the selected row to the completion payload.
@@ -224,10 +297,28 @@ func buildAttentionWidget(viewCtx *view.ViewContext, resp *ocpb.GetOutcomeComple
 	}
 
 	var rows []AttentionRow
+	periodText := ""
 	var returnedTotal int64
 	if resp != nil {
+		// Common-period window (M3): every category row is scored at the SAME
+		// phase_order (chosen from the All rollup) so the lowest-completion
+		// ranking compares like periods; rows with no slice in that period are
+		// skipped.
+		commonOrder, haveCommon := pickCommonPeriodOrder(resp)
+		if haveCommon {
+			periodText = fmt.Sprintf("%s %d", viewCtx.T("home.period.label"), commonOrder)
+		}
 		for _, r := range resp.GetCategoryRows() {
-			slice := pickPeriodSlice(r)
+			var slice *ocpb.OutcomeCompletionPeriodSlice
+			if haveCommon {
+				slice = sliceForOrder(r, commonOrder)
+				if slice == nil {
+					continue
+				}
+			}
+			if !haveCommon {
+				slice = pickPeriodSlice(r)
+			}
 			if slice == nil || slice.GetExpectedCells() == 0 {
 				continue
 			}
@@ -260,6 +351,10 @@ func buildAttentionWidget(viewCtx *view.ViewContext, resp *ocpb.GetOutcomeComple
 	w.State = StateFull
 	w.Attention = &AttentionData{
 		Subtitle:        w.Subtitle,
+		PeriodText:      periodText,
+		CategoryLabel:   viewCtx.T("home.widget.attention.category"),
+		RatioLabel:      viewCtx.T("home.widget.attention.ratio"),
+		RateLabel:       viewCtx.T("home.widget.attention.rate"),
 		Rows:            rows,
 		ExceptionsLabel: viewCtx.T("home.widget.attention.exceptions"),
 		ExceptionsValue: formatCount(returnedTotal),
@@ -271,6 +366,121 @@ func buildAttentionWidget(viewCtx *view.ViewContext, resp *ocpb.GetOutcomeComple
 // (equal rates keep the response's job_category sort_order).
 func sortAttentionRows(rows []AttentionRow) {
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].rateValue < rows[j].rateValue })
+}
+
+// buildReviewPipelineWidget (Pulse) renders the review ladder as an ordered
+// funnel of forward stages plus the returned count, from the selected row's
+// windowed approval counts (the SAME aggregate — no new backend, 20260809 H2).
+func buildReviewPipelineWidget(viewCtx *view.ViewContext, row *ocpb.OutcomeCompletionCategoryRow) WidgetData {
+	w := WidgetData{
+		Ref:      string(home.WidgetReviewPipeline),
+		Title:    viewCtx.T("home.widget.pipeline.title"),
+		Subtitle: viewCtx.T("home.widget.pipeline.subtitle"),
+	}
+
+	var counts *ocpb.OutcomeCompletionApprovalCounts
+	periodText := ""
+	if slice := pickPeriodSlice(row); slice != nil {
+		counts = slice.GetApprovalCounts()
+		periodText = fmt.Sprintf("%s %d", viewCtx.T("home.period.label"), slice.GetPhaseOrder())
+	} else if row != nil {
+		counts = row.GetApprovalCounts()
+	}
+
+	total := counts.GetNotStarted() + counts.GetInProgress() + counts.GetForReview() +
+		counts.GetVerified() + counts.GetPublished() + counts.GetReturned()
+	if counts == nil || total == 0 {
+		w.State = StateEmpty
+		w.EmptyText = viewCtx.T("home.widget.pipeline.empty")
+		return w
+	}
+
+	w.State = StateFull
+	w.Pipeline = &PipelineData{
+		PeriodText: periodText,
+		Stages: []CountRow{
+			{Key: "not-started", Label: viewCtx.T("home.widget.approval.not_started"), Value: formatCount(counts.GetNotStarted())},
+			{Key: "in-progress", Label: viewCtx.T("home.widget.approval.in_progress"), Value: formatCount(counts.GetInProgress())},
+			{Key: "for-review", Label: viewCtx.T("home.widget.approval.for_review"), Value: formatCount(counts.GetForReview())},
+			{Key: "verified", Label: viewCtx.T("home.widget.approval.verified"), Value: formatCount(counts.GetVerified())},
+			{Key: "published", Label: viewCtx.T("home.widget.approval.published"), Value: formatCount(counts.GetPublished())},
+		},
+		ReturnedLabel: viewCtx.T("home.widget.pipeline.returned_queue"),
+		ReturnedValue: formatCount(counts.GetReturned()),
+	}
+	return w
+}
+
+// buildPerformanceWidget (Performance) ranks every category's completion rate
+// at the common period (M3) against the app-supplied target (H1). Worst-first,
+// mirroring the attention ranking.
+func buildPerformanceWidget(viewCtx *view.ViewContext, resp *ocpb.GetOutcomeCompletionSummaryResponse, targetBP int32) WidgetData {
+	w := WidgetData{
+		Ref:      string(home.WidgetPerformanceTable),
+		Title:    viewCtx.T("home.widget.performance.title"),
+		Subtitle: viewCtx.T("home.widget.performance.subtitle"),
+	}
+
+	var rows []PerformanceRow
+	periodText := ""
+	if resp != nil {
+		commonOrder, haveCommon := pickCommonPeriodOrder(resp)
+		if haveCommon {
+			periodText = fmt.Sprintf("%s %d", viewCtx.T("home.period.label"), commonOrder)
+		}
+		for _, r := range resp.GetCategoryRows() {
+			var slice *ocpb.OutcomeCompletionPeriodSlice
+			if haveCommon {
+				slice = sliceForOrder(r, commonOrder)
+				if slice == nil {
+					continue
+				}
+			}
+			if !haveCommon {
+				slice = pickPeriodSlice(r)
+			}
+			if slice == nil || slice.GetExpectedCells() == 0 {
+				continue
+			}
+			bp := int32(slice.GetRecordedCells() * 10000 / slice.GetExpectedCells())
+			rows = append(rows, PerformanceRow{
+				CategoryID:  r.GetCategoryId(),
+				Name:        r.GetCategoryName(),
+				Ratio:       formatCount(slice.GetRecordedCells()) + " / " + formatCount(slice.GetExpectedCells()),
+				RatePct:     formatRate(slice.GetRecordedCells(), slice.GetExpectedCells()),
+				BelowTarget: targetBP > 0 && bp < targetBP,
+				rateBP:      bp,
+			})
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].rateBP < rows[j].rateBP })
+
+	if len(rows) == 0 {
+		w.State = StateEmpty
+		w.EmptyText = viewCtx.T("home.widget.performance.empty")
+		return w
+	}
+
+	w.State = StateFull
+	w.Performance = &PerformanceData{
+		PeriodText:    periodText,
+		TargetLabel:   viewCtx.T("home.widget.performance.target"),
+		TargetPct:     formatTargetBP(targetBP),
+		CategoryLabel: viewCtx.T("home.widget.performance.category"),
+		RatioLabel:    viewCtx.T("home.widget.performance.ratio"),
+		RateLabel:     viewCtx.T("home.widget.performance.rate"),
+		Rows:          rows,
+	}
+	return w
+}
+
+// formatTargetBP renders an app-supplied target (basis points) as a percent
+// string; zero (no declared target) renders "" so the template omits the line.
+func formatTargetBP(bp int32) string {
+	if bp <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%.1f%%", float64(bp)/100)
 }
 
 // buildQuickLinksWidget filters the declared links by the session permission

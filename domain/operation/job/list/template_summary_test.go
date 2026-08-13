@@ -7,6 +7,7 @@ import (
 
 	"github.com/erniealice/espyna-golang/shared/tableparams"
 	job "github.com/erniealice/fayna-golang/domain/operation/job"
+	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
@@ -26,14 +27,14 @@ func TestDeliverySummaryPropagatesQueryError(t *testing.T) {
 
 	t.Run("flat path", func(t *testing.T) {
 		t.Parallel()
-		if _, _, err := buildDeliverySummaryTable(context.Background(), deps, "active", summaryParams(), "", false); !errors.Is(err, queryErr) {
+		if _, _, err := buildDeliverySummaryTable(context.Background(), deps, "active", summaryParams(), "", false, nil); !errors.Is(err, queryErr) {
 			t.Fatalf("buildDeliverySummaryTable() err = %v, want %v", err, queryErr)
 		}
 	})
 
 	t.Run("tabbed path", func(t *testing.T) {
 		t.Parallel()
-		if _, _, err := buildDeliverySummaryTable(context.Background(), deps, "active", summaryParams(), "", true); !errors.Is(err, queryErr) {
+		if _, _, err := buildDeliverySummaryTable(context.Background(), deps, "active", summaryParams(), "", true, nil); !errors.Is(err, queryErr) {
 			t.Fatalf("buildDeliverySummaryTableTabbed() err = %v, want %v", err, queryErr)
 		}
 	})
@@ -79,7 +80,7 @@ func TestBuildDeliverySummaryTable_mapsTemplateSummaryRows(t *testing.T) {
 		},
 	}
 
-	table, _, err := buildDeliverySummaryTable(context.Background(), deps, "active", summaryParams(), "", false)
+	table, _, err := buildDeliverySummaryTable(context.Background(), deps, "active", summaryParams(), "", false, nil)
 	if err != nil {
 		t.Fatalf("buildDeliverySummaryTable() err = %v", err)
 	}
@@ -127,7 +128,7 @@ func TestBuildDeliverySummaryTable_forwardsServerPageContract(t *testing.T) {
 		},
 	}
 
-	table, counts, err := buildDeliverySummaryTable(context.Background(), deps, "completed", params, "cat/a b", true)
+	table, counts, err := buildDeliverySummaryTable(context.Background(), deps, "completed", params, "cat/a b", true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,4 +166,105 @@ func TestBuildDeliverySummaryTable_forwardsServerPageContract(t *testing.T) {
 	if got, want := sp.PaginationURL, "/action/job/table/completed?jc=cat%2Fa+b"; got != want {
 		t.Fatalf("pagination URL = %q, want %q (table-only endpoint, not full-page ListURL)", got, want)
 	}
+}
+
+func TestTemplateSummaryDownloadAction_usesGroupDrawerAndExactContract(t *testing.T) {
+	t.Parallel()
+
+	deps := drawerSummaryDeps()
+	deps.MatrixDownloadDrawerURL = "/action/outcome-matrix/download/{id}"
+	deps.MatrixGroupDownloadDrawerURL = "/action/outcome-matrix/download/{id}/subscription-group/{group_id}"
+	deps.MatrixDownloadDrawerTitle = "Export outcomes"
+	deps.Options.RowLink.ScopeByField = job.RowLinkEntitySubscriptionGroup
+
+	table := buildDrawerSummaryTable(t, deps, types.NewUserPermissions([]string{"task_outcome:read"}))
+	if got, want := len(table.Rows[0].Actions), 2; got != want {
+		t.Fatalf("action count = %d, want %d", got, want)
+	}
+	action := table.Rows[0].Actions[1]
+	if action.Type != "download" || action.Action != "outcome-matrix-download" {
+		t.Fatalf("download action identity = %#v", action)
+	}
+	if action.HxGet != "/action/outcome-matrix/download/tmpl-a/subscription-group/grp-a" {
+		t.Fatalf("HxGet = %q", action.HxGet)
+	}
+	if action.HxTarget != "#sheetContent" || action.HxSwap != "innerHTML" {
+		t.Fatalf("HTMX contract = %#v", action)
+	}
+	if action.DrawerTitle != "Export outcomes" || action.Label != "Export outcomes" {
+		t.Fatalf("drawer labels = %#v", action)
+	}
+	if action.TestID != "job-outcome-download-tmpl-a-grp-a" {
+		t.Fatalf("TestID = %q", action.TestID)
+	}
+	if action.Disabled {
+		t.Fatal("permitted download action is disabled")
+	}
+}
+
+func TestTemplateSummaryDownloadAction_fallsBackAndFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("template route and common download label", func(t *testing.T) {
+		deps := drawerSummaryDeps()
+		deps.MatrixDownloadDrawerURL = "/action/outcome-matrix/download/{id}"
+		deps.CommonLabels.Actions.Download = "Download"
+		deps.CommonLabels.Errors.PermissionDenied = "Permission denied"
+
+		action := buildDrawerSummaryTable(t, deps, types.NewUserPermissions([]string{"task_outcome:read"})).Rows[0].Actions[1]
+		if action.HxGet != "/action/outcome-matrix/download/tmpl-a" {
+			t.Fatalf("fallback HxGet = %q", action.HxGet)
+		}
+		if action.Label != "Download" || action.DrawerTitle != "Download" {
+			t.Fatalf("fallback labels = %#v", action)
+		}
+		if action.TestID != "job-outcome-download-tmpl-a-grp-a" {
+			t.Fatalf("fallback TestID = %q", action.TestID)
+		}
+	})
+
+	t.Run("nil permissions and missing permission disable", func(t *testing.T) {
+		deps := drawerSummaryDeps()
+		deps.MatrixDownloadDrawerURL = "/action/outcome-matrix/download/{id}"
+		deps.CommonLabels.Errors.PermissionDenied = "Permission denied"
+		for _, perms := range []*types.UserPermissions{nil, types.NewUserPermissions([]string{"job:list"})} {
+			action := buildDrawerSummaryTable(t, deps, perms).Rows[0].Actions[1]
+			if !action.Disabled || action.DisabledTooltip != "Permission denied" {
+				t.Fatalf("disabled action = %#v", action)
+			}
+		}
+	})
+
+	t.Run("no drawer route adds no action", func(t *testing.T) {
+		deps := drawerSummaryDeps()
+		if got := len(buildDrawerSummaryTable(t, deps, types.NewUserPermissions([]string{"task_outcome:read"})).Rows[0].Actions); got != 1 {
+			t.Fatalf("action count = %d, want view action only", got)
+		}
+	})
+}
+
+func drawerSummaryDeps() *ListViewDeps {
+	return &ListViewDeps{
+		Labels:       job.DefaultLabels(),
+		CommonLabels: pyeza.CommonLabels{},
+		ListJobTemplateSummaries: func(context.Context, *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error) {
+			return &summarypb.ListJobTemplateSummariesResponse{
+				Summaries: []*summarypb.JobTemplateSummary{{
+					JobTemplateId:         "tmpl-a",
+					SubscriptionGroupId:   "grp-a",
+					JobTemplateName:       "Math",
+					SubscriptionGroupName: "Grade 9",
+				}},
+			}, nil
+		},
+	}
+}
+
+func buildDrawerSummaryTable(t *testing.T, deps *ListViewDeps, perms *types.UserPermissions) *types.TableConfig {
+	t.Helper()
+	table, _, err := buildDeliverySummaryTable(context.Background(), deps, "active", summaryParams(), "", false, perms)
+	if err != nil {
+		t.Fatalf("buildDeliverySummaryTable() err = %v", err)
+	}
+	return table
 }

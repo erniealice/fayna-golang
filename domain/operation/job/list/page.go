@@ -55,6 +55,11 @@ type ListViewDeps struct {
 	// ("/outcome-matrix/{id}/subscription-group/{group_id}"). Preferred whenever
 	// the row carries a subscription_group_id; falls back to MatrixDetailURL.
 	MatrixGroupDetailURL string
+	// Outcome-matrix download drawer routes. The group route is preferred when
+	// row-link scoping is configured and the summary row carries a group id.
+	MatrixDownloadDrawerURL      string
+	MatrixGroupDownloadDrawerURL string
+	MatrixDownloadDrawerTitle    string
 
 	// Options — app-configured presentation. When Options.Tab.Enabled() is true
 	// the list renders a job_category tabstrip above the table (the "/classes"
@@ -171,7 +176,7 @@ func NewTableView(deps *ListViewDeps) view.View {
 			if parseErr != nil {
 				return view.Error(parseErr)
 			}
-			tableConfig, _, err = buildDeliverySummaryTable(ctx, deps, status, p, selected, deps.Options.Tab.Enabled())
+			tableConfig, _, err = buildDeliverySummaryTable(ctx, deps, status, p, selected, deps.Options.Tab.Enabled(), perms)
 		} else if deps.Options.Tab.Enabled() {
 			tableConfig, _, err = buildJobTableTabbed(ctx, deps, status, selected, perms)
 		} else {
@@ -197,7 +202,7 @@ func renderFlat(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewConte
 		if parseErr != nil {
 			return view.Error(parseErr)
 		}
-		tableConfig, _, err = buildDeliverySummaryTable(ctx, deps, status, p, "", false)
+		tableConfig, _, err = buildDeliverySummaryTable(ctx, deps, status, p, "", false, perms)
 	} else {
 		tableConfig, err = buildJobTable(ctx, deps, status, perms)
 	}
@@ -249,7 +254,7 @@ func renderTabbed(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCon
 		if parseErr != nil {
 			return view.Error(parseErr)
 		}
-		tableConfig, counts, err = buildDeliverySummaryTable(ctx, deps, status, p, selected, true)
+		tableConfig, counts, err = buildDeliverySummaryTable(ctx, deps, status, p, selected, true, perms)
 	} else {
 		tableConfig, counts, err = buildJobTableTabbed(ctx, deps, status, selected, perms)
 	}

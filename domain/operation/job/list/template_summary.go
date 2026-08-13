@@ -71,18 +71,18 @@ type templateSummaryRow struct {
 // buildDeliverySummaryTable is the server-page education path. The service owns
 // selected-category filtering, fallback selection, counts, ordering, and paging;
 // the view only maps its response into Pyeza's table contract.
-func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status string, p tableparams.TableQueryParams, selected string, includeTemplateFallback bool) (*types.TableConfig, map[string]int, error) {
+func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status string, p tableparams.TableQueryParams, selected string, includeTemplateFallback bool, perms *types.UserPermissions) (*types.TableConfig, map[string]int, error) {
 	p = boundTemplateSummaryParams(p)
 	resp, err := listTemplateSummaries(ctx, deps, status, p, selected, includeTemplateFallback)
 	if err != nil {
 		return nil, nil, err
 	}
-	return templateSummaryTableConfig(deps, responseTemplateSummaryRows(resp), p, status, selected, resp), responseCategoryCounts(resp), nil
+	return templateSummaryTableConfig(deps, responseTemplateSummaryRows(resp), p, status, selected, resp, perms), responseCategoryCounts(resp), nil
 }
 
 // templateSummaryTableConfig builds the template-grain TableConfig from an
 // already-fetched (and possibly category-filtered) summary-row slice.
-func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow, p tableparams.TableQueryParams, status, selected string, resp *summarypb.ListJobTemplateSummariesResponse) *types.TableConfig {
+func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow, p tableparams.TableQueryParams, status, selected string, resp *summarypb.ListJobTemplateSummariesResponse, perms *types.UserPermissions) *types.TableConfig {
 	l := deps.Labels
 	columns := templateSummaryColumns(l)
 	tableRows := make([]types.TableRow, 0, len(rows))
@@ -107,6 +107,28 @@ func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow, p
 		if r.hideItemCount {
 			itemValue = ""
 		}
+		actions := []types.TableAction{
+			{Type: "view", Label: l.Actions.View, Action: "view", Href: matrixURL},
+		}
+		if downloadURL := templateSummaryDownloadURL(deps, r); downloadURL != "" {
+			downloadLabel := deps.MatrixDownloadDrawerTitle
+			if downloadLabel == "" {
+				downloadLabel = deps.CommonLabels.Actions.Download
+			}
+			actions = append(actions, types.TableAction{
+				Type:            "download",
+				Label:           downloadLabel,
+				Action:          "outcome-matrix-download",
+				TestID:          templateSummaryDownloadTestID(r),
+				HxGet:           downloadURL,
+				HxTarget:        "#sheetContent",
+				HxSwap:          "innerHTML",
+				DrawerTitle:     downloadLabel,
+				Disabled:        !perms.Can("task_outcome", "read"),
+				DisabledTooltip: deps.CommonLabels.Errors.PermissionDenied,
+			})
+		}
+
 		tableRows = append(tableRows, types.TableRow{
 			ID:   r.TemplateID,
 			Href: matrixURL,
@@ -123,9 +145,7 @@ func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow, p
 				"deliverer": r.DelivererName,
 				"schedule":  r.ScheduleName,
 			},
-			Actions: []types.TableAction{
-				{Type: "view", Label: l.Actions.View, Action: "view", Href: matrixURL},
-			},
+			Actions: actions,
 		})
 	}
 	types.ApplyColumnStyles(columns, tableRows)
@@ -176,6 +196,27 @@ func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow, p
 	}
 	types.ApplyTableSettings(tableConfig)
 	return tableConfig
+}
+
+// templateSummaryDownloadURL resolves the row's outcome-matrix download drawer.
+// Group-scoped rows use the group route only when the list is configured to link
+// rows at that grain; otherwise the template route is the safe fallback.
+func templateSummaryDownloadURL(deps *ListViewDeps, row templateSummaryRow) string {
+	if deps.Options.RowLinkScopedByGroup() && deps.MatrixGroupDownloadDrawerURL != "" && row.GroupID != "" {
+		return route.ResolveURL(deps.MatrixGroupDownloadDrawerURL, "id", row.TemplateID, "group_id", row.GroupID)
+	}
+	if deps.MatrixDownloadDrawerURL == "" {
+		return ""
+	}
+	return route.ResolveURL(deps.MatrixDownloadDrawerURL, "id", row.TemplateID)
+}
+
+func templateSummaryDownloadTestID(row templateSummaryRow) string {
+	testID := "job-outcome-download-" + short(row.TemplateID)
+	if row.GroupID != "" {
+		testID += "-" + short(row.GroupID)
+	}
+	return testID
 }
 
 // templateSummaryColumns declares the template-grain columns. Go defaults

@@ -1,0 +1,41 @@
+{{/* Report-only section outcome export drawer. Loaded into #sheetContent by
+     HTMX; the actual CSV/PDF request is a native GET so the browser receives
+     the attachment response. */}}
+{{define "outcome-summary-section-download-drawer-form"}}
+<form method="get" action="{{.FormAction}}" hx-boost="false" data-testid="rc-section-download-drawer">
+    <div class="sheet-body">
+        <div class="form-section">
+            <div class="form-row single">
+                <div class="form-group">
+                    <label class="form-label" for="rc-section-download-category">{{.Labels.CategoryLabel}}</label>
+                    <select id="rc-section-download-category" data-testid="rc-section-download-category" name="job_category_id" class="form-select"
+                            hx-get="{{.RefreshAction}}" hx-trigger="change" hx-target="#sheetContent"
+                            hx-swap="innerHTML" hx-push-url="false" hx-include="this">
+                        {{range .Categories}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row single">
+                <div class="form-group">
+                    <label class="form-label" for="rc-section-download-period">{{.Labels.PeriodLabel}}</label>
+                    <select id="rc-section-download-period" data-testid="rc-section-download-period" name="period" class="form-select">
+                        {{range .Periods}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row single">
+                <div class="form-group">
+                    <label class="form-label" for="rc-section-download-format">{{.Labels.FormatLabel}}</label>
+                    <select id="rc-section-download-format" data-testid="rc-section-download-format" name="format" class="form-select">
+                        {{range .Formats}}<option value="{{.Value}}"{{if .Disabled}} disabled aria-disabled="true"{{end}}>{{.Label}}</option>{{end}}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="sheet-footer">
+        <button type="button" class="btn btn-secondary" data-lf-action="sheet-close">{{.CommonLabels.Buttons.Cancel}}</button>
+        <button type="submit" class="btn btn-primary" data-testid="rc-section-download-submit">{{.Labels.DownloadAction}}</button>
+    </div>
+</form>
+{{end}}

@@ -34,7 +34,7 @@ import (
 // unknown format is 400, and the auth/IDOR gates fire identically for both
 // formats (a foreign section 404s before either closure is called).
 
-const okPermCode = "job_outcome_summary:list"
+var okPermCodes = []string{"job_outcome_summary:list", "job_outcome_summary:read"}
 
 func sp(s string) *string { return &s }
 
@@ -95,7 +95,7 @@ func reqWithPerms(t *testing.T, target, section, client string, granted bool) *h
 	r.SetPathValue("client_id", client)
 	var perms *types.UserPermissions
 	if granted {
-		perms = types.NewUserPermissions([]string{okPermCode})
+		perms = types.NewUserPermissions(okPermCodes)
 	} else {
 		perms = types.NewEmptyUserPermissions()
 	}

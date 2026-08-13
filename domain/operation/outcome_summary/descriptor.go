@@ -5,7 +5,7 @@ import "github.com/erniealice/espyna-golang/consumer/compose"
 func Describe() compose.Unit {
 	r := DefaultRoutes()
 	l := DefaultLabels()
-	return compose.Unit{
+	u := compose.Unit{
 		Key:       "operation.outcome_summary",
 		Routes:    &r,
 		RouteJSON: compose.JSONBinding{File: "route.json", Key: "outcome_summary"},
@@ -36,5 +36,27 @@ func Describe() compose.Unit {
 				{Key: "outcome-summary-templates", Route: "outcome_summary.template_settings", Label: "Report Templates", Icon: "icon-file-text", Permission: "job_outcome_summary_document_template:list", LabelKey: "template_settings_label", IconKey: "template_settings_icon"},
 			},
 		},
+	}
+	// Section Template routes are deliberately app-only: their generic defaults
+	// are empty. A consumer that enables the subscription-group presentation
+	// appends this contribution through OutcomeSummaryUnit, after which compose
+	// overlays the app's route.json and validates the reference fail-closed.
+	if r.SectionTemplateSettingsURL != "" {
+		u.Nav.Items = append(u.Nav.Items, SectionTemplateSettingsNavItem())
+	}
+	return u
+}
+
+// SectionTemplateSettingsNavItem is the canonical, permission-reflected nav
+// contribution for the app-enabled subscription-group template surface.
+func SectionTemplateSettingsNavItem() compose.NavItem {
+	return compose.NavItem{
+		Key:        "section-templates",
+		Route:      "outcome_summary.section_template_settings",
+		Label:      "Group Templates",
+		Icon:       "icon-file-text",
+		Permission: "subscription_group_document_template:list",
+		LabelKey:   "section_template_settings_label",
+		IconKey:    "section_template_settings_icon",
 	}
 }

@@ -77,21 +77,31 @@ type Routes struct {
 	// Job/phase summary pages highlight "jobs" while the list page highlights "report-cards".
 	ListActiveSubNav string `json:"list_active_sub_nav"`
 
-	ListURL           string `json:"list_url"`
-	ListScopeURL      string `json:"list_scope_url"`
-	JobSummaryURL     string `json:"job_summary_url"`
-	SectionURL        string `json:"section_url"`
-	SectionExportURL  string `json:"section_export_url"`
-	ClientCardURL     string `json:"client_url"`
-	ClientDocumentURL string `json:"client_document_url"`
-	GroupDetailURL    string `json:"group_detail_url"`
-	PhaseSummaryURL   string `json:"phase_summary_url"`
+	ListURL          string `json:"list_url"`
+	ListScopeURL     string `json:"list_scope_url"`
+	JobSummaryURL    string `json:"job_summary_url"`
+	SectionURL       string `json:"section_url"`
+	SectionExportURL string `json:"section_export_url"`
+	// Education/app-only Section export drawer. The generic default is empty so
+	// consumers that do not opt into subscription-group lists mount nothing.
+	SectionDownloadDrawerURL string `json:"section_download_drawer_url"`
+	ClientCardURL            string `json:"client_url"`
+	ClientDocumentURL        string `json:"client_document_url"`
+	GroupDetailURL           string `json:"group_detail_url"`
+	PhaseSummaryURL          string `json:"phase_summary_url"`
 
 	// Report-card template settings (TB3 management surface).
 	TemplateSettingsURL string `json:"template_settings_url"`
 	TemplateUploadURL   string `json:"template_upload_url"`
 	TemplatePublishURL  string `json:"template_publish_url"`
 	TemplateDeleteURL   string `json:"template_delete_url"`
+
+	// Section Template management is a distinct document family from the
+	// existing report-card template settings above. Generic defaults stay empty.
+	SectionTemplateSettingsURL string `json:"section_template_settings_url"`
+	SectionTemplateUploadURL   string `json:"section_template_upload_url"`
+	SectionTemplatePublishURL  string `json:"section_template_publish_url"`
+	SectionTemplateDeleteURL   string `json:"section_template_delete_url"`
 }
 
 // DefaultRoutes returns a Routes populated from
@@ -122,7 +132,7 @@ func DefaultRoutes() Routes {
 // RouteMap returns a map of dot-notation keys to route paths for all
 // outcome summary routes.
 func (r Routes) RouteMap() map[string]string {
-	return map[string]string{
+	routes := map[string]string{
 		"outcome_summary.list":            r.ListURL,
 		"outcome_summary.list_scope":      r.ListScopeURL,
 		"outcome_summary.job":             r.JobSummaryURL,
@@ -138,4 +148,23 @@ func (r Routes) RouteMap() map[string]string {
 		"outcome_summary.template_publish":  r.TemplatePublishURL,
 		"outcome_summary.template_delete":   r.TemplateDeleteURL,
 	}
+	// App-only routes are omitted rather than exported with an empty target, so
+	// zero-option consumers preserve their exact route map and cannot advertise
+	// an unmounted surface.
+	if r.SectionDownloadDrawerURL != "" {
+		routes["outcome_summary.section_download_drawer"] = r.SectionDownloadDrawerURL
+	}
+	if r.SectionTemplateSettingsURL != "" {
+		routes["outcome_summary.section_template_settings"] = r.SectionTemplateSettingsURL
+	}
+	if r.SectionTemplateUploadURL != "" {
+		routes["outcome_summary.section_template_upload"] = r.SectionTemplateUploadURL
+	}
+	if r.SectionTemplatePublishURL != "" {
+		routes["outcome_summary.section_template_publish"] = r.SectionTemplatePublishURL
+	}
+	if r.SectionTemplateDeleteURL != "" {
+		routes["outcome_summary.section_template_delete"] = r.SectionTemplateDeleteURL
+	}
+	return routes
 }

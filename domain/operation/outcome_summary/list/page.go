@@ -10,6 +10,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
 	"github.com/erniealice/espyna-golang/consumer"
+	espynaports "github.com/erniealice/espyna-golang/ports"
 	entityid "github.com/erniealice/espyna-golang/registry/entityid"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
@@ -75,12 +76,20 @@ type ListViewDeps struct {
 	// is true the view renders the tabbed section landing; otherwise it renders
 	// the flat job_outcome_summary table (today's behavior, unchanged — the
 	// backward-compat contract for service-admin's zero-valued options).
-	Options outcome_summary.Options
+	Options              outcome_summary.Options
+	ResolvePrincipalKind func(context.Context) int32
 
 	// Landing deps (view-1 tabbed section list). All optional/nil-safe.
 	ListPriceSchedules       func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
 	ListSubscriptionGroups   func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
+	// ListSubscriptionGroupOutcomeLanding is the least-privilege landing read
+	// for report readers that may export a section but may not open the legacy
+	// section/client/document detail surfaces. The Espyna use case independently
+	// enforces landing-list + explicit-export capabilities and the trusted
+	// OWNER/STAFF principal boundary; its adapter returns only scoped schedule,
+	// group, and aggregate-count metadata.
+	ListSubscriptionGroupOutcomeLanding func(ctx context.Context, req *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
 
 	// ListJobListTabSupport (R9 W-A2) — the ONE no-argument single-statement
 	// UNION read (block/usecases.go JobListTabSupportUseCases) supplying the
@@ -134,7 +143,7 @@ func NewView(deps *ListViewDeps) view.View {
 		}
 
 		// Backward-compat (phases.md P3): the tabbed section landing mounts ONLY
-		// when the app configures List.Entity = "subscription_group". With
+		// when the app configures List.Entity = ListEntitySubscriptionGroup. With
 		// zero-valued options (service-admin) this renders EXACTLY today's flat
 		// job_outcome_summary table. Any other List.Entity value is logged and
 		// falls through to the flat list (Q-LIST-5 fail-safe).
@@ -142,7 +151,7 @@ func NewView(deps *ListViewDeps) view.View {
 			log.Printf("outcome summary list: unsupported List.Entity %q — rendering the flat list", entity)
 		}
 		if deps.Options.List.SubscriptionGroups() {
-			return renderLanding(ctx, deps, viewCtx)
+			return renderLanding(ctx, deps, viewCtx, perms)
 		}
 		return renderFlat(ctx, deps, viewCtx)
 	})
@@ -207,7 +216,7 @@ func renderFlat(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewConte
 // action into the section grid (view-2). All reads are workspace-bound at the
 // espyna adapter (dbOps.List is workspace-aware); the landing composes no raw
 // client_id/workspace filter.
-func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewContext) view.ViewResult {
+func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewContext, perms *types.UserPermissions) view.ViewResult {
 	l := deps.Labels
 
 	// Activeness scope: {scope} ∈ {current, past} restricts the tabbed landing to
@@ -215,6 +224,17 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	// past = inactive) — the generic split behind /list/current vs /list/past. An
 	// empty/unknown scope leaves the landing unfiltered (the ListURL behavior).
 	scope := normalizeScope(viewCtx.Request.PathValue("scope"))
+
+	// Export-only report readers deliberately do not receive the broad generic
+	// price_schedule/subscription_group/workspace_user/SGWU list permissions
+	// used by the preserved legacy landing. Their landing is supplied by one
+	// report-scoped aggregate whose application and adapter layers independently
+	// bind the active principal, workspace, servicing group, and reachable jobs.
+	// Never fall back to the generic reads when this trusted branch is selected:
+	// a missing/erroring aggregate must fail closed rather than widen metadata.
+	if outcome_summary.CanExplicitExport(perms, ctx, deps.ResolvePrincipalKind) && !outcome_summary.CanLegacyDetail(perms) {
+		return renderExportReaderLanding(ctx, deps, viewCtx, perms, scope)
+	}
 
 	// 1. price_schedules (ALL rows, incl. inactive — Q-TAB-1), ordered per the
 	//    Tab options (sort_order NULLS LAST, name ASC — Q-SORT-3). The generic
@@ -307,7 +327,8 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	tabs := buildTabs(schedules, groups, selected, l, baseHref)
 
 	// 6. section rows for the selected tab, name ASC.
-	rows := buildSectionRows(groups, selected, subjectCount, studentCount, l, deps.Routes, cats, subjectsByCat, statusByCat, showUncategorized)
+	sectionExportAllowed := sectionExportActionAllowed(ctx, deps.Options, perms, deps.ResolvePrincipalKind)
+	rows := buildSectionRows(groups, selected, subjectCount, studentCount, l, deps.Routes, deps.Options, sectionExportAllowed, outcome_summary.CanLegacyDetail(perms), cats, subjectsByCat, statusByCat, showUncategorized)
 
 	tableConfig := &types.TableConfig{
 		ID:                   "report-cards-sections",
@@ -358,6 +379,155 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	}
 
 	return view.OK("outcome-summary-list", pageData)
+}
+
+// renderExportReaderLanding renders the tabbed section landing from the narrow
+// report-scoped aggregate. It intentionally uses the static Section/Members/
+// Templates columns: category names and per-category status cells belong to the
+// separately authorized drawer composite, while the landing needs only enough
+// metadata to discover an allowed section and open that drawer.
+func renderExportReaderLanding(
+	ctx context.Context,
+	deps *ListViewDeps,
+	viewCtx *view.ViewContext,
+	perms *types.UserPermissions,
+	scope string,
+) view.ViewResult {
+	if deps.ListSubscriptionGroupOutcomeLanding == nil {
+		return renderEmptyScopedLanding(deps, viewCtx, scope)
+	}
+
+	req := &espynaports.SubscriptionGroupOutcomeLandingRequest{}
+	switch scope {
+	case "current":
+		active := true
+		req.PriceScheduleActive = &active
+	case "past":
+		active := false
+		req.PriceScheduleActive = &active
+	}
+	resp, err := deps.ListSubscriptionGroupOutcomeLanding(ctx, req)
+	if err != nil {
+		log.Printf("report cards landing: scoped export-reader aggregate: %v", err)
+		return renderEmptyScopedLanding(deps, viewCtx, scope)
+	}
+
+	schedules, groups, subjectCount, studentCount := exportReaderLandingProjection(resp)
+	sortSchedules(schedules, deps.Options.Tab)
+
+	baseHref := deps.Routes.ListURL
+	if scope != "" && deps.Routes.ListScopeURL != "" {
+		baseHref = route.ResolveURL(deps.Routes.ListScopeURL, "scope", scope)
+	}
+	selected := strings.TrimSpace(viewCtx.Request.URL.Query().Get("ps"))
+	if selected == "" || !scheduleExists(schedules, selected) {
+		selected = defaultSchedule(schedules)
+	}
+
+	tabs := buildTabs(schedules, groups, selected, deps.Labels, baseHref)
+	rows := buildSectionRows(
+		groups,
+		selected,
+		subjectCount,
+		studentCount,
+		deps.Labels,
+		deps.Routes,
+		deps.Options,
+		sectionExportActionAllowed(ctx, deps.Options, perms, deps.ResolvePrincipalKind),
+		false,
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	tableConfig := &types.TableConfig{
+		ID:                   "report-cards-sections",
+		Columns:              landingColumns(deps.Labels),
+		Rows:                 rows,
+		ShowSearch:           true,
+		ShowSort:             true,
+		ShowColumns:          true,
+		ShowDensity:          true,
+		ShowExport:           true,
+		ShowEntries:          true,
+		ShowActions:          true,
+		DefaultSortColumn:    "section",
+		DefaultSortDirection: "asc",
+		Labels:               deps.TableLabels,
+		Caption:              deps.Labels.Landing.Title,
+		EmptyState: types.TableEmptyState{
+			Title:   deps.Labels.Empty.Title,
+			Message: deps.Labels.Empty.Message,
+		},
+	}
+	types.ApplyColumnStyles(tableConfig.Columns, tableConfig.Rows)
+
+	return view.OK("outcome-summary-list", &PageData{
+		PageData: types.PageData{
+			CacheVersion:   viewCtx.CacheVersion,
+			Title:          deps.Labels.Landing.Title,
+			CurrentPath:    viewCtx.CurrentPath,
+			ActiveNav:      deps.Routes.ActiveNav,
+			ActiveSubNav:   scopeActiveSubNav(scope),
+			HeaderTitle:    deps.Labels.Landing.Title,
+			HeaderSubtitle: deps.Labels.Landing.Subtitle,
+			HeaderIcon:     "icon-award",
+			CommonLabels:   deps.CommonLabels,
+		},
+		ContentTemplate: "outcome-summary-list-content",
+		Table:           tableConfig,
+		Landing:         true,
+		TabItems:        tabs,
+		ActiveTab:       tabKey(selected),
+		TabsAria:        deps.Labels.Landing.TabsAriaLabel,
+	})
+}
+
+func exportReaderLandingProjection(resp *espynaports.SubscriptionGroupOutcomeLandingResponse) (
+	schedules []*priceschedulepb.PriceSchedule,
+	groups []*subscriptiongrouppb.SubscriptionGroup,
+	subjectCount map[string]int,
+	studentCount map[string]int,
+) {
+	subjectCount = map[string]int{}
+	studentCount = map[string]int{}
+	if resp == nil {
+		return
+	}
+	seenSchedules := map[string]bool{}
+	seenGroups := map[string]bool{}
+	for _, row := range resp.Rows {
+		if row == nil || row.PriceScheduleId == "" || row.SubscriptionGroupId == "" {
+			continue
+		}
+		if !seenSchedules[row.PriceScheduleId] {
+			seenSchedules[row.PriceScheduleId] = true
+			schedule := &priceschedulepb.PriceSchedule{
+				Id:     row.PriceScheduleId,
+				Name:   row.PriceScheduleName,
+				Active: row.PriceScheduleActive,
+			}
+			if row.PriceScheduleSortOrder != nil {
+				order := *row.PriceScheduleSortOrder
+				schedule.SortOrder = &order
+			}
+			schedules = append(schedules, schedule)
+		}
+		if seenGroups[row.SubscriptionGroupId] {
+			continue
+		}
+		seenGroups[row.SubscriptionGroupId] = true
+		priceScheduleID := row.PriceScheduleId
+		groups = append(groups, &subscriptiongrouppb.SubscriptionGroup{
+			Id:              row.SubscriptionGroupId,
+			Name:            row.SubscriptionGroupName,
+			Active:          row.SubscriptionGroupActive,
+			PriceScheduleId: &priceScheduleID,
+		})
+		subjectCount[row.SubscriptionGroupId] = int(row.JobTemplateCount)
+		studentCount[row.SubscriptionGroupId] = int(row.MemberCount)
+	}
+	return
 }
 
 // renderEmptyScopedLanding renders the landing for a scoped (current|past)
@@ -935,6 +1105,9 @@ func buildSectionRows(
 	subjectCount, studentCount map[string]int,
 	l outcome_summary.Labels,
 	routes outcome_summary.Routes,
+	options outcome_summary.Options,
+	sectionExportAllowed bool,
+	legacyDetailAllowed bool,
 	cats []*jobcategorypb.JobCategory,
 	subjectsByCat map[string]map[string]int,
 	statusByCat map[string]map[string]*cellStatusDist,
@@ -971,9 +1144,14 @@ func buildSectionRows(
 		} else {
 			for _, c := range cats {
 				cells = append(cells, types.BuildCompositeCell(types.CompositeCellParams{
-					Count:        subjectsByCat[gid][c.GetId()],
-					Chips:        buildStatusChips(statusByCat[gid][c.GetId()], l),
-					BasePath:     sectionURL,
+					Count: subjectsByCat[gid][c.GetId()],
+					Chips: buildStatusChips(statusByCat[gid][c.GetId()], l),
+					BasePath: func() string {
+						if legacyDetailAllowed {
+							return sectionURL
+						}
+						return ""
+					}(),
 					QueryKey:     "jc",
 					SectionID:    gid,
 					CategoryID:   c.GetId(),
@@ -995,39 +1173,72 @@ func buildSectionRows(
 				}))
 			}
 		}
+		downloadAction := types.TableAction{
+			// Compatibility path for zero-option consumers: retain the current
+			// immediate CSV action and its empty-id neutralizer.
+			Type:   "download",
+			Label:  l.Landing.DownloadAction,
+			Action: "download",
+			URL:    route.ResolveURL(routes.SectionExportURL, "id", gid) + "?id=",
+			TestID: "rc-section-download-" + short(gid),
+		}
+		if options.SectionExportEnabled() && routes.SectionDownloadDrawerURL != "" {
+			title := l.SectionExport.DrawerTitle
+			if title == "" {
+				title = l.Landing.DownloadAction
+			}
+			downloadAction = types.TableAction{
+				Type:        "download",
+				Label:       l.Landing.DownloadAction,
+				Action:      "outcome-summary-download",
+				HxGet:       route.ResolveURL(routes.SectionDownloadDrawerURL, "id", gid),
+				HxTarget:    "#sheetContent",
+				HxSwap:      "innerHTML",
+				DrawerTitle: title,
+				TestID:      "rc-section-download-" + short(gid),
+			}
+			if !sectionExportAllowed {
+				downloadAction.Disabled = true
+				downloadAction.DisabledTooltip = l.Errors.PermissionDenied
+			}
+		}
+
+		actions := []types.TableAction{downloadAction}
+		if legacyDetailAllowed {
+			actions = append([]types.TableAction{{
+				Type:   "view",
+				Label:  l.Landing.ViewAction,
+				Href:   sectionURL,
+				TestID: "rc-view-" + short(gid),
+			}}, actions...)
+		}
 		rows = append(rows, types.TableRow{
 			ID:        gid,
 			DataAttrs: map[string]string{"testid": "rc-section-" + short(gid)},
 			Cells:     cells,
-			Actions: []types.TableAction{
-				{
-					Type:   "view",
-					Label:  l.Landing.ViewAction,
-					Href:   sectionURL,
-					TestID: "rc-view-" + short(gid),
-				},
-				{
-					// R9 W-A2 export-link fix (Q-R9-7 locked; plan §3.4 pt 3):
-					// the row-download JS unconditionally appends "?id=<row id>"
-					// (pyeza table-actions.js) — here the row id is the SECTION's
-					// own id, which matches no client row in the section export
-					// (section/export.go:64-83). Pre-seeding an EMPTY "?id="
-					// makes the JS append "&id=<gid>" instead, and Go's
-					// Query().Get("id") returns the FIRST value ("") — so the
-					// server never attempts the bogus section-id row lookup and
-					// the whole-section CSV is guaranteed regardless of how the
-					// narrowing evolves. Fully dropping the appended param needs
-					// a pyeza table-actions.js delta (frozen this wave).
-					Type:   "download",
-					Label:  l.Landing.DownloadAction,
-					Action: "download",
-					URL:    route.ResolveURL(routes.SectionExportURL, "id", gid) + "?id=",
-					TestID: "rc-download-" + short(gid),
-				},
-			},
+			Actions:   actions,
 		})
 	}
 	return rows
+}
+
+// sectionExportActionAllowed mirrors the conditional authorization boundary in
+// the export handler. The explicit export capability and allowed principal kind
+// are required first. An empty row-band config needs no extra capability, while a configured
+// client-attribute band is actionable only when both trusted enrichment reads
+// are available. Malformed non-empty configuration fails closed.
+func sectionExportActionAllowed(ctx context.Context, options outcome_summary.Options, perms *types.UserPermissions, resolvePrincipalKind func(context.Context) int32) bool {
+	if !outcome_summary.CanExplicitExport(perms, ctx, resolvePrincipalKind) {
+		return false
+	}
+	_, _, configured, err := options.ExportRowBandConfig()
+	if err != nil {
+		return false
+	}
+	if !configured {
+		return true
+	}
+	return perms.Can("attribute", "list") && perms.Can("client_attribute", "list")
 }
 
 func landingColumns(l outcome_summary.Labels) []types.TableColumn {

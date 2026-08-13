@@ -6,9 +6,12 @@ import (
 	"reflect"
 	"testing"
 
+	espynaports "github.com/erniealice/espyna-golang/ports"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	workspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/workspace_user"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
@@ -16,6 +19,7 @@ import (
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
 
@@ -65,7 +69,7 @@ func TestListContentTemplateDispatch(t *testing.T) {
 func TestLandingScopedPastEmptyBandRendersZeroRows(t *testing.T) {
 	var groupsCalled, summariesCalled bool
 	deps := &ListViewDeps{}
-	deps.Options.List.Entity = "subscription_group"
+	deps.Options.List.Entity = outcome_summary.ListEntitySubscriptionGroup
 	deps.ListPriceSchedules = func(_ context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error) {
 		if hasFilters(req.GetFilters().GetFilters()) {
 			// inactive (past) band: empty.
@@ -118,7 +122,7 @@ func TestLandingScopedPastEmptyBandRendersZeroRows(t *testing.T) {
 func TestLandingScopedCurrentEmptyBandRendersZeroRows(t *testing.T) {
 	var groupsCalled, summariesCalled bool
 	deps := &ListViewDeps{}
-	deps.Options.List.Entity = "subscription_group"
+	deps.Options.List.Entity = outcome_summary.ListEntitySubscriptionGroup
 	deps.ListPriceSchedules = func(_ context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error) {
 		if hasFilters(req.GetFilters().GetFilters()) {
 			// inactive (past) band: one closed schedule.
@@ -164,7 +168,7 @@ func TestLandingScopedCurrentEmptyBandRendersZeroRows(t *testing.T) {
 // behavior) — the active AY's section must not leak in.
 func TestLandingScopedPastRendersOnlyInactiveBand(t *testing.T) {
 	deps := &ListViewDeps{}
-	deps.Options.List.Entity = "subscription_group"
+	deps.Options.List.Entity = outcome_summary.ListEntitySubscriptionGroup
 	deps.ListPriceSchedules = func(_ context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error) {
 		if hasFilters(req.GetFilters().GetFilters()) {
 			return &priceschedulepb.ListPriceSchedulesResponse{Data: []*priceschedulepb.PriceSchedule{
@@ -215,7 +219,7 @@ func TestLandingScopedPastRendersOnlyInactiveBand(t *testing.T) {
 // before. This is the backward-compatibility contract.
 func TestLandingUnscopedUnfilteredBackcompat(t *testing.T) {
 	deps := &ListViewDeps{}
-	deps.Options.List.Entity = "subscription_group"
+	deps.Options.List.Entity = outcome_summary.ListEntitySubscriptionGroup
 	deps.ListPriceSchedules = func(_ context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error) {
 		if hasFilters(req.GetFilters().GetFilters()) {
 			return &priceschedulepb.ListPriceSchedulesResponse{}, nil // no inactive schedule
@@ -261,8 +265,10 @@ func TestLandingUnscopedUnfilteredBackcompat(t *testing.T) {
 // closure, and summary rows spread across categories.
 func dynamicDeps() *ListViewDeps {
 	deps := &ListViewDeps{}
-	deps.Options.List.Entity = "subscription_group"
-	deps.Options.List.ColumnsByField = "job_category"
+	deps.ResolvePrincipalKind = func(context.Context) int32 { return outcome_summary.PrincipalKindOperatorOwner }
+	deps.Options.List.Entity = outcome_summary.ListEntitySubscriptionGroup
+	deps.Options.List.ColumnsByField = outcome_summary.ListColumnsJobCategory
+	deps.Options.SectionExport.Enabled = true
 	deps.Routes.SectionURL = "/report-cards/section/{id}"
 	deps.Routes.SectionExportURL = "/report-cards/section/{id}/export"
 	deps.Labels.Landing.CellViewAction = "View {category} report cards for {section}"
@@ -293,6 +299,20 @@ func dynamicDeps() *ListViewDeps {
 			{JobTemplateId: "t3", SubscriptionGroupId: "g-1", JobCount: 28, JobCategoryId: "cat-a"},
 			{JobTemplateId: "t4", SubscriptionGroupId: "g-1", JobCount: 28, JobCategoryId: "cat-b"},
 		}}, nil
+	}
+	deps.ListSubscriptionGroupOutcomeLanding = func(context.Context, *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error) {
+		order := int32(1)
+		return &espynaports.SubscriptionGroupOutcomeLandingResponse{Rows: []*espynaports.SubscriptionGroupOutcomeLandingRow{{
+			PriceScheduleId:         "ps-active",
+			PriceScheduleName:       "AY 2025-26",
+			PriceScheduleActive:     true,
+			PriceScheduleSortOrder:  &order,
+			SubscriptionGroupId:     "g-1",
+			SubscriptionGroupName:   "Grade 10 A",
+			SubscriptionGroupActive: true,
+			MemberCount:             28,
+			JobTemplateCount:        4,
+		}}}, nil
 	}
 	// Corpus arrives UNSORTED and includes an inactive category — the view must
 	// keep ACTIVE only, ordered by sort_order (cat-a=1, cat-b=2, cat-c=3).
@@ -551,6 +571,248 @@ func TestLandingExportLinkNeutralizesRowID(t *testing.T) {
 	}
 }
 
+func TestSectionLanding_DownloadOpensDrawer(t *testing.T) {
+	deps := dynamicDeps()
+	deps.Routes.SectionDownloadDrawerURL = "/action/report-cards/section/{id}/download"
+	deps.Labels.SectionExport.DrawerTitle = "Download Section Grades"
+
+	ctx, vc := landingReq("")
+	pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
+	acts := pd.Table.Rows[0].Actions
+	if len(acts) != 2 {
+		t.Fatalf("actions = %d, want 2 (view + drawer)", len(acts))
+	}
+	dl := acts[1]
+	if dl.Type != "download" || dl.Action != "outcome-summary-download" {
+		t.Fatalf("drawer action contract = type %q/action %q", dl.Type, dl.Action)
+	}
+	if dl.URL != "" || dl.Href != "" {
+		t.Fatalf("drawer action must not expose an immediate download URL: URL=%q Href=%q", dl.URL, dl.Href)
+	}
+	if dl.HxGet != "/action/report-cards/section/g-1/download" || dl.HxTarget != "#sheetContent" || dl.HxSwap != "innerHTML" {
+		t.Fatalf("drawer HTMX contract = %+v", dl)
+	}
+	if dl.DrawerTitle != "Download Section Grades" || dl.TestID != "rc-section-download-g-1" {
+		t.Fatalf("drawer title/testid = %q/%q", dl.DrawerTitle, dl.TestID)
+	}
+}
+
+func TestSectionLanding_ConfiguredRowBandReflectsPermissions(t *testing.T) {
+	tests := []struct {
+		name        string
+		configured  bool
+		permissions []string
+		disabled    bool
+	}{
+		{
+			name:        "empty band needs report permission only",
+			permissions: []string{"job_outcome_summary:list", "job_outcome_summary:read", "subscription_group_outcome_export:read"},
+		},
+		{
+			name:        "configured band with both reads stays enabled",
+			configured:  true,
+			permissions: []string{"job_outcome_summary:list", "job_outcome_summary:read", "subscription_group_outcome_export:read", "attribute:list", "client_attribute:list"},
+		},
+		{
+			name:        "configured band without attribute list is inert",
+			configured:  true,
+			permissions: []string{"job_outcome_summary:list", "job_outcome_summary:read", "subscription_group_outcome_export:read", "client_attribute:list"},
+			disabled:    true,
+		},
+		{
+			name:        "configured band without client attribute list is inert",
+			configured:  true,
+			permissions: []string{"job_outcome_summary:list", "job_outcome_summary:read", "subscription_group_outcome_export:read", "attribute:list"},
+			disabled:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deps := dynamicDeps()
+			deps.Routes.SectionDownloadDrawerURL = "/action/report-cards/section/{id}/download"
+			deps.Labels.SectionExport.DrawerTitle = "Download Section Grades"
+			deps.Labels.Errors.PermissionDenied = "Permission denied"
+			if tt.configured {
+				deps.Options.Row.GroupByField = "client_attributes.gender"
+				deps.Options.SectionExport.GroupByAttributeModule = "entity"
+			}
+
+			ctx, vc := landingReqWithPermissions("", tt.permissions)
+			pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
+			dl := pd.Table.Rows[0].Actions[1]
+			if dl.Disabled != tt.disabled {
+				t.Fatalf("download Disabled = %v, want %v", dl.Disabled, tt.disabled)
+			}
+			if tt.disabled {
+				if dl.DisabledTooltip != "Permission denied" {
+					t.Fatalf("disabled tooltip = %q, want permission label", dl.DisabledTooltip)
+				}
+				if dl.HxGet == "" {
+					t.Fatal("disabled drawer action lost its typed HxGet contract")
+				}
+			} else if dl.DisabledTooltip != "" {
+				t.Fatalf("enabled action tooltip = %q, want empty", dl.DisabledTooltip)
+			}
+		})
+	}
+}
+
+func TestSectionLanding_CapabilitySplitRowActionsAndEyes(t *testing.T) {
+	tests := []struct {
+		name        string
+		kind        int32
+		permissions []string
+		wantView    bool
+		wantEye     bool
+		wantDrawer  bool
+	}{
+		{
+			name:        "staff export only",
+			kind:        outcome_summary.PrincipalKindStaff,
+			permissions: []string{"job_outcome_summary:list", "subscription_group_outcome_export:read"},
+			wantDrawer:  true,
+		},
+		{
+			name:        "operator staff export only",
+			kind:        outcome_summary.PrincipalKindOperatorStaff,
+			permissions: []string{"job_outcome_summary:list", "subscription_group_outcome_export:read"},
+			wantDrawer:  true,
+		},
+		{
+			name:        "owner legacy detail",
+			kind:        outcome_summary.PrincipalKindOperatorOwner,
+			permissions: []string{"job_outcome_summary:list", "job_outcome_summary:read"},
+			wantView:    true,
+			wantEye:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deps := dynamicDeps()
+			deps.Routes.SectionDownloadDrawerURL = "/action/report-cards/section/{id}/download"
+			deps.Labels.Errors.PermissionDenied = "Permission denied"
+			deps.ResolvePrincipalKind = func(context.Context) int32 { return tt.kind }
+			ctx, vc := landingReqWithPermissions("", tt.permissions)
+			pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
+			row := pd.Table.Rows[0]
+
+			viewActions := 0
+			var drawer *types.TableAction
+			for i := range row.Actions {
+				if row.Actions[i].Type == "view" {
+					viewActions++
+				}
+				if row.Actions[i].Type == "download" {
+					drawer = &row.Actions[i]
+				}
+			}
+			if (viewActions > 0) != tt.wantView {
+				t.Fatalf("legacy view action present=%v, want %v; actions=%+v", viewActions > 0, tt.wantView, row.Actions)
+			}
+			if drawer == nil {
+				t.Fatal("landing row lost its section download drawer action")
+			}
+			if (!drawer.Disabled) != tt.wantDrawer {
+				t.Fatalf("drawer enabled=%v, want %v; action=%+v", !drawer.Disabled, tt.wantDrawer, *drawer)
+			}
+			if drawer.HxGet == "" || drawer.Action != "outcome-summary-download" {
+				t.Fatalf("drawer action is not the inert/active typed drawer shape: %+v", *drawer)
+			}
+
+			eye := ""
+			if len(row.Cells) >= 3 && row.Cells[2].Composite != nil {
+				eye = row.Cells[2].Composite.EyeHref
+			}
+			if (eye != "") != tt.wantEye {
+				t.Fatalf("legacy category eye href=%q, want present=%v", eye, tt.wantEye)
+			}
+		})
+	}
+}
+
+func TestSectionLanding_ExportOnlyStaffUsesNarrowAggregateWithoutGenericMetadataReads(t *testing.T) {
+	deps := dynamicDeps()
+	deps.Options.List.ScopeByServicingGrant = true
+	deps.Routes.SectionDownloadDrawerURL = "/action/report-cards/section/{id}/download"
+	deps.ResolvePrincipalKind = func(context.Context) int32 { return outcome_summary.PrincipalKindStaff }
+
+	genericCalls := 0
+	deps.ListPriceSchedules = func(context.Context, *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error) {
+		genericCalls++
+		return nil, nil
+	}
+	deps.ListSubscriptionGroups = func(context.Context, *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error) {
+		genericCalls++
+		return nil, nil
+	}
+	deps.ListWorkspaceUsers = func(context.Context, *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error) {
+		genericCalls++
+		return nil, nil
+	}
+	deps.ListSubscriptionGroupWorkspaceUsers = func(context.Context, *subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest) (*subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersResponse, error) {
+		genericCalls++
+		return nil, nil
+	}
+	deps.ListJobTemplateSummaries = func(context.Context, *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error) {
+		genericCalls++
+		return nil, nil
+	}
+	deps.ListJobListTabSupport = func(context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error) {
+		genericCalls++
+		return nil, nil, nil
+	}
+
+	narrowCalls := 0
+	deps.ListSubscriptionGroupOutcomeLanding = func(_ context.Context, req *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error) {
+		narrowCalls++
+		if req.PriceScheduleActive == nil || !*req.PriceScheduleActive {
+			t.Fatalf("PriceScheduleActive = %v, want true for /list/current", req.PriceScheduleActive)
+		}
+		order := int32(1)
+		return &espynaports.SubscriptionGroupOutcomeLandingResponse{Rows: []*espynaports.SubscriptionGroupOutcomeLandingRow{{
+			PriceScheduleId:         "ps-active",
+			PriceScheduleName:       "AY 2025-26",
+			PriceScheduleActive:     true,
+			PriceScheduleSortOrder:  &order,
+			SubscriptionGroupId:     "g-1",
+			SubscriptionGroupName:   "Grade 10 A",
+			SubscriptionGroupActive: true,
+			MemberCount:             28,
+			JobTemplateCount:        11,
+		}}}, nil
+	}
+
+	ctx, vc := landingReqWithPermissions("current", []string{
+		"job_outcome_summary:list",
+		"subscription_group_outcome_export:read",
+	})
+	pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
+	if narrowCalls != 1 {
+		t.Fatalf("narrow aggregate calls = %d, want 1", narrowCalls)
+	}
+	if genericCalls != 0 {
+		t.Fatalf("broad generic metadata calls = %d, want 0", genericCalls)
+	}
+	if len(pd.Table.Columns) != 3 {
+		t.Fatalf("columns = %d, want static section/member/template columns", len(pd.Table.Columns))
+	}
+	if len(pd.Table.Rows) != 1 {
+		t.Fatalf("rows = %d, want one principal-scoped section", len(pd.Table.Rows))
+	}
+	row := pd.Table.Rows[0]
+	if got := []string{row.Cells[0].Value, row.Cells[1].Value, row.Cells[2].Value}; !reflect.DeepEqual(got, []string{"Grade 10 A", "28", "11"}) {
+		t.Fatalf("row cells = %v, want scoped aggregate projection", got)
+	}
+	if len(row.Actions) != 1 || row.Actions[0].Type != "download" || row.Actions[0].Disabled {
+		t.Fatalf("restricted row actions = %+v, want enabled drawer only", row.Actions)
+	}
+	if len(pd.TabItems) != 1 || pd.TabItems[0].Label != "AY 2025-26" || pd.TabItems[0].Count != 1 {
+		t.Fatalf("tabs = %+v, want one scoped schedule tab", pd.TabItems)
+	}
+}
+
 // TestLandingHistoricalCountsBucketByCategory pins the historical (inactive-AY)
 // fallback's bucketing (§3.0 + §3.6): counts ride the SAME member/job reads
 // (no per-category fan-out); the effective category is the template's CURRENT
@@ -639,11 +901,15 @@ func TestCellAccessibleNameFrames(t *testing.T) {
 // SetPathValue). An empty scope leaves the path value unset (the unscoped
 // landing).
 func landingReq(scope string) (context.Context, *view.ViewContext) {
+	return landingReqWithPermissions(scope, []string{"job_outcome_summary:list", "job_outcome_summary:read"})
+}
+
+func landingReqWithPermissions(scope string, permissions []string) (context.Context, *view.ViewContext) {
 	req := httptest.NewRequest("GET", "/report-cards/list/"+scope, nil)
 	if scope != "" {
 		req.SetPathValue("scope", scope)
 	}
-	ctx := view.WithUserPermissions(req.Context(), types.NewUserPermissions([]string{"job_outcome_summary:list"}))
+	ctx := view.WithUserPermissions(req.Context(), types.NewUserPermissions(permissions))
 	return ctx, &view.ViewContext{Request: req, CurrentPath: req.URL.Path, CacheVersion: "test"}
 }
 

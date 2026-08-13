@@ -79,6 +79,11 @@ type JobModuleDeps struct {
 	// ("/outcome-matrix/{id}/subscription-group/{group_id}"). Preferred whenever
 	// the row carries a subscription_group_id; falls back to MatrixDetailURL.
 	MatrixGroupDetailURL string
+	// Outcome-matrix download drawer routes. The group route is preferred when
+	// row-link scoping is configured and the summary row carries a group id.
+	MatrixDownloadDrawerURL      string
+	MatrixGroupDownloadDrawerURL string
+	MatrixDownloadDrawerTitle    string
 
 	// JobListOptions drives the "/classes" job_category tab-split (school-admin
 	// education tier). Zero value → flat list (service-admin backward-compat).
@@ -230,9 +235,12 @@ func NewJobModule(deps *JobModuleDeps) *JobModule {
 		TableLabels:  deps.TableLabels,
 		BusinessType: deps.BusinessType,
 		// Template-grain delivery summary (education tier) — one server-side call.
-		ListJobTemplateSummaries: deps.ListJobTemplateSummaries,
-		MatrixDetailURL:          deps.MatrixDetailURL,
-		MatrixGroupDetailURL:     deps.MatrixGroupDetailURL,
+		ListJobTemplateSummaries:     deps.ListJobTemplateSummaries,
+		MatrixDetailURL:              deps.MatrixDetailURL,
+		MatrixGroupDetailURL:         deps.MatrixGroupDetailURL,
+		MatrixDownloadDrawerURL:      deps.MatrixDownloadDrawerURL,
+		MatrixGroupDownloadDrawerURL: deps.MatrixGroupDownloadDrawerURL,
+		MatrixDownloadDrawerTitle:    deps.MatrixDownloadDrawerTitle,
 		// "/classes" job_category tab-split.
 		Options:               deps.JobListOptions,
 		ListJobCategories:     deps.ListJobCategories,

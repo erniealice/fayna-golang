@@ -54,8 +54,9 @@ const pdfContentType = "application/pdf"
 // is workspace-bound at the espyna adapter (mirroring view-3). GenerateDoc is
 // the injected fycha doctemplate closure (nil → the route fails closed with 503).
 type Deps struct {
-	Labels       outcome_summary.Labels
-	CommonLabels pyeza.CommonLabels
+	Labels               outcome_summary.Labels
+	CommonLabels         pyeza.CommonLabels
+	ResolvePrincipalKind func(context.Context) int32
 
 	// DocumentHeaderName is the generic document header (sourced from a lyngua
 	// label by the module wiring — no education vocabulary in code).
@@ -168,7 +169,7 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 		ctx := r.Context()
 
 		perms := view.GetUserPermissions(ctx)
-		if !perms.Can("job_outcome_summary", "list") {
+		if !outcome_summary.CanLegacyDetail(perms) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

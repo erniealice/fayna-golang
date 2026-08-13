@@ -56,10 +56,11 @@ const maxPages = 100
 // workspace-bound at the espyna adapter; the view composes no client_id/
 // workspace filter of its own beyond the section + membership gates.
 type Deps struct {
-	Routes       outcome_summary.Routes
-	Labels       outcome_summary.Labels
-	CommonLabels pyeza.CommonLabels
-	TableLabels  types.TableLabels
+	Routes               outcome_summary.Routes
+	Labels               outcome_summary.Labels
+	CommonLabels         pyeza.CommonLabels
+	TableLabels          types.TableLabels
+	ResolvePrincipalKind func(context.Context) int32
 
 	// CategoryFilter (a job_category code, e.g. "academic") + ListJobCategories
 	// gate the subject set to that category — same-origin deportment jobs are
@@ -109,8 +110,8 @@ type PageData struct {
 func NewView(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
-		if !perms.Can("job_outcome_summary", "list") {
-			return view.Forbidden("job_outcome_summary:list")
+		if !outcome_summary.CanLegacyDetail(perms) {
+			return view.Forbidden("job_outcome_summary:read")
 		}
 
 		sectionID := strings.TrimSpace(viewCtx.Request.PathValue("id"))

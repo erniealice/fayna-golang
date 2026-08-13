@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/erniealice/pyeza-golang/types"
@@ -148,6 +149,9 @@ type uploadRecorder struct {
 	createdScheduleID string
 	deletedBindingID  string
 	deletedDocID      string
+	createdContainer  string
+	createdStorageKey string
+	uploadedContainer string
 	uploadedKey       string
 
 	bindings []*bindingpb.JobTemplateDocumentTemplate
@@ -155,11 +159,12 @@ type uploadRecorder struct {
 
 func (r *uploadRecorder) deps() *Deps {
 	return &Deps{
-		UploadTemplate: func(_ context.Context, _, key string, _ []byte, _ string) error {
+		UploadTemplate: func(_ context.Context, container, key string, _ []byte, _ string) error {
 			r.order = append(r.order, "upload")
 			if r.failUpload {
 				return errors.New("upload boom")
 			}
+			r.uploadedContainer = container
 			r.uploadedKey = key
 			return nil
 		},
@@ -170,6 +175,8 @@ func (r *uploadRecorder) deps() *Deps {
 			}
 			r.createdDocID = req.GetData().GetId()
 			r.createdPurpose = req.GetData().GetDocumentPurpose()
+			r.createdContainer = req.GetData().GetStorageContainer()
+			r.createdStorageKey = req.GetData().GetStorageKey()
 			return &documenttemplatepb.CreateDocumentTemplateResponse{Success: true}, nil
 		},
 		DeleteDocumentTemplate: func(_ context.Context, req *documenttemplatepb.DeleteDocumentTemplateRequest) (*documenttemplatepb.DeleteDocumentTemplateResponse, error) {
@@ -292,6 +299,12 @@ func TestUploadAction_BytesLastOrdering(t *testing.T) {
 	}
 	if rec.createdPurpose != documentPurpose {
 		t.Errorf("uploaded document_template must be stamped purpose=%q, got %q", documentPurpose, rec.createdPurpose)
+	}
+	if rec.createdContainer != storageContainerFallback || rec.uploadedContainer != storageContainerFallback {
+		t.Errorf("new local/mock locator must use fallback %q before composition resolution (created %q, upload %q)", storageContainerFallback, rec.createdContainer, rec.uploadedContainer)
+	}
+	if rec.createdStorageKey != rec.uploadedKey || !strings.HasPrefix(rec.uploadedKey, storagePrefix+"/") {
+		t.Errorf("storage key = %q (created %q), want prefix %q and identical persisted/uploaded keys", rec.uploadedKey, rec.createdStorageKey, storagePrefix+"/")
 	}
 }
 

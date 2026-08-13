@@ -15,7 +15,7 @@ import (
 // FAY-7: the phase outcome summary detail page (reached from the section
 // grid's /jobs/detail/{id}/phase/{phase_id}/summary link) had no Layer-3 read
 // gate. These pin the fail-closed / granted-principal behavior for the
-// job_outcome_summary:list verb — the same gate used by the sibling
+// job_outcome_summary:list ∧ read capability — the same gate used by the sibling
 // outcome_summary views (list, client_card, section, template_settings) and
 // its job_summary sibling.
 
@@ -67,7 +67,7 @@ func TestNewView_Granted_Renders(t *testing.T) {
 	v := NewView(deps)
 
 	req := newPhaseSummaryRequest("job-1", "phase-1")
-	ctx := view.WithUserPermissions(req.Context(), types.NewUserPermissions([]string{"job_outcome_summary:list"}))
+	ctx := view.WithUserPermissions(req.Context(), types.NewUserPermissions([]string{"job_outcome_summary:list", "job_outcome_summary:read"}))
 	res := v.Handle(ctx, &view.ViewContext{Request: req, CurrentPath: req.URL.Path, CacheVersion: "test"})
 
 	if res.Template != "phase-outcome-summary" {
@@ -82,5 +82,36 @@ func TestNewView_Granted_Renders(t *testing.T) {
 	}
 	if pd.Summary["id"] != "psum-1" {
 		t.Fatalf("Summary[id] = %v, want %q", pd.Summary["id"], "psum-1")
+	}
+}
+
+func TestNewView_LegacyDetailRequiresListAndReadBeforeDependency(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		codes []string
+		want  bool
+	}{
+		{name: "list only", codes: []string{"job_outcome_summary:list"}},
+		{name: "read only", codes: []string{"job_outcome_summary:read"}},
+		{name: "list and read", codes: []string{"job_outcome_summary:list", "job_outcome_summary:read"}, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			deps := &Deps{GetPhaseOutcomeSummaryByJobPhase: func(context.Context, *phasesumpb.GetPhaseOutcomeSummaryByJobPhaseRequest) (*phasesumpb.GetPhaseOutcomeSummaryByJobPhaseResponse, error) {
+				called = true
+				return &phasesumpb.GetPhaseOutcomeSummaryByJobPhaseResponse{PhaseOutcomeSummary: &phasesumpb.PhaseOutcomeSummary{Id: "psum-1", JobId: "job-1", JobPhaseId: "phase-1"}}, nil
+			}}
+			req := newPhaseSummaryRequest("job-1", "phase-1")
+			res := NewView(deps).Handle(view.WithUserPermissions(req.Context(), types.NewUserPermissions(tc.codes)), &view.ViewContext{Request: req, CurrentPath: req.URL.Path, CacheVersion: "test"})
+			if tc.want {
+				if res.StatusCode != http.StatusOK || !called {
+					t.Fatalf("status/called=%d/%v, want 200/true", res.StatusCode, called)
+				}
+				return
+			}
+			if res.StatusCode != http.StatusForbidden || called {
+				t.Fatalf("status/called=%d/%v, want 403/false", res.StatusCode, called)
+			}
+		})
 	}
 }

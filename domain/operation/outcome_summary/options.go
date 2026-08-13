@@ -3,6 +3,8 @@ package outcome_summary
 import (
 	"fmt"
 	"strings"
+
+	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 )
 
 // Options — app-configurable presentation for the outcome-summary surfaces,
@@ -40,6 +42,11 @@ type Options struct {
 	// DOCX/PDF download). Zero value disables every document enrichment — the
 	// download renders exactly as before (service-admin unaffected).
 	Document DocumentOptions
+	// SectionExport configures the subscription-group consolidated export.
+	// Enabled is its independent feature switch; List.Entity controls only the
+	// landing presentation. These values are trusted app composition and are
+	// never accepted from HTTP selectors.
+	SectionExport SectionExportOptions
 	// ClientCard configures view-3 (the per-student client card) presentation —
 	// a DEDICATED job-category banding option, NOT the section grid's Row (which
 	// is occupied by client-attribute gender bands and gated behind the global
@@ -47,6 +54,73 @@ type Options struct {
 	// Q-R9-8). Zero value → today's flat client card, byte-identical
 	// (service-admin, which sets no options, is unaffected).
 	ClientCard ClientCardOptions
+}
+
+// SectionExportOptions is the trusted composition contract for the
+// subscription-group one-period CSV/PDF drawer. Category codes and attribute
+// modules are deployment data; render profiles are canonical generated enums.
+type SectionExportOptions struct {
+	// Enabled mounts and advertises the section export/drawer/template surface.
+	// It is deliberately independent from List.Entity so grouped presentation
+	// cannot implicitly grant an export capability, and another presentation
+	// may reuse the export contract without pretending to be a grouped list.
+	Enabled bool
+	// DefaultCategoryCode is selected after a valid request category and before
+	// the first sorted response category. Empty or absent falls back to first.
+	DefaultCategoryCode string
+	// ProfileByCategoryCode declares which exact category semantics may use a
+	// PDF render profile. The browser never supplies or selects this value.
+	ProfileByCategoryCode map[string]bindingpb.RenderProfile
+	// GroupByAttributeModule pins the trusted attribute-definition module used
+	// with Options.Row.GroupByField. A configured client-attribute band without
+	// a module is invalid and explicit export fails closed.
+	GroupByAttributeModule string
+}
+
+// ResolvedSectionTemplate is the locator-free result of the app-owned
+// report resolver + storage composition. Fayna receives only trusted bytes and
+// the semantic identity it must recheck; storage coordinates never cross in.
+type ResolvedSectionTemplate struct {
+	Bytes         []byte
+	RenderProfile bindingpb.RenderProfile
+	JobCategoryID string
+}
+
+// SectionExportEnabled reports the explicit trusted composition switch. The
+// zero value preserves existing consumers and never advertises or mounts the
+// Section Template path.
+func (o Options) SectionExportEnabled() bool { return o.SectionExport.Enabled }
+
+// ProfileForCategoryCode returns a recognized non-UNSPECIFIED generated render
+// profile for the exact trusted category code. Unknown enum values fail closed.
+func (o SectionExportOptions) ProfileForCategoryCode(code string) (bindingpb.RenderProfile, bool) {
+	profile, ok := o.ProfileByCategoryCode[strings.TrimSpace(code)]
+	if !ok || profile == bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED {
+		return bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED, false
+	}
+	if _, known := bindingpb.RenderProfile_name[int32(profile)]; !known {
+		return bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED, false
+	}
+	return profile, true
+}
+
+// ExportRowBandConfig validates the presentation-only row-band reference. An
+// empty reference deliberately disables banding; any non-empty unsupported
+// reference or missing trusted module is configuration drift and fails closed.
+func (o Options) ExportRowBandConfig() (code, module string, configured bool, err error) {
+	field := strings.TrimSpace(o.Row.GroupByField)
+	if field == "" {
+		return "", "", false, nil
+	}
+	code, ok := ClientAttributeCode(field)
+	if !ok || strings.TrimSpace(code) == "" {
+		return "", "", true, fmt.Errorf("outcome_summary: unsupported section export row band %q", field)
+	}
+	module = strings.TrimSpace(o.SectionExport.GroupByAttributeModule)
+	if module == "" {
+		return "", "", true, fmt.Errorf("outcome_summary: section export row band %q requires an attribute module", field)
+	}
+	return strings.TrimSpace(code), module, true, nil
 }
 
 // DocumentOptions — app-configurable knobs for the report-card document

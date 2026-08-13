@@ -1,6 +1,10 @@
 package outcome_summary
 
-import "testing"
+import (
+	"testing"
+
+	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
+)
 
 // TestGroupValueRank pins the owner-locked band-order grammar: listed values
 // lead in list order (case-insensitive, trimmed), unlisted report ok=false.
@@ -73,5 +77,72 @@ func TestGateGrain(t *testing.T) {
 	// An invalid grain must NEVER read as group grain (no runtime guess).
 	if (DocumentOptions{GateGrain: "sideways"}).GateGrainGroup() {
 		t.Errorf("an unrecognized grain must not report group grain")
+	}
+}
+
+func TestSectionExportEnabledIndependentFromGroupedPresentation(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		entity        string
+		exportEnabled bool
+		wantGrouped   bool
+	}{
+		{name: "zero"},
+		{name: "grouped only", entity: ListEntitySubscriptionGroup, wantGrouped: true},
+		{name: "export only", exportEnabled: true},
+		{name: "grouped and export", entity: ListEntitySubscriptionGroup, exportEnabled: true, wantGrouped: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			options := Options{List: ListOptions{Entity: tc.entity}, SectionExport: SectionExportOptions{Enabled: tc.exportEnabled}}
+			if got := options.SectionExportEnabled(); got != tc.exportEnabled {
+				t.Fatalf("SectionExportEnabled() = %v, want %v", got, tc.exportEnabled)
+			}
+			if got := options.List.SubscriptionGroups(); got != tc.wantGrouped {
+				t.Fatalf("SubscriptionGroups() = %v, want %v", got, tc.wantGrouped)
+			}
+		})
+	}
+}
+
+func TestSectionExportProfileAndRowBandConfiguration(t *testing.T) {
+	const profile = bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
+	opts := Options{
+		Row: RowOptions{GroupByField: "client_attributes.gender"},
+		SectionExport: SectionExportOptions{
+			ProfileByCategoryCode:  map[string]bindingpb.RenderProfile{"academic": profile, "bad": 99},
+			GroupByAttributeModule: " entity ",
+		},
+	}
+	if got, ok := opts.SectionExport.ProfileForCategoryCode("academic"); !ok || got != profile {
+		t.Fatalf("trusted profile lookup = (%v,%v), want (%v,true)", got, ok, profile)
+	}
+	for _, code := range []string{"missing", "bad"} {
+		if got, ok := opts.SectionExport.ProfileForCategoryCode(code); ok || got != bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED {
+			t.Fatalf("profile lookup %q = (%v,%v), want fail-closed UNSPECIFIED", code, got, ok)
+		}
+	}
+	code, module, configured, err := opts.ExportRowBandConfig()
+	if err != nil || !configured || code != "gender" || module != "entity" {
+		t.Fatalf("ExportRowBandConfig() = (%q,%q,%v,%v)", code, module, configured, err)
+	}
+
+	for _, tc := range []struct {
+		name           string
+		field          string
+		module         string
+		wantConfigured bool
+		wantErr        bool
+	}{
+		{name: "empty disables", field: "", module: "", wantConfigured: false},
+		{name: "foreign reference", field: "job_category", module: "entity", wantConfigured: true, wantErr: true},
+		{name: "missing module", field: "client_attributes.gender", module: "", wantConfigured: true, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			candidate := Options{Row: RowOptions{GroupByField: tc.field}, SectionExport: SectionExportOptions{GroupByAttributeModule: tc.module}}
+			_, _, configured, err := candidate.ExportRowBandConfig()
+			if configured != tc.wantConfigured || (err != nil) != tc.wantErr {
+				t.Fatalf("configured/error = %v/%v, want %v/%v", configured, err, tc.wantConfigured, tc.wantErr)
+			}
+		})
 	}
 }

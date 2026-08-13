@@ -66,8 +66,11 @@ const documentPurpose = "report_card"
 const bindingPermissionEntity = "job_outcome_summary_document_template"
 
 const (
-	storageBucket  = "templates"
-	storagePrefix  = "templates/report_card"
+	// storageContainerFallback is used only by providers without a configured
+	// physical default (local/mock). App composition resolves cloud providers to
+	// their configured bucket before I/O and document_template persistence.
+	storageContainerFallback = "templates"
+	storagePrefix            = "templates/report_card"
 	docxExt        = ".docx"
 	docxContentTyp = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 	maxUploadBytes = 10 << 20
@@ -280,7 +283,7 @@ func NewUploadAction(deps *Deps) view.View {
 		docID := newID()
 		objectKey := fmt.Sprintf("%s/%s%s", storagePrefix, docID, docxExt)
 
-		bucket := storageBucket
+		bucket := storageContainerFallback
 		key := objectKey
 		orig := header.Filename
 		size := header.Size
@@ -325,7 +328,7 @@ func NewUploadAction(deps *Deps) view.View {
 		}
 
 		// Bytes LAST. On failure, compensate both created rows (best effort).
-		if err := deps.UploadTemplate(ctx, storageBucket, objectKey, content, docxContentTyp); err != nil {
+		if err := deps.UploadTemplate(ctx, storageContainerFallback, objectKey, content, docxContentTyp); err != nil {
 			log.Printf("report-card template upload: store bytes: %v", err)
 			if createResp != nil && len(createResp.GetData()) > 0 {
 				bindingID := createResp.GetData()[0].GetId()

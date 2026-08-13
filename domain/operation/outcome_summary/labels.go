@@ -16,10 +16,81 @@ type Labels struct {
 	Landing LandingLabels `json:"landing"`
 	Section SectionLabels `json:"section"`
 	Student PeriodLabels  `json:"student"`
+	// SectionExport holds the consolidated subscription-group drawer/export
+	// vocabulary. Canonical tags stay generic; vertical wording is a Lyngua value.
+	SectionExport SectionExportLabels `json:"section_export"`
 	// TemplateSettings holds the TB3 report-card template management surface
 	// strings. Same snake_case-json-tag rule as LandingLabels — a missing tag
 	// silently falls back to the compiled default.
 	TemplateSettings TemplateSettingsLabels `json:"template_settings"`
+	// SectionTemplateSettings is the separate subscription-group document family.
+	SectionTemplateSettings SectionTemplateSettingsLabels `json:"section_template_settings"`
+}
+
+// SectionExportLabels holds the category × period × format drawer and its
+// fail-loud export messages.
+type SectionExportLabels struct {
+	DrawerTitle               string `json:"drawer_title"`
+	CategoryLabel             string `json:"category_label"`
+	CategoryPlaceholder       string `json:"category_placeholder"`
+	PeriodLabel               string `json:"period_label"`
+	PeriodFinal               string `json:"period_final"`
+	FormatLabel               string `json:"format_label"`
+	FormatCSV                 string `json:"format_csv"`
+	FormatPDF                 string `json:"format_pdf"`
+	DownloadAction            string `json:"download_action"`
+	NoTemplateError           string `json:"no_template_error"`
+	NoProfileError            string `json:"no_profile_error"`
+	IncompatibleTemplateError string `json:"incompatible_template_error"`
+	AmbiguousPhaseError       string `json:"ambiguous_phase_error"`
+	NotComputedError          string `json:"not_computed_error"`
+	GroupingConfigError       string `json:"grouping_config_error"`
+	DataUnavailableError      string `json:"data_unavailable_error"`
+}
+
+// SectionTemplateSettingsLabels holds the distinct subscription-group template
+// management surface. Profile identifiers are canonical generic concepts; only
+// their translated values may contain education vocabulary.
+type SectionTemplateSettingsLabels struct {
+	Title                                                 string `json:"title"`
+	Subtitle                                              string `json:"subtitle"`
+	NameColumn                                            string `json:"name_column"`
+	ScheduleColumn                                        string `json:"schedule_column"`
+	PlanColumn                                            string `json:"plan_column"`
+	CategoryColumn                                        string `json:"category_column"`
+	ProfileColumn                                         string `json:"profile_column"`
+	ProfileSubscriptionGroupOutcomeMatrixSinglePeriod11V1 string `json:"profile_subscription_group_outcome_matrix_single_period_11_v1"`
+	VersionColumn                                         string `json:"version_column"`
+	StatusColumn                                          string `json:"status_column"`
+	ValidityColumn                                        string `json:"validity_column"`
+	UploadAction                                          string `json:"upload_action"`
+	PublishAction                                         string `json:"publish_action"`
+	DeleteAction                                          string `json:"delete_action"`
+	EmptyTitle                                            string `json:"empty_title"`
+	EmptyMessage                                          string `json:"empty_message"`
+	UploadTitle                                           string `json:"upload_title"`
+	NameLabel                                             string `json:"name_label"`
+	ScheduleLabel                                         string `json:"schedule_label"`
+	ScheduleFallback                                      string `json:"schedule_fallback"`
+	PlanLabel                                             string `json:"plan_label"`
+	PlanFallback                                          string `json:"plan_fallback"`
+	CategoryLabel                                         string `json:"category_label"`
+	CategoryFallback                                      string `json:"category_fallback"`
+	CategoryRequiredForProfile                            string `json:"category_required_for_profile"`
+	ValidityStartLabel                                    string `json:"validity_start_label"`
+	ValidityEndLabel                                      string `json:"validity_end_label"`
+	FileLabel                                             string `json:"file_label"`
+	StatusDraft                                           string `json:"status_draft"`
+	StatusPublished                                       string `json:"status_published"`
+	StatusDeprecated                                      string `json:"status_deprecated"`
+	PublishConfirm                                        string `json:"publish_confirm"`
+	BroadScopeConfirm                                     string `json:"broad_scope_confirm"`
+	DeleteConfirm                                         string `json:"delete_confirm"`
+	NotConfigured                                         string `json:"not_configured"`
+	InvalidFile                                           string `json:"invalid_file"`
+	InvalidManifest                                       string `json:"invalid_manifest"`
+	UploadFailed                                          string `json:"upload_failed"`
+	CleanupFailed                                         string `json:"cleanup_failed"`
 }
 
 // TemplateSettingsLabels holds the report-card template settings page strings
@@ -291,15 +362,33 @@ func DefaultLabels() Labels {
 			NotComputedBanner:     "Final outcomes have not been computed yet.",
 			CategoryTabsAriaLabel: "Categories",
 		},
+		SectionExport: SectionExportLabels{
+			DrawerTitle:               "Download Group Outcomes",
+			CategoryLabel:             "Category",
+			CategoryPlaceholder:       "Select a category",
+			PeriodLabel:               "Period",
+			PeriodFinal:               "Final",
+			FormatLabel:               "Format",
+			FormatCSV:                 "CSV",
+			FormatPDF:                 "PDF",
+			DownloadAction:            "Download",
+			NoTemplateError:           "No group template is configured for this selection.",
+			NoProfileError:            "PDF is not configured for this category. CSV is still available.",
+			IncompatibleTemplateError: "The group template does not match this outcome layout.",
+			AmbiguousPhaseError:       "This period is configured inconsistently across items.",
+			NotComputedError:          "No outcomes are available for this selection.",
+			GroupingConfigError:       "Outcome export grouping is not configured correctly.",
+			DataUnavailableError:      "The outcome export data is temporarily unavailable.",
+		},
 		Student: PeriodLabels{
-			Title:            "Client outcomes",
-			Subtitle:         "Outcomes by grading period",
-			SubjectColumn:    "Item",
-			Period1:          "Period 1",
-			Period2:          "Period 2",
-			YearColumn:       "Overall",
-			ProgressColumn:   "Progress",
-			FinalColumn:      "Final",
+			Title:             "Client outcomes",
+			Subtitle:          "Outcomes by grading period",
+			SubjectColumn:     "Item",
+			Period1:           "Period 1",
+			Period2:           "Period 2",
+			YearColumn:        "Overall",
+			ProgressColumn:    "Progress",
+			FinalColumn:       "Final",
 			ViewAction:        "View outcomes",
 			DownloadAction:    "Download PDF",
 			StaffLabel:        "Staff:",
@@ -335,6 +424,47 @@ func DefaultLabels() Labels {
 			NotConfigured:      "Template management is not configured.",
 			InvalidFile:        "Only .docx files are accepted.",
 			UploadFailed:       "Failed to upload template.",
+		},
+		SectionTemplateSettings: SectionTemplateSettingsLabels{
+			Title:          "Group Templates",
+			Subtitle:       "Manage templates used to print consolidated group outcomes",
+			NameColumn:     "Template",
+			ScheduleColumn: "Schedule",
+			PlanColumn:     "Plan",
+			CategoryColumn: "Category",
+			ProfileColumn:  "Layout Profile",
+			ProfileSubscriptionGroupOutcomeMatrixSinglePeriod11V1: "One period, 11 columns",
+			VersionColumn:              "Version",
+			StatusColumn:               "Status",
+			ValidityColumn:             "Validity",
+			UploadAction:               "Upload Template",
+			PublishAction:              "Publish",
+			DeleteAction:               "Delete",
+			EmptyTitle:                 "No group templates",
+			EmptyMessage:               "Upload a .docx template to enable consolidated PDF downloads.",
+			UploadTitle:                "Upload Group Template",
+			NameLabel:                  "Template Name",
+			ScheduleLabel:              "Schedule",
+			ScheduleFallback:           "All schedules",
+			PlanLabel:                  "Plan",
+			PlanFallback:               "All plans",
+			CategoryLabel:              "Category",
+			CategoryFallback:           "All categories",
+			CategoryRequiredForProfile: "This layout profile requires a specific category.",
+			ValidityStartLabel:         "Valid From",
+			ValidityEndLabel:           "Valid Until",
+			FileLabel:                  "Template File (.docx)",
+			StatusDraft:                "Draft",
+			StatusPublished:            "Published",
+			StatusDeprecated:           "Deprecated",
+			PublishConfirm:             "Publish this group template? The current template for the same scope will be superseded.",
+			BroadScopeConfirm:          "Publish this broadly scoped template? It may be used when no more specific group template applies.",
+			DeleteConfirm:              "Delete this group template? This cannot be undone.",
+			NotConfigured:              "Group template management is not configured.",
+			InvalidFile:                "Only .docx files are accepted.",
+			InvalidManifest:            "This file does not match the required group template layout.",
+			UploadFailed:               "Failed to upload group template.",
+			CleanupFailed:              "The template operation failed and storage cleanup requires operator attention.",
 		},
 	}
 }

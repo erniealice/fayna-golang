@@ -12,12 +12,15 @@ import (
 	summarylist "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/list"
 	phasesummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/phase_summary"
 	sectionview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/section"
+	sectiontemplatesettings "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/section_template_settings"
 	templatesettings "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/template_settings"
 
+	espynaports "github.com/erniealice/espyna-golang/ports"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
@@ -34,14 +37,17 @@ import (
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
+	sectionbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	planpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/plan"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
+	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
 // OutcomeSummaryModuleDeps holds all dependencies for the outcome summary module.
@@ -55,6 +61,9 @@ type OutcomeSummaryModuleDeps struct {
 	// (view-1 tabstrip + what to list, view-2 row bands/sort). Zero value →
 	// view-1 renders the flat job_outcome_summary list unchanged.
 	Options outcomesummarypkg.Options
+	// ResolvePrincipalKind is owned by app composition and returns the active
+	// session principal kind. Nil is fail-closed for explicit section exports.
+	ResolvePrincipalKind func(context.Context) int32
 
 	// Job outcome summary operations
 	GetJobOutcomeSummaryByJob func(ctx context.Context, req *jobsumpb.GetJobOutcomeSummaryByJobRequest) (*jobsumpb.GetJobOutcomeSummaryByJobResponse, error)
@@ -105,6 +114,7 @@ type OutcomeSummaryModuleDeps struct {
 	// optional/nil-safe: a nil closure degrades the affected surface to its
 	// empty/flat state, never a panic.
 	ListPriceSchedules                  func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
+	ListPlans                           func(ctx context.Context, req *planpb.ListPlansRequest) (*planpb.ListPlansResponse, error)
 	ListSubscriptionGroups              func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListSubscriptionGroupMembers        func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
 	ListSubscriptionGroupWorkspaceUsers func(ctx context.Context, req *subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest) (*subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersResponse, error)
@@ -121,12 +131,16 @@ type OutcomeSummaryModuleDeps struct {
 	// ListJobTemplatePhasesByTemplate resolves a job_template's phases (with their
 	// stable `code`) so the report-card block tree can key per-phase leaves by
 	// phase code. Optional/nil-safe.
-	ListJobTemplatePhasesByTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
-	ListJobTemplates                func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
-	ListClients                     func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
-	ListClientAttributes            func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
-	ResolveAttributeIDByCode        func(ctx context.Context, code string) (string, error)
-	ListJobTemplateSummaries        func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
+	ListJobTemplatePhasesByTemplate     func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListJobTemplates                    func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+	ListClients                         func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+	ListClientAttributes                func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
+	ListAttributes                      func(ctx context.Context, req *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error)
+	ResolveAttributeIDByCode            func(ctx context.Context, code string) (string, error)
+	GetSubscriptionGroupOutcomeExport   func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	ListSubscriptionGroupOutcomeLanding func(ctx context.Context, req *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
+	ResolveSectionTemplate              func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcomesummarypkg.ResolvedSectionTemplate, error)
+	ListJobTemplateSummaries            func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 
 	// ListJobListTabSupport (R9 W-A2) — the ONE no-argument single-statement
 	// UNION tab-support read (all job_category rows + ACTIVE job_template
@@ -159,16 +173,32 @@ type OutcomeSummaryModuleDeps struct {
 	CreateTemplateBinding  func(ctx context.Context, req *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error)
 	DeleteTemplateBinding  func(ctx context.Context, req *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error)
 	PublishTemplateBinding func(ctx context.Context, req *bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse, error)
+
+	// Section Template settings use a distinct binding family and a bytes-first,
+	// atomic artifact+DRAFT pair. Storage closures accept only the generated
+	// exact locator and are never exposed as routes.
+	StoreSectionTemplate            func(context.Context, string, []byte, string) (string, error)
+	DeleteSectionTemplateObject     func(context.Context, string, string) error
+	CreateSectionTemplateUploadPair func(context.Context, *documenttemplatepb.DocumentTemplate, *sectionbindingpb.SubscriptionGroupDocumentTemplate) (*documenttemplatepb.DocumentTemplate, *sectionbindingpb.SubscriptionGroupDocumentTemplate, error)
+	ListSectionTemplateBindings     func(context.Context, *sectionbindingpb.ListSubscriptionGroupDocumentTemplatesRequest) (*sectionbindingpb.ListSubscriptionGroupDocumentTemplatesResponse, error)
+	DeleteSectionTemplateDraftPair  func(context.Context, string) (*documenttemplatepb.DocumentTemplate, error)
+	DeleteSectionTemplateBinding    func(context.Context, *sectionbindingpb.DeleteSubscriptionGroupDocumentTemplateRequest) (*sectionbindingpb.DeleteSubscriptionGroupDocumentTemplateResponse, error)
+	PublishSectionTemplateBinding   func(context.Context, *sectionbindingpb.PublishSubscriptionGroupDocumentTemplateRequest) (*sectionbindingpb.PublishSubscriptionGroupDocumentTemplateResponse, error)
 }
 
 // OutcomeSummaryModule holds all constructed outcome summary views.
 type OutcomeSummaryModule struct {
-	routes       outcomesummarypkg.Routes
-	List         view.View
-	Section      view.View
-	ClientCard   view.View
-	JobSummary   view.View
-	PhaseSummary view.View
+	routes               outcomesummarypkg.Routes
+	sectionExportEnabled bool
+	List                 view.View
+	Section              view.View
+	// SectionDownload is the HTMX drawer fragment for category, one period,
+	// and output format selection. It remains report-read gated and separate
+	// from Section Template management permissions.
+	SectionDownload view.View
+	ClientCard      view.View
+	JobSummary      view.View
+	PhaseSummary    view.View
 	// SectionExport is the section-grid CSV download (a raw handler — the
 	// registrar wraps it with the same RBAC context injection as views).
 	SectionExport http.HandlerFunc
@@ -181,6 +211,11 @@ type OutcomeSummaryModule struct {
 	TemplateUpload   view.View
 	TemplatePublish  view.View
 	TemplateDelete   view.View
+
+	SectionTemplateSettings view.View
+	SectionTemplateUpload   view.View
+	SectionTemplatePublish  view.View
+	SectionTemplateDelete   view.View
 }
 
 // NewOutcomeSummaryModule creates a new outcome summary module with all views wired.
@@ -191,6 +226,7 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		CommonLabels:                        deps.CommonLabels,
 		TableLabels:                         deps.TableLabels,
 		Options:                             deps.Options,
+		ResolvePrincipalKind:                deps.ResolvePrincipalKind,
 		ListSubscriptionGroups:              deps.ListSubscriptionGroups,
 		ListSubscriptionGroupMembers:        deps.ListSubscriptionGroupMembers,
 		ListJobs:                            deps.ListJobs,
@@ -198,7 +234,11 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		ListClients:                         deps.ListClients,
 		ListJobOutcomeSummarys:              deps.ListJobOutcomeSummarys,
 		ListClientAttributes:                deps.ListClientAttributes,
+		ListAttributes:                      deps.ListAttributes,
 		ResolveAttributeIDByCode:            deps.ResolveAttributeIDByCode,
+		GetSubscriptionGroupOutcomeExport:   deps.GetSubscriptionGroupOutcomeExport,
+		ResolveSectionTemplate:              deps.ResolveSectionTemplate,
+		GeneratePDF:                         deps.GeneratePDF,
 		ListSubscriptionGroupWorkspaceUsers: deps.ListSubscriptionGroupWorkspaceUsers,
 		ListWorkspaceUsers:                  deps.ListWorkspaceUsers,
 		ListJobCategories:                   deps.ListJobCategories,
@@ -209,33 +249,44 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		ListTaskOutcomes: deps.ListTaskOutcomes,
 	}
 	return &OutcomeSummaryModule{
-		routes: deps.Routes,
+		routes:               deps.Routes,
+		sectionExportEnabled: deps.Options.SectionExportEnabled(),
 		List: summarylist.NewView(&summarylist.ListViewDeps{
-			Routes:                       deps.Routes,
-			Labels:                       deps.Labels,
-			CommonLabels:                 deps.CommonLabels,
-			TableLabels:                  deps.TableLabels,
-			Options:                      deps.Options,
-			ListJobOutcomeSummarys:       deps.ListJobOutcomeSummarys,
-			ListPriceSchedules:           deps.ListPriceSchedules,
-			ListSubscriptionGroups:       deps.ListSubscriptionGroups,
-			ListJobTemplateSummaries:     deps.ListJobTemplateSummaries,
-			ListJobListTabSupport:        deps.ListJobListTabSupport,
-			ListSubscriptionGroupMembers: deps.ListSubscriptionGroupMembers,
-			ListJobs:                     deps.ListJobs,
+			Routes:                              deps.Routes,
+			Labels:                              deps.Labels,
+			CommonLabels:                        deps.CommonLabels,
+			TableLabels:                         deps.TableLabels,
+			Options:                             deps.Options,
+			ResolvePrincipalKind:                deps.ResolvePrincipalKind,
+			ListJobOutcomeSummarys:              deps.ListJobOutcomeSummarys,
+			ListPriceSchedules:                  deps.ListPriceSchedules,
+			ListSubscriptionGroups:              deps.ListSubscriptionGroups,
+			ListJobTemplateSummaries:            deps.ListJobTemplateSummaries,
+			ListSubscriptionGroupOutcomeLanding: deps.ListSubscriptionGroupOutcomeLanding,
+			ListJobListTabSupport:               deps.ListJobListTabSupport,
+			ListSubscriptionGroupMembers:        deps.ListSubscriptionGroupMembers,
+			ListJobs:                            deps.ListJobs,
 			// Section-visibility scoping (Options.List.ScopeByServicingGrant).
 			ListWorkspaceUsers:                  deps.ListWorkspaceUsers,
 			ListSubscriptionGroupWorkspaceUsers: deps.ListSubscriptionGroupWorkspaceUsers,
 		}),
-		Section:         sectionview.NewView(sectionDeps),
+		Section: sectionview.NewView(sectionDeps),
+		SectionDownload: sectionview.NewDownloadDrawer(&sectionview.DrawerDeps{
+			Routes:                            deps.Routes,
+			Labels:                            deps.Labels,
+			Options:                           deps.Options,
+			ResolvePrincipalKind:              deps.ResolvePrincipalKind,
+			GetSubscriptionGroupOutcomeExport: deps.GetSubscriptionGroupOutcomeExport,
+		}),
 		SectionExport:   sectionview.NewExportHandler(sectionDeps),
 		StudentDocument: newStudentDocumentHandler(deps),
 		ClientCard: clientcard.NewView(&clientcard.Deps{
-			Routes:                        deps.Routes,
-			Labels:                        deps.Labels,
-			CommonLabels:                  deps.CommonLabels,
-			TableLabels:                   deps.TableLabels,
-			CategoryFilter:                deps.Options.CategoryFilter,
+			Routes:               deps.Routes,
+			Labels:               deps.Labels,
+			CommonLabels:         deps.CommonLabels,
+			TableLabels:          deps.TableLabels,
+			ResolvePrincipalKind: deps.ResolvePrincipalKind,
+			CategoryFilter:       deps.Options.CategoryFilter,
 			// Client-card job-category banding (R9 W-A6, dedicated Options.ClientCard
 			// — NOT Options.Row). BandByCategory groups the subject rows into native
 			// job-category TableRowGroup bands; IncludeAllCategories lifts the card's
@@ -258,10 +309,14 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			ListJobTasks:     deps.ListJobTasks,
 			ListTaskOutcomes: deps.ListTaskOutcomes,
 		}),
-		TemplateSettings: templatesettings.NewListView(templateSettingsDeps(deps)),
-		TemplateUpload:   templatesettings.NewUploadAction(templateSettingsDeps(deps)),
-		TemplatePublish:  templatesettings.NewPublishAction(templateSettingsDeps(deps)),
-		TemplateDelete:   templatesettings.NewDeleteAction(templateSettingsDeps(deps)),
+		TemplateSettings:        templatesettings.NewListView(templateSettingsDeps(deps)),
+		TemplateUpload:          templatesettings.NewUploadAction(templateSettingsDeps(deps)),
+		TemplatePublish:         templatesettings.NewPublishAction(templateSettingsDeps(deps)),
+		TemplateDelete:          templatesettings.NewDeleteAction(templateSettingsDeps(deps)),
+		SectionTemplateSettings: sectiontemplatesettings.NewListView(sectionTemplateSettingsDeps(deps)),
+		SectionTemplateUpload:   sectiontemplatesettings.NewUploadAction(sectionTemplateSettingsDeps(deps)),
+		SectionTemplatePublish:  sectiontemplatesettings.NewPublishAction(sectionTemplateSettingsDeps(deps)),
+		SectionTemplateDelete:   sectiontemplatesettings.NewDeleteAction(sectionTemplateSettingsDeps(deps)),
 		JobSummary: jobsummary.NewView(&jobsummary.Deps{
 			Routes:                    deps.Routes,
 			Labels:                    deps.Labels,
@@ -274,6 +329,25 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			CommonLabels:                     deps.CommonLabels,
 			GetPhaseOutcomeSummaryByJobPhase: deps.GetPhaseOutcomeSummaryByJobPhase,
 		}),
+	}
+}
+
+func sectionTemplateSettingsDeps(deps *OutcomeSummaryModuleDeps) *sectiontemplatesettings.Deps {
+	return &sectiontemplatesettings.Deps{
+		Routes:                 deps.Routes,
+		Labels:                 deps.Labels,
+		CommonLabels:           deps.CommonLabels,
+		TableLabels:            deps.TableLabels,
+		Options:                deps.Options,
+		ListPriceSchedules:     deps.ListPriceSchedules,
+		ListPlans:              deps.ListPlans,
+		ListJobCategories:      deps.ListJobCategories,
+		StoreTemplate:          deps.StoreSectionTemplate,
+		DeleteTemplateObject:   deps.DeleteSectionTemplateObject,
+		CreateUploadPair:       deps.CreateSectionTemplateUploadPair,
+		ListTemplateBindings:   deps.ListSectionTemplateBindings,
+		DeleteDraftPair:        deps.DeleteSectionTemplateDraftPair,
+		PublishTemplateBinding: deps.PublishSectionTemplateBinding,
 	}
 }
 
@@ -307,6 +381,7 @@ func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc 
 	}
 	return documentview.NewDownloadHandler(&documentview.Deps{
 		Labels:                                    deps.Labels,
+		ResolvePrincipalKind:                      deps.ResolvePrincipalKind,
 		CommonLabels:                              deps.CommonLabels,
 		DocumentHeaderName:                        deps.DocumentHeaderName,
 		CategoryFilter:                            deps.Options.CategoryFilter,
@@ -354,6 +429,9 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 	if m.Section != nil && m.routes.SectionURL != "" {
 		r.GET(m.routes.SectionURL, m.Section)
 	}
+	if m.sectionExportEnabled && m.SectionDownload != nil && m.routes.SectionDownloadDrawerURL != "" {
+		r.GET(m.routes.SectionDownloadDrawerURL, m.SectionDownload)
+	}
 	if m.ClientCard != nil && m.routes.ClientCardURL != "" {
 		r.GET(m.routes.ClientCardURL, m.ClientCard)
 	}
@@ -400,5 +478,21 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 	}
 	if m.TemplateDelete != nil && m.routes.TemplateDeleteURL != "" {
 		r.POST(m.routes.TemplateDeleteURL, m.TemplateDelete)
+	}
+
+	if m.sectionExportEnabled {
+		if m.SectionTemplateSettings != nil && m.routes.SectionTemplateSettingsURL != "" {
+			r.GET(m.routes.SectionTemplateSettingsURL, m.SectionTemplateSettings)
+		}
+		if m.SectionTemplateUpload != nil && m.routes.SectionTemplateUploadURL != "" {
+			r.GET(m.routes.SectionTemplateUploadURL, m.SectionTemplateUpload)
+			r.POST(m.routes.SectionTemplateUploadURL, m.SectionTemplateUpload)
+		}
+		if m.SectionTemplatePublish != nil && m.routes.SectionTemplatePublishURL != "" {
+			r.POST(m.routes.SectionTemplatePublishURL, m.SectionTemplatePublish)
+		}
+		if m.SectionTemplateDelete != nil && m.routes.SectionTemplateDeleteURL != "" {
+			r.POST(m.routes.SectionTemplateDeleteURL, m.SectionTemplateDelete)
+		}
 	}
 }

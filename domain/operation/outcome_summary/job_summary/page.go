@@ -96,8 +96,8 @@ func overallDeterminationVariant(d enums.OverallDetermination) string {
 func NewView(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
-		if !perms.Can("job_outcome_summary", "list") {
-			return view.Forbidden("job_outcome_summary:list")
+		if !outcome_summary.CanLegacyDetail(perms) {
+			return view.Forbidden("job_outcome_summary:read")
 		}
 
 		id := viewCtx.Request.PathValue("id")

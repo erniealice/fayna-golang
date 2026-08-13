@@ -46,6 +46,7 @@ import (
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
+	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
 // actionsColumnKey is the column Key of the frozen per-row action cell (view
@@ -96,7 +97,8 @@ type Deps struct {
 	// Options — app-configured row presentation (bands + sort) + CategoryFilter
 	// (a job_category code, e.g. "academic"). Zero value → flat rows (no bands),
 	// name sort, and no category filter.
-	Options outcome_summary.Options
+	Options              outcome_summary.Options
+	ResolvePrincipalKind func(context.Context) int32
 
 	// ListJobCategories resolves Options.CategoryFilter to its id so same-origin
 	// deportment jobs are dropped from the academic grid (gate H2). Optional/
@@ -111,6 +113,16 @@ type Deps struct {
 	ListJobOutcomeSummarys       func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
 	ListClientAttributes         func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
 	ResolveAttributeIDByCode     func(ctx context.Context, code string) (string, error)
+	// Explicit consolidated export dependencies. ListAttributes is deliberately
+	// separate from the screen's first-row ResolveAttributeIDByCode helper: the
+	// official export requires exactly one active code+module definition.
+	ListAttributes                    func(ctx context.Context, req *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error)
+	GetSubscriptionGroupOutcomeExport func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	// ResolveSectionTemplate composes the report-scoped Espyna resolver with
+	// app storage and returns no locator. GeneratePDF is Fycha's injected
+	// template+data -> PDF closure. Both are optional and PDF fails loud if nil.
+	ResolveSectionTemplate func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSectionTemplate, error)
+	GeneratePDF            func(templateData []byte, data map[string]any) ([]byte, error)
 
 	// Non-enrolled-placeholder evidence walk (job_phase → job_task →
 	// task_outcome). Optional/nil-safe: when any is nil (a tier that never wired
@@ -185,8 +197,8 @@ func (s student) listName() string {
 func NewView(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
-		if !perms.Can("job_outcome_summary", "list") {
-			return view.Forbidden("job_outcome_summary:list")
+		if !outcome_summary.CanLegacyDetail(perms) {
+			return view.Forbidden("job_outcome_summary:read")
 		}
 
 		sectionID := strings.TrimSpace(viewCtx.Request.PathValue("id"))

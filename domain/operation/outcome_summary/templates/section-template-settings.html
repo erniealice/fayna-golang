@@ -1,0 +1,78 @@
+{{define "section-template-settings"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{define "section-template-settings-content"}}
+<div class="page-content page-content--table" data-testid="section-template-settings">
+    {{template "table-card" .Table}}
+</div>
+{{end}}
+
+{{define "section-template-upload-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-encoding="multipart/form-data" data-hx-on="sheet-response" data-testid="section-template-upload-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    <div class="sheet-body">
+        {{template "form-section" (dict "Title" .Labels.UploadTitle)}}
+
+        <div class="form-row single">
+            {{template "form-group" (dict "Type" "text" "Name" "name" "Label" .Labels.NameLabel "Required" true "Placeholder" .Labels.NameLabel)}}
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <span class="form-label">{{.Labels.ProfileColumn}}</span>
+                <p class="form-hint" data-testid="section-template-profile">{{.ProfileLabel}}</p>
+            </div>
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="section_template_job_category_id">{{.Labels.CategoryLabel}} <span class="form-required" aria-hidden="true">*</span></label>
+                <select class="form-input" id="section_template_job_category_id" name="job_category_id" data-testid="section-template-category-select" required>
+                    {{range $index, $option := .CategoryOptions}}
+                    <option value="{{$option.Value}}"{{if eq $index 0}} disabled selected{{end}}>{{$option.Label}}</option>
+                    {{end}}
+                </select>
+                <p class="form-hint">{{.Labels.CategoryRequiredForProfile}}</p>
+            </div>
+        </div>
+
+        <div class="form-row two-columns">
+            <div class="form-group">
+                <label class="form-label" for="section_template_price_schedule_id">{{.Labels.ScheduleLabel}}</label>
+                <select class="form-input" id="section_template_price_schedule_id" name="price_schedule_id" data-testid="section-template-schedule-select">
+                    {{range .ScheduleOptions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="section_template_plan_id">{{.Labels.PlanLabel}}</label>
+                <select class="form-input" id="section_template_plan_id" name="plan_id" data-testid="section-template-plan-select">
+                    {{range .PlanOptions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row two-columns">
+            <div class="form-group">
+                <label class="form-label" for="section_template_validity_start">{{.Labels.ValidityStartLabel}}</label>
+                <input class="form-input" type="date" id="section_template_validity_start" name="validity_start" data-testid="section-template-validity-start">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="section_template_validity_end">{{.Labels.ValidityEndLabel}}</label>
+                <input class="form-input" type="date" id="section_template_validity_end" name="validity_end" data-testid="section-template-validity-end">
+            </div>
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="section_template_file">{{.Labels.FileLabel}} <span class="form-required" aria-hidden="true">*</span></label>
+                <input class="form-input" type="file" id="section_template_file" name="template_file" accept="{{.AcceptTypes}}" data-testid="section-template-file" required>
+            </div>
+        </div>
+    </div>
+    <div class="sheet-footer">
+        <button type="button" class="btn btn-secondary" data-lf-action="sheet-close">{{.CommonLabels.Buttons.Cancel}}</button>
+        <button type="submit" class="btn btn-primary" data-testid="section-template-upload-submit">{{.CommonLabels.Buttons.Save}}</button>
+    </div>
+</form>
+{{end}}

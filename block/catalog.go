@@ -1,6 +1,7 @@
 package block
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -75,11 +76,8 @@ func JobUnit(uc *UseCases, infra *Infra, options job.Options) compose.Unit {
 		// outcome_matrix.matrix route — the template-grain delivery summary
 		// row link ("/outcome-matrix/{id}", id=job_template_id).
 		if omRoutes, ok := compose.RoutesOf[*outcome_matrix.Routes](mc, "operation.outcome_matrix"); ok {
-			deps.MatrixDetailURL = omRoutes.MatrixURL
-			// Section-scoped sibling. Each summary row is already at
-			// (template x group) grain, so linking to the template alone made
-			// every section of a multi-section template share one URL.
-			deps.MatrixGroupDetailURL = omRoutes.GroupMatrixURL
+			omLabels, _ := compose.LabelsOf[*outcome_matrix.Labels](mc, "operation.outcome_matrix")
+			wireJobOutcomeMatrixListDeps(deps, omRoutes, omLabels)
 		}
 		if infra.RefChecker != nil {
 			deps.GetInUseIDs = infra.RefChecker.GetJobInUseIDs
@@ -95,6 +93,22 @@ func JobUnit(uc *UseCases, infra *Infra, options job.Options) compose.Unit {
 		return nil
 	}
 	return u
+}
+
+func wireJobOutcomeMatrixListDeps(deps *operation.JobModuleDeps, routes *outcome_matrix.Routes, labels *outcome_matrix.Labels) {
+	if deps == nil || routes == nil {
+		return
+	}
+	deps.MatrixDetailURL = routes.MatrixURL
+	// Section-scoped sibling. Each summary row is already at
+	// (template x group) grain, so linking to the template alone made every
+	// section of a multi-section template share one URL.
+	deps.MatrixGroupDetailURL = routes.GroupMatrixURL
+	deps.MatrixDownloadDrawerURL = routes.DownloadDrawerURL
+	deps.MatrixGroupDownloadDrawerURL = routes.GroupDownloadDrawerURL
+	if labels != nil {
+		deps.MatrixDownloadDrawerTitle = labels.Export.DrawerTitle
+	}
 }
 
 // JobCategoryUnit registers the per-workspace job taxonomy CRUD module (P7a):
@@ -677,23 +691,34 @@ func OutcomeMatrixUnit(uc *UseCases, infra *Infra, options outcome_matrix.Option
 // per-section grid (client × job_template year-final ratings). options is the
 // app's presentation config (EngineBlock's view option block); the zero value
 // renders the current flat list unchanged (backward-compatible).
-func OutcomeSummaryUnit(uc *UseCases, infra *Infra, options outcome_summary.Options) compose.Unit {
+func OutcomeSummaryUnit(uc *UseCases, infra *Infra, options outcome_summary.Options, principalKindResolvers ...func(context.Context) int32) compose.Unit {
+	var resolvePrincipalKind func(context.Context) int32
+	if len(principalKindResolvers) > 0 {
+		resolvePrincipalKind = principalKindResolvers[0]
+	}
 	u := outcome_summary.Describe()
+	if options.List.SubscriptionGroups() {
+		u.Nav.Items = append(u.Nav.Items, outcome_summary.SectionTemplateSettingsNavItem())
+	}
 	u.Mount = func(mc *compose.MountContext) error {
 		r := u.Routes.(*outcome_summary.Routes)
 		l := u.Labels.(*outcome_summary.Labels)
 
 		deps := &operation.OutcomeSummaryModuleDeps{
-			Routes:       *r,
-			Labels:       *l,
-			CommonLabels: mc.Common,
-			TableLabels:  mc.Table,
-			Options:      options,
+			Routes:               *r,
+			Labels:               *l,
+			CommonLabels:         mc.Common,
+			TableLabels:          mc.Table,
+			Options:              options,
+			ResolvePrincipalKind: resolvePrincipalKind,
 		}
 		if infra != nil {
 			deps.GenerateDoc = infra.GenerateDoc
 			deps.GeneratePDF = infra.GeneratePDF
 			deps.ResolveTemplateBytes = infra.ResolveTemplateBytes
+			deps.ResolveSectionTemplate = infra.ResolveSectionTemplate
+			deps.StoreSectionTemplate = infra.StoreSectionTemplate
+			deps.DeleteSectionTemplateObject = infra.DeleteSectionTemplateObject
 			// TB3 template settings artifact closures.
 			deps.UploadTemplate = infra.UploadTemplate
 			deps.ListDocumentTemplates = infra.ListDocTemplates
@@ -901,7 +926,7 @@ func AllUnits(uc *UseCases, infra *Infra, opts ...EngineOption) []compose.Unit {
 		ReportingCheckpointUnit(uc, infra),
 		TaskOutcomeUnit(uc, infra),
 		OutcomeMatrixUnit(uc, infra, cfg.outcomeMatrixOptions),
-		OutcomeSummaryUnit(uc, infra, cfg.outcomeSummaryOptions),
+		OutcomeSummaryUnit(uc, infra, cfg.outcomeSummaryOptions, cfg.resolveOutcomeSummaryPrincipalKind),
 		FulfillmentUnit(uc, infra),
 		// Performance-Evaluation (20260604). evaluation_template_item must be
 		// registered (it has no Nav) so the template unit's RoutesOf lookup

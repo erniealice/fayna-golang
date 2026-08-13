@@ -29,6 +29,9 @@ import (
 	"os"
 	"testing"
 
+	espynaports "github.com/erniealice/espyna-golang/ports"
+	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
+	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	clientpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
@@ -64,10 +67,12 @@ import (
 	scoringcomponentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_component"
 	scoringcomponentcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_component_criteria"
 	scoringschemepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_scheme"
+	sectionbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	productpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
+	planpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/plan"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
@@ -77,6 +82,7 @@ import (
 	activitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/workflow/activity"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
+	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 
 	fulfillmentdashboard "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
 	cycleview "github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
@@ -146,15 +152,23 @@ type OperationUseCases struct {
 	// publish use cases. OPTIONAL / nil-able — a nil closure degrades the settings
 	// surface to empty/"not configured".
 	JobTemplateDocumentTemplate JobTemplateDocumentTemplateUseCases
-	JobTemplatePhase            JobTemplatePhaseUseCases
-	JobTemplateTask             JobTemplateTaskUseCases
-	OutcomeCriteria             OutcomeCriteriaUseCases
-	TaskOutcome                 TaskOutcomeUseCases
+	// SubscriptionGroupDocumentTemplate — consolidated group-outcome document
+	// binding. It is distinct from report-card and grade-sheet template families.
+	SubscriptionGroupDocumentTemplate SubscriptionGroupDocumentTemplateUseCases
+	JobTemplatePhase                  JobTemplatePhaseUseCases
+	JobTemplateTask                   JobTemplateTaskUseCases
+	OutcomeCriteria                   OutcomeCriteriaUseCases
+	TaskOutcome                       TaskOutcomeUseCases
 	// OutcomeMatrix — the generic principal-scoped grading grid (read) + the
 	// acting-staff resolver its read-only + IDOR gates depend on. Sourced from
 	// espyna's SERVICE aggregate (service/operation/outcome_matrix), surfaced
 	// here on Operation because the view module lives in fayna domain/operation.
 	OutcomeMatrix OutcomeMatrixUseCases
+	// SubscriptionGroupOutcomeExport is the report-authorized, group-scoped
+	// category/period options and rectangular outcome read. It originates in
+	// espyna's service aggregate but is surfaced here beside the consuming
+	// outcome-summary module. Optional/nil-able: the drawer/export fail closed.
+	SubscriptionGroupOutcomeExport SubscriptionGroupOutcomeExportUseCases
 	// JobTemplateSummary — the generic resolver-scoped, template-grain delivery
 	// summary (read). Sourced from espyna's SERVICE aggregate
 	// (service/operation/job_template_summary), surfaced here on Operation
@@ -307,6 +321,17 @@ type JobTemplateDocumentTemplateUseCases struct {
 	PublishJobTemplateDocumentTemplate func(context.Context, *sheetbindingpb.PublishJobTemplateDocumentTemplateRequest) (*sheetbindingpb.PublishJobTemplateDocumentTemplateResponse, error)
 }
 
+// SubscriptionGroupDocumentTemplateUseCases is the Section Template lifecycle.
+// CreateUploadPair atomically creates the already-stored artifact and DRAFT
+// binding after both create permissions are rechecked by Espyna.
+type SubscriptionGroupDocumentTemplateUseCases struct {
+	CreateUploadPair                         func(context.Context, *documenttemplatepb.DocumentTemplate, *sectionbindingpb.SubscriptionGroupDocumentTemplate) (*documenttemplatepb.DocumentTemplate, *sectionbindingpb.SubscriptionGroupDocumentTemplate, error)
+	ListSubscriptionGroupDocumentTemplates   func(context.Context, *sectionbindingpb.ListSubscriptionGroupDocumentTemplatesRequest) (*sectionbindingpb.ListSubscriptionGroupDocumentTemplatesResponse, error)
+	DeleteDraftPair                          func(context.Context, string) (*documenttemplatepb.DocumentTemplate, error)
+	DeleteSubscriptionGroupDocumentTemplate  func(context.Context, *sectionbindingpb.DeleteSubscriptionGroupDocumentTemplateRequest) (*sectionbindingpb.DeleteSubscriptionGroupDocumentTemplateResponse, error)
+	PublishSubscriptionGroupDocumentTemplate func(context.Context, *sectionbindingpb.PublishSubscriptionGroupDocumentTemplateRequest) (*sectionbindingpb.PublishSubscriptionGroupDocumentTemplateResponse, error)
+}
+
 // JobTemplatePhaseUseCases — JobTemplatePhase CRUD + ListByJobTemplate.
 type JobTemplatePhaseUseCases struct {
 	CreateJobTemplatePhase func(context.Context, *jobtemplatephasepb.CreateJobTemplatePhaseRequest) (*jobtemplatephasepb.CreateJobTemplatePhaseResponse, error)
@@ -407,6 +432,13 @@ type OutcomeMatrixUseCases struct {
 	// degrades the gate to template grain.
 	GetPhaseApprovalGateRollup func(context.Context, *matrixpb.GetPhaseApprovalGateRollupRequest) (*matrixpb.GetPhaseApprovalGateRollupResponse, error)
 	ResolveStaff               func(ctx context.Context) (string, error)
+}
+
+// SubscriptionGroupOutcomeExportUseCases is the narrow composite read used by
+// the section download drawer and its explicit CSV/PDF export path.
+type SubscriptionGroupOutcomeExportUseCases struct {
+	GetSubscriptionGroupOutcomeExport   func(context.Context, *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	ListSubscriptionGroupOutcomeLanding func(context.Context, *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
 }
 
 // JobTemplateSummaryUseCases — the generic resolver-scoped, template-grain
@@ -638,6 +670,13 @@ type SubscriptionUseCases struct {
 	SubscriptionGroupMember        SubscriptionGroupMemberUseCases
 	SubscriptionGroupWorkspaceUser SubscriptionGroupWorkspaceUserUseCases
 	PriceSchedule                  PriceScheduleUseCases
+	Plan                           PlanUseCases
+}
+
+// PlanUseCases provides the optional applicability-axis choices used by the
+// subscription-group document-template settings drawer.
+type PlanUseCases struct {
+	ListPlans func(context.Context, *planpb.ListPlansRequest) (*planpb.ListPlansResponse, error)
 }
 
 // SubscriptionGroupWorkspaceUserUseCases — bare list of a group's servicing
@@ -731,7 +770,11 @@ type EntityClientUseCases struct {
 // field references): the code→id resolver plus the per-client value list.
 // Optional/nil-safe — nil disables the attribute-driven behaviors only.
 type EntityClientAttributeUseCases struct {
-	ListClientAttributes     func(context.Context, *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
+	ListClientAttributes func(context.Context, *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
+	// ListAttributes intentionally exposes the trusted definition list beside
+	// the client values consumed by Fayna. The export requires an exact-one
+	// active code+module match; it must not reuse the legacy first-row resolver.
+	ListAttributes           func(context.Context, *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error)
 	ResolveAttributeIDByCode func(ctx context.Context, code string) (string, error)
 }
 

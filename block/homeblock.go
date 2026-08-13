@@ -35,6 +35,7 @@ type homeConfig struct {
 	options              home.Options
 	resolvePrincipalKind func(ctx context.Context) int32
 	resolveWorkspaceName func(ctx context.Context) string
+	resolveOverviewURL   func(ctx context.Context) string
 }
 
 // WithHomeOptions sets the deployment-declared home-surface config (persona
@@ -56,6 +57,14 @@ func WithHomePrincipalKindResolver(fn func(ctx context.Context) int32) HomeOptio
 // the workspace line is omitted.
 func WithHomeWorkspaceNameResolver(fn func(ctx context.Context) string) HomeOption {
 	return func(c *homeConfig) { c.resolveWorkspaceName = fn }
+}
+
+// WithHomeOverviewURLResolver injects the WORKSPACE-QUALIFIED overview URL the
+// bare /home route redirects to (20260809 D2/M5). The app builds it with its
+// workspace-slug helper so fayna never imports espyna's slug package. Nil-safe:
+// absent ⇒ the redirect falls back to the bare Routes.OverviewURL.
+func WithHomeOverviewURLResolver(fn func(ctx context.Context) string) HomeOption {
+	return func(c *homeConfig) { c.resolveOverviewURL = fn }
 }
 
 // HomeBlock returns the consumerapp.AppOption that mounts the persona-aware
@@ -131,6 +140,7 @@ func HomeBlock(opts ...HomeOption) consumerapp.AppOption {
 				GetCompletionSummary: getSummary,
 				ResolvePrincipalKind: cfg.resolvePrincipalKind,
 				ResolveWorkspaceName: cfg.resolveWorkspaceName,
+				ResolveOverviewURL:   cfg.resolveOverviewURL,
 				LogDeny:              logDeny,
 			}).RegisterRoutes(mc.Routes)
 			return nil

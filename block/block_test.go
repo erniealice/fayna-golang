@@ -19,7 +19,30 @@ import (
 	phaseoutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	operation "github.com/erniealice/fayna-golang/domain/operation"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 )
+
+func TestWireJobOutcomeMatrixListDepsIncludesDownloadDrawers(t *testing.T) {
+	t.Parallel()
+
+	deps := &operation.JobModuleDeps{}
+	routes := &outcome_matrix.Routes{
+		MatrixURL:              "/grade-sheet/{id}",
+		GroupMatrixURL:         "/grade-sheet/{id}/section/{group_id}",
+		DownloadDrawerURL:      "/action/grade-sheet/{id}/download",
+		GroupDownloadDrawerURL: "/action/grade-sheet/{id}/section/{group_id}/download",
+	}
+	labels := &outcome_matrix.Labels{Export: outcome_matrix.ExportLabels{DrawerTitle: "Download grade sheet"}}
+
+	wireJobOutcomeMatrixListDeps(deps, routes, labels)
+
+	if deps.MatrixDetailURL != routes.MatrixURL || deps.MatrixGroupDetailURL != routes.GroupMatrixURL ||
+		deps.MatrixDownloadDrawerURL != routes.DownloadDrawerURL || deps.MatrixGroupDownloadDrawerURL != routes.GroupDownloadDrawerURL ||
+		deps.MatrixDownloadDrawerTitle != labels.Export.DrawerTitle {
+		t.Fatalf("outcome-matrix job-list wiring = %#v", deps)
+	}
+}
 
 func TestBlockConfig_NoOptions_EnablesAll(t *testing.T) {
 	t.Parallel()

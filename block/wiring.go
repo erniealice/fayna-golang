@@ -369,6 +369,7 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	// new espyna surface. Nil-safe end to end (a nil closure degrades the
 	// affected surface to empty/flat, never panics).
 	deps.ListPriceSchedules = u.Subscription.PriceSchedule.ListPriceSchedules
+	deps.ListPlans = u.Subscription.Plan.ListPlans
 	deps.ListSubscriptionGroups = u.Subscription.SubscriptionGroup.ListSubscriptionGroups
 	// H2 category filter: resolve Options.CategoryFilter (a job_category code,
 	// e.g. "academic") to its id once per request so the three grade surfaces
@@ -393,7 +394,10 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
 	deps.ListClients = u.Entity.Client.ListClients
 	deps.ListClientAttributes = u.Entity.ClientAttribute.ListClientAttributes
+	deps.ListAttributes = u.Entity.ClientAttribute.ListAttributes
 	deps.ResolveAttributeIDByCode = u.Entity.ClientAttribute.ResolveAttributeIDByCode
+	deps.GetSubscriptionGroupOutcomeExport = u.Operation.SubscriptionGroupOutcomeExport.GetSubscriptionGroupOutcomeExport
+	deps.ListSubscriptionGroupOutcomeLanding = u.Operation.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding
 	deps.ListJobTemplateSummaries = u.Operation.JobTemplateSummary.ListJobTemplateSummaries
 	// Landing dynamic category columns (R9 W-A2): the SAME single-statement
 	// tab-support UNION read the "/classes" job list consumes — category
@@ -427,6 +431,13 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.CreateTemplateBinding = binding.CreateJobOutcomeSummaryDocumentTemplate
 	deps.DeleteTemplateBinding = binding.DeleteJobOutcomeSummaryDocumentTemplate
 	deps.PublishTemplateBinding = binding.PublishJobOutcomeSummaryDocumentTemplate
+
+	sectionBinding := &u.Operation.SubscriptionGroupDocumentTemplate
+	deps.CreateSectionTemplateUploadPair = sectionBinding.CreateUploadPair
+	deps.ListSectionTemplateBindings = sectionBinding.ListSubscriptionGroupDocumentTemplates
+	deps.DeleteSectionTemplateDraftPair = sectionBinding.DeleteDraftPair
+	deps.DeleteSectionTemplateBinding = sectionBinding.DeleteSubscriptionGroupDocumentTemplate
+	deps.PublishSectionTemplateBinding = sectionBinding.PublishSubscriptionGroupDocumentTemplate
 }
 
 // ---------------------------------------------------------------------------

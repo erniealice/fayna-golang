@@ -6,6 +6,8 @@ import (
 	"github.com/erniealice/espyna-golang/ports"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
+	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 )
 
 // Infra carries the subset of AppContext that view modules need beyond
@@ -76,6 +78,17 @@ type Infra struct {
 	// falls back to an embedded template) BY DESIGN (Q1 / entities.html §5). Nil
 	// when the app did not wire the resolver → the same fail-loud 503.
 	ResolveSheetTemplateBytes func(ctx context.Context, jobCategoryID, priceScheduleID string) ([]byte, error)
+
+	// ResolveSectionTemplate is the report-authorized subscription-group
+	// outcome resolver composed with storage by the app. It returns no storage
+	// locator to Fayna and has no binding-management permission dependency.
+	ResolveSectionTemplate func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSectionTemplate, error)
+
+	// StoreSectionTemplate writes one server-generated object key and returns
+	// the exact physical container that must be persisted. DeleteSectionTemplateObject
+	// is the trusted compensation/reap seam for that same exact locator.
+	StoreSectionTemplate        func(context.Context, string, []byte, string) (string, error)
+	DeleteSectionTemplateObject func(context.Context, string, string) error
 
 	// Report-card template settings (TB3) artifact closures, sourced from the app
 	// AppContext (ctx.UploadTemplate / ctx.ListDocTemplates / ctx.CreateDocTemplate,

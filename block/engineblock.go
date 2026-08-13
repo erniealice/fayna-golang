@@ -23,6 +23,7 @@ import (
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	fulfillmentdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/fulfillment"
 	jobdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/job"
+	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
 // EngineOption configures the engine block from the consuming app (the app's
@@ -31,9 +32,10 @@ type EngineOption func(*engineConfig)
 
 // engineConfig collects the per-unit view options an app may set.
 type engineConfig struct {
-	outcomeMatrixOptions  outcome_matrix.Options
-	outcomeSummaryOptions outcome_summary.Options
-	jobListOptions        job.Options
+	outcomeMatrixOptions               outcome_matrix.Options
+	outcomeSummaryOptions              outcome_summary.Options
+	jobListOptions                     job.Options
+	resolveOutcomeSummaryPrincipalKind func(context.Context) int32
 }
 
 // WithOutcomeMatrixOptions sets the outcome-matrix row-presentation options
@@ -50,6 +52,14 @@ func WithOutcomeMatrixOptions(o outcome_matrix.Options) EngineOption {
 // (backward-compatible for consumers that do not set it).
 func WithOutcomeSummaryOptions(o outcome_summary.Options) EngineOption {
 	return func(c *engineConfig) { c.outcomeSummaryOptions = o }
+}
+
+// WithOutcomeSummaryPrincipalKindResolver injects the composition-owned
+// session persona resolver into the outcome-summary module. Fayna intentionally
+// receives only the canonical numeric kind and never imports the HTTP/session
+// identity layer. A nil resolver is fail-closed for explicit exports.
+func WithOutcomeSummaryPrincipalKindResolver(fn func(context.Context) int32) EngineOption {
+	return func(c *engineConfig) { c.resolveOutcomeSummaryPrincipalKind = fn }
 }
 
 // WithJobListOptions sets the job list ("/classes") presentation options: the
@@ -163,6 +173,9 @@ func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 		// schedule) so no fayna→espyna dependency is introduced; nil-safe when
 		// unwired (the pdf export fails loud with a 503, no embedded fallback).
 		infra.ResolveSheetTemplateBytes, _ = ctx.ResolveSheetTemplateBytes.(func(context.Context, string, string) ([]byte, error))
+		infra.ResolveSectionTemplate, _ = ctx.ResolveSectionTemplate.(func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSectionTemplate, error))
+		infra.StoreSectionTemplate, _ = ctx.StoreSectionTemplate.(func(context.Context, string, []byte, string) (string, error))
+		infra.DeleteSectionTemplateObject, _ = ctx.DeleteSectionTemplateObject.(func(context.Context, string, string) error)
 		// TB3 template settings artifact closures (upload + document_template CRUD).
 		infra.UploadTemplate, _ = ctx.UploadTemplate.(func(context.Context, string, string, []byte, string) error)
 		infra.ListDocTemplates, _ = ctx.ListDocTemplates.(func(context.Context, *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error))
@@ -288,6 +301,18 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.JobTemplateDocumentTemplate.CreateJobTemplateDocumentTemplate = b.CreateJobTemplateDocumentTemplate.Execute
 			result.Operation.JobTemplateDocumentTemplate.DeleteJobTemplateDocumentTemplate = b.DeleteJobTemplateDocumentTemplate.Execute
 			result.Operation.JobTemplateDocumentTemplate.PublishJobTemplateDocumentTemplate = b.PublishJobTemplateDocumentTemplate.Execute
+		}
+
+		// SubscriptionGroupDocumentTemplate — Section Template management. The
+		// atomic pair method exposes protobuf-only arguments so this consumer does
+		// not import Espyna's internal application DTOs.
+		if op.SubscriptionGroupDocumentTemplate != nil {
+			b := op.SubscriptionGroupDocumentTemplate
+			result.Operation.SubscriptionGroupDocumentTemplate.CreateUploadPair = b.CreateUploadPair.ExecutePair
+			result.Operation.SubscriptionGroupDocumentTemplate.ListSubscriptionGroupDocumentTemplates = b.ListSubscriptionGroupDocumentTemplates.Execute
+			result.Operation.SubscriptionGroupDocumentTemplate.DeleteDraftPair = b.DeleteDraftPair.ExecutePair
+			result.Operation.SubscriptionGroupDocumentTemplate.DeleteSubscriptionGroupDocumentTemplate = b.DeleteSubscriptionGroupDocumentTemplate.Execute
+			result.Operation.SubscriptionGroupDocumentTemplate.PublishSubscriptionGroupDocumentTemplate = b.PublishSubscriptionGroupDocumentTemplate.Execute
 		}
 
 		if op.JobTemplatePhase != nil {
@@ -449,6 +474,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		if uc.Subscription.PriceSchedule != nil {
 			result.Subscription.PriceSchedule.ListPriceSchedules = uc.Subscription.PriceSchedule.ListPriceSchedules.Execute
 		}
+		if uc.Subscription.Plan != nil {
+			result.Subscription.Plan.ListPlans = uc.Subscription.Plan.ListPlans.Execute
+		}
 	}
 
 	// -- Product (cross-domain; template-grain delivery summary's deliverer
@@ -481,6 +509,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 	// The attribute code→id resolver behind the outcome-matrix row options
 	// ("client_attributes.<code>"). Lives on espyna's Common aggregate.
 	if uc.Common != nil && uc.Common.Attribute != nil {
+		if uc.Common.Attribute.ListAttributes != nil {
+			result.Entity.ClientAttribute.ListAttributes = uc.Common.Attribute.ListAttributes.Execute
+		}
 		result.Entity.ClientAttribute.ResolveAttributeIDByCode = uc.Common.Attribute.ReadAttributeByCode
 	}
 
@@ -509,6 +540,19 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 	if uc.Service != nil && uc.Service.OutcomeMatrix != nil &&
 		uc.Service.OutcomeMatrix.GetPhaseApprovalGateRollup != nil {
 		result.Operation.OutcomeMatrix.GetPhaseApprovalGateRollup = uc.Service.OutcomeMatrix.GetPhaseApprovalGateRollup.Execute
+	}
+	// SubscriptionGroupOutcomeExport is a separate report-scoped service read,
+	// not an HTTP/gRPC transport route. The use case owns permission and
+	// principal scope; Fayna supplies only the group and validated selection.
+	if uc.Service != nil && uc.Service.SubscriptionGroupOutcomeExport != nil &&
+		uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupOutcomeExport != nil {
+		result.Operation.SubscriptionGroupOutcomeExport.GetSubscriptionGroupOutcomeExport =
+			uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupOutcomeExport.Execute
+	}
+	if uc.Service != nil && uc.Service.SubscriptionGroupOutcomeExport != nil &&
+		uc.Service.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding != nil {
+		result.Operation.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding =
+			uc.Service.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding.Execute
 	}
 	// ResolveStaff maps the session user → active staff_id through the typed staff
 	// list use case (the read-only gate + record-action IDOR guard authority).

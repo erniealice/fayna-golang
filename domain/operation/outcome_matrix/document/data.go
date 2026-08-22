@@ -19,7 +19,7 @@ package document
 // never a leaked {{period2}} token.
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log"
 	"strconv"

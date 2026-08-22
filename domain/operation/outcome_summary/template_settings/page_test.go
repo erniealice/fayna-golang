@@ -16,6 +16,7 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
+	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 )
 
@@ -144,6 +145,7 @@ type uploadRecorder struct {
 
 	createdDocID      string
 	createdBindingID  string
+	createdSupersedes string
 	deletedBindingID  string
 	deletedDocID      string
 	createdContainer  string
@@ -151,7 +153,8 @@ type uploadRecorder struct {
 	uploadedContainer string
 	uploadedKey       string
 
-	bindings []*bindingpb.JobOutcomeSummaryDocumentTemplate
+	bindings  []*bindingpb.JobOutcomeSummaryDocumentTemplate
+	documents []*documenttemplatepb.DocumentTemplate
 }
 
 func (r *uploadRecorder) deps() *Deps {
@@ -180,12 +183,13 @@ func (r *uploadRecorder) deps() *Deps {
 			r.deletedDocID = req.GetData().GetId()
 			return &documenttemplatepb.DeleteDocumentTemplateResponse{Success: true}, nil
 		},
-		CreateTemplateBinding: func(_ context.Context, _ *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error) {
+		CreateTemplateBinding: func(_ context.Context, req *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error) {
 			r.order = append(r.order, "create_binding")
 			if r.failCreateBinding {
 				return nil, errors.New("create binding boom")
 			}
 			r.createdBindingID = "b-created"
+			r.createdSupersedes = req.GetData().GetSupersedesBindingId()
 			return &bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse{
 				Data:    []*bindingpb.JobOutcomeSummaryDocumentTemplate{{Id: "b-created"}},
 				Success: true,
@@ -202,15 +206,27 @@ func (r *uploadRecorder) deps() *Deps {
 			}
 			return &bindingpb.ListJobOutcomeSummaryDocumentTemplatesResponse{Data: r.bindings, Success: true}, nil
 		},
+		ListDocumentTemplates: func(_ context.Context, _ *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error) {
+			return &documenttemplatepb.ListDocumentTemplatesResponse{Data: r.documents, Success: true}, nil
+		},
 	}
 }
 
 func uploadPost(t *testing.T, content []byte) *view.ViewContext {
+	return uploadPostWithFields(t, content, nil)
+}
+
+func uploadPostWithFields(t *testing.T, content []byte, extra map[string]string) *view.ViewContext {
 	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	if err := mw.WriteField("name", "Test Template"); err != nil {
 		t.Fatalf("write name field: %v", err)
+	}
+	for key, value := range extra {
+		if err := mw.WriteField(key, value); err != nil {
+			t.Fatalf("write %q field: %v", key, err)
+		}
 	}
 	fw, err := mw.CreateFormFile("template_file", "report.docx")
 	if err != nil {
@@ -262,6 +278,98 @@ func TestPublishAction_GatesOnBindingFamily(t *testing.T) {
 	}
 	if res := v.Handle(permsCtx("job_outcome_summary_document_template:update"), vc); res.StatusCode != http.StatusOK || published != "b-1" {
 		t.Errorf("binding-family update role must publish (status %d, published %q)", res.StatusCode, published)
+	}
+}
+
+func TestListRows_ReplacementEditAndDraftActions(t *testing.T) {
+	rec := &uploadRecorder{bindings: []*bindingpb.JobOutcomeSummaryDocumentTemplate{
+		{Id: "published", DocumentTemplateId: "dt-published", VersionStatus: enums.VersionStatus_VERSION_STATUS_PUBLISHED, DocumentTemplate: &documenttemplatepb.DocumentTemplate{Id: "dt-published", Name: "Published", DocumentPurpose: documentPurpose}},
+		{Id: "draft", DocumentTemplateId: "dt-draft", VersionStatus: enums.VersionStatus_VERSION_STATUS_DRAFT, DocumentTemplate: &documenttemplatepb.DocumentTemplate{Id: "dt-draft", Name: "Draft", DocumentPurpose: documentPurpose}},
+	}}
+	deps := rec.deps()
+	deps.Routes.TemplateUploadURL = "/templates/upload"
+	deps.Routes.TemplatePublishURL = "/templates/publish"
+	deps.Routes.TemplateDeleteURL = "/templates/delete"
+	deps.CommonLabels.Actions.Edit = "Edit"
+	perms := types.NewUserPermissions([]string{
+		bindingPermissionEntity + ":create",
+		bindingPermissionEntity + ":update",
+		bindingPermissionEntity + ":delete",
+	})
+
+	rows := buildBindingRows(context.Background(), deps, perms)
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	if len(rows[0].Actions) != 1 || rows[0].Actions[0].Type != "edit" || rows[0].Actions[0].URL != deps.Routes.TemplateUploadURL {
+		t.Fatalf("published actions = %#v, want replacement edit only", rows[0].Actions)
+	}
+	if len(rows[1].Actions) != 2 || rows[1].Actions[0].Type != "activate" || rows[1].Actions[1].Type != "delete" {
+		t.Fatalf("draft actions = %#v, want publish + delete", rows[1].Actions)
+	}
+}
+
+func TestUploadAction_ReplacementDrawerPrefillsSource(t *testing.T) {
+	source := &bindingpb.JobOutcomeSummaryDocumentTemplate{
+		Id: "published", DocumentTemplateId: "dt-published", VersionStatus: enums.VersionStatus_VERSION_STATUS_PUBLISHED,
+		DocumentTemplate: &documenttemplatepb.DocumentTemplate{Id: "dt-published", Name: "Existing report card", DocumentPurpose: documentPurpose},
+	}
+	deps := (&uploadRecorder{bindings: []*bindingpb.JobOutcomeSummaryDocumentTemplate{source}}).deps()
+	deps.CommonLabels.Actions.Edit = "Edit"
+	req := httptest.NewRequest(http.MethodGet, "/templates/upload?id=published", nil)
+	res := NewUploadAction(deps).Handle(permsCtx(bindingPermissionEntity+":create"), &view.ViewContext{Request: req})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("replacement drawer status = %d, want 200", res.StatusCode)
+	}
+	form, ok := res.Data.(*UploadFormData)
+	if !ok {
+		t.Fatalf("drawer data = %T, want *UploadFormData", res.Data)
+	}
+	if !form.IsEdit || form.SourceBindingID != source.GetId() || form.Name != "Existing report card" || form.FormTitle != "Edit" {
+		t.Fatalf("replacement drawer was not prefilled: %#v", form)
+	}
+}
+
+func TestUploadAction_ReplacementCreatesSuccessorWithoutMutatingSource(t *testing.T) {
+	source := &bindingpb.JobOutcomeSummaryDocumentTemplate{
+		Id: "published", DocumentTemplateId: "dt-published", VersionStatus: enums.VersionStatus_VERSION_STATUS_PUBLISHED,
+		DocumentTemplate: &documenttemplatepb.DocumentTemplate{Id: "dt-published", Name: "Existing report card", DocumentPurpose: documentPurpose},
+	}
+	rec := &uploadRecorder{bindings: []*bindingpb.JobOutcomeSummaryDocumentTemplate{source}}
+	res := NewUploadAction(rec.deps()).Handle(
+		permsCtx(bindingPermissionEntity+":create"),
+		uploadPostWithFields(t, minimalDocx(t), map[string]string{"source_binding_id": source.GetId()}),
+	)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("replacement upload status = %d, want 200", res.StatusCode)
+	}
+	if rec.createdSupersedes != source.GetId() {
+		t.Errorf("supersedes_binding_id = %q, want %q", rec.createdSupersedes, source.GetId())
+	}
+	if rec.createdDocID == "" || rec.createdDocID == source.GetDocumentTemplateId() {
+		t.Errorf("replacement must create a new artifact, got %q", rec.createdDocID)
+	}
+	if rec.deletedBindingID != "" || rec.deletedDocID != "" || source.GetVersionStatus() != enums.VersionStatus_VERSION_STATUS_PUBLISHED {
+		t.Errorf("source history was mutated or deleted: binding=%q doc=%q status=%s", rec.deletedBindingID, rec.deletedDocID, source.GetVersionStatus())
+	}
+
+	draft := &bindingpb.JobOutcomeSummaryDocumentTemplate{Id: "draft-source", DocumentTemplateId: "dt-draft", VersionStatus: enums.VersionStatus_VERSION_STATUS_DRAFT, DocumentTemplate: &documenttemplatepb.DocumentTemplate{Id: "dt-draft", DocumentPurpose: documentPurpose}}
+	rec = &uploadRecorder{bindings: []*bindingpb.JobOutcomeSummaryDocumentTemplate{draft}}
+	res = NewUploadAction(rec.deps()).Handle(
+		permsCtx(bindingPermissionEntity+":create"),
+		uploadPostWithFields(t, minimalDocx(t), map[string]string{"source_binding_id": draft.GetId()}),
+	)
+	if res.StatusCode == http.StatusOK || len(rec.order) != 0 {
+		t.Fatalf("draft lineage source must fail before writes: status=%d order=%v", res.StatusCode, rec.order)
+	}
+
+	rec = &uploadRecorder{}
+	res = NewUploadAction(rec.deps()).Handle(
+		permsCtx(bindingPermissionEntity+":create"),
+		uploadPostWithFields(t, minimalDocx(t), map[string]string{"source_binding_id": "forged-source"}),
+	)
+	if res.StatusCode == http.StatusOK || len(rec.order) != 0 {
+		t.Fatalf("forged lineage source must fail before writes: status=%d order=%v", res.StatusCode, rec.order)
 	}
 }
 

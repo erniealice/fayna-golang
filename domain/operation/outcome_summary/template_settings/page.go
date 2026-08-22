@@ -71,9 +71,9 @@ const (
 	// their configured bucket before I/O and document_template persistence.
 	storageContainerFallback = "templates"
 	storagePrefix            = "templates/report_card"
-	docxExt        = ".docx"
-	docxContentTyp = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	maxUploadBytes = 10 << 20
+	docxExt                  = ".docx"
+	docxContentTyp           = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	maxUploadBytes           = 10 << 20
 	// maxRequestBytes bounds the whole multipart request body (the .docx cap plus
 	// headroom for the multipart envelope + text fields) so ParseMultipartForm can
 	// never be steered into unbounded reads off the wire.
@@ -139,6 +139,12 @@ type UploadFormData struct {
 	WorkspaceID     string
 	Labels          outcome_summary.TemplateSettingsLabels
 	CommonLabels    any
+	FormTitle       string
+	SourceBindingID string
+	Name            string
+	ValidityStart   string
+	ValidityEnd     string
+	IsEdit          bool
 	ScheduleOptions []types.SelectOption
 	AcceptTypes     string
 }
@@ -214,13 +220,28 @@ func NewUploadAction(deps *Deps) view.View {
 		l := deps.Labels.TemplateSettings
 
 		if viewCtx.Request.Method == http.MethodGet {
-			return view.OK("outcome-summary-template-upload-drawer-form", &UploadFormData{
+			form := &UploadFormData{
 				FormAction:      deps.Routes.TemplateUploadURL,
 				Labels:          l,
 				CommonLabels:    deps.CommonLabels,
+				FormTitle:       l.UploadTitle,
 				ScheduleOptions: scheduleOptions(ctx, deps, l.ScheduleFallback),
 				AcceptTypes:     docxExt,
-			})
+			}
+			if sourceID := strings.TrimSpace(viewCtx.Request.URL.Query().Get("id")); sourceID != "" {
+				source, artifact, ok := replacementSource(ctx, deps, sourceID)
+				if !ok {
+					return view.HTMXError(l.UploadFailed)
+				}
+				form.FormTitle = editLabel(deps)
+				form.SourceBindingID = sourceID
+				form.Name = artifact.GetName()
+				form.ValidityStart = formatFormDate(source.GetValidityStart())
+				form.ValidityEnd = formatFormDate(source.GetValidityEnd())
+				form.IsEdit = true
+				form.ScheduleOptions = selectOption(form.ScheduleOptions, source.GetPriceScheduleId())
+			}
+			return view.OK("outcome-summary-template-upload-drawer-form", form)
 		}
 
 		// POST — create the document_template artifact + a DRAFT binding.
@@ -234,6 +255,12 @@ func NewUploadAction(deps *Deps) view.View {
 		viewCtx.Request.Body = http.MaxBytesReader(nil, viewCtx.Request.Body, maxRequestBytes)
 		if err := viewCtx.Request.ParseMultipartForm(maxUploadBytes); err != nil {
 			return view.HTMXError(l.UploadFailed)
+		}
+		sourceID := strings.TrimSpace(viewCtx.Request.FormValue("source_binding_id"))
+		if sourceID != "" {
+			if _, _, ok := replacementSource(ctx, deps, sourceID); !ok {
+				return view.HTMXError(l.UploadFailed)
+			}
 		}
 
 		name := strings.TrimSpace(viewCtx.Request.FormValue("name"))
@@ -310,6 +337,9 @@ func NewUploadAction(deps *Deps) view.View {
 		// never sends workspace_id. price_schedule_id + validity are operator-set.
 		binding := &bindingpb.JobOutcomeSummaryDocumentTemplate{
 			DocumentTemplateId: docID,
+		}
+		if sourceID != "" {
+			binding.SupersedesBindingId = &sourceID
 		}
 		if ps := strings.TrimSpace(viewCtx.Request.FormValue("price_schedule_id")); ps != "" {
 			binding.PriceScheduleId = &ps
@@ -532,8 +562,10 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 	l := deps.Labels.TemplateSettings
 	docNames := docTemplateNames(ctx, deps)
 	schedNames := scheduleNames(ctx, deps)
-	// Q4: each row action cites the code its use case enforces — publish gates
-	// :update, delete gates :delete (a split role may hold one, not the other).
+	// Q4: each row action cites the code its use case enforces — replacement
+	// creation gates :create, publish gates :update, and delete gates :delete (a
+	// split role may hold one permission without the others).
+	canReplace := perms.Can(bindingPermissionEntity, "create")
 	canPublish := perms.Can(bindingPermissionEntity, "update")
 	canDelete := perms.Can(bindingPermissionEntity, "delete")
 
@@ -546,10 +578,9 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 		statusLabel, statusVariant := statusBadge(b.GetVersionStatus(), l)
 		validity := formatValidity(b, l)
 
-		// Publish + Delete are DRAFT-only. A PUBLISHED/DEPRECATED binding is part
-		// of the immutable version history (historical as_of renders resolve it),
-		// so it exposes no row action — mirroring the server-side draft-only gate
-		// enforced in the publish + delete use cases and the persistence adapter.
+		// Publish + Delete are DRAFT-only. Published/deprecated history is never
+		// mutated: Edit opens the upload drawer and creates a successor DRAFT whose
+		// supersedes_binding_id points at this row.
 		actions := []types.TableAction{}
 		if b.GetVersionStatus() == enums.VersionStatus_VERSION_STATUS_DRAFT {
 			actions = append(actions, types.TableAction{
@@ -568,6 +599,17 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 				ConfirmTitle:    l.DeleteAction,
 				ConfirmMessage:  l.DeleteConfirm,
 				Disabled:        !canDelete,
+				DisabledTooltip: l.NotConfigured,
+			})
+		} else if b.GetVersionStatus() == enums.VersionStatus_VERSION_STATUS_PUBLISHED || b.GetVersionStatus() == enums.VersionStatus_VERSION_STATUS_DEPRECATED {
+			actions = append(actions, types.TableAction{
+				Type:            "edit",
+				Label:           editLabel(deps),
+				Action:          "edit",
+				URL:             deps.Routes.TemplateUploadURL,
+				DrawerTitle:     editLabel(deps),
+				ItemName:        name,
+				Disabled:        !canReplace,
 				DisabledTooltip: l.NotConfigured,
 			})
 		}
@@ -695,6 +737,67 @@ func scheduleOptions(ctx context.Context, deps *Deps, fallback string) []types.S
 		}
 	}
 	return opts
+}
+
+// replacementSource resolves an immutable history row and its artifact for the
+// replacement drawer. Drafts and cross-purpose artifacts fail closed.
+func replacementSource(ctx context.Context, deps *Deps, sourceID string) (*bindingpb.JobOutcomeSummaryDocumentTemplate, *documenttemplatepb.DocumentTemplate, bool) {
+	if sourceID == "" || deps.ListTemplateBindings == nil {
+		return nil, nil, false
+	}
+	resp, err := deps.ListTemplateBindings(ctx, &bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest{})
+	if err != nil {
+		log.Printf("report-card template replacement: list bindings: %v", err)
+		return nil, nil, false
+	}
+	for _, source := range resp.GetData() {
+		if source.GetId() != sourceID {
+			continue
+		}
+		status := source.GetVersionStatus()
+		if status != enums.VersionStatus_VERSION_STATUS_PUBLISHED && status != enums.VersionStatus_VERSION_STATUS_DEPRECATED {
+			return nil, nil, false
+		}
+		if artifact := source.GetDocumentTemplate(); artifact != nil && artifact.GetId() == source.GetDocumentTemplateId() && artifact.GetDocumentPurpose() == documentPurpose {
+			return source, artifact, true
+		}
+		if deps.ListDocumentTemplates == nil {
+			return nil, nil, false
+		}
+		docs, err := deps.ListDocumentTemplates(ctx, &documenttemplatepb.ListDocumentTemplatesRequest{})
+		if err != nil {
+			log.Printf("report-card template replacement: list document templates: %v", err)
+			return nil, nil, false
+		}
+		for _, artifact := range docs.GetData() {
+			if artifact.GetId() == source.GetDocumentTemplateId() && artifact.GetDocumentPurpose() == documentPurpose {
+				return source, artifact, true
+			}
+		}
+		return nil, nil, false
+	}
+	return nil, nil, false
+}
+
+func selectOption(options []types.SelectOption, value string) []types.SelectOption {
+	for i := range options {
+		options[i].Selected = options[i].Value == value
+	}
+	return options
+}
+
+func editLabel(deps *Deps) string {
+	if deps.CommonLabels.Actions.Edit != "" {
+		return deps.CommonLabels.Actions.Edit
+	}
+	return deps.CommonLabels.Buttons.Edit
+}
+
+func formatFormDate(value *timestamppb.Timestamp) string {
+	if value == nil {
+		return ""
+	}
+	return value.AsTime().Format(dateLayout)
 }
 
 // listAllSchedules returns every price_schedule (active + inactive) so bindings

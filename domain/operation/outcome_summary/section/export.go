@@ -543,10 +543,10 @@ func (failure explicitMatrixFailure) Error() string {
 
 func explicitMatrixFailureContext(err error) (string, int, int, bool) {
 	if failure, ok := err.(explicitMatrixFailure); ok {
-		return failure.reason, failure.expectedSlots, failure.actualSlots, failure.canonicalOrder
+		return explicitNormalizeFailureClass(failure), failure.expectedSlots, failure.actualSlots, failure.canonicalOrder
 	}
 	if ptr, ok := err.(*explicitMatrixFailure); ok {
-		return ptr.reason, ptr.expectedSlots, ptr.actualSlots, ptr.canonicalOrder
+		return explicitNormalizeFailureClass(ptr), ptr.expectedSlots, ptr.actualSlots, ptr.canonicalOrder
 	}
 	return explicitNormalizeFailureClass(err), 0, 0, true
 }

@@ -1,0 +1,59 @@
+{{/* Upload/replacement drawer — replacement creates a successor DRAFT and
+     never mutates the selected published/deprecated history row. */}}
+{{define "outcome-summary-template-upload-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-encoding="multipart/form-data" data-hx-on="sheet-response" data-testid="outcome-summary-template-upload-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .SourceBindingID}}<input type="hidden" name="source_binding_id" value="{{.SourceBindingID}}">{{end}}
+
+    <div class="sheet-body">
+        {{template "form-section" (dict "Title" .FormTitle)}}
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.NameLabel
+                "Value" .Name
+                "Required" true
+                "Placeholder" .Labels.NameLabel
+            )}}
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="report_card_price_schedule_id">{{.Labels.ScheduleLabel}}</label>
+                <select class="form-input" id="report_card_price_schedule_id" name="price_schedule_id" data-testid="outcome-summary-template-schedule-select">
+                    {{range .ScheduleOptions}}
+                    <option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+                    {{end}}
+                </select>
+                <p class="form-hint">{{.Labels.ScheduleHint}}</p>
+            </div>
+        </div>
+
+        <div class="form-row">
+            {{template "form-group" (dict
+                "Type" "date"
+                "Name" "validity_start"
+                "Label" .Labels.ValidityStartLabel
+                "Value" .ValidityStart
+            )}}
+            {{template "form-group" (dict
+                "Type" "date"
+                "Name" "validity_end"
+                "Label" .Labels.ValidityEndLabel
+                "Value" .ValidityEnd
+            )}}
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="report_card_template_file">{{.Labels.FileLabel}} <span class="form-required" aria-hidden="true">*</span></label>
+                <input type="file" class="form-input" id="report_card_template_file" name="template_file" accept="{{.AcceptTypes}}" data-testid="outcome-summary-template-file" required>
+            </div>
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

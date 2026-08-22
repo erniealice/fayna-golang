@@ -2,7 +2,7 @@ package action
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log"
 	"net/http"
 	"strings"

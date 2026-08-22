@@ -37,7 +37,7 @@ package document
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log"
 	"sort"
 	"strings"

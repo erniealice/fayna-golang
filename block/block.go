@@ -16,7 +16,8 @@ package block
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"log"
 	"net/http"
@@ -208,7 +209,7 @@ const jobSearchResultLimit = 20
 // writeSearchJSON writes a JSON response for the auto-complete component.
 func writeSearchJSON(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(data); err != nil {
+	if err := json.MarshalEncode(jsontext.NewEncoder(w), data); err != nil {
 		log.Printf("fayna.Block: failed to encode search JSON: %v", err)
 	}
 }

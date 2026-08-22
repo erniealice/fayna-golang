@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"embed"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/xml"
 	"fmt"
 	"io"

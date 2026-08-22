@@ -1,0 +1,64 @@
+{{/* Upload/replacement drawer — replacement creates a successor DRAFT and
+     never mutates the selected published/deprecated history row. */}}
+{{define "outcome-matrix-template-upload-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" hx-encoding="multipart/form-data" data-hx-on="sheet-response" data-testid="outcome-matrix-template-upload-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .SourceBindingID}}<input type="hidden" name="source_binding_id" value="{{.SourceBindingID}}">{{end}}
+
+    <div class="sheet-body">
+        {{template "form-section" (dict "Title" .FormTitle)}}
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.NameLabel
+                "Value" .Name
+                "Required" true
+                "Placeholder" .Labels.NameLabel
+            )}}
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="outcome_matrix_job_category_id">{{.Labels.CategoryLabel}}</label>
+                <select class="form-input" id="outcome_matrix_job_category_id" name="job_category_id" data-testid="outcome-matrix-template-category-select">
+                    {{range .CategoryOptions}}
+                    <option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="outcome_matrix_price_schedule_id">{{.Labels.ScheduleLabel}}</label>
+                <select class="form-input" id="outcome_matrix_price_schedule_id" name="price_schedule_id" data-testid="outcome-matrix-template-schedule-select">
+                    {{range .ScheduleOptions}}
+                    <option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "description"
+                "Label" .Labels.NotesLabel
+                "Value" .Description
+            )}}
+        </div>
+
+        <div class="form-row single">
+            <div class="form-group">
+                <label class="form-label" for="outcome_matrix_template_file">{{.Labels.FileLabel}} <span class="form-required" aria-hidden="true">*</span></label>
+                <input type="file" class="form-input" id="outcome_matrix_template_file" name="template_file" accept="{{.AcceptTypes}}" data-testid="outcome-matrix-template-file" required>
+                <p class="form-hint">{{.Labels.FileHint}}</p>
+            </div>
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

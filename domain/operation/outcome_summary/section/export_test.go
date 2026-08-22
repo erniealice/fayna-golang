@@ -42,13 +42,13 @@ func exportFixture() *exportpb.GetSubscriptionGroupOutcomeExportResponse {
 			FinalOutcomeAvailable: true,
 			JobTemplatePhases:     []*exportpb.JobTemplatePhaseOption{{Code: "q1", Name: "Quarter 1", SequenceOrder: 1}, {Code: "final", Name: "Phase named final", SequenceOrder: 2}},
 		}},
-		// Deliberately use a stable column order while each row's cells are permuted.
-		JobTemplateColumns: []*exportpb.JobTemplateColumn{{JobTemplateId: "job-b", DisplayName: "Math"}, {JobTemplateId: "job-a", DisplayName: "English"}},
+		// Deliberately use canonical display-name order while each row's cells are permuted.
+		JobTemplateColumns: []*exportpb.JobTemplateColumn{{JobTemplateId: "job-a", DisplayName: "English"}, {JobTemplateId: "job-b", DisplayName: "Math"}},
 		ClientRows: []*exportpb.SubscriptionGroupOutcomeClientRow{{
 			ClientId: "client-1", ClientName: "Alpha", ClientFirstName: "Alpha", ClientLastName: "One",
 			Cells: []*exportpb.SubscriptionGroupOutcomeCell{
-				exportCell("job-a", exportString("0"), nil, true, true),
 				exportCell("job-b", exportString("1"), nil, true, false),
+				exportCell("job-a", exportString("0"), nil, true, true),
 			},
 		}},
 	}
@@ -170,7 +170,7 @@ func TestSectionExport_SelectionFailureLogsStructuredReason(t *testing.T) {
 	resp := exportFixture()
 	deps, _ := exportDeps(resp)
 	logs := captureSectionExportLogs(t, func() {
-		w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=q1", "job_outcome_summary:list")
+		w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=phase:q2", "job_outcome_summary:list")
 		if w.Code != 400 {
 			t.Fatalf("status=%d", w.Code)
 		}
@@ -250,12 +250,12 @@ func TestSectionExport_PermutedIDsAndEnrollmentRules(t *testing.T) {
 		t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
 	}
 	rows := readCSV(t, w.Body.String())
-	if len(rows) != 3 || rows[0][0] != "Client" || rows[0][1] != "Math" || rows[0][2] != "English" {
+	if len(rows) != 3 || rows[0][0] != "Client" || rows[0][1] != "English" || rows[0][2] != "Math" {
 		t.Fatalf("header/row count = %#v", rows)
 	}
-	// job-b is first despite its cell being second in the source row. The
+	// job-a is first despite its cell being second in the source row. The
 	// positive-evidence zero remains a real grade; the all-zero placeholder is blank.
-	if got, want := rows[1], []string{"[1] Alpha", "", "0"}; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+	if got, want := rows[1], []string{"[1] Alpha", "0", ""}; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("ID-keyed/evidence row=%#v want %#v", got, want)
 	}
 }
@@ -266,7 +266,7 @@ func TestSectionExport_CorruptMatrixFailsBeforeBytes(t *testing.T) {
 		mutate func(*exportpb.GetSubscriptionGroupOutcomeExportResponse)
 	}{
 		{"duplicate columns", func(r *exportpb.GetSubscriptionGroupOutcomeExportResponse) {
-			r.JobTemplateColumns[1].JobTemplateId = "job-b"
+			r.JobTemplateColumns[1].JobTemplateId = "job-a"
 		}},
 		{"missing cell", func(r *exportpb.GetSubscriptionGroupOutcomeExportResponse) {
 			r.ClientRows[0].Cells = r.ClientRows[0].Cells[:1]
@@ -438,13 +438,16 @@ func TestSectionExport_DeterministicBandsSortAndFormulaNeutralization(t *testing
 	if len(rows) != 7 || rows[1][0] != "A" || rows[2][0] != "[1] Amy" || rows[3][0] != "" || rows[4][0] != "B" || rows[5][0] != "[2] Zed" || rows[6][0] != "" {
 		t.Fatalf("deterministic rows=%#v", rows)
 	}
-	if !strings.HasPrefix(rows[2][2], "\t") || !strings.HasPrefix(rows[5][2], "\t") {
+	if !strings.HasPrefix(rows[2][1], "\t") || !strings.HasPrefix(rows[5][1], "\t") {
 		t.Fatalf("formula values not neutralized: %#v", rows)
 	}
 }
 
 func TestSectionExport_PDFFailLoud(t *testing.T) {
-	deps, calls := exportDeps(exportFixture())
+	deps, calls := exportDeps(fullPDFFixture())
+	deps.Options.SectionExport.ProfileByCategoryCode = map[string]bindingpb.RenderProfile{
+		"academic": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1,
+	}
 	w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 	if w.Code != 503 || strings.Contains(w.Header().Get("Content-Type"), "text/csv") || *calls != 1 {
 		t.Fatalf("pdf status/header/calls=%d/%v/%d", w.Code, w.Header(), *calls)

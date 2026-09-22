@@ -44,15 +44,23 @@ type EmptyLabels struct {
 }
 
 type FormLabels struct {
-	JobTemplateTaskID     string `json:"job_template_task_id"`
-	JobTemplateTaskIDInfo string `json:"job_template_task_id_info"`
-	OutcomeCriteriaID     string `json:"outcome_criteria_id"`
-	OutcomeCriteriaIDInfo string `json:"outcome_criteria_id_info"`
-	SequenceOrder         string `json:"sequence_order"`
-	SequenceOrderInfo     string `json:"sequence_order_info"`
-	RequiredOverride      string `json:"required_override"`
-	RequiredOverrideInfo  string `json:"required_override_info"`
-	Active                string `json:"active"`
+	JobTemplateTaskID                string `json:"job_template_task_id"`
+	JobTemplateTaskIDInfo            string `json:"job_template_task_id_info"`
+	OutcomeCriteriaID                string `json:"outcome_criteria_id"`
+	OutcomeCriteriaIDInfo            string `json:"outcome_criteria_id_info"`
+	SequenceOrder                    string `json:"sequence_order"`
+	SequenceOrderInfo                string `json:"sequence_order_info"`
+	RequiredOverride                 string `json:"required_override"`
+	RequiredOverrideInfo             string `json:"required_override_info"`
+	Active                           string `json:"active"`
+	RatingMode                       string `json:"rating_mode"`
+	RatingModeInfo                   string `json:"rating_mode_info"`
+	RatingModeStandard               string `json:"rating_mode_standard"`
+	RatingModeNumericWithDescription string `json:"rating_mode_numeric_with_description"`
+	RatingScaleID                    string `json:"rating_scale_id"`
+	RatingScaleIDInfo                string `json:"rating_scale_id_info"`
+	RatingDescriptions               string `json:"rating_descriptions"`
+	RatingDescriptionInfo            string `json:"rating_description_info"`
 }
 
 type ActionLabels struct {
@@ -118,15 +126,23 @@ func DefaultLabels() Labels {
 			InactiveMessage: "Deactivated links will appear here.",
 		},
 		Form: FormLabels{
-			JobTemplateTaskID:     "Job Template Task ID",
-			JobTemplateTaskIDInfo: "The job template task this criteria link belongs to.",
-			OutcomeCriteriaID:     "Outcome Criteria ID",
-			OutcomeCriteriaIDInfo: "The outcome criterion being linked to the template task.",
-			SequenceOrder:         "Sequence Order",
-			SequenceOrderInfo:     "Display order of this criterion within the task.",
-			RequiredOverride:      "Required Override",
-			RequiredOverrideInfo:  "Override whether this criterion is required for the task.",
-			Active:                "Active",
+			JobTemplateTaskID:                "Job Template Task ID",
+			JobTemplateTaskIDInfo:            "The job template task this criteria link belongs to.",
+			OutcomeCriteriaID:                "Outcome Criteria ID",
+			OutcomeCriteriaIDInfo:            "The outcome criterion being linked to the template task.",
+			SequenceOrder:                    "Sequence Order",
+			SequenceOrderInfo:                "Display order of this criterion within the task.",
+			RequiredOverride:                 "Required Override",
+			RequiredOverrideInfo:             "Override whether this criterion is required for the task.",
+			Active:                           "Active",
+			RatingMode:                       "Rating Behavior",
+			RatingModeInfo:                   "Choose how the grade-sheet cell should behave.",
+			RatingModeStandard:               "Standard",
+			RatingModeNumericWithDescription: "Numeric with description",
+			RatingScaleID:                    "Rating Scale",
+			RatingScaleIDInfo:                "Reusable numeric scale for this template binding.",
+			RatingDescriptions:               "Descriptions by rating",
+			RatingDescriptionInfo:            "Enter the text shown after a matching numeric rating.",
 		},
 		Actions: ActionLabels{
 			View:   "View Link",

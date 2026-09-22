@@ -1,4 +1,4 @@
-package section
+package subscription_group
 
 import (
 	"archive/zip"
@@ -7,8 +7,8 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"log"
 	"io"
+	"log"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -57,11 +57,11 @@ func exportFixture() *exportpb.GetSubscriptionGroupOutcomeExportResponse {
 func exportDeps(resp *exportpb.GetSubscriptionGroupOutcomeExportResponse) (*Deps, *int) {
 	calls := 0
 	labels := outcome_summary.DefaultLabels()
-	labels.Section.Title = "Report Cards"
-	labels.Section.ClientColumn = "Client"
+	labels.SubscriptionGroup.Title = "Report Cards"
+	labels.SubscriptionGroup.ClientColumn = "Client"
 	return &Deps{
 		Labels:               labels,
-		Options:              outcome_summary.Options{SectionExport: outcome_summary.SectionExportOptions{Enabled: true}},
+		Options:              outcome_summary.Options{SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{Enabled: true}},
 		ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindOperatorOwner },
 		GetSubscriptionGroupOutcomeExport: func(context.Context, *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error) {
 			calls++
@@ -90,7 +90,7 @@ func runExportExact(deps *Deps, url string, permissions ...string) *httptest.Res
 	return w
 }
 
-func captureSectionExportLogs(t *testing.T, fn func()) string {
+func captureSubscriptionGroupExportLogs(t *testing.T, fn func()) string {
 	t.Helper()
 	var buf bytes.Buffer
 	oldOut := log.Writer()
@@ -108,7 +108,7 @@ func captureSectionExportLogs(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-func TestSectionExport_ExplicitListOnlyDeniedBeforeCompositeRead(t *testing.T) {
+func TestSubscriptionGroupExport_ExplicitListOnlyDeniedBeforeCompositeRead(t *testing.T) {
 	deps, calls := exportDeps(exportFixture())
 	w := runExportExact(deps, "/export?format=csv&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 	if w.Code != 403 || *calls != 0 {
@@ -116,7 +116,7 @@ func TestSectionExport_ExplicitListOnlyDeniedBeforeCompositeRead(t *testing.T) {
 	}
 }
 
-func TestSectionExport_LegacyNoSelectorRequiresListAndRead(t *testing.T) {
+func TestSubscriptionGroupExport_LegacyNoSelectorRequiresListAndRead(t *testing.T) {
 	deps, calls := exportDeps(exportFixture())
 	w := runExportExact(deps, "/export", "job_outcome_summary:list")
 	if w.Code != 403 || *calls != 0 {
@@ -133,7 +133,7 @@ func readCSV(t *testing.T, body string) [][]string {
 	return rows
 }
 
-func TestSectionExport_RejectsTamperedSelectors(t *testing.T) {
+func TestSubscriptionGroupExport_RejectsTamperedSelectors(t *testing.T) {
 	cases := []struct {
 		name string
 		url  string
@@ -166,10 +166,10 @@ func TestSectionExport_RejectsTamperedSelectors(t *testing.T) {
 	}
 }
 
-func TestSectionExport_SelectionFailureLogsStructuredReason(t *testing.T) {
+func TestSubscriptionGroupExport_SelectionFailureLogsStructuredReason(t *testing.T) {
 	resp := exportFixture()
 	deps, _ := exportDeps(resp)
-	logs := captureSectionExportLogs(t, func() {
+	logs := captureSubscriptionGroupExportLogs(t, func() {
 		w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=phase:q2", "job_outcome_summary:list")
 		if w.Code != 400 {
 			t.Fatalf("status=%d", w.Code)
@@ -186,12 +186,12 @@ func TestSectionExport_SelectionFailureLogsStructuredReason(t *testing.T) {
 	}
 }
 
-func TestSectionExport_ExplicitDisableStopsBeforeCompositeReadRegardlessOfListEntity(t *testing.T) {
+func TestSubscriptionGroupExport_ExplicitDisableStopsBeforeCompositeReadRegardlessOfListEntity(t *testing.T) {
 	for _, entity := range []string{"", "client", "subscription", outcome_summary.ListEntitySubscriptionGroup} {
 		t.Run("entity="+entity, func(t *testing.T) {
 			deps, calls := exportDeps(exportFixture())
 			deps.Options.List.Entity = entity
-			deps.Options.SectionExport.Enabled = false
+			deps.Options.SubscriptionGroupExport.Enabled = false
 			w := runExport(deps, "/export?format=csv&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 			if w.Code != 404 || *calls != 0 || strings.Contains(w.Header().Get("Content-Type"), "text/csv") {
 				t.Fatalf("disabled explicit export status/calls/header=%d/%d/%v, want 404/0/non-CSV", w.Code, *calls, w.Header())
@@ -200,7 +200,7 @@ func TestSectionExport_ExplicitDisableStopsBeforeCompositeReadRegardlessOfListEn
 	}
 }
 
-func TestSectionExport_MissingForeignAndZeroMatrixStatuses(t *testing.T) {
+func TestSubscriptionGroupExport_MissingForeignAndZeroMatrixStatuses(t *testing.T) {
 	cases := []struct {
 		name string
 		resp *exportpb.GetSubscriptionGroupOutcomeExportResponse
@@ -243,7 +243,7 @@ func TestSectionExport_MissingForeignAndZeroMatrixStatuses(t *testing.T) {
 	}
 }
 
-func TestSectionExport_PermutedIDsAndEnrollmentRules(t *testing.T) {
+func TestSubscriptionGroupExport_PermutedIDsAndEnrollmentRules(t *testing.T) {
 	deps, _ := exportDeps(exportFixture())
 	w := runExport(deps, "/export?format=csv&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 	if w.Code != 200 {
@@ -260,7 +260,7 @@ func TestSectionExport_PermutedIDsAndEnrollmentRules(t *testing.T) {
 	}
 }
 
-func TestSectionExport_CorruptMatrixFailsBeforeBytes(t *testing.T) {
+func TestSubscriptionGroupExport_CorruptMatrixFailsBeforeBytes(t *testing.T) {
 	cases := []struct {
 		name   string
 		mutate func(*exportpb.GetSubscriptionGroupOutcomeExportResponse)
@@ -294,11 +294,11 @@ func TestSectionExport_CorruptMatrixFailsBeforeBytes(t *testing.T) {
 	}
 }
 
-func TestSectionExport_NormalizeFailureLogsStructuredReason(t *testing.T) {
+func TestSubscriptionGroupExport_NormalizeFailureLogsStructuredReason(t *testing.T) {
 	resp := exportFixture()
 	resp.ClientRows[0].Cells = resp.ClientRows[0].Cells[:1]
 	deps, _ := exportDeps(resp)
-	logs := captureSectionExportLogs(t, func() {
+	logs := captureSubscriptionGroupExportLogs(t, func() {
 		w := runExport(deps, "/export?format=csv&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 		if w.Code != 400 || w.Body.Len() == 0 {
 			t.Fatalf("status/body=%d/%q", w.Code, w.Body.String())
@@ -318,11 +318,11 @@ func TestSectionExport_NormalizeFailureLogsStructuredReason(t *testing.T) {
 	}
 }
 
-func TestSectionExport_RowBandResolutionAndPermissions(t *testing.T) {
+func TestSubscriptionGroupExport_RowBandResolutionAndPermissions(t *testing.T) {
 	resp := exportFixture()
 	deps, _ := exportDeps(resp)
 	deps.Options.Row.GroupByField = "client_attributes.gender"
-	deps.Options.SectionExport.GroupByAttributeModule = "client"
+	deps.Options.SubscriptionGroupExport.GroupByAttributeModule = "client"
 	definitionCalls, valueCalls := 0, 0
 	deps.ListAttributes = func(context.Context, *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error) {
 		definitionCalls++
@@ -340,7 +340,7 @@ func TestSectionExport_RowBandResolutionAndPermissions(t *testing.T) {
 	// The band permission conjunction is checked before the composite read.
 	deps, calls := exportDeps(resp)
 	deps.Options.Row.GroupByField = "client_attributes.gender"
-	deps.Options.SectionExport.GroupByAttributeModule = "client"
+	deps.Options.SubscriptionGroupExport.GroupByAttributeModule = "client"
 	deps.ListAttributes = func(context.Context, *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error) {
 		t.Fatal("attribute list called while denied")
 		return nil, nil
@@ -351,7 +351,7 @@ func TestSectionExport_RowBandResolutionAndPermissions(t *testing.T) {
 	}
 }
 
-func TestSectionExport_BandRosterChunkingAndScopeCorruption(t *testing.T) {
+func TestSubscriptionGroupExport_BandRosterChunkingAndScopeCorruption(t *testing.T) {
 	resp := exportFixture()
 	resp.ClientRows = make([]*exportpb.SubscriptionGroupOutcomeClientRow, 101)
 	for i := range resp.ClientRows {
@@ -360,7 +360,7 @@ func TestSectionExport_BandRosterChunkingAndScopeCorruption(t *testing.T) {
 	}
 	deps, _ := exportDeps(resp)
 	deps.Options.Row.GroupByField = "client_attributes.gender"
-	deps.Options.SectionExport.GroupByAttributeModule = "client"
+	deps.Options.SubscriptionGroupExport.GroupByAttributeModule = "client"
 	definitionCalls, valueCalls, chunkSizes := 0, 0, []int{}
 	deps.ListAttributes = func(context.Context, *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error) {
 		definitionCalls++
@@ -387,7 +387,7 @@ func TestSectionExport_BandRosterChunkingAndScopeCorruption(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			deps, _ := exportDeps(resp)
 			deps.Options.Row.GroupByField = "client_attributes.gender"
-			deps.Options.SectionExport.GroupByAttributeModule = "client"
+			deps.Options.SubscriptionGroupExport.GroupByAttributeModule = "client"
 			deps.ListAttributes = func(context.Context, *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error) {
 				return &commonpb.ListAttributesResponse{Success: true, Data: []*commonpb.Attribute{{Id: "attr", Code: "gender", Module: "client", Active: true}}}, nil
 			}
@@ -402,7 +402,7 @@ func TestSectionExport_BandRosterChunkingAndScopeCorruption(t *testing.T) {
 	}
 }
 
-func TestSectionExport_DeterministicBandsSortAndFormulaNeutralization(t *testing.T) {
+func TestSubscriptionGroupExport_DeterministicBandsSortAndFormulaNeutralization(t *testing.T) {
 	resp := exportFixture()
 	resp.ClientRows = []*exportpb.SubscriptionGroupOutcomeClientRow{
 		{ClientId: "c2", ClientName: "Zed", ClientFirstName: "Zed", ClientLastName: "Z", Cells: []*exportpb.SubscriptionGroupOutcomeCell{exportCell("job-b", exportString("2"), nil, false, false), exportCell("job-a", exportString("=SUM(A1)"), nil, false, false)}},
@@ -411,7 +411,7 @@ func TestSectionExport_DeterministicBandsSortAndFormulaNeutralization(t *testing
 	deps, _ := exportDeps(resp)
 	deps.Options.Row.GroupByField = "client_attributes.gender"
 	deps.Options.Row.GroupValueOrder = []string{"A", "B"}
-	deps.Options.SectionExport.GroupByAttributeModule = "client"
+	deps.Options.SubscriptionGroupExport.GroupByAttributeModule = "client"
 	deps.ListAttributes = func(context.Context, *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error) {
 		return &commonpb.ListAttributesResponse{Success: true, Data: []*commonpb.Attribute{{Id: "attr", Code: "gender", Module: "client", Active: true}}}, nil
 	}
@@ -443,9 +443,9 @@ func TestSectionExport_DeterministicBandsSortAndFormulaNeutralization(t *testing
 	}
 }
 
-func TestSectionExport_PDFFailLoud(t *testing.T) {
+func TestSubscriptionGroupExport_PDFFailLoud(t *testing.T) {
 	deps, calls := exportDeps(fullPDFFixture())
-	deps.Options.SectionExport.ProfileByCategoryCode = map[string]bindingpb.RenderProfile{
+	deps.Options.SubscriptionGroupExport.ProfileByCategoryCode = map[string]bindingpb.RenderProfile{
 		"academic": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1,
 	}
 	w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
@@ -454,7 +454,7 @@ func TestSectionExport_PDFFailLoud(t *testing.T) {
 	}
 }
 
-func TestSectionExport_NoBandRequiresNoAttributeCalls(t *testing.T) {
+func TestSubscriptionGroupExport_NoBandRequiresNoAttributeCalls(t *testing.T) {
 	deps, _ := exportDeps(exportFixture())
 	deps.ListAttributes = func(context.Context, *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error) {
 		t.Fatal("unexpected attribute definition call")
@@ -490,7 +490,7 @@ func fullPDFFixture() *exportpb.GetSubscriptionGroupOutcomeExportResponse {
 
 func canonicalPDFDocx(t *testing.T) []byte {
 	t.Helper()
-	docx, err := os.ReadFile("../section_document/subscription-group-outcome-matrix-single-period-11-v1.docx")
+	docx, err := os.ReadFile("../subscription_group_document/subscription-group-outcome-matrix-single-period-11-v1.docx")
 	if err != nil {
 		t.Fatalf("read generated DOCX: %v", err)
 	}
@@ -537,16 +537,16 @@ func stalePDFDocx(t *testing.T, docx []byte) []byte {
 func configurePDFDeps(t *testing.T, resp *exportpb.GetSubscriptionGroupOutcomeExportResponse) (*Deps, *int, *int, **exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) {
 	t.Helper()
 	deps, _ := exportDeps(resp)
-	deps.Options.SectionExport.ProfileByCategoryCode = map[string]bindingpb.RenderProfile{
+	deps.Options.SubscriptionGroupExport.ProfileByCategoryCode = map[string]bindingpb.RenderProfile{
 		"academic": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1,
 	}
 	resolverCalls, engineCalls := 0, 0
 	seen := new(*exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest)
-	deps.ResolveSectionTemplate = func(_ context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSectionTemplate, error) {
+	deps.ResolveSubscriptionGroupDocumentTemplate = func(_ context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error) {
 		resolverCalls++
 		copy := *req
 		*seen = &copy
-		return &outcome_summary.ResolvedSectionTemplate{Bytes: canonicalPDFDocx(t), RenderProfile: req.GetRenderProfile(), JobCategoryID: req.GetJobCategoryId()}, nil
+		return &outcome_summary.ResolvedSubscriptionGroupDocumentTemplate{Bytes: canonicalPDFDocx(t), RenderProfile: req.GetRenderProfile(), JobCategoryID: req.GetJobCategoryId()}, nil
 	}
 	deps.GeneratePDF = func(template []byte, data map[string]any) ([]byte, error) {
 		engineCalls++
@@ -558,7 +558,7 @@ func configurePDFDeps(t *testing.T, resp *exportpb.GetSubscriptionGroupOutcomeEx
 	return deps, &resolverCalls, &engineCalls, seen
 }
 
-func TestSectionExport_PDFContentAndPeriod(t *testing.T) {
+func TestSubscriptionGroupExport_PDFContentAndPeriod(t *testing.T) {
 	resp := fullPDFFixture()
 	deps, resolverCalls, engineCalls, seen := configurePDFDeps(t, resp)
 	w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
@@ -580,10 +580,10 @@ func TestSectionExport_PDFContentAndPeriod(t *testing.T) {
 	}
 }
 
-func TestSectionExport_PDFResolverFailureStopsBeforeEngine(t *testing.T) {
+func TestSubscriptionGroupExport_PDFResolverFailureStopsBeforeEngine(t *testing.T) {
 	deps, resolverCalls, engineCalls, _ := configurePDFDeps(t, fullPDFFixture())
 	wantErr := errors.New("bounded storage read failed")
-	deps.ResolveSectionTemplate = func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSectionTemplate, error) {
+	deps.ResolveSubscriptionGroupDocumentTemplate = func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error) {
 		*resolverCalls++
 		return nil, wantErr
 	}
@@ -597,7 +597,7 @@ func TestSectionExport_PDFResolverFailureStopsBeforeEngine(t *testing.T) {
 	}
 }
 
-func TestSectionExport_PDFRejectsProfileCapacityCategoryAndManifestBeforeEngine(t *testing.T) {
+func TestSubscriptionGroupExport_PDFRejectsProfileCapacityCategoryAndManifestBeforeEngine(t *testing.T) {
 	cases := []struct {
 		name   string
 		mutate func(*exportpb.GetSubscriptionGroupOutcomeExportResponse, *Deps)
@@ -619,9 +619,9 @@ func TestSectionExport_PDFRejectsProfileCapacityCategoryAndManifestBeforeEngine(
 			deps, resolverCalls, engineCalls, _ := configurePDFDeps(t, resp)
 			tc.mutate(resp, deps)
 			if tc.name == "stale manifest" {
-				deps.ResolveSectionTemplate = func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSectionTemplate, error) {
+				deps.ResolveSubscriptionGroupDocumentTemplate = func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error) {
 					*resolverCalls++
-					return &outcome_summary.ResolvedSectionTemplate{Bytes: stalePDFDocx(t, canonicalPDFDocx(t)), RenderProfile: bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1, JobCategoryID: "cat-a"}, nil
+					return &outcome_summary.ResolvedSubscriptionGroupDocumentTemplate{Bytes: stalePDFDocx(t, canonicalPDFDocx(t)), RenderProfile: bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1, JobCategoryID: "cat-a"}, nil
 				}
 			}
 			w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
@@ -643,11 +643,11 @@ func TestSectionExport_PDFRejectsProfileCapacityCategoryAndManifestBeforeEngine(
 	}
 }
 
-func TestSectionExport_ProfileFailureLogsStructuredReason(t *testing.T) {
+func TestSubscriptionGroupExport_ProfileFailureLogsStructuredReason(t *testing.T) {
 	resp := exportFixture()
 	resp.JobCategories[0].Code = "other"
 	deps, _ := exportDeps(resp)
-	logs := captureSectionExportLogs(t, func() {
+	logs := captureSubscriptionGroupExportLogs(t, func() {
 		w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 		if w.Code != 400 || strings.Contains(w.Header().Get("Content-Type"), "text/csv") {
 			t.Fatalf("status/header=%d/%v", w.Code, w.Header())
@@ -671,7 +671,7 @@ type sectionLibreMarker struct{}
 func (sectionLibreMarker) Error() string                { return "libreoffice unavailable" }
 func (sectionLibreMarker) LibreOfficeUnavailable() bool { return true }
 
-func TestSectionExport_PDFGeneratorErrorsFailLoud(t *testing.T) {
+func TestSubscriptionGroupExport_PDFGeneratorErrorsFailLoud(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error

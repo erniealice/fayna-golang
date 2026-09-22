@@ -12,11 +12,11 @@ import (
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 )
 
-// FAY-7: the job outcome summary detail page (reached from the section grid's
+// FAY-7: the job outcome summary detail page (reached from the group grid's
 // /jobs/detail/{id}/summary link) had no Layer-3 read gate. These pin the
 // fail-closed / granted-principal behavior for the job_outcome_summary:list
 // list ∧ read capability — the same gate used by the sibling outcome_summary views (list,
-// client_card, section, template_settings).
+// client_card, group, template_settings).
 
 func jobSummaryFn(s *jobsumpb.JobOutcomeSummary) func(context.Context, *jobsumpb.GetJobOutcomeSummaryByJobRequest) (*jobsumpb.GetJobOutcomeSummaryByJobResponse, error) {
 	return func(context.Context, *jobsumpb.GetJobOutcomeSummaryByJobRequest) (*jobsumpb.GetJobOutcomeSummaryByJobResponse, error) {

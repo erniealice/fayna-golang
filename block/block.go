@@ -30,6 +30,7 @@ import (
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	fulfillmentdomain "github.com/erniealice/fayna-golang/domain/fulfillment"
 	operation "github.com/erniealice/fayna-golang/domain/operation"
+	"github.com/erniealice/fayna-golang/domain/operation/template_task_criteria"
 	lynguaV1 "github.com/erniealice/lyngua/golang/v1"
 	pyeza "github.com/erniealice/pyeza-golang"
 )
@@ -570,6 +571,9 @@ func Block(opts ...BlockOption) consumerapp.AppOption {
 		jtLabels := operation.DefaultJobTemplateLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job_template.json", "job_template", &jtLabels)
 
+		ttcLabels := template_task_criteria.DefaultLabels()
+		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "template_task_criteria.json", "template_task_criteria", &ttcLabels)
+
 		jaLabels := operation.DefaultJobActivityLabels()
 		_ = translations.LoadPathIfExists("en", ctx.BusinessType, "job_activity.json", "job_activity", &jaLabels)
 
@@ -707,6 +711,7 @@ func Block(opts ...BlockOption) consumerapp.AppOption {
 			jtDeps := &operation.JobTemplateModuleDeps{
 				Routes:           jtRoutes,
 				Labels:           jtLabels,
+				CriteriaLabels:   ttcLabels,
 				CommonLabels:     ctx.Common,
 				TableLabels:      ctx.Table,
 				UploadFile:       uploadFile,

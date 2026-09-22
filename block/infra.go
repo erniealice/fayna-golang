@@ -79,16 +79,16 @@ type Infra struct {
 	// when the app did not wire the resolver → the same fail-loud 503.
 	ResolveSheetTemplateBytes func(ctx context.Context, jobCategoryID, priceScheduleID string) ([]byte, error)
 
-	// ResolveSectionTemplate is the report-authorized subscription-group
+	// ResolveSubscriptionGroupDocumentTemplate is the report-authorized subscription-group
 	// outcome resolver composed with storage by the app. It returns no storage
 	// locator to Fayna and has no binding-management permission dependency.
-	ResolveSectionTemplate func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSectionTemplate, error)
+	ResolveSubscriptionGroupDocumentTemplate func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error)
 
-	// StoreSectionTemplate writes one server-generated object key and returns
-	// the exact physical container that must be persisted. DeleteSectionTemplateObject
+	// StoreSubscriptionGroupDocumentTemplate writes one server-generated object key and returns
+	// the exact physical container that must be persisted. DeleteSubscriptionGroupDocumentTemplateObject
 	// is the trusted compensation/reap seam for that same exact locator.
-	StoreSectionTemplate        func(context.Context, string, []byte, string) (string, error)
-	DeleteSectionTemplateObject func(context.Context, string, string) error
+	StoreSubscriptionGroupDocumentTemplate        func(context.Context, string, []byte, string) (string, error)
+	DeleteSubscriptionGroupDocumentTemplateObject func(context.Context, string, string) error
 
 	// Report-card template settings (TB3) artifact closures, sourced from the app
 	// AppContext (ctx.UploadTemplate / ctx.ListDocTemplates / ctx.CreateDocTemplate,

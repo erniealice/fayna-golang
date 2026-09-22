@@ -1,4 +1,4 @@
-package section_document
+package subscription_group_document
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ func elevenColumnMatrix() Matrix {
 	return result
 }
 
-func TestBuildSectionSheetData_PaletteAndBlankSeeding(t *testing.T) {
+func TestBuildSubscriptionGroupSheetData_PaletteAndBlankSeeding(t *testing.T) {
 	matrix := elevenColumnMatrix()
 	client := Row{Kind: RowClient, Label: "[1] Synthetic Client"}
 	for i := len(matrix.Columns) - 1; i >= 0; i-- { // deliberately permuted input
@@ -44,7 +44,7 @@ func TestBuildSectionSheetData_PaletteAndBlankSeeding(t *testing.T) {
 	}
 }
 
-func TestBuildSectionSheetData_RequiresExactCellIdentitySet(t *testing.T) {
+func TestBuildSubscriptionGroupSheetData_RequiresExactCellIdentitySet(t *testing.T) {
 	profile := bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
 	base := elevenColumnMatrix()
 	validCells := make([]Cell, len(base.Columns))

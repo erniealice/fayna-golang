@@ -29,7 +29,7 @@ type Options struct {
 	// Row configures view-2's row presentation (group bands + sort).
 	Row RowOptions
 	// CategoryFilter, when set to a job_category CODE (e.g. "academic"),
-	// restricts every grade surface (view-2 section grid, view-3 client card,
+	// restricts every grade surface (view-2 group grid, view-3 client card,
 	// report-card document) to jobs of that category — dropping same-origin jobs
 	// of another category (e.g. deportment) that would otherwise render as
 	// academic subjects (gate H2). The code is resolved to its id once per
@@ -42,13 +42,13 @@ type Options struct {
 	// DOCX/PDF download). Zero value disables every document enrichment — the
 	// download renders exactly as before (service-admin unaffected).
 	Document DocumentOptions
-	// SectionExport configures the subscription-group consolidated export.
+	// SubscriptionGroupExport configures the subscription-group consolidated export.
 	// Enabled is its independent feature switch; List.Entity controls only the
 	// landing presentation. These values are trusted app composition and are
 	// never accepted from HTTP selectors.
-	SectionExport SectionExportOptions
-	// ClientCard configures view-3 (the per-student client card) presentation —
-	// a DEDICATED job-category banding option, NOT the section grid's Row (which
+	SubscriptionGroupExport SubscriptionGroupExportOptions
+	// ClientCard configures view-3 (the per-client client card) presentation —
+	// a DEDICATED job-category banding option, NOT the group grid's Row (which
 	// is occupied by client-attribute gender bands and gated behind the global
 	// academic-only CategoryFilter that would gut category bands, codex §5 /
 	// Q-R9-8). Zero value → today's flat client card, byte-identical
@@ -56,11 +56,11 @@ type Options struct {
 	ClientCard ClientCardOptions
 }
 
-// SectionExportOptions is the trusted composition contract for the
+// SubscriptionGroupExportOptions is the trusted composition contract for the
 // subscription-group one-period CSV/PDF drawer. Category codes and attribute
 // modules are deployment data; render profiles are canonical generated enums.
-type SectionExportOptions struct {
-	// Enabled mounts and advertises the section export/drawer/template surface.
+type SubscriptionGroupExportOptions struct {
+	// Enabled mounts and advertises the group export/drawer/template surface.
 	// It is deliberately independent from List.Entity so grouped presentation
 	// cannot implicitly grant an export capability, and another presentation
 	// may reuse the export contract without pretending to be a grouped list.
@@ -77,23 +77,23 @@ type SectionExportOptions struct {
 	GroupByAttributeModule string
 }
 
-// ResolvedSectionTemplate is the locator-free result of the app-owned
+// ResolvedSubscriptionGroupDocumentTemplate is the locator-free result of the app-owned
 // report resolver + storage composition. Fayna receives only trusted bytes and
 // the semantic identity it must recheck; storage coordinates never cross in.
-type ResolvedSectionTemplate struct {
+type ResolvedSubscriptionGroupDocumentTemplate struct {
 	Bytes         []byte
 	RenderProfile bindingpb.RenderProfile
 	JobCategoryID string
 }
 
-// SectionExportEnabled reports the explicit trusted composition switch. The
+// SubscriptionGroupExportEnabled reports the explicit trusted composition switch. The
 // zero value preserves existing consumers and never advertises or mounts the
-// Section Template path.
-func (o Options) SectionExportEnabled() bool { return o.SectionExport.Enabled }
+// SubscriptionGroup Template path.
+func (o Options) SubscriptionGroupExportEnabled() bool { return o.SubscriptionGroupExport.Enabled }
 
 // ProfileForCategoryCode returns a recognized non-UNSPECIFIED generated render
 // profile for the exact trusted category code. Unknown enum values fail closed.
-func (o SectionExportOptions) ProfileForCategoryCode(code string) (bindingpb.RenderProfile, bool) {
+func (o SubscriptionGroupExportOptions) ProfileForCategoryCode(code string) (bindingpb.RenderProfile, bool) {
 	profile, ok := o.ProfileByCategoryCode[strings.TrimSpace(code)]
 	if !ok || profile == bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED {
 		return bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED, false
@@ -114,11 +114,11 @@ func (o Options) ExportRowBandConfig() (code, module string, configured bool, er
 	}
 	code, ok := ClientAttributeCode(field)
 	if !ok || strings.TrimSpace(code) == "" {
-		return "", "", true, fmt.Errorf("outcome_summary: unsupported section export row band %q", field)
+		return "", "", true, fmt.Errorf("outcome_summary: unsupported group export row band %q", field)
 	}
-	module = strings.TrimSpace(o.SectionExport.GroupByAttributeModule)
+	module = strings.TrimSpace(o.SubscriptionGroupExport.GroupByAttributeModule)
 	if module == "" {
-		return "", "", true, fmt.Errorf("outcome_summary: section export row band %q requires an attribute module", field)
+		return "", "", true, fmt.Errorf("outcome_summary: group export row band %q requires an attribute module", field)
 	}
 	return strings.TrimSpace(code), module, true, nil
 }
@@ -227,19 +227,19 @@ type ListOptions struct {
 	// the job_category entity ref ("job_category"), the landing's single static
 	// count column is replaced by ONE count column per ACTIVE job_category row
 	// (ordered by sort_order NULLS LAST, name ASC), each cell carrying that
-	// (section × category) subject count plus an eye deep-link into the
-	// section's category view (?jc=<category id>). Zero value (service-admin)
+	// (group × category) subject count plus an eye deep-link into the
+	// group's category view (?jc=<category id>). Zero value (service-admin)
 	// or an unrecognized ref keeps today's static column set byte-identical;
 	// even when set, a nil/empty/denied/failed category read degrades to the
 	// SAME static columns (the two-layer degrade contract, plan §3.7). Generic —
 	// the category display names are per-workspace job_category.name DATA.
 	ColumnsByField string
-	// ScopeByServicingGrant, when true, confines the section landing to the
-	// sections the ACTING principal holds an active servicing grant
-	// (subscription_group_workspace_user, sgwu) on — fail-closed section
-	// visibility (a principal with no grant sees zero sections). A principal
+	// ScopeByServicingGrant, when true, confines the group landing to the
+	// groups the ACTING principal holds an active servicing grant
+	// (subscription_group_workspace_user, sgwu) on — fail-closed group
+	// visibility (a principal with no grant sees zero groups). A principal
 	// holding the workspace:list capability (operator/superadmin) BYPASSES the
-	// filter and sees every section. Empty/false = today's unscoped landing
+	// filter and sees every group. Empty/false = today's unscoped landing
 	// (service-admin, zero-valued, is unaffected). Generic: the grant family is
 	// the cross-vertical `*_workspace_user` ACCESS axis (visibility resolver),
 	// distinct from the delivery/StaffScope row axis that already scopes grades.
@@ -261,10 +261,10 @@ type RowOptions struct {
 	SortDirection   string
 }
 
-// ClientCardOptions — view-3 (per-student client card) row presentation. A
+// ClientCardOptions — view-3 (per-client client card) row presentation. A
 // DEDICATED banding knob so the card can group its subject rows into
-// job-category bands independently of the section grid's Row (gender) bands and
-// the global academic-only CategoryFilter — the section's Row string cannot
+// job-category bands independently of the group grid's Row (gender) bands and
+// the global academic-only CategoryFilter — the group's Row string cannot
 // serve both, and CategoryFilter would drop every non-academic job before bands
 // could form (codex §5 / Q-R9-8). Zero value → flat card. Generic — the band
 // titles are per-workspace job_category.name DATA, never code vocabulary.
@@ -274,7 +274,7 @@ type ClientCardOptions struct {
 	// distinct job_category (band title = job_category.name DATA, ordered by the
 	// category sort contract; a NULL/foreign effective category folds into a
 	// single trailing Uncategorized band, never dropped/duplicated). Any other
-	// value → flat rows. Reuses the section's RowOptions shape for grammar
+	// value → flat rows. Reuses the group's RowOptions shape for grammar
 	// symmetry (Options.Row vs Options.ClientCard.Row); only GroupByField is
 	// consulted here — the ordering follows the category's own sort_order, not
 	// GroupValueOrder.
@@ -282,7 +282,7 @@ type ClientCardOptions struct {
 	// IncludeAllCategories, when true (with banding on), LIFTS the card's H2
 	// academic-only job filter FOR BANDING so same-origin deportment subjects
 	// render under their own band. The lift is LOCAL to the card's own table:
-	// the report-card DOCUMENT download and the section grid keep H2 (separate
+	// the report-card DOCUMENT download and the group grid keep H2 (separate
 	// fetches/handlers — the document view has its own job read + CategoryFilter).
 	// Without it the card keeps H2 and, on academic-only seeded data, the
 	// ≥2-category branch is unreachable (bands would never render). Zero value

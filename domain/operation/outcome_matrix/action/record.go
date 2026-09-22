@@ -188,9 +188,9 @@ func NewRecordAction(deps *Deps) view.View {
 					acks = append(acks, cellAck{key: key, errMsg: "not_editable"})
 					continue
 				}
-				normVal, ok := updateCell(ctx, deps, actingStaff, outcomeID, raw, sc.ct, sc.bounds)
+				normVal, ok, hasNote := updateCell(ctx, deps, actingStaff, outcomeID, raw, sc.ct, sc.bounds, sc.ratings)
 				acks = append(acks, cellAck{
-					key: key, ok: ok, outcomeID: outcomeID, value: normVal,
+					key: key, ok: ok, outcomeID: outcomeID, value: normVal, hasNote: hasNote,
 					numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
 					jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
 					errMsg: failMsg(ok, "value_rejected"),
@@ -208,9 +208,9 @@ func NewRecordAction(deps *Deps) view.View {
 				createAddr := jobTaskID + ":" + criteriaID
 				sc := byCreateAddr[createAddr]
 				if ct, addressable := allowedCreate[createAddr]; hasCreate && addressable {
-					newID, normVal, done := createCell(ctx, deps, actingStaff, jobTaskID, criteriaID, ct, raw, sc.bounds)
+					newID, normVal, done, hasNote := createCell(ctx, deps, actingStaff, jobTaskID, criteriaID, ct, raw, sc.bounds, sc.ratings)
 					acks = append(acks, cellAck{
-						key: key, ok: done, outcomeID: newID, value: normVal,
+						key: key, ok: done, outcomeID: newID, value: normVal, hasNote: hasNote,
 						numeric: isNumericCriteria(ct), criteriaID: criteriaID,
 						jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
 						errMsg: failMsg(done, "value_rejected"),
@@ -222,9 +222,9 @@ func NewRecordAction(deps *Deps) view.View {
 				// ack was lost) → resolve to an UPDATE, return its id so the client
 				// renames new.* → cells.*. Never a duplicate insert.
 				if sc.outcomeID != "" && hasUpdate && allowedUpdate[sc.outcomeID] {
-					normVal, done := updateCell(ctx, deps, actingStaff, sc.outcomeID, raw, sc.ct, sc.bounds)
+					normVal, done, hasNote := updateCell(ctx, deps, actingStaff, sc.outcomeID, raw, sc.ct, sc.bounds, sc.ratings)
 					acks = append(acks, cellAck{
-						key: key, ok: done, outcomeID: sc.outcomeID, value: normVal,
+						key: key, ok: done, outcomeID: sc.outcomeID, value: normVal, hasNote: hasNote,
 						numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
 						jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
 						errMsg: failMsg(done, "value_rejected"),
@@ -287,7 +287,8 @@ type srvCell struct {
 	jobTaskID  string
 	criteriaID string
 	ct         enums.CriteriaType
-	bounds     cellBounds // the criterion's server-side value contract
+	bounds     cellBounds         // the criterion's server-side value contract
+	ratings    ratingDescriptions // binding rating descriptions → outcome narrative (nil = off)
 	jobPhaseID string
 	jobID      string
 }
@@ -305,6 +306,7 @@ type cellAck struct {
 	drives     bool   // graph-derived: this save drives a scaled-summary recompute
 	jobPhaseID string
 	jobID      string
+	hasNote    bool   // the outcome carries a determination_note after this write (icon state)
 	errMsg     string // set only when !ok (bounded, never echoes the value)
 }
 
@@ -415,13 +417,14 @@ func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult) view.Vi
 		OutcomeID           string `json:"outcomeId,omitempty"`
 		NextKey             string `json:"nextKey,omitempty"`
 		Value               string `json:"value,omitempty"`
+		HasNarrative        bool   `json:"hasNarrative,omitempty"`
 		RatingFresh         *bool  `json:"ratingFresh,omitempty"`
 		RatingNotRecomputed string `json:"ratingNotRecomputed,omitempty"`
 		Error               string `json:"error,omitempty"`
 	}
 	items := make([]item, 0, len(acks))
 	for _, a := range acks {
-		it := item{Key: a.key, OK: a.ok, NextKey: a.nextKey, OutcomeID: a.outcomeID, Value: a.value}
+		it := item{Key: a.key, OK: a.ok, NextKey: a.nextKey, OutcomeID: a.outcomeID, Value: a.value, HasNarrative: a.hasNote}
 		if !a.ok {
 			it.Error = a.errMsg
 			items = append(items, it)
@@ -500,20 +503,20 @@ func failMsg(ok bool, reason string) string {
 // making them permanently un-editable — every value "failed to parse as
 // UNSPECIFIED") falls back to the column type, and the update re-stamps it so
 // the row self-heals.
-func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, colCT enums.CriteriaType, bounds cellBounds) (string, bool) {
+func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, colCT enums.CriteriaType, bounds cellBounds, ratings ratingDescriptions) (string, bool, bool) {
 	if deps.ReadTaskOutcome == nil || deps.UpdateTaskOutcome == nil {
-		return "", false
+		return "", false, false
 	}
 	readResp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
 	})
 	if err != nil {
 		log.Printf("[outcome-matrix] read failed for outcome %s: %v", outcomeID, err)
-		return "", false
+		return "", false, false
 	}
 	records := readResp.GetData()
 	if len(records) == 0 {
-		return "", false
+		return "", false, false
 	}
 	existing := records[0]
 
@@ -521,7 +524,7 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 	if existing.GetRecordedBy() != actingStaff {
 		log.Printf("[outcome-matrix] IDOR blocked: staff %s tried to edit outcome %s owned by %s",
 			actingStaff, outcomeID, existing.GetRecordedBy())
-		return "", false
+		return "", false, false
 	}
 
 	ct := existing.GetCriteriaType()
@@ -540,14 +543,33 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 	// no-op that reports success.
 	if !applyValueStrict(req.Data, ct, raw, bounds) {
 		log.Printf("[outcome-matrix] update rejected: value does not parse as %v (or violates the criterion's declared bounds) for outcome %s", ct, outcomeID)
-		return "", false
+		return "", false, false
+	}
+
+	// Rating description → narrative (numeric-with-description bindings only).
+	// The stored note is replaced only while it is still the description the OLD
+	// value produced (or empty): a grader's own wording is never overwritten, and
+	// an untouched auto note follows the score. "" clears an auto note whose new
+	// value has no description.
+	note := existing.GetDeterminationNote()
+	if ratings.enabled() && req.Data.NumericValue != nil {
+		auto := ""
+		if existing.NumericValue != nil {
+			auto = ratings.describe(existing.GetNumericValue())
+		}
+		if note == "" || note == auto {
+			if next := ratings.describe(*req.Data.NumericValue); next != note {
+				req.Data.DeterminationNote = &next
+				note = next
+			}
+		}
 	}
 
 	if _, err := deps.UpdateTaskOutcome(ctx, req); err != nil {
 		log.Printf("[outcome-matrix] update failed for outcome %s: %v", outcomeID, err)
-		return "", false
+		return "", false, false
 	}
-	return normalizedValue(ct, req.Data), true
+	return normalizedValue(ct, req.Data), true, note != ""
 }
 
 // deleteCell removes an editable outcome with a server-derived IDOR guard (staff-owned
@@ -596,9 +618,9 @@ func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) 
 // active). A value that does not parse as the criterion's type fails the cell.
 // Returns the new task_outcome id (for the client's new.*→cells.* rename
 // handshake) + the normalized stored value.
-func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteriaID string, ct enums.CriteriaType, raw string, bounds cellBounds) (string, string, bool) {
+func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteriaID string, ct enums.CriteriaType, raw string, bounds cellBounds, ratings ratingDescriptions) (string, string, bool, bool) {
 	if deps.CreateTaskOutcome == nil {
-		return "", "", false
+		return "", "", false, false
 	}
 	req := &taskoutcomepb.CreateTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{
@@ -615,13 +637,22 @@ func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteri
 		// Do NOT log the raw value (it is user content); the type + criteria id
 		// are sufficient to diagnose a rejected create.
 		log.Printf("[outcome-matrix] create rejected: value does not parse as %v (or violates the criterion's declared bounds) for criteria %s", ct, criteriaID)
-		return "", "", false
+		return "", "", false, false
+	}
+
+	// Rating description → narrative snapshot for a numeric-with-description
+	// binding (see rating_description.go). No description ⇒ no note.
+	note := ""
+	if ratings.enabled() && req.Data.NumericValue != nil {
+		if note = ratings.describe(*req.Data.NumericValue); note != "" {
+			req.Data.DeterminationNote = &note
+		}
 	}
 
 	resp, err := deps.CreateTaskOutcome(ctx, req)
 	if err != nil {
 		log.Printf("[outcome-matrix] create failed for job_task %s criteria %s: %v", jobTaskID, criteriaID, err)
-		return "", "", false
+		return "", "", false, false
 	}
 	// The new id backs the mandatory new.*→cells.* rename handshake; without it
 	// the client would re-CREATE on its next save (a duplicate).
@@ -629,7 +660,7 @@ func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteri
 	if data := resp.GetData(); len(data) > 0 && data[0] != nil {
 		newID = data[0].GetId()
 	}
-	return newID, normalizedValue(ct, req.Data), true
+	return newID, normalizedValue(ct, req.Data), true, note != ""
 }
 
 // normalizedValue renders the stored typed value back to its canonical string

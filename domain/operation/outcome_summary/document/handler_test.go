@@ -32,7 +32,7 @@ import (
 // default, PDF routes through the injected GeneratePDF closure, the
 // LibreOffice-absent sentinel maps to 503 (vs 500 for any other error), an
 // unknown format is 400, and the auth/IDOR gates fire identically for both
-// formats (a foreign section 404s before either closure is called).
+// formats (a foreign group 404s before either closure is called).
 
 var okPermCodes = []string{"job_outcome_summary:list", "job_outcome_summary:read"}
 
@@ -44,7 +44,7 @@ var stubPDFBytes = []byte("%PDF-1.7\nPDF-BYTES")
 
 // fullCardDeps returns Deps whose fetch chain yields exactly one kept subject
 // (Mathematics, year-final band "7" so the non-enrolled-placeholder suppressor
-// keeps it) for section sec-1 / client stu-1, with the two generator closures
+// keeps it) for group sec-1 / client stu-1, with the two generator closures
 // injected by the caller.
 func fullCardDeps(gen, pdf func([]byte, map[string]any) ([]byte, error)) *Deps {
 	return &Deps{
@@ -88,10 +88,10 @@ func fullCardDeps(gen, pdf func([]byte, map[string]any) ([]byte, error)) *Deps {
 	}
 }
 
-func reqWithPerms(t *testing.T, target, section, client string, granted bool) *http.Request {
+func reqWithPerms(t *testing.T, target, group, client string, granted bool) *http.Request {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, target, nil)
-	r.SetPathValue("id", section)
+	r.SetPathValue("id", group)
 	r.SetPathValue("client_id", client)
 	var perms *types.UserPermissions
 	if granted {
@@ -140,15 +140,15 @@ func TestDownload_Forbidden_BothFormats(t *testing.T) {
 	}
 }
 
-func TestDownload_IDOR_ForeignSection_404_BothFormats(t *testing.T) {
+func TestDownload_IDOR_ForeignGroup_404_BothFormats(t *testing.T) {
 	for _, f := range []string{"docx", "pdf"} {
 		d := fullCardDeps(
 			func([]byte, map[string]any) ([]byte, error) {
-				t.Fatalf("generator must not run for a foreign section")
+				t.Fatalf("generator must not run for a foreign group")
 				return nil, nil
 			},
 			func([]byte, map[string]any) ([]byte, error) {
-				t.Fatalf("generator must not run for a foreign section")
+				t.Fatalf("generator must not run for a foreign group")
 				return nil, nil
 			},
 		)
@@ -157,7 +157,7 @@ func TestDownload_IDOR_ForeignSection_404_BothFormats(t *testing.T) {
 		w := httptest.NewRecorder()
 		h(w, reqWithPerms(t, "/doc?format="+f, "sec-1", "stu-1", true))
 		if w.Code != http.StatusNotFound {
-			t.Fatalf("format=%q foreign section must 404, got %d", f, w.Code)
+			t.Fatalf("format=%q foreign group must 404, got %d", f, w.Code)
 		}
 	}
 }

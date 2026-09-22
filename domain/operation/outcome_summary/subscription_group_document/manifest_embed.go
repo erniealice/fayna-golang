@@ -1,4 +1,4 @@
-package section_document
+package subscription_group_document
 
 import (
 	"archive/zip"
@@ -65,7 +65,7 @@ type renderManifest struct {
 type TemplateContractError struct{ reason string }
 
 func (e *TemplateContractError) Error() string {
-	return "section document template contract: " + e.reason
+	return "subscription group document template contract: " + e.reason
 }
 func (*TemplateContractError) TemplateContractError() bool { return true }
 

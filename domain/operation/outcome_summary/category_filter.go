@@ -11,7 +11,7 @@ import (
 
 // ResolveCategoryID resolves a configured job_category CODE (Options.CategoryFilter,
 // e.g. "academic") to its id, using the per-request ListJobCategories closure. It
-// is the shared resolver for the three grade surfaces (view-2 section grid, view-3
+// is the shared resolver for the three grade surfaces (view-2 group grid, view-3
 // client card, report-card document); each surface calls it ONCE per request and
 // then filters its job set with KeepJobInCategory.
 //

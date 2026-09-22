@@ -1,6 +1,6 @@
-package section
+package subscription_group
 
-// download.go renders the report-only section outcome export drawer.  The
+// download.go renders the report-only group outcome export drawer.  The
 // drawer asks the composite export query for options once, then derives all
 // category/period choices locally from that trusted response.  It deliberately
 // has no document-template resolver: the native export form owns the actual
@@ -23,7 +23,7 @@ import (
 
 const uncategorizedExportValue = "uncategorized"
 
-// DrawerDeps is the deliberately narrow composition seam for the section
+// DrawerDeps is the deliberately narrow composition seam for the group
 // download drawer.  GetSubscriptionGroupOutcomeExport is the report query
 // use-case closure; no storage or template resolver belongs in this view.
 type DrawerDeps struct {
@@ -44,12 +44,12 @@ type DrawerData struct {
 	Categories    []types.SelectOption
 	Periods       []types.SelectOption
 	Formats       []types.SelectOption
-	Labels        outcome_summary.SectionExportLabels
+	Labels        outcome_summary.SubscriptionGroupExportLabels
 	CommonLabels  any
 	Nonce         string
 }
 
-// NewDownloadDrawer creates the section export options drawer. The export
+// NewDownloadDrawer creates the group export options drawer. The export
 // capability and allowed principal kind are checked before any dependency or
 // composite query.
 func NewDownloadDrawer(deps *DrawerDeps) view.View {
@@ -58,14 +58,14 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 		if deps == nil || !outcome_summary.CanExplicitExport(perms, ctx, deps.ResolvePrincipalKind) {
 			return view.Forbidden(outcome_summary.ExportPermissionEntity + ":" + outcome_summary.ExportReadAction)
 		}
-		if deps == nil || !deps.Options.SectionExportEnabled() ||
-			strings.TrimSpace(deps.Routes.SectionDownloadDrawerURL) == "" ||
-			strings.TrimSpace(deps.Routes.SectionExportURL) == "" ||
+		if deps == nil || !deps.Options.SubscriptionGroupExportEnabled() ||
+			strings.TrimSpace(deps.Routes.SubscriptionGroupDownloadDrawerURL) == "" ||
+			strings.TrimSpace(deps.Routes.SubscriptionGroupExportURL) == "" ||
 			deps.GetSubscriptionGroupOutcomeExport == nil {
-			return view.Error(fmt.Errorf("section outcome export is not configured"))
+			return view.Error(fmt.Errorf("group outcome export is not configured"))
 		}
 		if viewCtx == nil || viewCtx.Request == nil {
-			return view.Error(fmt.Errorf("section outcome export request is missing"))
+			return view.Error(fmt.Errorf("group outcome export request is missing"))
 		}
 
 		groupID := strings.TrimSpace(viewCtx.Request.PathValue("id"))
@@ -80,30 +80,30 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 			SubscriptionGroupId: groupID,
 		})
 		if err != nil {
-			return view.Error(fmt.Errorf("load section outcome export options: %w", err))
+			return view.Error(fmt.Errorf("load group outcome export options: %w", err))
 		}
 		if resp == nil || !resp.GetSuccess() {
-			return view.ViewResult{Error: fmt.Errorf("load section outcome export options: unavailable response"), StatusCode: http.StatusServiceUnavailable}
+			return view.ViewResult{Error: fmt.Errorf("load group outcome export options: unavailable response"), StatusCode: http.StatusServiceUnavailable}
 		}
 		if resp.GetContext() == nil || resp.GetContext().GetSubscriptionGroupId() != groupID {
 			// Missing, foreign, and unreachable groups deliberately share one shape.
-			return view.ViewResult{Error: fmt.Errorf("section outcome export not found"), StatusCode: http.StatusNotFound}
+			return view.ViewResult{Error: fmt.Errorf("group outcome export not found"), StatusCode: http.StatusNotFound}
 		}
 		if len(resp.GetJobCategories()) == 0 {
-			return view.ViewResult{Error: fmt.Errorf("section outcome export is not computed"), StatusCode: http.StatusNotFound}
+			return view.ViewResult{Error: fmt.Errorf("group outcome export is not computed"), StatusCode: http.StatusNotFound}
 		}
 
 		requestedCategory := strings.TrimSpace(viewCtx.Request.URL.Query().Get("job_category_id"))
-		category := chooseCategory(resp.GetJobCategories(), requestedCategory, deps.Options.SectionExport.DefaultCategoryCode)
+		category := chooseCategory(resp.GetJobCategories(), requestedCategory, deps.Options.SubscriptionGroupExport.DefaultCategoryCode)
 		data := &DrawerData{
-			FormAction:    route.ResolveURL(deps.Routes.SectionExportURL, "id", groupID),
-			RefreshAction: route.ResolveURL(deps.Routes.SectionDownloadDrawerURL, "id", groupID),
+			FormAction:    route.ResolveURL(deps.Routes.SubscriptionGroupExportURL, "id", groupID),
+			RefreshAction: route.ResolveURL(deps.Routes.SubscriptionGroupDownloadDrawerURL, "id", groupID),
 			Categories:    buildCategoryOptions(deps.Labels, resp.GetJobCategories(), category),
 			Periods:       buildPeriodOptions(deps.Labels, category),
 			Formats:       buildFormatOptions(deps.Options, category, deps.Labels),
-			Labels:        deps.Labels.SectionExport,
+			Labels:        deps.Labels.SubscriptionGroupExport,
 		}
-		return view.OK("outcome-summary-section-download-drawer-form", data)
+		return view.OK("outcome-summary-subscription-group-download-drawer-form", data)
 	})
 }
 
@@ -208,7 +208,7 @@ func buildPeriodOptions(labels outcome_summary.Labels, category *exportpb.JobCat
 		options = append(options, types.SelectOption{Value: "phase:" + phase.GetCode(), Label: label})
 	}
 	if category.GetFinalOutcomeAvailable() {
-		options = append(options, types.SelectOption{Value: "final", Label: labels.SectionExport.PeriodFinal})
+		options = append(options, types.SelectOption{Value: "final", Label: labels.SubscriptionGroupExport.PeriodFinal})
 	}
 	return options
 }
@@ -218,9 +218,9 @@ func buildFormatOptions(options outcome_summary.Options, category *exportpb.JobC
 	if category != nil {
 		categoryCode = category.GetCode()
 	}
-	_, pdfAvailable := options.SectionExport.ProfileForCategoryCode(categoryCode)
+	_, pdfAvailable := options.SubscriptionGroupExport.ProfileForCategoryCode(categoryCode)
 	return []types.SelectOption{
-		{Value: "csv", Label: labels.SectionExport.FormatCSV, Selected: true},
-		{Value: "pdf", Label: labels.SectionExport.FormatPDF, Disabled: !pdfAvailable},
+		{Value: "csv", Label: labels.SubscriptionGroupExport.FormatCSV, Selected: true},
+		{Value: "pdf", Label: labels.SubscriptionGroupExport.FormatPDF, Disabled: !pdfAvailable},
 	}
 }

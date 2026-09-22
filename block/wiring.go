@@ -208,6 +208,14 @@ func wireTemplateTaskCriteriaDeps(deps *operation.TemplateTaskCriteriaModuleDeps
 	deps.ListOutcomeCriterias = u.Operation.OutcomeCriteria.ListOutcomeCriterias
 	deps.ListPhasesByJobTemplate = u.Operation.JobTemplatePhase.ListByJobTemplate
 	deps.ListTasksByPhase = u.Operation.JobTemplateTask.ListByPhase
+	deps.ListScoreScales = u.Operation.ScoreScale.ListScoreScales
+	deps.ListScoreScaleBands = u.Operation.ScoreScaleBand.ListScoreScaleBands
+	rd := u.Operation.TemplateTaskCriteriaRatingDescription
+	deps.CreateTemplateTaskCriteriaRatingDescription = rd.CreateTemplateTaskCriteriaRatingDescription
+	deps.ReadTemplateTaskCriteriaRatingDescription = rd.ReadTemplateTaskCriteriaRatingDescription
+	deps.UpdateTemplateTaskCriteriaRatingDescription = rd.UpdateTemplateTaskCriteriaRatingDescription
+	deps.DeleteTemplateTaskCriteriaRatingDescription = rd.DeleteTemplateTaskCriteriaRatingDescription
+	deps.ListTemplateTaskCriteriaRatingDescriptionsByTemplateTaskCriteria = rd.ListByTemplateTaskCriteria
 }
 
 func wireScoringComponentCriteriaDeps(deps *operation.ScoringComponentCriteriaModuleDeps, u *UseCases) {
@@ -281,9 +289,9 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	deps.GetOutcomeSummaryRoster = om.GetOutcomeSummaryRoster
 	deps.ResolveStaff = om.ResolveStaff
 
-	// (template, section) pair guard for the Group* routes — the SAME delivery
+	// (template, group) pair guard for the Group* routes — the SAME delivery
 	// aggregate the courses list reads, reused as a validator. Nil-safe: without
-	// it the section routes 404 rather than render an unvalidated narrowing.
+	// it the group routes 404 rather than render an unvalidated narrowing.
 	deps.ListJobTemplateSummaries = u.Operation.JobTemplateSummary.ListJobTemplateSummaries
 
 	// Grade-sheet PDF render context (P5): the job_template read resolves the
@@ -364,8 +372,8 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.GetPhaseOutcomeSummaryByJobPhase = pos.GetByJobPhase
 	deps.ListPhaseOutcomeSummarysByJob = pos.ListByJob
 
-	// Report-cards navigation deps (view-1 landing tabbed section list + view-2
-	// per-section grid). All reused from already-wired top-level closures — no
+	// Report-cards navigation deps (view-1 landing tabbed group list + view-2
+	// per-subscription-group grid). All reused from already-wired top-level closures — no
 	// new espyna surface. Nil-safe end to end (a nil closure degrades the
 	// affected surface to empty/flat, never panics).
 	deps.ListPriceSchedules = u.Subscription.PriceSchedule.ListPriceSchedules
@@ -380,7 +388,7 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListSubscriptionGroupWorkspaceUsers = u.Subscription.SubscriptionGroupWorkspaceUser.ListSubscriptionGroupWorkspaceUsers
 	deps.ListWorkspaceUsers = u.Entity.WorkspaceUser.ListWorkspaceUsers
 	deps.ListJobs = u.Operation.Job.ListJobs
-	// view-3 per-student card: maps each phase_outcome_summary to its Sem 1 / Sem 2
+	// view-3 per-client card: maps each phase_outcome_summary to its Sem 1 / Sem 2
 	// column via job_phase.phase_order.
 	deps.ListJobPhases = u.Operation.JobPhase.ListJobPhases
 	// Group-grain render-gate rollup port (docs/plan/20260729-report-card-
@@ -432,12 +440,12 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.DeleteTemplateBinding = binding.DeleteJobOutcomeSummaryDocumentTemplate
 	deps.PublishTemplateBinding = binding.PublishJobOutcomeSummaryDocumentTemplate
 
-	sectionBinding := &u.Operation.SubscriptionGroupDocumentTemplate
-	deps.CreateSectionTemplateUploadPair = sectionBinding.CreateUploadPair
-	deps.ListSectionTemplateBindings = sectionBinding.ListSubscriptionGroupDocumentTemplates
-	deps.DeleteSectionTemplateDraftPair = sectionBinding.DeleteDraftPair
-	deps.DeleteSectionTemplateBinding = sectionBinding.DeleteSubscriptionGroupDocumentTemplate
-	deps.PublishSectionTemplateBinding = sectionBinding.PublishSubscriptionGroupDocumentTemplate
+	subscriptionGroupDocumentTemplateBinding := &u.Operation.SubscriptionGroupDocumentTemplate
+	deps.CreateSubscriptionGroupDocumentTemplateUploadPair = subscriptionGroupDocumentTemplateBinding.CreateUploadPair
+	deps.ListSubscriptionGroupDocumentTemplateBindings = subscriptionGroupDocumentTemplateBinding.ListSubscriptionGroupDocumentTemplates
+	deps.DeleteSubscriptionGroupDocumentTemplateDraftPair = subscriptionGroupDocumentTemplateBinding.DeleteDraftPair
+	deps.DeleteSubscriptionGroupDocumentTemplateBinding = subscriptionGroupDocumentTemplateBinding.DeleteSubscriptionGroupDocumentTemplate
+	deps.PublishSubscriptionGroupDocumentTemplateBinding = subscriptionGroupDocumentTemplateBinding.PublishSubscriptionGroupDocumentTemplate
 }
 
 // ---------------------------------------------------------------------------

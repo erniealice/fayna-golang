@@ -24,8 +24,8 @@ import (
 func sptr(s string) *string   { return &s }
 func fptr(v float64) *float64 { return &v }
 
-// M4 (audit T5): the two IDOR gates on the per-student report card —
-// fetchSection (workspace EXISTS gate) + memberSubscription (section-membership
+// M4 (audit T5): the two IDOR gates on the per-client report card —
+// fetchGroup (workspace EXISTS gate) + memberSubscription (group-membership
 // gate) — are security-critical and were untested. These pin the fail-closed
 // behavior with fake, injectable closures.
 
@@ -41,26 +41,26 @@ func membersFn(members ...*subscriptiongroupmemberpb.SubscriptionGroupMember) fu
 	}
 }
 
-// TestFetchSection_ForeignSection_Nil: the workspace-scoped adapter returns no
+// TestFetchSubscriptionGroup_ForeignSubscriptionGroup_Nil: the workspace-scoped adapter returns no
 // rows for a foreign/missing id → fail-closed nil.
-func TestFetchSection_ForeignSection_Nil(t *testing.T) {
+func TestFetchSubscriptionGroup_ForeignSubscriptionGroup_Nil(t *testing.T) {
 	deps := &Deps{ListSubscriptionGroups: groupsFn()}
-	if g := fetchSection(context.Background(), deps, "sec-1"); g != nil {
-		t.Fatalf("foreign section must resolve nil, got %v", g)
+	if g := fetchGroup(context.Background(), deps, "sec-1"); g != nil {
+		t.Fatalf("foreign group must resolve nil, got %v", g)
 	}
 }
 
-// TestFetchSection_Present: an in-workspace section resolves.
-func TestFetchSection_Present(t *testing.T) {
+// TestFetchSubscriptionGroup_Present: an in-workspace group resolves.
+func TestFetchSubscriptionGroup_Present(t *testing.T) {
 	deps := &Deps{ListSubscriptionGroups: groupsFn(&subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Active: true})}
-	g := fetchSection(context.Background(), deps, "sec-1")
+	g := fetchGroup(context.Background(), deps, "sec-1")
 	if g == nil || g.GetId() != "sec-1" {
-		t.Fatalf("present section must resolve, got %v", g)
+		t.Fatalf("present group must resolve, got %v", g)
 	}
 }
 
 // TestMemberSubscription_NonMember_Empty: a client that is not a member of the
-// section resolves to "" (the IDOR fail-closed signal).
+// group resolves to "" (the IDOR fail-closed signal).
 func TestMemberSubscription_NonMember_Empty(t *testing.T) {
 	deps := &Deps{ListSubscriptionGroupMembers: membersFn(
 		&subscriptiongroupmemberpb.SubscriptionGroupMember{ClientId: "other", SubscriptionId: "sub-x", Active: true},
@@ -81,13 +81,13 @@ func TestMemberSubscription_Member_Resolves(t *testing.T) {
 }
 
 // TestMemberSubscription_InactiveInActiveGroup_Empty: an inactive membership row
-// in a live (non-historical) section is skipped → "".
+// in a live (non-historical) group is skipped → "".
 func TestMemberSubscription_InactiveInActiveGroup_Empty(t *testing.T) {
 	deps := &Deps{ListSubscriptionGroupMembers: membersFn(
 		&subscriptiongroupmemberpb.SubscriptionGroupMember{ClientId: "target", SubscriptionId: "sub-1", Active: false},
 	)}
 	if sub := memberSubscription(context.Background(), deps, "sec-1", "target", false); sub != "" {
-		t.Fatalf("inactive member in a live section must resolve empty, got %q", sub)
+		t.Fatalf("inactive member in a live group must resolve empty, got %q", sub)
 	}
 }
 
@@ -150,21 +150,21 @@ func taskOutcomesFn(outcomes ...*taskoutcomepb.TaskOutcome) func(context.Context
 
 // TestOkPage_DownloadWiredIntoPrimaryAction pins the moved Download-PDF: when a
 // document URL exists it lands in TableConfig.PrimaryAction with Download=true,
-// the preserved rc-download-pdf test id, and the student.download_action label.
+// the preserved rc-download-pdf test id, and the client.download_action label.
 func TestOkPage_DownloadWiredIntoPrimaryAction(t *testing.T) {
 	deps := &Deps{
 		Routes: outcome_summary.Routes{
-			ClientDocumentURL: "/rc/section/{id}/client/{client_id}/doc",
-			SectionURL:        "/rc/section/{id}",
-			ActiveNav:         "reports",
+			ClientDocumentURL:    "/rc/group/{id}/client/{client_id}/doc",
+			SubscriptionGroupURL: "/rc/group/{id}",
+			ActiveNav:            "reports",
 		},
 		Labels: outcome_summary.Labels{
-			Student: outcome_summary.PeriodLabels{DownloadAction: "Download report card (PDF)"},
+			Client: outcome_summary.PeriodLabels{DownloadAction: "Download report card (PDF)"},
 		},
 	}
 	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "Grade 5 Diamond"}
-	viewCtx := &view.ViewContext{CacheVersion: "v1", CurrentPath: "/rc/section/sec-1/client/c-1"}
-	table := &types.TableConfig{ID: "report-cards-student"}
+	viewCtx := &view.ViewContext{CacheVersion: "v1", CurrentPath: "/rc/group/sec-1/client/c-1"}
+	table := &types.TableConfig{ID: "report-cards-client"}
 
 	res := okPage(viewCtx, deps, group, "c-1", "Ada Lovelace", table)
 	pd, ok := res.Data.(*PageData)
@@ -176,7 +176,7 @@ func TestOkPage_DownloadWiredIntoPrimaryAction(t *testing.T) {
 		t.Fatal("PrimaryAction must be wired when a document URL exists")
 	}
 	if pa.Label != "Download report card (PDF)" {
-		t.Errorf("Label = %q, want the student.download_action label", pa.Label)
+		t.Errorf("Label = %q, want the client.download_action label", pa.Label)
 	}
 	if !pa.Download {
 		t.Error("Download must be true so the body-boosted app does not intercept the download")
@@ -193,12 +193,12 @@ func TestOkPage_DownloadWiredIntoPrimaryAction(t *testing.T) {
 // {{if .DocumentDownloadURL}} gate: no document URL ⇒ no primary action.
 func TestOkPage_NoDocumentURL_NoPrimaryAction(t *testing.T) {
 	deps := &Deps{
-		Routes: outcome_summary.Routes{SectionURL: "/rc/section/{id}"}, // ClientDocumentURL empty
-		Labels: outcome_summary.Labels{Student: outcome_summary.PeriodLabels{DownloadAction: "x"}},
+		Routes: outcome_summary.Routes{SubscriptionGroupURL: "/rc/group/{id}"}, // ClientDocumentURL empty
+		Labels: outcome_summary.Labels{Client: outcome_summary.PeriodLabels{DownloadAction: "x"}},
 	}
 	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "S"}
 	viewCtx := &view.ViewContext{CacheVersion: "v1"}
-	table := &types.TableConfig{ID: "report-cards-student"}
+	table := &types.TableConfig{ID: "report-cards-client"}
 
 	res := okPage(viewCtx, deps, group, "c-1", "N", table)
 	pd := res.Data.(*PageData)
@@ -211,8 +211,8 @@ func TestOkPage_NoDocumentURL_NoPrimaryAction(t *testing.T) {
 // takes the no-URL path without a nil-pointer deref on table.PrimaryAction.
 func TestOkPage_NilTable_NoPanic(t *testing.T) {
 	deps := &Deps{
-		Routes: outcome_summary.Routes{ClientDocumentURL: "/rc/{id}/{client_id}", SectionURL: "/rc/{id}"},
-		Labels: outcome_summary.Labels{Section: outcome_summary.SectionLabels{NotComputedBanner: "not yet"}},
+		Routes: outcome_summary.Routes{ClientDocumentURL: "/rc/{id}/{client_id}", SubscriptionGroupURL: "/rc/{id}"},
+		Labels: outcome_summary.Labels{SubscriptionGroup: outcome_summary.SubscriptionGroupLabels{NotComputedBanner: "not yet"}},
 	}
 	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "S"}
 	viewCtx := &view.ViewContext{CacheVersion: "v1"}
@@ -240,7 +240,7 @@ func findRow(t *testing.T, table *types.TableConfig, name string) types.TableRow
 }
 
 // TestBuildTable_PhantomBlank_RealShown pins the phantom-blank invariant on the
-// per-student client card. Cells per row: [0]=subject, [1]=S1 progress, [2]=S1
+// per-client client card. Cells per row: [0]=subject, [1]=S1 progress, [2]=S1
 // final, [3]=S2 progress, [4]=S2 final, [5]=year final.
 //
 //   - Korean is an untaken-elective all-zero scaffold (all task marks 0, bands

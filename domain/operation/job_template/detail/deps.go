@@ -29,12 +29,13 @@ type DetailViewDeps struct {
 	Routes job_template.Routes
 	// PhaseRoutes and TaskRoutes supply Edit/Delete URLs for per-row CTAs
 	// and the Add CTA on the Phases / Tasks tabs. CriteriaRoutes supplies
-	// Add/Delete URLs for the Standards tab's "+ Add Standard" CTA and
-	// per-row remove actions. RelationRoutes supplies Add/Delete URLs for
+	// Add/Edit/Delete URLs for the Standards tab's "+ Add Standard" CTA and
+	// per-row actions. RelationRoutes supplies Add/Delete URLs for
 	// the Spawn Graph tab's "+ Add Relation" CTA and per-row remove actions.
 	PhaseRoutes    job_template_phase.Routes
 	TaskRoutes     job_template_task.Routes
 	CriteriaRoutes template_task_criteria.Routes
+	CriteriaLabels template_task_criteria.Labels
 	RelationRoutes job_template_relation.Routes
 
 	ReadJobTemplate         func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)

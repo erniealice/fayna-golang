@@ -52,6 +52,27 @@ type Data struct {
 	SequenceOrder   int32
 	Active          bool
 
+	// Binding-level rating behavior. The mode is intentionally separate from
+	// the criterion's value type; the selected scale is reusable, while the
+	// descriptions below remain specific to this binding.
+	RatingMode            string
+	RatingModeOptions     []types.SelectOption
+	RatingScaleID         string
+	RatingScaleOptions    []types.SelectOption
+	RatingDescriptionRows []RatingDescriptionRow
+
 	Labels       any
 	CommonLabels any
+}
+
+// RatingDescriptionRow is one editable binding-specific description keyed by
+// a reusable score-scale band.
+type RatingDescriptionRow struct {
+	ID          string
+	BandID      string
+	ScaleID     string
+	ScaleName   string
+	BandLabel   string
+	InputLabel  string
+	Description string
 }

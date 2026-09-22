@@ -173,9 +173,11 @@ func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 		// schedule) so no fayna→espyna dependency is introduced; nil-safe when
 		// unwired (the pdf export fails loud with a 503, no embedded fallback).
 		infra.ResolveSheetTemplateBytes, _ = ctx.ResolveSheetTemplateBytes.(func(context.Context, string, string) ([]byte, error))
-		infra.ResolveSectionTemplate, _ = ctx.ResolveSectionTemplate.(func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSectionTemplate, error))
-		infra.StoreSectionTemplate, _ = ctx.StoreSectionTemplate.(func(context.Context, string, []byte, string) (string, error))
-		infra.DeleteSectionTemplateObject, _ = ctx.DeleteSectionTemplateObject.(func(context.Context, string, string) error)
+		// AppContext is the external composition boundary; the typed fayna seam
+		// above remains canonical.
+		infra.ResolveSubscriptionGroupDocumentTemplate, _ = ctx.ResolveSubscriptionGroupDocumentTemplate.(func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error))
+		infra.StoreSubscriptionGroupDocumentTemplate, _ = ctx.StoreSubscriptionGroupDocumentTemplate.(func(context.Context, string, []byte, string) (string, error))
+		infra.DeleteSubscriptionGroupDocumentTemplateObject, _ = ctx.DeleteSubscriptionGroupDocumentTemplateObject.(func(context.Context, string, string) error)
 		// TB3 template settings artifact closures (upload + document_template CRUD).
 		infra.UploadTemplate, _ = ctx.UploadTemplate.(func(context.Context, string, string, []byte, string) error)
 		infra.ListDocTemplates, _ = ctx.ListDocTemplates.(func(context.Context, *documenttemplatepb.ListDocumentTemplatesRequest) (*documenttemplatepb.ListDocumentTemplatesResponse, error))
@@ -303,7 +305,7 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.JobTemplateDocumentTemplate.PublishJobTemplateDocumentTemplate = b.PublishJobTemplateDocumentTemplate.Execute
 		}
 
-		// SubscriptionGroupDocumentTemplate — Section Template management. The
+		// SubscriptionGroupDocumentTemplate — Subscription Group Document Template management. The
 		// atomic pair method exposes protobuf-only arguments so this consumer does
 		// not import Espyna's internal application DTOs.
 		if op.SubscriptionGroupDocumentTemplate != nil {
@@ -338,6 +340,14 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.TemplateTaskCriteria.DeleteTemplateTaskCriteria = op.TemplateTaskCriteria.DeleteTemplateTaskCriteria.Execute
 			result.Operation.TemplateTaskCriteria.ListTemplateTaskCriterias = op.TemplateTaskCriteria.ListTemplateTaskCriteria.Execute
 			result.Operation.TemplateTaskCriteria.ListByTemplateTask = op.TemplateTaskCriteria.ListByTemplateTask.Execute
+		}
+
+		if op.TemplateTaskCriteriaRatingDescription != nil {
+			result.Operation.TemplateTaskCriteriaRatingDescription.CreateTemplateTaskCriteriaRatingDescription = op.TemplateTaskCriteriaRatingDescription.CreateTemplateTaskCriteriaRatingDescription.Execute
+			result.Operation.TemplateTaskCriteriaRatingDescription.ReadTemplateTaskCriteriaRatingDescription = op.TemplateTaskCriteriaRatingDescription.ReadTemplateTaskCriteriaRatingDescription.Execute
+			result.Operation.TemplateTaskCriteriaRatingDescription.UpdateTemplateTaskCriteriaRatingDescription = op.TemplateTaskCriteriaRatingDescription.UpdateTemplateTaskCriteriaRatingDescription.Execute
+			result.Operation.TemplateTaskCriteriaRatingDescription.DeleteTemplateTaskCriteriaRatingDescription = op.TemplateTaskCriteriaRatingDescription.DeleteTemplateTaskCriteriaRatingDescription.Execute
+			result.Operation.TemplateTaskCriteriaRatingDescription.ListByTemplateTaskCriteria = op.TemplateTaskCriteriaRatingDescription.ListByTemplateTaskCriteria.Execute
 		}
 
 		if op.JobTemplateRelation != nil {

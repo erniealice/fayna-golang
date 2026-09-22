@@ -77,7 +77,7 @@ import (
 // group step.
 //
 // Known over-refusal edge (group grain, documented + tested): a HISTORICAL
-// section (inactive group) carries inactive membership rows, which the
+// group (inactive group) carries inactive membership rows, which the
 // active-membership transition predicate would resolve to target_count = 0.
 // In practice a historical card's phase ancestry is inactive too, so the
 // card-phase active filter empties the template-phase set and the group path
@@ -88,7 +88,7 @@ import (
 // reportRenderStatus returns (blocked, err). groupID is the card's
 // subscription group — the route group the download was requested under.
 // collectCard has already proven the (group, client) pair before the gate
-// runs: fetchSection resolved the group by id and memberSubscription proved
+// runs: fetchGroup resolved the group by id and memberSubscription proved
 // the client's own membership row, 404ing otherwise (the outcome_matrix
 // ResolveGroupScope pair-validation precedent). The zero-grain path ignores
 // groupID entirely (byte-identical pre-option behavior).

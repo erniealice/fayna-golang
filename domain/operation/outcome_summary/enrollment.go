@@ -15,7 +15,7 @@ import (
 // markEvidencePageLimit chunks ListFilter(IN) id sets so each call's result set
 // stays under the adapter's default cap. markEvidenceMaxPages bounds every
 // offset page-loop independently of the adapter's own termination (which relies
-// on a short final page) — a section's phase/task set (roster × subjects × ~2
+// on a short final page) — a group's phase/task set (roster × subjects × ~2
 // phases ≈ 600+) far exceeds the default row caps, and an uncapped single call
 // silently truncates the evidence, so every walk pages explicitly.
 const (
@@ -44,7 +44,7 @@ type EnrollmentEvidence struct {
 // jobIDs and returns per-job mark evidence (existence + any-positive), keyed by
 // job id. It is the bulk (no N+1), existence-only counterpart to the DOCX's
 // per-criterion fetchCriteriaByJob: every walk pages explicitly and chunks its
-// IN-filter so a large section's evidence is never silently truncated.
+// IN-filter so a large group's evidence is never silently truncated.
 //
 // PRINCIPAL PREREQUISITE (report cards are admin/registrar-only today): the
 // task walk uses listJobTasks, which staff-narrows to tasks assigned to the
@@ -270,7 +270,7 @@ func markEvidencePage(page int32) *commonpb.PaginationRequest {
 // markEvidenceSortByID sorts each paged list by the primary key (id ASC), a
 // UNIQUE column, so OFFSET pagination is deterministic across pages. Without it
 // the base adapter falls back to `ORDER BY date_created DESC`; education1's
-// bulk-seed stamps every phase/task/outcome row of a section with an IDENTICAL
+// bulk-seed stamps every phase/task/outcome row of a group with an IDENTICAL
 // date_created, and OFFSET paging over a fully-tied sort key returns an
 // overlapping/gapped subset per page — silently dropping whole jobs' mark rows,
 // which flips a taken job to HasMarks=false and leaves its phantom cell showing

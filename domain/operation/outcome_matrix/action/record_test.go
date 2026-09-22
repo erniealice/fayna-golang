@@ -68,6 +68,8 @@ type recorder struct {
 	createCalls   int
 	updateCalls   int
 	deleteCalls   int
+	lastCreate    *taskoutcomepb.TaskOutcome
+	lastUpdate    *taskoutcomepb.TaskOutcome
 	order         []string // recompute call order ("phase:<id>", "job:<id>")
 	phaseErr      error
 	jobRecomputed bool
@@ -76,6 +78,8 @@ type recorder struct {
 	jobNil        bool
 	readOwner     string             // RecordedBy the ReadTaskOutcome fixture returns (default staffID)
 	readCT        enums.CriteriaType // CriteriaType the stored record reports (default NUMERIC_SCORE)
+	readNote      string             // determination_note the stored record reports
+	readNumeric   *float64           // numeric_value the stored record reports
 	deleteErr     error
 
 	// recompute-eligibility fixture (wired only when wireElig): eligible + the
@@ -108,14 +112,18 @@ func (r *recorder) deps(matrix *matrixpb.GetOutcomeMatrixResponse) *Deps {
 				RecordedBy:        owner,
 				CriteriaType:      readCT,
 				CriteriaVersionId: "cv1",
+				NumericValue:      r.readNumeric,
+				DeterminationNote: nonEmpty(r.readNote),
 			}}}, nil
 		},
-		UpdateTaskOutcome: func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error) {
+		UpdateTaskOutcome: func(_ context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error) {
 			r.updateCalls++
+			r.lastUpdate = req.GetData()
 			return &taskoutcomepb.UpdateTaskOutcomeResponse{}, nil
 		},
-		CreateTaskOutcome: func(context.Context, *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, error) {
+		CreateTaskOutcome: func(_ context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, error) {
 			r.createCalls++
+			r.lastCreate = req.GetData()
 			return &taskoutcomepb.CreateTaskOutcomeResponse{Data: []*taskoutcomepb.TaskOutcome{{Id: "new-outcome-9"}}}, nil
 		},
 		DeleteTaskOutcome: func(_ context.Context, req *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error) {
@@ -152,6 +160,7 @@ type ackItem struct {
 	OutcomeID           string `json:"outcomeId"`
 	NextKey             string `json:"nextKey"`
 	Value               string `json:"value"`
+	HasNarrative        bool   `json:"hasNarrative"`
 	RatingFresh         *bool  `json:"ratingFresh"`
 	RatingNotRecomputed string `json:"ratingNotRecomputed"`
 	Error               string `json:"error"`
@@ -221,6 +230,111 @@ func TestCellMode_SingleUpdate(t *testing.T) {
 		t.Errorf("want 1 update 0 create, got %d/%d", r.updateCalls, r.createCalls)
 	}
 }
+
+func nonEmpty(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func f64(v float64) *float64 { return &v }
+
+// descMatrix is numericMatrix with the column in numeric-with-description mode
+// and exact-map wording for levels 3, 4 and 5.
+func descMatrix(recorded bool) *matrixpb.GetOutcomeMatrixResponse {
+	m := numericMatrix(recorded)
+	col := m.Phases[0].Tasks[0].Criteria[0]
+	col.RatingMode = enums.RatingMode_RATING_MODE_NUMERIC_WITH_DESCRIPTION
+	for _, lv := range []struct {
+		match, text string
+	}{{"3", "Adequate: shows the skill in familiar situations."}, {"4", "Adequate: applies the skill soundly."}, {"5", "Substantial: applies the skill well."}} {
+		match := lv.match
+		col.RatingDescriptions = append(col.RatingDescriptions, &matrixpb.RatingDescription{
+			ScaleKind: enums.ScaleKind_SCALE_KIND_EXACT_MAP, InputMatch: &match, Description: lv.text,
+		})
+	}
+	return m
+}
+
+// A create snapshots the matching description into determination_note, stores
+// the score as numeric_value only (never text_value), and acks hasNarrative.
+func TestCellMode_Create_SnapshotsRatingDescriptionAsNarrative(t *testing.T) {
+	r := &recorder{}
+	items := cells(t, invoke(t, r.deps(descMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=4", allPerms))
+	if len(items) != 1 || !items[0].OK {
+		t.Fatalf("create failed: %+v", items)
+	}
+	d := r.lastCreate
+	if d == nil || d.NumericValue == nil || *d.NumericValue != 4 {
+		t.Fatalf("numeric value = %+v, want 4", d)
+	}
+	if d.TextValue != nil {
+		t.Fatalf("description must not be persisted as text_value: %q", *d.TextValue)
+	}
+	if d.DeterminationNote == nil || *d.DeterminationNote != "Adequate: applies the skill soundly." {
+		t.Fatalf("determination_note = %v, want the level-4 description", d.DeterminationNote)
+	}
+	if !items[0].HasNarrative {
+		t.Fatal("ack must report hasNarrative for an auto-filled note")
+	}
+}
+
+// A binding without the mode, or a value with no description, writes no note.
+func TestCellMode_Create_NoNoteWithoutModeOrMatch(t *testing.T) {
+	r := &recorder{}
+	items := cells(t, invoke(t, r.deps(numericMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=4", allPerms))
+	if len(items) != 1 || !items[0].OK || r.lastCreate.DeterminationNote != nil || items[0].HasNarrative {
+		t.Fatalf("standard binding must not write a note: %+v / %+v", items, r.lastCreate)
+	}
+	r = &recorder{}
+	items = cells(t, invoke(t, r.deps(descMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=7", allPerms))
+	if len(items) != 1 || !items[0].OK || r.lastCreate.DeterminationNote != nil || items[0].HasNarrative {
+		t.Fatalf("unmatched value must not write a note: %+v / %+v", items, r.lastCreate)
+	}
+}
+
+// The update path replaces the note only while it is empty or still the
+// description the OLD value produced; a grader's own wording is never touched.
+func TestCellMode_Update_RatingDescriptionNarrativeRules(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		note     string
+		oldValue *float64
+		form     string
+		wantNote *string // nil = the request must not touch the note
+		wantHas  bool
+	}{
+		{"empty note is filled", "", f64(3), "5", ptr("Substantial: applies the skill well."), true},
+		{"untouched auto note follows the score", "Adequate: shows the skill in familiar situations.", f64(3), "4", ptr("Adequate: applies the skill soundly."), true},
+		{"grader wording is preserved", "Great effort on the proof.", f64(3), "4", nil, true},
+		{"auto note cleared when the new value has no description", "Adequate: shows the skill in familiar situations.", f64(3), "7", ptr(""), false},
+		{"same score keeps the note untouched", "Adequate: applies the skill soundly.", f64(4), "4", nil, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &recorder{readNote: tc.note, readNumeric: tc.oldValue}
+			items := cells(t, invoke(t, r.deps(descMatrix(true)), "save_mode=cell&cells."+existingID+"="+tc.form, allPerms))
+			if len(items) != 1 || !items[0].OK {
+				t.Fatalf("update failed: %+v", items)
+			}
+			got := r.lastUpdate.DeterminationNote
+			switch {
+			case tc.wantNote == nil && got != nil:
+				t.Fatalf("note must be untouched, request carried %q", *got)
+			case tc.wantNote != nil && (got == nil || *got != *tc.wantNote):
+				t.Fatalf("note = %v, want %q", got, *tc.wantNote)
+			}
+			if r.lastUpdate.TextValue != nil {
+				t.Fatal("update must never write text_value")
+			}
+			if items[0].HasNarrative != tc.wantHas {
+				t.Fatalf("hasNarrative = %v, want %v", items[0].HasNarrative, tc.wantHas)
+			}
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
 
 func TestCellMode_ClearExisting_Success(t *testing.T) {
 	r := &recorder{}

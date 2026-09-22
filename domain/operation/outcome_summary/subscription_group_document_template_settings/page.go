@@ -1,7 +1,7 @@
-// Package section_template_settings owns the subscription-group outcome
+// Package subscription_group_document_template_settings owns the subscription-group outcome
 // document-template management surface. Vertical wording is supplied by
 // Lyngua; code, routes, permissions, and persistence use canonical concepts.
-package section_template_settings
+package subscription_group_document_template_settings
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
-	sectiondocument "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/section_document"
+	subscriptiongroupdocument "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/subscription_group_document"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
@@ -81,7 +81,7 @@ type PageData struct {
 type UploadFormData struct {
 	FormAction      string
 	WorkspaceID     string
-	Labels          outcome_summary.SectionTemplateSettingsLabels
+	Labels          outcome_summary.SubscriptionGroupDocumentTemplateSettingsLabels
 	CommonLabels    any
 	ProfileLabel    string
 	ScheduleOptions []types.SelectOption
@@ -96,10 +96,10 @@ func NewListView(deps *Deps) view.View {
 		if !perms.Can(bindingPermissionEntity, "list") {
 			return view.Forbidden(bindingPermissionEntity + ":list")
 		}
-		l := deps.Labels.SectionTemplateSettings
+		l := deps.Labels.SubscriptionGroupDocumentTemplateSettings
 		table := &types.TableConfig{
 			ID:          tableID,
-			RefreshURL:  deps.Routes.SectionTemplateSettingsURL,
+			RefreshURL:  deps.Routes.SubscriptionGroupDocumentTemplateSettingsURL,
 			Columns:     bindingColumns(l),
 			Rows:        bindingRows(ctx, deps, perms),
 			ShowSearch:  true,
@@ -109,24 +109,24 @@ func NewListView(deps *Deps) view.View {
 			EmptyState:  types.TableEmptyState{Title: l.EmptyTitle, Message: l.EmptyMessage},
 			PrimaryAction: &types.PrimaryAction{
 				Label:           l.UploadAction,
-				ActionURL:       deps.Routes.SectionTemplateUploadURL,
+				ActionURL:       deps.Routes.SubscriptionGroupDocumentTemplateUploadURL,
 				Icon:            "icon-upload",
-				TestID:          "section-template-upload",
+				TestID:          "subscription-group-document-template-upload",
 				Disabled:        !canCreate(perms),
 				DisabledTooltip: l.NotConfigured,
 			},
 		}
 		types.ApplyColumnStyles(table.Columns, table.Rows)
 		types.ApplyTableSettings(table)
-		return view.OK("section-template-settings", &PageData{
+		return view.OK("subscription-group-document-template-settings", &PageData{
 			PageData: types.PageData{
 				CacheVersion: viewCtx.CacheVersion, Title: l.Title,
 				CurrentPath: viewCtx.CurrentPath, ActiveNav: deps.Routes.ActiveNav,
-				ActiveSubNav: "section-templates", HeaderTitle: l.Title,
+				ActiveSubNav: "subscription-group-document-templates", HeaderTitle: l.Title,
 				HeaderSubtitle: l.Subtitle, HeaderIcon: "icon-file-text",
 				CommonLabels: deps.CommonLabels,
 			},
-			ContentTemplate: "section-template-settings-content",
+			ContentTemplate: "subscription-group-document-template-settings-content",
 			Table:           table,
 		})
 	})
@@ -134,19 +134,19 @@ func NewListView(deps *Deps) view.View {
 
 func NewUploadAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
-		l := deps.Labels.SectionTemplateSettings
+		l := deps.Labels.SubscriptionGroupDocumentTemplateSettings
 		perms := view.GetUserPermissions(ctx)
 		if !canCreate(perms) {
 			return view.HTMXError(l.NotConfigured)
 		}
 		categories, err := mappedCategories(ctx, deps)
 		if err != nil {
-			log.Printf("section template settings: category choices: %v", err)
+			log.Printf("subscription-group document template settings: category choices: %v", err)
 			return view.HTMXError(l.NotConfigured)
 		}
 		if viewCtx.Request.Method == http.MethodGet {
-			return view.OK("section-template-upload-drawer-form", &UploadFormData{
-				FormAction: deps.Routes.SectionTemplateUploadURL, Labels: l,
+			return view.OK("subscription-group-document-template-upload-drawer-form", &UploadFormData{
+				FormAction: deps.Routes.SubscriptionGroupDocumentTemplateUploadURL, Labels: l,
 				CommonLabels:    deps.CommonLabels,
 				ProfileLabel:    profileLabel(bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1, l),
 				ScheduleOptions: scheduleOptions(ctx, deps, l.ScheduleFallback),
@@ -167,7 +167,7 @@ func NewUploadAction(deps *Deps) view.View {
 		if name == "" {
 			return view.HTMXError(l.NameLabel)
 		}
-		category, profile, ok := selectedCategory(categories, viewCtx.Request.FormValue("job_category_id"), deps.Options.SectionExport)
+		category, profile, ok := selectedCategory(categories, viewCtx.Request.FormValue("job_category_id"), deps.Options.SubscriptionGroupExport)
 		if !ok {
 			return view.HTMXError(l.CategoryRequiredForProfile)
 		}
@@ -192,8 +192,8 @@ func NewUploadAction(deps *Deps) view.View {
 		if err != nil || len(content) == 0 || int64(len(content)) > maxUploadBytes {
 			return view.HTMXError(l.UploadFailed)
 		}
-		if err := sectiondocument.ValidateTemplate(profile, content); err != nil {
-			log.Printf("section template settings: manifest reject: %v", err)
+		if err := subscriptiongroupdocument.ValidateTemplate(profile, content); err != nil {
+			log.Printf("subscription-group document template settings: manifest reject: %v", err)
 			return view.HTMXError(l.InvalidManifest)
 		}
 
@@ -213,7 +213,7 @@ func NewUploadAction(deps *Deps) view.View {
 		if storeErr != nil {
 			if container != "" {
 				if cleanupErr := deps.DeleteTemplateObject(ctx, container, objectKey); cleanupErr != nil {
-					log.Printf("section template settings: partial upload cleanup: %v", cleanupErr)
+					log.Printf("subscription-group document template settings: partial upload cleanup: %v", cleanupErr)
 					return view.HTMXError(l.CleanupFailed)
 				}
 			}
@@ -246,24 +246,24 @@ func NewUploadAction(deps *Deps) view.View {
 		if err != nil || createdArtifact == nil || createdBinding == nil ||
 			createdArtifact.GetId() != documentID || createdBinding.GetId() != bindingID {
 			if err != nil {
-				log.Printf("section template settings: atomic pair create: %v", err)
+				log.Printf("subscription-group document template settings: atomic pair create: %v", err)
 			}
 			if cleanupErr := deps.DeleteTemplateObject(ctx, container, objectKey); cleanupErr != nil {
-				log.Printf("section template settings: orphan object cleanup: %v", cleanupErr)
+				log.Printf("subscription-group document template settings: orphan object cleanup: %v", cleanupErr)
 				return view.HTMXError(l.CleanupFailed)
 			}
 			return view.HTMXError(l.UploadFailed)
 		}
 
 		return view.ViewResult{StatusCode: http.StatusOK, Headers: map[string]string{
-			"HX-Trigger": `{"formSuccess":true}`, "HX-Redirect": deps.Routes.SectionTemplateSettingsURL,
+			"HX-Trigger": `{"formSuccess":true}`, "HX-Redirect": deps.Routes.SubscriptionGroupDocumentTemplateSettingsURL,
 		}}
 	})
 }
 
 func NewPublishAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
-		l := deps.Labels.SectionTemplateSettings
+		l := deps.Labels.SubscriptionGroupDocumentTemplateSettings
 		if !view.GetUserPermissions(ctx).Can(bindingPermissionEntity, "update") || deps.PublishTemplateBinding == nil {
 			return view.HTMXError(l.NotConfigured)
 		}
@@ -272,7 +272,7 @@ func NewPublishAction(deps *Deps) view.View {
 			return view.HTMXError(l.NotConfigured)
 		}
 		if _, err := deps.PublishTemplateBinding(ctx, &bindingpb.PublishSubscriptionGroupDocumentTemplateRequest{Id: id}); err != nil {
-			log.Printf("section template settings: publish: %v", err)
+			log.Printf("subscription-group document template settings: publish: %v", err)
 			return view.HTMXError(err.Error())
 		}
 		return view.HTMXSuccess(tableID)
@@ -281,7 +281,7 @@ func NewPublishAction(deps *Deps) view.View {
 
 func NewDeleteAction(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
-		l := deps.Labels.SectionTemplateSettings
+		l := deps.Labels.SubscriptionGroupDocumentTemplateSettings
 		perms := view.GetUserPermissions(ctx)
 		if !canDelete(perms) || deps.DeleteDraftPair == nil || deps.DeleteTemplateObject == nil {
 			return view.HTMXError(l.NotConfigured)
@@ -290,12 +290,12 @@ func NewDeleteAction(deps *Deps) view.View {
 		artifact, err := deps.DeleteDraftPair(ctx, id)
 		if err != nil || artifact == nil || artifact.GetStorageContainer() == "" || artifact.GetStorageKey() == "" {
 			if err != nil {
-				log.Printf("section template settings: atomic draft-pair delete: %v", err)
+				log.Printf("subscription-group document template settings: atomic draft-pair delete: %v", err)
 			}
 			return view.HTMXError(l.NotConfigured)
 		}
 		if err := deps.DeleteTemplateObject(ctx, artifact.GetStorageContainer(), artifact.GetStorageKey()); err != nil {
-			log.Printf("section template settings: delete object: %v", err)
+			log.Printf("subscription-group document template settings: delete object: %v", err)
 			return view.HTMXError(l.CleanupFailed)
 		}
 		return view.HTMXSuccess(tableID)
@@ -310,7 +310,7 @@ func canDelete(perms *types.UserPermissions) bool {
 	return perms.Can(bindingPermissionEntity, "delete") && perms.Can(artifactPermissionEntity, "delete")
 }
 
-func bindingColumns(l outcome_summary.SectionTemplateSettingsLabels) []types.TableColumn {
+func bindingColumns(l outcome_summary.SubscriptionGroupDocumentTemplateSettingsLabels) []types.TableColumn {
 	return []types.TableColumn{
 		{Key: "name", Label: l.NameColumn},
 		{Key: "schedule", Label: l.ScheduleColumn},
@@ -326,13 +326,13 @@ func bindingColumns(l outcome_summary.SectionTemplateSettingsLabels) []types.Tab
 func bindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissions) []types.TableRow {
 	bindings, err := listAllTemplateBindings(ctx, deps)
 	if err != nil {
-		log.Printf("section template settings: list: %v", err)
+		log.Printf("subscription-group document template settings: list: %v", err)
 		return nil
 	}
 	if len(bindings) == 0 {
 		return nil
 	}
-	l := deps.Labels.SectionTemplateSettings
+	l := deps.Labels.SubscriptionGroupDocumentTemplateSettings
 	rows := make([]types.TableRow, 0, len(bindings))
 	for _, binding := range bindings {
 		if binding == nil {
@@ -348,12 +348,12 @@ func bindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissions) 
 			if binding.GetPriceScheduleId() == "" || binding.GetPlanId() == "" {
 				confirm = l.BroadScopeConfirm
 			}
-			actions = append(actions, types.TableAction{Type: "activate", Label: l.PublishAction, Action: "activate", URL: deps.Routes.SectionTemplatePublishURL, ItemName: name, ConfirmTitle: l.PublishAction, ConfirmMessage: confirm, TestID: "section-template-publish-" + short(binding.GetId()), Disabled: !perms.Can(bindingPermissionEntity, "update"), DisabledTooltip: l.NotConfigured})
-			actions = append(actions, types.TableAction{Type: "delete", Label: l.DeleteAction, Action: "delete", URL: deps.Routes.SectionTemplateDeleteURL, ItemName: name, ConfirmTitle: l.DeleteAction, ConfirmMessage: l.DeleteConfirm, TestID: "section-template-delete-" + short(binding.GetId()), Disabled: !canDelete(perms), DisabledTooltip: l.NotConfigured})
+			actions = append(actions, types.TableAction{Type: "activate", Label: l.PublishAction, Action: "activate", URL: deps.Routes.SubscriptionGroupDocumentTemplatePublishURL, ItemName: name, ConfirmTitle: l.PublishAction, ConfirmMessage: confirm, TestID: "subscription-group-document-template-publish-" + short(binding.GetId()), Disabled: !perms.Can(bindingPermissionEntity, "update"), DisabledTooltip: l.NotConfigured})
+			actions = append(actions, types.TableAction{Type: "delete", Label: l.DeleteAction, Action: "delete", URL: deps.Routes.SubscriptionGroupDocumentTemplateDeleteURL, ItemName: name, ConfirmTitle: l.DeleteAction, ConfirmMessage: l.DeleteConfirm, TestID: "subscription-group-document-template-delete-" + short(binding.GetId()), Disabled: !canDelete(perms), DisabledTooltip: l.NotConfigured})
 		}
 		status, variant := statusBadge(binding.GetVersionStatus(), l)
 		profileKey := ""
-		if profile, ok := sectiondocument.LookupProfile(binding.GetRenderProfile()); ok {
+		if profile, ok := subscriptiongroupdocument.LookupProfile(binding.GetRenderProfile()); ok {
 			profileKey = profile.Key
 		}
 		categoryCode := ""
@@ -370,7 +370,7 @@ func bindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissions) 
 			{Type: "badge", Value: status, Variant: variant},
 			{Type: "text", Value: validity(binding)},
 		}, DataAttrs: map[string]string{
-			"testid":        "section-template-row-" + short(binding.GetId()),
+			"testid":        "subscription-group-document-template-row-" + short(binding.GetId()),
 			"renderprofile": profileKey,
 			"category":      categoryCode,
 			"categoryscope": axisScope(binding.GetJobCategoryId()),
@@ -406,7 +406,7 @@ func listAllTemplateBindings(ctx context.Context, deps *Deps) ([]*bindingpb.Subs
 			break
 		}
 		if page == templateBindingMaxPages {
-			return nil, fmt.Errorf("section template settings: list template bindings: %d full pages without termination", templateBindingMaxPages)
+			return nil, fmt.Errorf("subscription-group document template settings: list template bindings: %d full pages without termination", templateBindingMaxPages)
 		}
 	}
 	return bindings, nil
@@ -437,8 +437,8 @@ func mappedCategories(ctx context.Context, deps *Deps) ([]*jobcategorypb.JobCate
 		if category == nil || category.GetId() == "" {
 			continue
 		}
-		profile, ok := deps.Options.SectionExport.ProfileForCategoryCode(category.GetCode())
-		if _, registered := sectiondocument.LookupProfile(profile); ok && registered {
+		profile, ok := deps.Options.SubscriptionGroupExport.ProfileForCategoryCode(category.GetCode())
+		if _, registered := subscriptiongroupdocument.LookupProfile(profile); ok && registered {
 			result = append(result, category)
 		}
 	}
@@ -455,14 +455,14 @@ func mappedCategories(ctx context.Context, deps *Deps) ([]*jobcategorypb.JobCate
 	return result, nil
 }
 
-func selectedCategory(categories []*jobcategorypb.JobCategory, id string, options outcome_summary.SectionExportOptions) (*jobcategorypb.JobCategory, bindingpb.RenderProfile, bool) {
+func selectedCategory(categories []*jobcategorypb.JobCategory, id string, options outcome_summary.SubscriptionGroupExportOptions) (*jobcategorypb.JobCategory, bindingpb.RenderProfile, bool) {
 	id = strings.TrimSpace(id)
 	for _, category := range categories {
 		if category.GetId() != id {
 			continue
 		}
 		profile, ok := options.ProfileForCategoryCode(category.GetCode())
-		_, registered := sectiondocument.LookupProfile(profile)
+		_, registered := subscriptiongroupdocument.LookupProfile(profile)
 		return category, profile, ok && registered
 	}
 	return nil, bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED, false
@@ -586,7 +586,7 @@ func statusKey(status enums.VersionStatus) string {
 	}
 }
 
-func profileLabel(profile bindingpb.RenderProfile, l outcome_summary.SectionTemplateSettingsLabels) string {
+func profileLabel(profile bindingpb.RenderProfile, l outcome_summary.SubscriptionGroupDocumentTemplateSettingsLabels) string {
 	if profile == bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1 {
 		return l.ProfileSubscriptionGroupOutcomeMatrixSinglePeriod11V1
 	}
@@ -623,7 +623,7 @@ func nestedCategoryName(binding *bindingpb.SubscriptionGroupDocumentTemplate, fa
 	return binding.GetJobCategoryId()
 }
 
-func statusBadge(status enums.VersionStatus, l outcome_summary.SectionTemplateSettingsLabels) (string, string) {
+func statusBadge(status enums.VersionStatus, l outcome_summary.SubscriptionGroupDocumentTemplateSettingsLabels) (string, string) {
 	switch status {
 	case enums.VersionStatus_VERSION_STATUS_PUBLISHED:
 		return l.StatusPublished, "success"

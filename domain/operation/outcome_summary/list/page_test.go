@@ -21,6 +21,7 @@ import (
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
+	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
 // TestListContentTemplateDispatch (T9) pins the boosted-nav dispatch invariant:
@@ -58,13 +59,13 @@ func TestListContentTemplateDispatch(t *testing.T) {
 //
 // These cover the landing (view-1) dispatch, which the flat-dispatch test above
 // does not touch. The invariant under test: a SCOPED landing (current|past)
-// whose activeness band has NO schedules must render ZERO section rows — it must
+// whose activeness band has NO schedules must render ZERO group rows — it must
 // never fall open to the unfiltered group set. The UNSCOPED landing (scope "")
 // stays unfiltered.
 
 // TestLandingScopedPastEmptyBandRendersZeroRows: /report-cards/list/past in a
 // workspace with NO inactive schedule renders an empty landing (no rows, no
-// tabs) — NOT the open AY's sections — and performs none of the group/count
+// tabs) — NOT the open AY's groups — and performs none of the group/count
 // reads.
 func TestLandingScopedPastEmptyBandRendersZeroRows(t *testing.T) {
 	var groupsCalled, summariesCalled bool
@@ -164,8 +165,8 @@ func TestLandingScopedCurrentEmptyBandRendersZeroRows(t *testing.T) {
 }
 
 // TestLandingScopedPastRendersOnlyInactiveBand: /report-cards/list/past with an
-// inactive schedule present renders ONLY that band's sections (existing
-// behavior) — the active AY's section must not leak in.
+// inactive schedule present renders ONLY that band's groups (existing
+// behavior) — the active AY's group must not leak in.
 func TestLandingScopedPastRendersOnlyInactiveBand(t *testing.T) {
 	deps := &ListViewDeps{}
 	deps.Options.List.Entity = outcome_summary.ListEntitySubscriptionGroup
@@ -201,11 +202,11 @@ func TestLandingScopedPastRendersOnlyInactiveBand(t *testing.T) {
 		t.Fatalf("TabItems = %d, want 1 (only the past band's tab)", len(pd.TabItems))
 	}
 	if len(pd.Table.Rows) != 2 {
-		t.Fatalf("Table.Rows = %d, want 2 (only the inactive schedule's sections)", len(pd.Table.Rows))
+		t.Fatalf("Table.Rows = %d, want 2 (only the inactive schedule's groups)", len(pd.Table.Rows))
 	}
 	for _, r := range pd.Table.Rows {
 		if r.ID == "g-active-1" {
-			t.Fatalf("active-AY section g-active-1 rendered under scope=past; band boundary leaked")
+			t.Fatalf("active-AY group g-active-1 rendered under scope=past; band boundary leaked")
 		}
 	}
 	if pd.ActiveSubNav != "report-cards-past" {
@@ -215,7 +216,7 @@ func TestLandingScopedPastRendersOnlyInactiveBand(t *testing.T) {
 
 // TestLandingUnscopedUnfilteredBackcompat: scope "" (the /report-cards ListURL
 // landing) is unaffected by the guard — even with NO inactive schedule it stays
-// unfiltered and renders the default (active) schedule's sections, exactly as
+// unfiltered and renders the default (active) schedule's groups, exactly as
 // before. This is the backward-compatibility contract.
 func TestLandingUnscopedUnfilteredBackcompat(t *testing.T) {
 	deps := &ListViewDeps{}
@@ -245,7 +246,7 @@ func TestLandingUnscopedUnfilteredBackcompat(t *testing.T) {
 		t.Fatalf("TabItems = %d, want 1 (unscoped landing stays unfiltered)", len(pd.TabItems))
 	}
 	if len(pd.Table.Rows) != 1 {
-		t.Fatalf("Table.Rows = %d, want 1 (the active schedule's section renders)", len(pd.Table.Rows))
+		t.Fatalf("Table.Rows = %d, want 1 (the active schedule's group renders)", len(pd.Table.Rows))
 	}
 	if pd.ActiveSubNav != "report-cards" {
 		t.Fatalf("ActiveSubNav = %q, want %q (base report-cards row)", pd.ActiveSubNav, "report-cards")
@@ -261,17 +262,22 @@ func TestLandingUnscopedUnfilteredBackcompat(t *testing.T) {
 // Uncategorized bucket column (§3.0 — never dropped, never duplicated).
 
 // dynamicDeps builds a knob-on landing fixture: one active schedule, one
-// active section (g-1, "Grade 10 A"), category corpus via the tab-support
+// active group (g-1, "Grade 10 A"), category corpus via the tab-support
 // closure, and summary rows spread across categories.
 func dynamicDeps() *ListViewDeps {
 	deps := &ListViewDeps{}
 	deps.ResolvePrincipalKind = func(context.Context) int32 { return outcome_summary.PrincipalKindOperatorOwner }
 	deps.Options.List.Entity = outcome_summary.ListEntitySubscriptionGroup
 	deps.Options.List.ColumnsByField = outcome_summary.ListColumnsJobCategory
-	deps.Options.SectionExport.Enabled = true
-	deps.Routes.SectionURL = "/report-cards/section/{id}"
-	deps.Routes.SectionExportURL = "/report-cards/section/{id}/export"
-	deps.Labels.Landing.CellViewAction = "View {category} report cards for {section}"
+	deps.Options.SubscriptionGroupExport.Enabled = true
+	deps.Routes.SubscriptionGroupURL = "/report-cards/group/{id}"
+	deps.Routes.SubscriptionGroupExportURL = "/report-cards/group/{id}/export"
+	deps.GetSubscriptionGroupOutcomeExport = func(context.Context, *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error) {
+		return &exportpb.GetSubscriptionGroupOutcomeExportResponse{
+			Context: &exportpb.SubscriptionGroupOutcomeExportContext{SubscriptionGroupId: "g-1"},
+		}, nil
+	}
+	deps.Labels.Landing.CellViewAction = "View {category} report cards for {subscription_group}"
 	deps.Labels.Landing.UncategorizedColumn = "Uncategorized"
 	deps.ListPriceSchedules = func(_ context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error) {
 		if hasFilters(req.GetFilters().GetFilters()) {
@@ -318,16 +324,16 @@ func dynamicDeps() *ListViewDeps {
 	// keep ACTIVE only, ordered by sort_order (cat-a=1, cat-b=2, cat-c=3).
 	deps.ListJobListTabSupport = func(context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error) {
 		return []*jobcategorypb.JobCategory{
-				{Id: "cat-c", Name: "Homeroom Deportment", Active: true, SortOrder: i32ptr(3)},
-				{Id: "cat-a", Name: "Academic", Active: true, SortOrder: i32ptr(1)},
-				{Id: "cat-old", Name: "Retired", Active: false, SortOrder: i32ptr(0)},
-				{Id: "cat-b", Name: "Subject Deportment", Active: true, SortOrder: i32ptr(2)},
-			}, []*jobtemplatepb.JobTemplate{
-				{Id: "t1", Name: "Math", JobCategoryId: strptr("cat-a")},
-				{Id: "t2", Name: "Science", JobCategoryId: strptr("cat-a")},
-				{Id: "t3", Name: "English", JobCategoryId: strptr("cat-a")},
-				{Id: "t4", Name: "Math Conduct", JobCategoryId: strptr("cat-b")},
-			}, nil
+			{Id: "cat-c", Name: "Homeroom Deportment", Active: true, SortOrder: i32ptr(3)},
+			{Id: "cat-a", Name: "Academic", Active: true, SortOrder: i32ptr(1)},
+			{Id: "cat-old", Name: "Retired", Active: false, SortOrder: i32ptr(0)},
+			{Id: "cat-b", Name: "Subject Deportment", Active: true, SortOrder: i32ptr(2)},
+		}, []*jobtemplatepb.JobTemplate{
+			{Id: "t1", Name: "Math", JobCategoryId: strptr("cat-a")},
+			{Id: "t2", Name: "Science", JobCategoryId: strptr("cat-a")},
+			{Id: "t3", Name: "English", JobCategoryId: strptr("cat-a")},
+			{Id: "t4", Name: "Math Conduct", JobCategoryId: strptr("cat-b")},
+		}, nil
 	}
 	return deps
 }
@@ -335,15 +341,15 @@ func dynamicDeps() *ListViewDeps {
 // TestLandingDynamicCategoryColumns pins the dynamic column set: headers are
 // job_category.name DATA in sort_order order, cells are typed composite
 // count+eye cells with URL-query-encoded ?jc= hrefs, collision-proof
-// rc-eye-<section>-<category> test ids, and an aria name carrying BOTH the
-// category and the section. A zero-count category still renders its column
+// rc-eye-<group>-<category> test ids, and an aria name carrying BOTH the
+// category and the group. A zero-count category still renders its column
 // (and its eye — the empty tab is still navigable).
 func TestLandingDynamicCategoryColumns(t *testing.T) {
 	deps := dynamicDeps()
 	ctx, vc := landingReq("")
 	pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
 
-	wantKeys := []string{"section", "students", "jc-cat-a", "jc-cat-b", "jc-cat-c"}
+	wantKeys := []string{"group", "clients", "jc-cat-a", "jc-cat-b", "jc-cat-c"}
 	if len(pd.Table.Columns) != len(wantKeys) {
 		t.Fatalf("columns = %d, want %d (%v)", len(pd.Table.Columns), len(wantKeys), pd.Table.Columns)
 	}
@@ -376,8 +382,8 @@ func TestLandingDynamicCategoryColumns(t *testing.T) {
 		}
 	}
 	eye := cells[2].Composite
-	if eye.EyeHref != "/report-cards/section/g-1?jc=cat-a" {
-		t.Fatalf("EyeHref = %q, want %q", eye.EyeHref, "/report-cards/section/g-1?jc=cat-a")
+	if eye.EyeHref != "/report-cards/group/g-1?jc=cat-a" {
+		t.Fatalf("EyeHref = %q, want %q", eye.EyeHref, "/report-cards/group/g-1?jc=cat-a")
 	}
 	if eye.EyeTestID != "rc-eye-g-1-cat-a" {
 		t.Fatalf("EyeTestID = %q, want %q (collision-proof full ids)", eye.EyeTestID, "rc-eye-g-1-cat-a")
@@ -386,8 +392,8 @@ func TestLandingDynamicCategoryColumns(t *testing.T) {
 		t.Fatalf("EyeName = %q, want the lyngua frame with BOTH nouns substituted", eye.EyeName)
 	}
 	// The zero-count category keeps a working eye (empty tab is navigable).
-	if zero := cells[4].Composite; zero.EyeHref != "/report-cards/section/g-1?jc=cat-c" {
-		t.Fatalf("zero-count EyeHref = %q, want %q", zero.EyeHref, "/report-cards/section/g-1?jc=cat-c")
+	if zero := cells[4].Composite; zero.EyeHref != "/report-cards/group/g-1?jc=cat-c" {
+		t.Fatalf("zero-count EyeHref = %q, want %q", zero.EyeHref, "/report-cards/group/g-1?jc=cat-c")
 	}
 }
 
@@ -552,8 +558,8 @@ func TestLandingForeignCategoryFoldsIntoBucket(t *testing.T) {
 // TestLandingExportLinkNeutralizesRowID pins the Q-R9-7 export-link fix: the
 // landing's per-row download URL pre-seeds an EMPTY "?id=" so the pyeza
 // row-action JS's unconditional "&id=<row id>" append is inert server-side
-// (Query().Get("id") returns the FIRST — empty — value; the bogus section-id
-// row lookup never happens and the whole-section CSV is guaranteed).
+// (Query().Get("id") returns the FIRST — empty — value; the bogus group-id
+// row lookup never happens and the whole-group CSV is guaranteed).
 func TestLandingExportLinkNeutralizesRowID(t *testing.T) {
 	deps := dynamicDeps()
 	ctx, vc := landingReq("")
@@ -566,15 +572,15 @@ func TestLandingExportLinkNeutralizesRowID(t *testing.T) {
 	if dl.Action != "download" {
 		t.Fatalf("action[1].Action = %q, want download", dl.Action)
 	}
-	if want := "/report-cards/section/g-1/export?id="; dl.URL != want {
+	if want := "/report-cards/group/g-1/export?id="; dl.URL != want {
 		t.Fatalf("download URL = %q, want %q (empty id pre-seed neutralizes the JS row-id append)", dl.URL, want)
 	}
 }
 
-func TestSectionLanding_DownloadOpensDrawer(t *testing.T) {
+func TestSubscriptionGroupLanding_DownloadOpensDrawer(t *testing.T) {
 	deps := dynamicDeps()
-	deps.Routes.SectionDownloadDrawerURL = "/action/report-cards/section/{id}/download"
-	deps.Labels.SectionExport.DrawerTitle = "Download Section Grades"
+	deps.Routes.SubscriptionGroupDownloadDrawerURL = "/action/report-cards/group/{id}/download"
+	deps.Labels.SubscriptionGroupExport.DrawerTitle = "Download SubscriptionGroup Grades"
 
 	ctx, vc := landingReq("")
 	pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
@@ -589,15 +595,142 @@ func TestSectionLanding_DownloadOpensDrawer(t *testing.T) {
 	if dl.URL != "" || dl.Href != "" {
 		t.Fatalf("drawer action must not expose an immediate download URL: URL=%q Href=%q", dl.URL, dl.Href)
 	}
-	if dl.HxGet != "/action/report-cards/section/g-1/download" || dl.HxTarget != "#sheetContent" || dl.HxSwap != "innerHTML" {
+	if dl.HxGet != "/action/report-cards/group/g-1/download" || dl.HxTarget != "#sheetContent" || dl.HxSwap != "innerHTML" {
 		t.Fatalf("drawer HTMX contract = %+v", dl)
 	}
-	if dl.DrawerTitle != "Download Section Grades" || dl.TestID != "rc-section-download-g-1" {
+	if dl.DrawerTitle != "Download SubscriptionGroup Grades" || dl.TestID != "rc-subscription-group-download-g-1" {
 		t.Fatalf("drawer title/testid = %q/%q", dl.DrawerTitle, dl.TestID)
 	}
 }
 
-func TestSectionLanding_ConfiguredRowBandReflectsPermissions(t *testing.T) {
+func TestExportReaderLandingHasViewAction(t *testing.T) {
+	deps := dynamicDeps()
+	deps.Routes.SubscriptionGroupDownloadDrawerURL = "/action/report-cards/group/{id}/download"
+	deps.ResolvePrincipalKind = func(context.Context) int32 { return outcome_summary.PrincipalKindStaff }
+
+	ctx, vc := landingReqWithPermissions("", []string{
+		"job_outcome_summary:list",
+		"subscription_group_outcome_export:read",
+	})
+	pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
+	if len(pd.Table.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(pd.Table.Rows))
+	}
+	actions := pd.Table.Rows[0].Actions
+	if len(actions) != 2 {
+		t.Fatalf("actions = %+v, want view followed by download", actions)
+	}
+	if actions[0].Type != "view" || actions[0].TestID != "rc-view-g-1" {
+		t.Fatalf("view action = %+v, want canonical view action", actions[0])
+	}
+	if actions[0].Href != "/report-cards/group/g-1" {
+		t.Fatalf("view href = %q, want route-resolved group href", actions[0].Href)
+	}
+	if actions[1].Type != "download" || actions[1].TestID != "rc-subscription-group-download-g-1" {
+		t.Fatalf("download action = %+v, want canonical download action", actions[1])
+	}
+}
+
+func TestExportReaderLandingNoViewActionWhenExportDisabled(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		exportOff    bool
+		nilAggregate bool
+	}{
+		{name: "export disabled", exportOff: true},
+		{name: "aggregate closure nil", nilAggregate: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := dynamicDeps()
+			deps.ResolvePrincipalKind = func(context.Context) int32 { return outcome_summary.PrincipalKindStaff }
+			if tc.exportOff {
+				deps.Options.SubscriptionGroupExport.Enabled = false
+			}
+			if tc.nilAggregate {
+				deps.GetSubscriptionGroupOutcomeExport = nil
+			}
+
+			ctx, vc := landingReqWithPermissions("", []string{
+				"job_outcome_summary:list",
+				"subscription_group_outcome_export:read",
+			})
+			pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
+			if !pd.Landing || len(pd.Table.Rows) != 1 {
+				t.Fatalf("landing/rows = %v/%d, want narrow landing with one row", pd.Landing, len(pd.Table.Rows))
+			}
+			hasDownload := false
+			for _, action := range pd.Table.Rows[0].Actions {
+				if action.Type == "view" {
+					t.Fatalf("view action = %+v, want no view action when narrow page cannot render", action)
+				}
+				if action.Type == "download" {
+					hasDownload = true
+				}
+			}
+			if !hasDownload {
+				t.Fatal("download action missing from narrow landing row")
+			}
+		})
+	}
+}
+
+func TestExportReaderLandingRoutingUnchangedForExportOnlyStaff(t *testing.T) {
+	deps := dynamicDeps()
+	deps.ResolvePrincipalKind = func(context.Context) int32 { return outcome_summary.PrincipalKindStaff }
+	landingCalls := 0
+	landing := deps.ListSubscriptionGroupOutcomeLanding
+	deps.ListSubscriptionGroupOutcomeLanding = func(ctx context.Context, req *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error) {
+		landingCalls++
+		return landing(ctx, req)
+	}
+
+	ctx, vc := landingReqWithPermissions("", []string{
+		"job_outcome_summary:list",
+		"subscription_group_outcome_export:read",
+	})
+	pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
+	if !pd.Landing || landingCalls != 1 || len(pd.Table.Rows) != 1 {
+		t.Fatalf("landing/calls/rows = %v/%d/%d, want narrow landing/1/1", pd.Landing, landingCalls, len(pd.Table.Rows))
+	}
+}
+
+func TestLegacyLandingStillServedToListOnlyRole(t *testing.T) {
+	deps := dynamicDeps()
+	landingCalls := 0
+	landing := deps.ListSubscriptionGroupOutcomeLanding
+	deps.ListSubscriptionGroupOutcomeLanding = func(ctx context.Context, req *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error) {
+		landingCalls++
+		return landing(ctx, req)
+	}
+
+	ctx, vc := landingReqWithPermissions("", []string{"job_outcome_summary:list"})
+	pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
+	if !pd.Landing || landingCalls != 0 || len(pd.Table.Rows) != 1 {
+		t.Fatalf("landing/narrow-calls/rows = %v/%d/%d, want legacy landing/0/1", pd.Landing, landingCalls, len(pd.Table.Rows))
+	}
+}
+
+func TestExportReaderLandingWrongPrincipalKindNotNarrow(t *testing.T) {
+	deps := dynamicDeps()
+	deps.ResolvePrincipalKind = func(context.Context) int32 { return 99 }
+	landingCalls := 0
+	landing := deps.ListSubscriptionGroupOutcomeLanding
+	deps.ListSubscriptionGroupOutcomeLanding = func(ctx context.Context, req *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error) {
+		landingCalls++
+		return landing(ctx, req)
+	}
+
+	ctx, vc := landingReqWithPermissions("", []string{
+		"job_outcome_summary:list",
+		"subscription_group_outcome_export:read",
+	})
+	pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
+	if !pd.Landing || landingCalls != 0 || len(pd.Table.Rows) != 1 {
+		t.Fatalf("landing/narrow-calls/rows = %v/%d/%d, want legacy landing/0/1", pd.Landing, landingCalls, len(pd.Table.Rows))
+	}
+}
+
+func TestSubscriptionGroupLanding_ConfiguredRowBandReflectsPermissions(t *testing.T) {
 	tests := []struct {
 		name        string
 		configured  bool
@@ -630,12 +763,12 @@ func TestSectionLanding_ConfiguredRowBandReflectsPermissions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := dynamicDeps()
-			deps.Routes.SectionDownloadDrawerURL = "/action/report-cards/section/{id}/download"
-			deps.Labels.SectionExport.DrawerTitle = "Download Section Grades"
+			deps.Routes.SubscriptionGroupDownloadDrawerURL = "/action/report-cards/group/{id}/download"
+			deps.Labels.SubscriptionGroupExport.DrawerTitle = "Download SubscriptionGroup Grades"
 			deps.Labels.Errors.PermissionDenied = "Permission denied"
 			if tt.configured {
 				deps.Options.Row.GroupByField = "client_attributes.gender"
-				deps.Options.SectionExport.GroupByAttributeModule = "entity"
+				deps.Options.SubscriptionGroupExport.GroupByAttributeModule = "entity"
 			}
 
 			ctx, vc := landingReqWithPermissions("", tt.permissions)
@@ -658,7 +791,7 @@ func TestSectionLanding_ConfiguredRowBandReflectsPermissions(t *testing.T) {
 	}
 }
 
-func TestSectionLanding_CapabilitySplitRowActionsAndEyes(t *testing.T) {
+func TestSubscriptionGroupLanding_CapabilitySplitRowActionsAndEyes(t *testing.T) {
 	tests := []struct {
 		name        string
 		kind        int32
@@ -671,12 +804,16 @@ func TestSectionLanding_CapabilitySplitRowActionsAndEyes(t *testing.T) {
 			name:        "staff export only",
 			kind:        outcome_summary.PrincipalKindStaff,
 			permissions: []string{"job_outcome_summary:list", "subscription_group_outcome_export:read"},
+			wantView:    true,
+			wantEye:     false,
 			wantDrawer:  true,
 		},
 		{
 			name:        "operator staff export only",
 			kind:        outcome_summary.PrincipalKindOperatorStaff,
 			permissions: []string{"job_outcome_summary:list", "subscription_group_outcome_export:read"},
+			wantView:    true,
+			wantEye:     false,
 			wantDrawer:  true,
 		},
 		{
@@ -691,7 +828,7 @@ func TestSectionLanding_CapabilitySplitRowActionsAndEyes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := dynamicDeps()
-			deps.Routes.SectionDownloadDrawerURL = "/action/report-cards/section/{id}/download"
+			deps.Routes.SubscriptionGroupDownloadDrawerURL = "/action/report-cards/group/{id}/download"
 			deps.Labels.Errors.PermissionDenied = "Permission denied"
 			deps.ResolvePrincipalKind = func(context.Context) int32 { return tt.kind }
 			ctx, vc := landingReqWithPermissions("", tt.permissions)
@@ -712,7 +849,7 @@ func TestSectionLanding_CapabilitySplitRowActionsAndEyes(t *testing.T) {
 				t.Fatalf("legacy view action present=%v, want %v; actions=%+v", viewActions > 0, tt.wantView, row.Actions)
 			}
 			if drawer == nil {
-				t.Fatal("landing row lost its section download drawer action")
+				t.Fatal("landing row lost its group download drawer action")
 			}
 			if (!drawer.Disabled) != tt.wantDrawer {
 				t.Fatalf("drawer enabled=%v, want %v; action=%+v", !drawer.Disabled, tt.wantDrawer, *drawer)
@@ -732,10 +869,10 @@ func TestSectionLanding_CapabilitySplitRowActionsAndEyes(t *testing.T) {
 	}
 }
 
-func TestSectionLanding_ExportOnlyStaffUsesNarrowAggregateWithoutGenericMetadataReads(t *testing.T) {
+func TestSubscriptionGroupLanding_ExportOnlyStaffUsesNarrowAggregateWithoutGenericMetadataReads(t *testing.T) {
 	deps := dynamicDeps()
 	deps.Options.List.ScopeByServicingGrant = true
-	deps.Routes.SectionDownloadDrawerURL = "/action/report-cards/section/{id}/download"
+	deps.Routes.SubscriptionGroupDownloadDrawerURL = "/action/report-cards/group/{id}/download"
 	deps.ResolvePrincipalKind = func(context.Context) int32 { return outcome_summary.PrincipalKindStaff }
 
 	genericCalls := 0
@@ -796,17 +933,17 @@ func TestSectionLanding_ExportOnlyStaffUsesNarrowAggregateWithoutGenericMetadata
 		t.Fatalf("broad generic metadata calls = %d, want 0", genericCalls)
 	}
 	if len(pd.Table.Columns) != 3 {
-		t.Fatalf("columns = %d, want static section/member/template columns", len(pd.Table.Columns))
+		t.Fatalf("columns = %d, want static group/member/template columns", len(pd.Table.Columns))
 	}
 	if len(pd.Table.Rows) != 1 {
-		t.Fatalf("rows = %d, want one principal-scoped section", len(pd.Table.Rows))
+		t.Fatalf("rows = %d, want one principal-scoped group", len(pd.Table.Rows))
 	}
 	row := pd.Table.Rows[0]
 	if got := []string{row.Cells[0].Value, row.Cells[1].Value, row.Cells[2].Value}; !reflect.DeepEqual(got, []string{"Grade 10 A", "28", "11"}) {
 		t.Fatalf("row cells = %v, want scoped aggregate projection", got)
 	}
-	if len(row.Actions) != 1 || row.Actions[0].Type != "download" || row.Actions[0].Disabled {
-		t.Fatalf("restricted row actions = %+v, want enabled drawer only", row.Actions)
+	if len(row.Actions) != 2 || row.Actions[0].Type != "view" || row.Actions[1].Type != "download" || row.Actions[1].Disabled {
+		t.Fatalf("restricted row actions = %+v, want enabled view and drawer actions", row.Actions)
 	}
 	if len(pd.TabItems) != 1 || pd.TabItems[0].Label != "AY 2025-26" || pd.TabItems[0].Count != 1 {
 		t.Fatalf("tabs = %+v, want one scoped schedule tab", pd.TabItems)
@@ -821,7 +958,7 @@ func TestSectionLanding_ExportOnlyStaffUsesNarrowAggregateWithoutGenericMetadata
 // into the Uncategorized bucket.
 func TestLandingHistoricalCountsBucketByCategory(t *testing.T) {
 	deps := dynamicDeps()
-	// Only an INACTIVE schedule + section exist → the historical path fills.
+	// Only an INACTIVE schedule + group exist → the historical path fills.
 	deps.ListPriceSchedules = func(_ context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error) {
 		if hasFilters(req.GetFilters().GetFilters()) {
 			return &priceschedulepb.ListPriceSchedulesResponse{Data: []*priceschedulepb.PriceSchedule{
@@ -862,15 +999,15 @@ func TestLandingHistoricalCountsBucketByCategory(t *testing.T) {
 	ctx, vc := landingReq("")
 	pd := mustPageData(t, NewView(deps).Handle(ctx, vc))
 	if len(pd.Table.Rows) != 1 {
-		t.Fatalf("rows = %d, want 1 (the historical section)", len(pd.Table.Rows))
+		t.Fatalf("rows = %d, want 1 (the historical group)", len(pd.Table.Rows))
 	}
 	cells := pd.Table.Rows[0].Cells
-	// section, students, cat-a, cat-b, cat-c, uncategorized
+	// group, clients, cat-a, cat-b, cat-c, uncategorized
 	if len(cells) != 6 {
 		t.Fatalf("cells = %d, want 6 (3 categories + bucket): %+v", len(cells), pd.Table.Columns)
 	}
 	if cells[1].Value != "2" {
-		t.Fatalf("students = %q, want \"2\" (frozen roster)", cells[1].Value)
+		t.Fatalf("clients = %q, want \"2\" (frozen roster)", cells[1].Value)
 	}
 	for i, want := range []string{"1", "1", "0", "1"} {
 		if got := cells[2+i].Value; got != want {
@@ -883,7 +1020,7 @@ func TestLandingHistoricalCountsBucketByCategory(t *testing.T) {
 // substituted from DATA; a frame missing either noun falls back to "" so the
 // typed cell composes its default BOTH-nouns name.
 func TestCellAccessibleNameFrames(t *testing.T) {
-	if got := cellAccessibleName("View {category} report cards for {section}", "Academic", "7A"); got != "View Academic report cards for 7A" {
+	if got := cellAccessibleName("View {category} report cards for {subscription_group}", "Academic", "7A"); got != "View Academic report cards for 7A" {
 		t.Fatalf("substituted frame = %q", got)
 	}
 	if got := cellAccessibleName("View report cards", "Academic", "7A"); got != "" {

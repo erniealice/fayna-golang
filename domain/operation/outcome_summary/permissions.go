@@ -18,7 +18,7 @@ const (
 )
 
 // Export principal kinds are the only operator/persona bindings allowed to
-// receive the consolidated section export. Keep these numeric values aligned
+// receive the consolidated group export. Keep these numeric values aligned
 // with the canonical PrincipalType enum without importing the HTTP/session
 // layer into Fayna.
 const (

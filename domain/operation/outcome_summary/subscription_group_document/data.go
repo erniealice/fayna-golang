@@ -1,4 +1,4 @@
-package section_document
+package subscription_group_document
 
 import (
 	"fmt"

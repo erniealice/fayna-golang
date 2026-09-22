@@ -34,13 +34,13 @@ func (r *outcomeSummaryRouteRecorder) HandleFunc(method, path string, _ http.Han
 	r.raw[method+" "+path] = true
 }
 
-func TestOutcomeSummaryModule_SectionTemplateRoutesRequireTypedEnablement(t *testing.T) {
+func TestOutcomeSummaryModule_SubscriptionGroupDocumentTemplateRoutesRequireTypedEnablement(t *testing.T) {
 	routes := outcomesummarypkg.DefaultRoutes()
-	routes.SectionDownloadDrawerURL = "/outcomes/section/{id}/download"
-	routes.SectionTemplateSettingsURL = "/outcomes/section-templates"
-	routes.SectionTemplateUploadURL = "/outcomes/section-templates/upload"
-	routes.SectionTemplatePublishURL = "/outcomes/section-templates/{id}/publish"
-	routes.SectionTemplateDeleteURL = "/outcomes/section-templates/{id}/delete"
+	routes.SubscriptionGroupDownloadDrawerURL = "/outcomes/subscription-group/{id}/download"
+	routes.SubscriptionGroupDocumentTemplateSettingsURL = "/outcomes/subscription-group-document-templates"
+	routes.SubscriptionGroupDocumentTemplateUploadURL = "/outcomes/subscription-group-document-templates/upload"
+	routes.SubscriptionGroupDocumentTemplatePublishURL = "/outcomes/subscription-group-document-templates/{id}/publish"
+	routes.SubscriptionGroupDocumentTemplateDeleteURL = "/outcomes/subscription-group-document-templates/{id}/delete"
 
 	tests := []struct {
 		name          string
@@ -58,15 +58,15 @@ func TestOutcomeSummaryModule_SectionTemplateRoutesRequireTypedEnablement(t *tes
 				Routes: routes,
 				Labels: outcomesummarypkg.DefaultLabels(),
 				Options: outcomesummarypkg.Options{
-					List:          outcomesummarypkg.ListOptions{Entity: tt.entity},
-					SectionExport: outcomesummarypkg.SectionExportOptions{Enabled: tt.exportEnabled},
+					List:                    outcomesummarypkg.ListOptions{Entity: tt.entity},
+					SubscriptionGroupExport: outcomesummarypkg.SubscriptionGroupExportOptions{Enabled: tt.exportEnabled},
 				},
 			})
 			recorder := newOutcomeSummaryRouteRecorder()
 			module.RegisterRoutes(recorder)
 
-			if !recorder.raw["GET "+routes.SectionExportURL] {
-				t.Fatal("legacy section CSV route must remain mounted")
+			if !recorder.raw["GET "+routes.SubscriptionGroupExportURL] {
+				t.Fatal("legacy subscription-group CSV route must remain mounted")
 			}
 			assertRouteState := func(method, path string, mounted bool) {
 				t.Helper()
@@ -83,12 +83,12 @@ func TestOutcomeSummaryModule_SectionTemplateRoutesRequireTypedEnablement(t *tes
 					t.Fatalf("%s %s mounted=%v, want %v", method, path, got, mounted)
 				}
 			}
-			assertRouteState("GET", routes.SectionDownloadDrawerURL, tt.exportEnabled)
-			assertRouteState("GET", routes.SectionTemplateSettingsURL, tt.exportEnabled)
-			assertRouteState("GET", routes.SectionTemplateUploadURL, tt.exportEnabled)
-			assertRouteState("POST", routes.SectionTemplateUploadURL, tt.exportEnabled)
-			assertRouteState("POST", routes.SectionTemplatePublishURL, tt.exportEnabled)
-			assertRouteState("POST", routes.SectionTemplateDeleteURL, tt.exportEnabled)
+			assertRouteState("GET", routes.SubscriptionGroupDownloadDrawerURL, tt.exportEnabled)
+			assertRouteState("GET", routes.SubscriptionGroupDocumentTemplateSettingsURL, tt.exportEnabled)
+			assertRouteState("GET", routes.SubscriptionGroupDocumentTemplateUploadURL, tt.exportEnabled)
+			assertRouteState("POST", routes.SubscriptionGroupDocumentTemplateUploadURL, tt.exportEnabled)
+			assertRouteState("POST", routes.SubscriptionGroupDocumentTemplatePublishURL, tt.exportEnabled)
+			assertRouteState("POST", routes.SubscriptionGroupDocumentTemplateDeleteURL, tt.exportEnabled)
 		})
 	}
 }

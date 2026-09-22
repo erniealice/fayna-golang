@@ -1,4 +1,4 @@
-package section
+package subscription_group
 
 import (
 	"context"
@@ -32,10 +32,10 @@ func drawerResponse() *exportpb.GetSubscriptionGroupOutcomeExportResponse {
 func drawerDeps(resp *exportpb.GetSubscriptionGroupOutcomeExportResponse) (*DrawerDeps, *int) {
 	calls := 0
 	return &DrawerDeps{
-		Routes:               outcome_summary.Routes{SectionDownloadDrawerURL: "/report-cards/section/{id}/download", SectionExportURL: "/report-cards/section/{id}/export"},
+		Routes:               outcome_summary.Routes{SubscriptionGroupDownloadDrawerURL: "/report-cards/group/{id}/download", SubscriptionGroupExportURL: "/report-cards/group/{id}/export"},
 		Labels:               outcome_summary.DefaultLabels(),
 		ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindOperatorOwner },
-		Options: outcome_summary.Options{List: outcome_summary.ListOptions{Entity: outcome_summary.ListEntitySubscriptionGroup}, SectionExport: outcome_summary.SectionExportOptions{
+		Options: outcome_summary.Options{List: outcome_summary.ListOptions{Entity: outcome_summary.ListEntitySubscriptionGroup}, SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{
 			Enabled:             true,
 			DefaultCategoryCode: "academic",
 			ProfileByCategoryCode: map[string]bindingpb.RenderProfile{
@@ -55,11 +55,11 @@ func drawerDeps(resp *exportpb.GetSubscriptionGroupOutcomeExportResponse) (*Draw
 func TestDownloadDrawer_CategoryRefreshBuildsPhaseOptions(t *testing.T) {
 	deps, calls := drawerDeps(drawerResponse())
 	viewUnderTest := NewDownloadDrawer(deps)
-	request := httptest.NewRequest("GET", "/report-cards/section/group-1/download?job_category_id=cat-b", nil)
+	request := httptest.NewRequest("GET", "/report-cards/group/group-1/download?job_category_id=cat-b", nil)
 	request.SetPathValue("id", "group-1")
 	ctx := view.WithUserPermissions(context.Background(), types.NewUserPermissions([]string{"subscription_group_outcome_export:read"}))
 	result := viewUnderTest.Handle(ctx, &view.ViewContext{Request: request})
-	if result.Error != nil || result.Template != "outcome-summary-section-download-drawer-form" {
+	if result.Error != nil || result.Template != "outcome-summary-subscription-group-download-drawer-form" {
 		t.Fatalf("result = template %q error %v", result.Template, result.Error)
 	}
 	if *calls != 1 {
@@ -78,15 +78,15 @@ func TestDownloadDrawer_CategoryRefreshBuildsPhaseOptions(t *testing.T) {
 	if !data.Formats[0].Selected || data.Formats[1].Disabled {
 		t.Fatalf("formats = %+v, want selected/enabled CSV and mapped PDF", data.Formats)
 	}
-	if data.RefreshAction != "/report-cards/section/group-1/download" || data.FormAction != "/report-cards/section/group-1/export" {
+	if data.RefreshAction != "/report-cards/group/group-1/download" || data.FormAction != "/report-cards/group/group-1/export" {
 		t.Fatalf("actions = %q / %q", data.RefreshAction, data.FormAction)
 	}
 
 	// Invalid request category falls back to the trusted configured code, while
 	// a missing configured code falls back to the first deterministic category.
-	request = httptest.NewRequest("GET", "/report-cards/section/group-1/download?job_category_id=nope", nil)
+	request = httptest.NewRequest("GET", "/report-cards/group/group-1/download?job_category_id=nope", nil)
 	request.SetPathValue("id", "group-1")
-	deps.Options.SectionExport.DefaultCategoryCode = "missing"
+	deps.Options.SubscriptionGroupExport.DefaultCategoryCode = "missing"
 	result = viewUnderTest.Handle(ctx, &view.ViewContext{Request: request})
 	data = result.Data.(*DrawerData)
 	if len(data.Periods) != 1 || data.Periods[0].Value != "phase:q1" {
@@ -98,13 +98,13 @@ func TestDownloadDrawer_CategoryRefreshBuildsPhaseOptions(t *testing.T) {
 }
 
 func TestDownloadDrawer_FailsClosed(t *testing.T) {
-	request := httptest.NewRequest("GET", "/report-cards/section/group-1/download", nil)
+	request := httptest.NewRequest("GET", "/report-cards/group/group-1/download", nil)
 	request.SetPathValue("id", "group-1")
 	ctx := view.WithUserPermissions(context.Background(), types.NewUserPermissions([]string{"subscription_group_outcome_export:read"}))
 	for name, deps := range map[string]*DrawerDeps{
 		"nil deps":         nil,
-		"feature disabled": {Routes: outcome_summary.Routes{SectionDownloadDrawerURL: "/drawer", SectionExportURL: "/export"}, Labels: outcome_summary.DefaultLabels(), ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindOperatorOwner }},
-		"missing closure":  {Routes: outcome_summary.Routes{SectionDownloadDrawerURL: "/drawer", SectionExportURL: "/export"}, Labels: outcome_summary.DefaultLabels(), ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindOperatorOwner }, Options: outcome_summary.Options{SectionExport: outcome_summary.SectionExportOptions{Enabled: true}}},
+		"feature disabled": {Routes: outcome_summary.Routes{SubscriptionGroupDownloadDrawerURL: "/drawer", SubscriptionGroupExportURL: "/export"}, Labels: outcome_summary.DefaultLabels(), ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindOperatorOwner }},
+		"missing closure":  {Routes: outcome_summary.Routes{SubscriptionGroupDownloadDrawerURL: "/drawer", SubscriptionGroupExportURL: "/export"}, Labels: outcome_summary.DefaultLabels(), ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindOperatorOwner }, Options: outcome_summary.Options{SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{Enabled: true}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			result := NewDownloadDrawer(deps).Handle(ctx, &view.ViewContext{Request: request})
@@ -127,7 +127,7 @@ func TestDownloadDrawer_FailsClosed(t *testing.T) {
 }
 
 func TestDownloadDrawer_RequiresExportCapabilityAndAllowedKind(t *testing.T) {
-	request := httptest.NewRequest("GET", "/report-cards/section/group-1/download", nil)
+	request := httptest.NewRequest("GET", "/report-cards/group/group-1/download", nil)
 	request.SetPathValue("id", "group-1")
 	deps, calls := drawerDeps(drawerResponse())
 	viewUnderTest := NewDownloadDrawer(deps)

@@ -9,7 +9,6 @@ import (
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 
-	"github.com/erniealice/espyna-golang/consumer"
 	espynaports "github.com/erniealice/espyna-golang/ports"
 	entityid "github.com/erniealice/espyna-golang/registry/entityid"
 	pyeza "github.com/erniealice/pyeza-golang"
@@ -29,9 +28,10 @@ import (
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
+	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
-// listIn builds a LIST_IN TypedFilter (shared shape with the section view).
+// listIn builds a LIST_IN TypedFilter (shared shape with the group view).
 func listIn(field string, values []string) *commonpb.TypedFilter {
 	return &commonpb.TypedFilter{
 		Field: field,
@@ -43,7 +43,7 @@ func listIn(field string, values []string) *commonpb.TypedFilter {
 
 // maxLandingPages bounds the historical-count offset loop independently of the
 // adapter's short-final-page termination (defense against an adapter that
-// ignores OFFSET). 100 × 100 = 10k rows, far above any real section.
+// ignores OFFSET). 100 × 100 = 10k rows, far above any real group.
 const maxLandingPages = 100
 
 // boolEq builds a BooleanFilter TypedFilter.
@@ -73,19 +73,19 @@ type ListViewDeps struct {
 	TableLabels            types.TableLabels
 
 	// Options — app-configured presentation. When Options.List.SubscriptionGroups()
-	// is true the view renders the tabbed section landing; otherwise it renders
+	// is true the view renders the tabbed group landing; otherwise it renders
 	// the flat job_outcome_summary table (today's behavior, unchanged — the
 	// backward-compat contract for service-admin's zero-valued options).
 	Options              outcome_summary.Options
 	ResolvePrincipalKind func(context.Context) int32
 
-	// Landing deps (view-1 tabbed section list). All optional/nil-safe.
+	// Landing deps (view-1 tabbed group list). All optional/nil-safe.
 	ListPriceSchedules       func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
 	ListSubscriptionGroups   func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListJobTemplateSummaries func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 	// ListSubscriptionGroupOutcomeLanding is the least-privilege landing read
-	// for report readers that may export a section but may not open the legacy
-	// section/client/document detail surfaces. The Espyna use case independently
+	// for report readers that may export a group but may not open the legacy
+	// group/client/document detail surfaces. The Espyna use case independently
 	// enforces landing-list + explicit-export capabilities and the trusted
 	// OWNER/STAFF principal boundary; its adapter returns only scoped schedule,
 	// group, and aggregate-count metadata.
@@ -105,17 +105,18 @@ type ListViewDeps struct {
 
 	// Historical-count fallback deps: the grouped ListJobTemplateSummaries
 	// aggregate binds active rows only, so a historical (inactive) schedule's
-	// sections come back with no counts — these two reads fill them in for
+	// groups come back with no counts — these two reads fill them in for
 	// the rendered tab. Optional/nil-safe (missing → counts stay blank).
 	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
 	ListJobs                     func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 
 	// Servicing-grant scoping deps (Options.List.ScopeByServicingGrant, Option A).
 	// Resolve the acting principal → workspace_user → active sgwu grants → the
-	// sections they may see. Optional/nil-safe: BOTH nil → no scoping (the app
+	// groups they may see. Optional/nil-safe: BOTH nil → no scoping (the app
 	// did not opt in; the landing stays unscoped — never an accidental lockout).
 	ListWorkspaceUsers                  func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
 	ListSubscriptionGroupWorkspaceUsers func(ctx context.Context, req *subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest) (*subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersResponse, error)
+	GetSubscriptionGroupOutcomeExport   func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
 }
 
 // PageData holds the data for the outcome summary list page (flat or landing).
@@ -142,7 +143,7 @@ func NewView(deps *ListViewDeps) view.View {
 			return view.Forbidden("job_outcome_summary:list")
 		}
 
-		// Backward-compat (phases.md P3): the tabbed section landing mounts ONLY
+		// Backward-compat (phases.md P3): the tabbed group landing mounts ONLY
 		// when the app configures List.Entity = ListEntitySubscriptionGroup. With
 		// zero-valued options (service-admin) this renders EXACTLY today's flat
 		// job_outcome_summary table. Any other List.Entity value is logged and
@@ -212,8 +213,8 @@ func renderFlat(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewConte
 
 // renderLanding renders view-1: a tabstrip of price_schedules (one tab per row,
 // incl. inactive — Q-TAB-1) over a table of the selected schedule's
-// subscription_groups (sections) with student/subject counts and a per-row view
-// action into the section grid (view-2). All reads are workspace-bound at the
+// subscription_groups (groups) with client/subject counts and a per-row view
+// action into the group grid (view-2). All reads are workspace-bound at the
 // espyna adapter (dbOps.List is workspace-aware); the landing composes no raw
 // client_id/workspace filter.
 func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewContext, perms *types.UserPermissions) view.ViewResult {
@@ -248,11 +249,11 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	schedules = filterSchedulesByScope(schedules, scope)
 
 	// Scope-boundary guard: a SCOPED landing (current|past) whose activeness band
-	// holds NO schedule renders ZERO section rows — never the unfiltered group
+	// holds NO schedule renders ZERO group rows — never the unfiltered group
 	// set. Without this, an empty scoped slice makes defaultSchedule return ""
-	// (:407) and buildSectionRows' `selected != ""` predicate (:671) falls open,
+	// (:407) and buildSubscriptionGroupRows' `selected != ""` predicate (:671) falls open,
 	// silently widening /list/past (a workspace with no inactive schedule, or an
-	// inactive-schedule read that failed) to the OPEN AY's sections. Render the
+	// inactive-schedule read that failed) to the OPEN AY's groups. Render the
 	// empty landing here and skip every group/count read (nothing to count). The
 	// UNSCOPED landing (scope == "") never reaches this branch and stays fully
 	// unfiltered — the backward-compatible /report-cards behavior is untouched.
@@ -288,8 +289,8 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	//    listAllSchedules keeps the historical view correct.
 	groups := listAllGroups(ctx, deps)
 
-	// 3b. Section visibility (Option A, Mantra-locked 2026-07-17): confine the
-	//     landing to the sections the acting principal holds an active servicing
+	// 3b. SubscriptionGroup visibility (Option A, Mantra-locked 2026-07-17): confine the
+	//     landing to the groups the acting principal holds an active servicing
 	//     grant on. Opt-in (Options.List.ScopeByServicingGrant); fail-closed;
 	//     operator/superadmin (workspace:list) bypasses. This closes the HAZ-03
 	//     unscoped-list over-exposure. Row-level grade reads stay StaffScope'd
@@ -307,14 +308,14 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	cats, templateToCat, hasNullTemplate := loadLandingCategories(ctx, deps)
 
 	// 4. counts via ONE grouped read (no N+1): subjects = distinct templates per
-	//    section (bucketed per category — the summary rows carry the template's
-	//    CURRENT job_category_id, W-A1), students = the section's largest
+	//    group (bucketed per category — the summary rows carry the template's
+	//    CURRENT job_category_id, W-A1), clients = the group's largest
 	//    per-subject cohort. The aggregate covers ACTIVE rows only, so
-	//    historical sections then fill their counts from direct member/job
+	//    historical groups then fill their counts from direct member/job
 	//    reads (selected tab only), bucketed in-memory over the SAME fetched
 	//    rows (no per-category read fan-out — §3.6 historical row).
-	subjectCount, subjectsByCat, statusByCat, studentCount := sectionCounts(ctx, deps)
-	fillHistoricalCounts(ctx, deps, groups, selected, subjectCount, studentCount, subjectsByCat, templateToCat)
+	subjectCount, subjectsByCat, statusByCat, clientCount := groupCounts(ctx, deps)
+	fillHistoricalCounts(ctx, deps, groups, selected, subjectCount, clientCount, subjectsByCat, templateToCat)
 
 	// Uncategorized bucket (§3.0 NULL policy): render the single named bucket
 	// column ONLY when out-of-corpus subjects exist — an ACTIVE template stub
@@ -323,15 +324,15 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	// dropped, never duplicated.
 	showUncategorized := len(cats) > 0 && (hasNullTemplate || anyUncategorizedCount(subjectsByCat, categoryIDSet(cats)))
 
-	// 5. tabs (one per schedule; Count = active sections under it).
+	// 5. tabs (one per schedule; Count = active groups under it).
 	tabs := buildTabs(schedules, groups, selected, l, baseHref)
 
-	// 6. section rows for the selected tab, name ASC.
-	sectionExportAllowed := sectionExportActionAllowed(ctx, deps.Options, perms, deps.ResolvePrincipalKind)
-	rows := buildSectionRows(groups, selected, subjectCount, studentCount, l, deps.Routes, deps.Options, sectionExportAllowed, outcome_summary.CanLegacyDetail(perms), cats, subjectsByCat, statusByCat, showUncategorized)
+	// 6. group rows for the selected tab, name ASC.
+	subscriptionGroupExportAllowed := subscriptionGroupExportActionAllowed(ctx, deps.Options, perms, deps.ResolvePrincipalKind)
+	rows := buildSubscriptionGroupRows(groups, selected, subjectCount, clientCount, l, deps.Routes, deps.Options, subscriptionGroupExportAllowed, outcome_summary.CanLegacyDetail(perms), cats, subjectsByCat, statusByCat, showUncategorized)
 
 	tableConfig := &types.TableConfig{
-		ID:                   "report-cards-sections",
+		ID:                   "report-cards-subscription-groups",
 		Columns:              landingColumnsFor(l, cats, showUncategorized),
 		Rows:                 rows,
 		ShowSearch:           true,
@@ -341,7 +342,7 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 		ShowExport:           true,
 		ShowEntries:          true,
 		ShowActions:          true,
-		DefaultSortColumn:    "section",
+		DefaultSortColumn:    "group",
 		DefaultSortDirection: "asc",
 		Labels:               deps.TableLabels,
 		Caption:              l.Landing.Title,
@@ -381,11 +382,11 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	return view.OK("outcome-summary-list", pageData)
 }
 
-// renderExportReaderLanding renders the tabbed section landing from the narrow
-// report-scoped aggregate. It intentionally uses the static Section/Members/
+// renderExportReaderLanding renders the tabbed group landing from the narrow
+// report-scoped aggregate. It intentionally uses the static SubscriptionGroup/Members/
 // Templates columns: category names and per-category status cells belong to the
 // separately authorized drawer composite, while the landing needs only enough
-// metadata to discover an allowed section and open that drawer.
+// metadata to discover an allowed group and open that drawer.
 func renderExportReaderLanding(
 	ctx context.Context,
 	deps *ListViewDeps,
@@ -412,7 +413,7 @@ func renderExportReaderLanding(
 		return renderEmptyScopedLanding(deps, viewCtx, scope)
 	}
 
-	schedules, groups, subjectCount, studentCount := exportReaderLandingProjection(resp)
+	schedules, groups, subjectCount, clientCount := exportReaderLandingProjection(resp)
 	sortSchedules(schedules, deps.Options.Tab)
 
 	baseHref := deps.Routes.ListURL
@@ -425,23 +426,25 @@ func renderExportReaderLanding(
 	}
 
 	tabs := buildTabs(schedules, groups, selected, deps.Labels, baseHref)
-	rows := buildSectionRows(
+	rows := buildSubscriptionGroupRows(
 		groups,
 		selected,
 		subjectCount,
-		studentCount,
+		clientCount,
 		deps.Labels,
 		deps.Routes,
 		deps.Options,
-		sectionExportActionAllowed(ctx, deps.Options, perms, deps.ResolvePrincipalKind),
-		false,
+		subscriptionGroupExportActionAllowed(ctx, deps.Options, perms, deps.ResolvePrincipalKind),
+		deps.Options.List.SubscriptionGroups() &&
+			deps.Options.SubscriptionGroupExportEnabled() &&
+			deps.GetSubscriptionGroupOutcomeExport != nil,
 		nil,
 		nil,
 		nil,
 		false,
 	)
 	tableConfig := &types.TableConfig{
-		ID:                   "report-cards-sections",
+		ID:                   "report-cards-subscription-groups",
 		Columns:              landingColumns(deps.Labels),
 		Rows:                 rows,
 		ShowSearch:           true,
@@ -451,7 +454,7 @@ func renderExportReaderLanding(
 		ShowExport:           true,
 		ShowEntries:          true,
 		ShowActions:          true,
-		DefaultSortColumn:    "section",
+		DefaultSortColumn:    "group",
 		DefaultSortDirection: "asc",
 		Labels:               deps.TableLabels,
 		Caption:              deps.Labels.Landing.Title,
@@ -487,10 +490,10 @@ func exportReaderLandingProjection(resp *espynaports.SubscriptionGroupOutcomeLan
 	schedules []*priceschedulepb.PriceSchedule,
 	groups []*subscriptiongrouppb.SubscriptionGroup,
 	subjectCount map[string]int,
-	studentCount map[string]int,
+	clientCount map[string]int,
 ) {
 	subjectCount = map[string]int{}
-	studentCount = map[string]int{}
+	clientCount = map[string]int{}
 	if resp == nil {
 		return
 	}
@@ -525,18 +528,18 @@ func exportReaderLandingProjection(resp *espynaports.SubscriptionGroupOutcomeLan
 			PriceScheduleId: &priceScheduleID,
 		})
 		subjectCount[row.SubscriptionGroupId] = int(row.JobTemplateCount)
-		studentCount[row.SubscriptionGroupId] = int(row.MemberCount)
+		clientCount[row.SubscriptionGroupId] = int(row.MemberCount)
 	}
 	return
 }
 
 // renderEmptyScopedLanding renders the landing for a scoped (current|past)
-// request whose activeness band has NO schedules: zero section rows, the
+// request whose activeness band has NO schedules: zero group rows, the
 // normal empty-state, and NO tabstrip. It performs none of the group/count
 // reads (there is nothing in-band to count), so an empty scoped band stays
 // empty instead of falling open to the unfiltered group set. ContentTemplate
 // stays "outcome-summary-list-content" (the boosted-nav dispatch invariant);
-// with empty TabItems that template renders the section table's empty-state
+// with empty TabItems that template renders the group table's empty-state
 // without the tabstrip — identical on the full-page and partial render paths.
 // Only the scoped landing reaches here (guarded on scope != ""); the unscoped
 // landing is unaffected.
@@ -544,7 +547,7 @@ func renderEmptyScopedLanding(deps *ListViewDeps, viewCtx *view.ViewContext, sco
 	l := deps.Labels
 
 	tableConfig := &types.TableConfig{
-		ID:                   "report-cards-sections",
+		ID:                   "report-cards-subscription-groups",
 		Columns:              landingColumns(l),
 		Rows:                 nil,
 		ShowSearch:           true,
@@ -554,7 +557,7 @@ func renderEmptyScopedLanding(deps *ListViewDeps, viewCtx *view.ViewContext, sco
 		ShowExport:           true,
 		ShowEntries:          true,
 		ShowActions:          true,
-		DefaultSortColumn:    "section",
+		DefaultSortColumn:    "group",
 		DefaultSortDirection: "asc",
 		Labels:               deps.TableLabels,
 		Caption:              l.Landing.Title,
@@ -581,7 +584,7 @@ func renderEmptyScopedLanding(deps *ListViewDeps, viewCtx *view.ViewContext, sco
 		Table:           tableConfig,
 		Landing:         true,
 		// No tabs: outcome-summary-list-content keys the tabstrip on TabItems,
-		// so an empty slice renders the section table (empty-state) with no tabs.
+		// so an empty slice renders the group table (empty-state) with no tabs.
 		TabItems:  nil,
 		ActiveTab: "",
 		TabsAria:  l.Landing.TabsAriaLabel,
@@ -621,16 +624,16 @@ func listAllSchedules(ctx context.Context, deps *ListViewDeps) []*priceschedulep
 }
 
 // listAllGroups returns every subscription_group (active + inactive) so
-// historical schedules' sections stay visible. Same default-active +
+// historical schedules' groups stay visible. Same default-active +
 // explicit-inactive merge as listAllSchedules. Nil-safe → empty slice.
-// scopeGroupsByServicingGrant filters the section groups to those the acting
+// scopeGroupsByServicingGrant filters the group groups to those the acting
 // principal holds an ACTIVE servicing grant (sgwu) on — the fail-closed
-// section-visibility gate (Option A / visibility-resolver ACCESS axis).
+// group-visibility gate (Option A / visibility-resolver ACCESS axis).
 //
 // Bypass: an operator/superadmin (holds workspace:list, the resolver's scope=ALL
-// capability) sees every section. Every other principal is confined to their
-// granted sections; a principal with no resolvable identity or zero grants sees
-// ZERO sections (fail-closed — never a fall-open to the full set).
+// capability) sees every group. Every other principal is confined to their
+// granted groups; a principal with no resolvable identity or zero grants sees
+// ZERO groups (fail-closed — never a fall-open to the full set).
 //
 // Nil-safe: if either scoping closure is unwired the groups are returned
 // unchanged (the app opted in via the flag but did not wire the reads — treated
@@ -641,53 +644,18 @@ func scopeGroupsByServicingGrant(ctx context.Context, deps *ListViewDeps, groups
 	if deps.ListWorkspaceUsers == nil || deps.ListSubscriptionGroupWorkspaceUsers == nil {
 		return groups // opted-in but unwired → not configured (no scoping)
 	}
-	// Operator/superadmin bypass — sees all sections.
+	// Operator/superadmin bypass — sees all groups.
 	if view.GetUserPermissions(ctx).Can(entityid.Workspace, "list") {
 		return groups
 	}
-	userID := strings.TrimSpace(consumer.GetUserIDFromContext(ctx))
-	if userID == "" {
-		return nil // no identity → fail-closed
-	}
-	// acting user → workspace_user id(s). The adapter ignores filters, so match
-	// user_id in code over the (small, workspace-scoped) active set.
-	wuResp, err := deps.ListWorkspaceUsers(ctx, &workspaceuserpb.ListWorkspaceUsersRequest{})
+	// Shared resolver: acting user -> workspace_user -> active
+	// subscription_group_workspace_user grants. No identity / no workspace_user /
+	// zero grants yield an empty set (ZERO groups); a read error fails closed the
+	// same way.
+	granted, err := outcome_summary.GrantedSubscriptionGroupIDs(ctx, deps.ListWorkspaceUsers, deps.ListSubscriptionGroupWorkspaceUsers)
 	if err != nil {
-		log.Printf("report cards landing: resolve workspace_user for section scoping: %v", err)
+		log.Printf("report cards landing: resolve servicing grants for group scoping: %v", err)
 		return nil // fail-closed
-	}
-	myWU := map[string]bool{}
-	for _, wu := range wuResp.GetData() {
-		if wu.GetActive() && wu.GetUserId() == userID && wu.GetId() != "" {
-			myWU[wu.GetId()] = true
-		}
-	}
-	if len(myWU) == 0 {
-		return nil // no workspace_user for this principal → fail-closed
-	}
-	wuIDs := make([]string, 0, len(myWU))
-	for id := range myWU {
-		wuIDs = append(wuIDs, id)
-	}
-	// active sgwu grants for those workspace_users → the granted section ids.
-	sgResp, err := deps.ListSubscriptionGroupWorkspaceUsers(ctx, &subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest{
-		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
-			listIn("workspace_user_id", wuIDs), boolEq("active", true),
-		}},
-	})
-	if err != nil {
-		log.Printf("report cards landing: list servicing grants for section scoping: %v", err)
-		return nil // fail-closed
-	}
-	granted := map[string]bool{}
-	for _, g := range sgResp.GetData() {
-		// Defense-in-depth against a filter-ignoring adapter: only honor grants
-		// whose workspace_user_id is actually the acting principal's.
-		if g.GetActive() && myWU[g.GetWorkspaceUserId()] {
-			if sid := g.GetSubscriptionGroupId(); sid != "" {
-				granted[sid] = true
-			}
-		}
 	}
 	out := groups[:0:0]
 	for _, grp := range groups {
@@ -796,11 +764,11 @@ func orderOf(s *priceschedulepb.PriceSchedule) (int32, bool) {
 	return 0, false
 }
 
-// sectionCounts derives per-section (subscription_group) subject + student
+// groupCounts derives per-group (subscription_group) subject + client
 // counts from ONE ListJobTemplateSummaries grouped read (staff-scoped at the
-// adapter): subjects = distinct job_template rows for the group; students = the
-// group's largest per-subject job_count (its roster size for a section where
-// every student shares ≥1 subject). subjectsByCat additionally buckets the SAME
+// adapter): subjects = distinct job_template rows for the group; clients = the
+// group's largest per-subject job_count (its roster size for a group where
+// every client shares ≥1 subject). subjectsByCat additionally buckets the SAME
 // distinct templates by the row's job_category_id (the template's CURRENT FK,
 // projected by W-A1; "" = the NULL/Uncategorized bucket, §3.0) — a pure
 // in-memory regroup of the one read, zero extra statements. Nil-safe → empty
@@ -812,11 +780,11 @@ func orderOf(s *priceschedulepb.PriceSchedule) (int32, bool) {
 // no-data subjects (group_phase_count == 0, field 19). Populated inside the
 // seen[gid][tid] block so staff-folded rows count once (chips.go
 // recordSubjectStatus). Statement budget +0 — no extra read (plan §3.6).
-func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string]int, subjectsByCat map[string]map[string]int, statusByCat map[string]map[string]*cellStatusDist, students map[string]int) {
+func groupCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string]int, subjectsByCat map[string]map[string]int, statusByCat map[string]map[string]*cellStatusDist, clients map[string]int) {
 	subjects = map[string]int{}
 	subjectsByCat = map[string]map[string]int{}
 	statusByCat = map[string]map[string]*cellStatusDist{}
-	students = map[string]int{}
+	clients = map[string]int{}
 	if deps.ListJobTemplateSummaries == nil {
 		return
 	}
@@ -846,16 +814,16 @@ func sectionCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string
 			// but STILL counted above (the count-only degrade).
 			recordSubjectStatus(statusByCat, gid, s.GetJobCategoryId(), s)
 		}
-		if jc := int(s.GetJobCount()); jc > students[gid] {
-			students[gid] = jc
+		if jc := int(s.GetJobCount()); jc > clients[gid] {
+			clients[gid] = jc
 		}
 	}
 	return
 }
 
-// fillHistoricalCounts fills Students/Subjects counts for the selected tab's
-// INACTIVE sections (their rows are invisible to the active-bound
-// ListJobTemplateSummaries aggregate): students = distinct member clients
+// fillHistoricalCounts fills Clients/Subjects counts for the selected tab's
+// INACTIVE groups (their rows are invisible to the active-bound
+// ListJobTemplateSummaries aggregate): clients = distinct member clients
 // (active + inactive members — the frozen roster), subjects = distinct
 // job_templates over the members' jobs (active + inactive). Bulk reads, no
 // N+1: one member read (+inactive merge) and chunked job reads across the
@@ -873,7 +841,7 @@ func fillHistoricalCounts(
 	deps *ListViewDeps,
 	groups []*subscriptiongrouppb.SubscriptionGroup,
 	selected string,
-	subjectCount, studentCount map[string]int,
+	subjectCount, clientCount map[string]int,
 	subjectsByCat map[string]map[string]int,
 	templateToCat map[string]string,
 ) {
@@ -885,7 +853,7 @@ func fillHistoricalCounts(
 		if g.GetActive() || (selected != "" && g.GetPriceScheduleId() != selected) {
 			continue
 		}
-		if studentCount[g.GetId()] == 0 || subjectCount[g.GetId()] == 0 {
+		if clientCount[g.GetId()] == 0 || subjectCount[g.GetId()] == 0 {
 			groupIDs = append(groupIDs, g.GetId())
 		}
 	}
@@ -926,14 +894,14 @@ func fillHistoricalCounts(
 		}
 	}
 	for gid, clients := range clientsPerGroup {
-		if studentCount[gid] == 0 {
-			studentCount[gid] = len(clients)
+		if clientCount[gid] == 0 {
+			clientCount[gid] = len(clients)
 		}
 	}
 
 	// subjects: distinct templates over the members' jobs (both liveness
-	// states), chunked by origin_id PER GROUP (one section's job set is the
-	// scale the section grid already reads in one call).
+	// states), chunked by origin_id PER GROUP (one group's job set is the
+	// scale the group grid already reads in one call).
 	if deps.ListJobs == nil || len(subToGroup) == 0 {
 		return
 	}
@@ -958,8 +926,8 @@ func fillHistoricalCounts(
 				}}},
 			}
 			for _, req := range jobReqs {
-				// Page explicitly — a section's job set exceeds the adapters'
-				// default row caps (the fetchSectionJobs lesson). maxPages
+				// Page explicitly — a group's job set exceeds the adapters'
+				// default row caps (the fetchGroupJobs lesson). maxPages
 				// bounds the loop even if the adapter ignored OFFSET.
 				for page := int32(1); page <= maxLandingPages; page++ {
 					req.Pagination = &commonpb.PaginationRequest{
@@ -1009,8 +977,8 @@ func fillHistoricalCounts(
 	}
 }
 
-// buildTabs builds one TabItem per schedule; Count = its sections (active or
-// not — a historical schedule's sections are all inactive but still count);
+// buildTabs builds one TabItem per schedule; Count = its groups (active or
+// not — a historical schedule's groups are all inactive but still count);
 // the tab whose id == selected is marked active. Href carries ?ps=<id>.
 func buildTabs(
 	schedules []*priceschedulepb.PriceSchedule,
@@ -1082,15 +1050,15 @@ func scopeActiveSubNav(scope string) string {
 	}
 }
 
-// buildSectionRows builds the section table rows for the selected schedule
+// buildSubscriptionGroupRows builds the group table rows for the selected schedule
 // (inactive groups included — the historical view), name ASC. Each row links
-// (view action) into the per-section grid.
+// (view action) into the per-group grid.
 //
 // With a nonempty category corpus (R9 W-A2) the single subject-count cell is
 // replaced by one TYPED composite cell per category (plan §3.11 — committed
 // pyeza BuildCompositeCell: count + eye deep-link, URL-query-encoded ?jc=,
-// collision-proof rc-eye-<section>-<category> test id, aria naming category
-// AND section), plus the Uncategorized bucket cell (bare count, no eye — the
+// collision-proof rc-eye-<group>-<category> test id, aria naming category
+// AND group), plus the Uncategorized bucket cell (bare count, no eye — the
 // NULL bucket has no addressable ?jc= target) when enabled. Zero categories →
 // EXACTLY today's static cells (the degrade contract).
 //
@@ -1099,14 +1067,14 @@ func scopeActiveSubNav(scope string) string {
 // count-only when the cell has no data-bearing status (nil dist → nil chips,
 // the degrade). The Uncategorized bucket stays count-only (it folds
 // heterogeneous out-of-corpus subjects with no addressable tab).
-func buildSectionRows(
+func buildSubscriptionGroupRows(
 	groups []*subscriptiongrouppb.SubscriptionGroup,
 	selected string,
-	subjectCount, studentCount map[string]int,
+	subjectCount, clientCount map[string]int,
 	l outcome_summary.Labels,
 	routes outcome_summary.Routes,
 	options outcome_summary.Options,
-	sectionExportAllowed bool,
+	subscriptionGroupExportAllowed bool,
 	legacyDetailAllowed bool,
 	cats []*jobcategorypb.JobCategory,
 	subjectsByCat map[string]map[string]int,
@@ -1133,10 +1101,10 @@ func buildSectionRows(
 	rows := make([]types.TableRow, 0, len(filtered))
 	for _, g := range filtered {
 		gid := g.GetId()
-		sectionURL := route.ResolveURL(routes.SectionURL, "id", gid)
+		groupURL := route.ResolveURL(routes.SubscriptionGroupURL, "id", gid)
 		cells := []types.TableCell{
 			{Value: g.GetName()},
-			{Value: fmt.Sprintf("%d", studentCount[gid])},
+			{Value: fmt.Sprintf("%d", clientCount[gid])},
 		}
 		if len(cats) == 0 {
 			// Static degrade path — byte-identical to the pre-R9 landing cell.
@@ -1148,7 +1116,7 @@ func buildSectionRows(
 					Chips: buildStatusChips(statusByCat[gid][c.GetId()], l),
 					BasePath: func() string {
 						if legacyDetailAllowed {
-							return sectionURL
+							return groupURL
 						}
 						return ""
 					}(),
@@ -1157,7 +1125,7 @@ func buildSectionRows(
 					CategoryID:   c.GetId(),
 					SectionName:  g.GetName(),
 					CategoryName: c.GetName(),
-					// The lyngua frame names category AND section; a frame
+					// The lyngua frame names category AND group; a frame
 					// missing either placeholder falls back ("") to the typed
 					// cell's default both-nouns composition.
 					AccessibleName: cellAccessibleName(l.Landing.CellViewAction, c.GetName(), g.GetName()),
@@ -1179,11 +1147,11 @@ func buildSectionRows(
 			Type:   "download",
 			Label:  l.Landing.DownloadAction,
 			Action: "download",
-			URL:    route.ResolveURL(routes.SectionExportURL, "id", gid) + "?id=",
-			TestID: "rc-section-download-" + short(gid),
+			URL:    route.ResolveURL(routes.SubscriptionGroupExportURL, "id", gid) + "?id=",
+			TestID: "rc-subscription-group-download-" + short(gid),
 		}
-		if options.SectionExportEnabled() && routes.SectionDownloadDrawerURL != "" {
-			title := l.SectionExport.DrawerTitle
+		if options.SubscriptionGroupExportEnabled() && routes.SubscriptionGroupDownloadDrawerURL != "" {
+			title := l.SubscriptionGroupExport.DrawerTitle
 			if title == "" {
 				title = l.Landing.DownloadAction
 			}
@@ -1191,13 +1159,13 @@ func buildSectionRows(
 				Type:        "download",
 				Label:       l.Landing.DownloadAction,
 				Action:      "outcome-summary-download",
-				HxGet:       route.ResolveURL(routes.SectionDownloadDrawerURL, "id", gid),
+				HxGet:       route.ResolveURL(routes.SubscriptionGroupDownloadDrawerURL, "id", gid),
 				HxTarget:    "#sheetContent",
 				HxSwap:      "innerHTML",
 				DrawerTitle: title,
-				TestID:      "rc-section-download-" + short(gid),
+				TestID:      "rc-subscription-group-download-" + short(gid),
 			}
-			if !sectionExportAllowed {
+			if !subscriptionGroupExportAllowed {
 				downloadAction.Disabled = true
 				downloadAction.DisabledTooltip = l.Errors.PermissionDenied
 			}
@@ -1208,13 +1176,13 @@ func buildSectionRows(
 			actions = append([]types.TableAction{{
 				Type:   "view",
 				Label:  l.Landing.ViewAction,
-				Href:   sectionURL,
+				Href:   groupURL,
 				TestID: "rc-view-" + short(gid),
 			}}, actions...)
 		}
 		rows = append(rows, types.TableRow{
 			ID:        gid,
-			DataAttrs: map[string]string{"testid": "rc-section-" + short(gid)},
+			DataAttrs: map[string]string{"testid": "rc-subscription-group-" + short(gid)},
 			Cells:     cells,
 			Actions:   actions,
 		})
@@ -1222,12 +1190,12 @@ func buildSectionRows(
 	return rows
 }
 
-// sectionExportActionAllowed mirrors the conditional authorization boundary in
+// subscriptionGroupExportActionAllowed mirrors the conditional authorization boundary in
 // the export handler. The explicit export capability and allowed principal kind
 // are required first. An empty row-band config needs no extra capability, while a configured
 // client-attribute band is actionable only when both trusted enrichment reads
 // are available. Malformed non-empty configuration fails closed.
-func sectionExportActionAllowed(ctx context.Context, options outcome_summary.Options, perms *types.UserPermissions, resolvePrincipalKind func(context.Context) int32) bool {
+func subscriptionGroupExportActionAllowed(ctx context.Context, options outcome_summary.Options, perms *types.UserPermissions, resolvePrincipalKind func(context.Context) int32) bool {
 	if !outcome_summary.CanExplicitExport(perms, ctx, resolvePrincipalKind) {
 		return false
 	}
@@ -1243,8 +1211,8 @@ func sectionExportActionAllowed(ctx context.Context, options outcome_summary.Opt
 
 func landingColumns(l outcome_summary.Labels) []types.TableColumn {
 	return []types.TableColumn{
-		{Key: "section", Label: l.Landing.GroupColumn, MinWidth: "12.5rem"},
-		{Key: "students", Label: l.Landing.MembersColumn, MinWidth: "6.25rem", Align: "right"},
+		{Key: "group", Label: l.Landing.GroupColumn, MinWidth: "12.5rem"},
+		{Key: "clients", Label: l.Landing.MembersColumn, MinWidth: "6.25rem", Align: "right"},
 		{Key: "subjects", Label: l.Landing.TemplatesColumn, MinWidth: "6.25rem", Align: "right"},
 	}
 }

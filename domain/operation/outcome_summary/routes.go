@@ -11,30 +11,34 @@ const (
 	// ListScopeURL is the activeness-scoped report-cards landing: {scope} ∈
 	// {current, past} filters the price_schedule tabs by the GENERIC
 	// price_schedule.active flag (current = active schedules, past = inactive).
-	// It renders the SAME tabbed section landing as ListURL, restricted to one
+	// It renders the SAME tabbed group landing as ListURL, restricted to one
 	// activeness band; an empty/unknown scope degrades to the unfiltered landing.
 	// Education overrides it to /report-cards/list/{scope}.
 	ListScopeURL = "/outcomes/summaries/list/{scope}"
 	JobURL       = "/jobs/detail/{id}/summary"
-	// SectionURL is the per-section report-card grid (view-2): {id} is a
+	// SubscriptionGroupURL is the per-group report-card grid (view-2): {id} is a
 	// subscription_group id. Generic default here; the education tier overrides
-	// it to /report-cards/section/{id} via education/route.json.
-	SectionURL = "/outcomes/summaries/section/{id}"
-	// SectionExportURL serves the per-section report-card grid as a CSV
+	// it to the unchanged education value bound to outcome_summary.subscription_group
+	// in education/route.json.
+	SubscriptionGroupURL = "/outcomes/summaries/subscription-group/{id}"
+	// SubscriptionGroupExportURL serves the per-group report-card grid as a CSV
 	// download ({id} = subscription_group id; optional ?id=<client id> narrows
-	// to one row). Education overrides it to /report-cards/section/{id}/export.
-	SectionExportURL = "/outcomes/summaries/section/{id}/export"
+	// to one row). Education keeps the unchanged value bound to
+	// outcome_summary.subscription_group_export in education/route.json.
+	SubscriptionGroupExportURL = "/outcomes/summaries/subscription-group/{id}/export"
 	// ClientCardURL is the per-client report card (view-3): {id} = subscription_group
 	// id, {client_id} = the client id. The generic "client" path noun is
-	// lyngua-fied to "student" on education
-	// (/report-cards/section/{id}/student/{client_id}).
-	ClientCardURL = "/outcomes/summaries/section/{id}/client/{client_id}"
+	// lyngua-fied to "client" on education
+	// Education keeps the unchanged value bound to outcome_summary.client in
+	// education/route.json.
+	ClientCardURL = "/outcomes/summaries/subscription-group/{id}/client/{client_id}"
 	// ClientDocumentURL streams the per-client report card as a .docx download
 	// ({id} = subscription_group id, {client_id} = the client id).
-	// Education overrides it to /report-cards/section/{id}/student/{client_id}/document.
-	ClientDocumentURL = "/outcomes/summaries/section/{id}/client/{client_id}/document"
+	// Education keeps the unchanged value bound to outcome_summary.client_document
+	// in education/route.json.
+	ClientDocumentURL = "/outcomes/summaries/subscription-group/{id}/client/{client_id}/document"
 	// GroupDetailURL is the listed entity's own detail page (the
-	// subscription_group detail — centymo's mount), used by the section view's
+	// subscription_group detail — centymo's mount), used by the group view's
 	// header caption link. Kept as a Routes field so the per-tier route.json
 	// override (education: /sections/detail/{id}) rides the same binding as
 	// every other route here; the default mirrors centymo's generic constant.
@@ -77,18 +81,18 @@ type Routes struct {
 	// Job/phase summary pages highlight "jobs" while the list page highlights "report-cards".
 	ListActiveSubNav string `json:"list_active_sub_nav"`
 
-	ListURL          string `json:"list_url"`
-	ListScopeURL     string `json:"list_scope_url"`
-	JobSummaryURL    string `json:"job_summary_url"`
-	SectionURL       string `json:"section_url"`
-	SectionExportURL string `json:"section_export_url"`
-	// Education/app-only Section export drawer. The generic default is empty so
+	ListURL                    string `json:"list_url"`
+	ListScopeURL               string `json:"list_scope_url"`
+	JobSummaryURL              string `json:"job_summary_url"`
+	SubscriptionGroupURL       string `json:"subscription_group_url"`
+	SubscriptionGroupExportURL string `json:"subscription_group_export_url"`
+	// Education/app-only SubscriptionGroup export drawer. The generic default is empty so
 	// consumers that do not opt into subscription-group lists mount nothing.
-	SectionDownloadDrawerURL string `json:"section_download_drawer_url"`
-	ClientCardURL            string `json:"client_url"`
-	ClientDocumentURL        string `json:"client_document_url"`
-	GroupDetailURL           string `json:"group_detail_url"`
-	PhaseSummaryURL          string `json:"phase_summary_url"`
+	SubscriptionGroupDownloadDrawerURL string `json:"subscription_group_download_drawer_url"`
+	ClientCardURL                      string `json:"client_url"`
+	ClientDocumentURL                  string `json:"client_document_url"`
+	GroupDetailURL                     string `json:"group_detail_url"`
+	PhaseSummaryURL                    string `json:"phase_summary_url"`
 
 	// Report-card template settings (TB3 management surface).
 	TemplateSettingsURL string `json:"template_settings_url"`
@@ -96,12 +100,12 @@ type Routes struct {
 	TemplatePublishURL  string `json:"template_publish_url"`
 	TemplateDeleteURL   string `json:"template_delete_url"`
 
-	// Section Template management is a distinct document family from the
+	// SubscriptionGroup Template management is a distinct document family from the
 	// existing report-card template settings above. Generic defaults stay empty.
-	SectionTemplateSettingsURL string `json:"section_template_settings_url"`
-	SectionTemplateUploadURL   string `json:"section_template_upload_url"`
-	SectionTemplatePublishURL  string `json:"section_template_publish_url"`
-	SectionTemplateDeleteURL   string `json:"section_template_delete_url"`
+	SubscriptionGroupDocumentTemplateSettingsURL string `json:"subscription_group_document_template_settings_url"`
+	SubscriptionGroupDocumentTemplateUploadURL   string `json:"subscription_group_document_template_upload_url"`
+	SubscriptionGroupDocumentTemplatePublishURL  string `json:"subscription_group_document_template_publish_url"`
+	SubscriptionGroupDocumentTemplateDeleteURL   string `json:"subscription_group_document_template_delete_url"`
 }
 
 // DefaultRoutes returns a Routes populated from
@@ -112,15 +116,15 @@ func DefaultRoutes() Routes {
 		ActiveSubNav:     "jobs",
 		ListActiveSubNav: "report-cards",
 
-		ListURL:           ListURL,
-		ListScopeURL:      ListScopeURL,
-		JobSummaryURL:     JobURL,
-		SectionURL:        SectionURL,
-		SectionExportURL:  SectionExportURL,
-		ClientCardURL:     ClientCardURL,
-		ClientDocumentURL: ClientDocumentURL,
-		GroupDetailURL:    GroupDetailURL,
-		PhaseSummaryURL:   PhaseURL,
+		ListURL:                    ListURL,
+		ListScopeURL:               ListScopeURL,
+		JobSummaryURL:              JobURL,
+		SubscriptionGroupURL:       SubscriptionGroupURL,
+		SubscriptionGroupExportURL: SubscriptionGroupExportURL,
+		ClientCardURL:              ClientCardURL,
+		ClientDocumentURL:          ClientDocumentURL,
+		GroupDetailURL:             GroupDetailURL,
+		PhaseSummaryURL:            PhaseURL,
 
 		TemplateSettingsURL: TemplateSettingsURL,
 		TemplateUploadURL:   TemplateUploadURL,
@@ -133,15 +137,15 @@ func DefaultRoutes() Routes {
 // outcome summary routes.
 func (r Routes) RouteMap() map[string]string {
 	routes := map[string]string{
-		"outcome_summary.list":            r.ListURL,
-		"outcome_summary.list_scope":      r.ListScopeURL,
-		"outcome_summary.job":             r.JobSummaryURL,
-		"outcome_summary.section":         r.SectionURL,
-		"outcome_summary.section_export":  r.SectionExportURL,
-		"outcome_summary.client_card":     r.ClientCardURL,
-		"outcome_summary.client_document": r.ClientDocumentURL,
-		"outcome_summary.group_detail":    r.GroupDetailURL,
-		"outcome_summary.phase":           r.PhaseSummaryURL,
+		"outcome_summary.list":                      r.ListURL,
+		"outcome_summary.list_scope":                r.ListScopeURL,
+		"outcome_summary.job":                       r.JobSummaryURL,
+		"outcome_summary.subscription_group":        r.SubscriptionGroupURL,
+		"outcome_summary.subscription_group_export": r.SubscriptionGroupExportURL,
+		"outcome_summary.client_card":               r.ClientCardURL,
+		"outcome_summary.client_document":           r.ClientDocumentURL,
+		"outcome_summary.group_detail":              r.GroupDetailURL,
+		"outcome_summary.phase":                     r.PhaseSummaryURL,
 
 		"outcome_summary.template_settings": r.TemplateSettingsURL,
 		"outcome_summary.template_upload":   r.TemplateUploadURL,
@@ -151,20 +155,20 @@ func (r Routes) RouteMap() map[string]string {
 	// App-only routes are omitted rather than exported with an empty target, so
 	// zero-option consumers preserve their exact route map and cannot advertise
 	// an unmounted surface.
-	if r.SectionDownloadDrawerURL != "" {
-		routes["outcome_summary.section_download_drawer"] = r.SectionDownloadDrawerURL
+	if r.SubscriptionGroupDownloadDrawerURL != "" {
+		routes["outcome_summary.subscription_group_download_drawer"] = r.SubscriptionGroupDownloadDrawerURL
 	}
-	if r.SectionTemplateSettingsURL != "" {
-		routes["outcome_summary.section_template_settings"] = r.SectionTemplateSettingsURL
+	if r.SubscriptionGroupDocumentTemplateSettingsURL != "" {
+		routes["outcome_summary.subscription_group_document_template_settings"] = r.SubscriptionGroupDocumentTemplateSettingsURL
 	}
-	if r.SectionTemplateUploadURL != "" {
-		routes["outcome_summary.section_template_upload"] = r.SectionTemplateUploadURL
+	if r.SubscriptionGroupDocumentTemplateUploadURL != "" {
+		routes["outcome_summary.subscription_group_document_template_upload"] = r.SubscriptionGroupDocumentTemplateUploadURL
 	}
-	if r.SectionTemplatePublishURL != "" {
-		routes["outcome_summary.section_template_publish"] = r.SectionTemplatePublishURL
+	if r.SubscriptionGroupDocumentTemplatePublishURL != "" {
+		routes["outcome_summary.subscription_group_document_template_publish"] = r.SubscriptionGroupDocumentTemplatePublishURL
 	}
-	if r.SectionTemplateDeleteURL != "" {
-		routes["outcome_summary.section_template_delete"] = r.SectionTemplateDeleteURL
+	if r.SubscriptionGroupDocumentTemplateDeleteURL != "" {
+		routes["outcome_summary.subscription_group_document_template_delete"] = r.SubscriptionGroupDocumentTemplateDeleteURL
 	}
 	return routes
 }

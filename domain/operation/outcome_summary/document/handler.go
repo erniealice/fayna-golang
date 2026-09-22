@@ -1,7 +1,7 @@
-// handler.go — the per-student report-card .docx download. A raw
+// handler.go — the per-client report-card .docx download. A raw
 // http.HandlerFunc (registered through the ViewAdapter, so view.GetUserPermissions
-// observes the same RBAC context as the HTML views — the SectionExport
-// precedent). It reuses the exact view-3 fetch + IDOR gates (section EXISTS gate
+// observes the same RBAC context as the HTML views — the SubscriptionGroupExport
+// precedent). It reuses the exact view-3 fetch + IDOR gates (group EXISTS gate
 // → membership gate), assembles the split-source data map, and streams the .docx
 // produced by the injected GenerateDoc closure (fycha doctemplate.ProcessBytes,
 // already wired on both app containers).
@@ -157,13 +157,13 @@ type Deps struct {
 	// ListCodedTaskOutcomeValuesByJobHistorical is the past-academic-year sibling
 	// of the above. A past card's instance+template ancestry is inactive, so the
 	// live reader resolves nothing; collectCard routes to this reader (which admits
-	// inactive ancestry) when the section is historical. nil-safe: a missing closure
+	// inactive ancestry) when the group is historical. nil-safe: a missing closure
 	// leaves a past card's coded cells blank exactly as before.
 	ListCodedTaskOutcomeValuesByJobHistorical func(ctx context.Context, req *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
 	ListTemplateTaskCriterias                 func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
 }
 
-// NewDownloadHandler returns the per-student report-card .docx download handler.
+// NewDownloadHandler returns the per-client report-card .docx download handler.
 func NewDownloadHandler(d *Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -174,9 +174,9 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			return
 		}
 
-		sectionID := strings.TrimSpace(r.PathValue("id"))
+		groupID := strings.TrimSpace(r.PathValue("id"))
 		clientID := strings.TrimSpace(r.PathValue("client_id"))
-		if sectionID == "" || clientID == "" {
+		if groupID == "" || clientID == "" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -212,15 +212,15 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			}
 		}
 
-		rc, ok := collectCard(ctx, d, sectionID, clientID)
+		rc, ok := collectCard(ctx, d, groupID, clientID)
 		if !ok {
-			// Same fail-closed response for foreign/missing section, non-member
+			// Same fail-closed response for foreign/missing group, non-member
 			// client, and no-data — no leak of which gate tripped.
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		if len(rc.Subjects) == 0 {
-			http.Error(w, "no computed grades for this student", http.StatusNotFound)
+			http.Error(w, "no computed grades for this client", http.StatusNotFound)
 			return
 		}
 
@@ -238,14 +238,14 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 		// or echo gap / permission denial) returns 503, a proven-unsafe sheet
 		// returns 409 — a document-issuance integrity boundary.
 		//
-		// sectionID IS the subscription_group_id: collectCard above resolved it
-		// through fetchSection (a subscription_group read by id) AND proved this
+		// groupID IS the subscription_group_id: collectCard above resolved it
+		// through fetchGroup (a subscription_group read by id) AND proved this
 		// client's own membership row in it (memberSubscription), returning
 		// !ok → 404 if either failed — so by here it is a proven-real group in
 		// this workspace with the card's client a proven member: the
 		// route-group pair validation the group-grain gate anchors on (the
 		// outcome_matrix ResolveGroupScope precedent).
-		blocked, gateErr := reportRenderStatus(ctx, d, rc.JobIDs, sectionID)
+		blocked, gateErr := reportRenderStatus(ctx, d, rc.JobIDs, groupID)
 		if gateErr != nil {
 			log.Printf("report render gate: cannot prove sheet safe: %v", gateErr)
 			http.Error(w, "report card cannot be generated right now — please retry", http.StatusServiceUnavailable)
@@ -318,7 +318,7 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			}
 			contentType = pdfContentType
 			// LOCKED filename: "Report Card - {Student} - {AY} - {unixMilli}.pdf"
-			// (decisions.md Q-GSE PDF filename lock). AY derives from the section's
+			// (decisions.md Q-GSE PDF filename lock). AY derives from the group's
 			// price_schedule period (rc.SchedulePeriod); unixMilli is the current
 			// time in ms. Full conversion completes before any byte is streamed.
 			w.Header().Set("Content-Type", contentType)
@@ -338,7 +338,7 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 				http.Error(w, "failed to generate report card", http.StatusInternalServerError)
 				return
 			}
-			filename := "report-card-" + slug(rc.SectionName) + "-" + slug(rc.ClientName) + ".docx"
+			filename := "report-card-" + slug(rc.SubscriptionGroupName) + "-" + slug(rc.ClientName) + ".docx"
 			w.Header().Set("Content-Type", docxContentType)
 			w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 			if _, err := w.Write(outBytes); err != nil {
@@ -385,9 +385,9 @@ func isLibreOfficeUnavailable(err error) bool {
 // (possibly non-ASCII, space/comma-bearing) name is sanitized for transport by
 // contentDisposition.
 func reportCardPDFFilename(rc *reportCard) string {
-	student := firstNonEmpty(rc.ClientName, "Student")
+	client := firstNonEmpty(rc.ClientName, "Student")
 	ay := strings.TrimSpace(rc.SchedulePeriod)
-	name := "Report Card - " + student
+	name := "Report Card - " + client
 	if ay != "" {
 		name += " - " + ay
 	}
@@ -397,7 +397,7 @@ func reportCardPDFFilename(rc *reportCard) string {
 
 // contentDisposition builds an attachment Content-Disposition with BOTH an
 // ASCII-safe filename="" fallback and an RFC-5987 filename*=UTF-8” form, so
-// names with spaces/commas/non-ASCII (student names) download correctly across
+// names with spaces/commas/non-ASCII (client names) download correctly across
 // browsers without header injection.
 func contentDisposition(name string) string {
 	ascii := asciiFilename(name)

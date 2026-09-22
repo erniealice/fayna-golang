@@ -147,14 +147,16 @@ func resolveCellAuthority(ctx context.Context, deps authorityDeps, templateID st
 	// a cell (addressed by column_key) can be tested against the hard-frozen set
 	// below.
 	typeByColKey := make(map[string]enums.CriteriaType)
-	phaseByColKey := make(map[string]string)      // column_key → job_template_phase_id
-	boundsByColKey := make(map[string]cellBounds) // column_key → value contract
+	phaseByColKey := make(map[string]string)               // column_key → job_template_phase_id
+	boundsByColKey := make(map[string]cellBounds)          // column_key → value contract
+	ratingsByColKey := make(map[string]ratingDescriptions) // column_key → binding rating descriptions
 	for _, phase := range matrix.GetPhases() {
 		for _, task := range phase.GetTasks() {
 			for _, crit := range task.GetCriteria() {
 				typeByColKey[crit.GetColumnKey()] = crit.GetCriteria().GetCriteriaType()
 				phaseByColKey[crit.GetColumnKey()] = phase.GetJobTemplatePhaseId()
 				boundsByColKey[crit.GetColumnKey()] = boundsFromCriteria(crit.GetCriteria())
+				ratingsByColKey[crit.GetColumnKey()] = ratingDescriptionsFromColumn(crit)
 			}
 		}
 	}
@@ -209,6 +211,7 @@ func resolveCellAuthority(ctx context.Context, deps authorityDeps, templateID st
 				criteriaID: criteriaID,
 				ct:         typeByColKey[colKey],
 				bounds:     boundsByColKey[colKey],
+				ratings:    ratingsByColKey[colKey],
 				jobPhaseID: cell.GetJobPhaseId(),
 				jobID:      cell.GetJobId(),
 			}

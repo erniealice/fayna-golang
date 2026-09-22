@@ -67,9 +67,10 @@ import (
 	scoringcomponentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_component"
 	scoringcomponentcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_component_criteria"
 	scoringschemepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/scoring_scheme"
-	sectionbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
+	subscriptiongroupdocumenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	templatetaskcriteriaratingdescriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria_rating_description"
 	productpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	planpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/plan"
@@ -184,6 +185,9 @@ type OperationUseCases struct {
 	JobListTabSupport JobListTabSupportUseCases
 	// TemplateTaskCriteria — JobTemplate detail criteria-by-task list.
 	TemplateTaskCriteria TemplateTaskCriteriaUseCases
+	// TemplateTaskCriteriaRatingDescription — binding-specific scale-band wording
+	// used by the TemplateTaskCriteria authoring drawer.
+	TemplateTaskCriteriaRatingDescription TemplateTaskCriteriaRatingDescriptionUseCases
 	// JobTemplateRelation — the spawn-graph parent/child edges (Q-TPL W4,
 	// NEW). OPTIONAL / nil-able (NOT in RequireFor): espyna currently ships
 	// only ListByParent (see job_template_relation/deps.go); the view module
@@ -321,15 +325,15 @@ type JobTemplateDocumentTemplateUseCases struct {
 	PublishJobTemplateDocumentTemplate func(context.Context, *sheetbindingpb.PublishJobTemplateDocumentTemplateRequest) (*sheetbindingpb.PublishJobTemplateDocumentTemplateResponse, error)
 }
 
-// SubscriptionGroupDocumentTemplateUseCases is the Section Template lifecycle.
+// SubscriptionGroupDocumentTemplateUseCases is the Subscription Group Document Template lifecycle.
 // CreateUploadPair atomically creates the already-stored artifact and DRAFT
 // binding after both create permissions are rechecked by Espyna.
 type SubscriptionGroupDocumentTemplateUseCases struct {
-	CreateUploadPair                         func(context.Context, *documenttemplatepb.DocumentTemplate, *sectionbindingpb.SubscriptionGroupDocumentTemplate) (*documenttemplatepb.DocumentTemplate, *sectionbindingpb.SubscriptionGroupDocumentTemplate, error)
-	ListSubscriptionGroupDocumentTemplates   func(context.Context, *sectionbindingpb.ListSubscriptionGroupDocumentTemplatesRequest) (*sectionbindingpb.ListSubscriptionGroupDocumentTemplatesResponse, error)
+	CreateUploadPair                         func(context.Context, *documenttemplatepb.DocumentTemplate, *subscriptiongroupdocumenttemplatepb.SubscriptionGroupDocumentTemplate) (*documenttemplatepb.DocumentTemplate, *subscriptiongroupdocumenttemplatepb.SubscriptionGroupDocumentTemplate, error)
+	ListSubscriptionGroupDocumentTemplates   func(context.Context, *subscriptiongroupdocumenttemplatepb.ListSubscriptionGroupDocumentTemplatesRequest) (*subscriptiongroupdocumenttemplatepb.ListSubscriptionGroupDocumentTemplatesResponse, error)
 	DeleteDraftPair                          func(context.Context, string) (*documenttemplatepb.DocumentTemplate, error)
-	DeleteSubscriptionGroupDocumentTemplate  func(context.Context, *sectionbindingpb.DeleteSubscriptionGroupDocumentTemplateRequest) (*sectionbindingpb.DeleteSubscriptionGroupDocumentTemplateResponse, error)
-	PublishSubscriptionGroupDocumentTemplate func(context.Context, *sectionbindingpb.PublishSubscriptionGroupDocumentTemplateRequest) (*sectionbindingpb.PublishSubscriptionGroupDocumentTemplateResponse, error)
+	DeleteSubscriptionGroupDocumentTemplate  func(context.Context, *subscriptiongroupdocumenttemplatepb.DeleteSubscriptionGroupDocumentTemplateRequest) (*subscriptiongroupdocumenttemplatepb.DeleteSubscriptionGroupDocumentTemplateResponse, error)
+	PublishSubscriptionGroupDocumentTemplate func(context.Context, *subscriptiongroupdocumenttemplatepb.PublishSubscriptionGroupDocumentTemplateRequest) (*subscriptiongroupdocumenttemplatepb.PublishSubscriptionGroupDocumentTemplateResponse, error)
 }
 
 // JobTemplatePhaseUseCases — JobTemplatePhase CRUD + ListByJobTemplate.
@@ -358,6 +362,16 @@ type TemplateTaskCriteriaUseCases struct {
 	DeleteTemplateTaskCriteria func(context.Context, *templatetaskcriteriapb.DeleteTemplateTaskCriteriaRequest) (*templatetaskcriteriapb.DeleteTemplateTaskCriteriaResponse, error)
 	ListTemplateTaskCriterias  func(context.Context, *templatetaskcriteriapb.ListTemplateTaskCriteriasRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasResponse, error)
 	ListByTemplateTask         func(context.Context, *templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskRequest) (*templatetaskcriteriapb.ListTemplateTaskCriteriasByTemplateTaskResponse, error)
+}
+
+// TemplateTaskCriteriaRatingDescriptionUseCases — embedded child configuration
+// operations for one template_task_criteria binding.
+type TemplateTaskCriteriaRatingDescriptionUseCases struct {
+	CreateTemplateTaskCriteriaRatingDescription func(context.Context, *templatetaskcriteriaratingdescriptionpb.CreateTemplateTaskCriteriaRatingDescriptionRequest) (*templatetaskcriteriaratingdescriptionpb.CreateTemplateTaskCriteriaRatingDescriptionResponse, error)
+	ReadTemplateTaskCriteriaRatingDescription   func(context.Context, *templatetaskcriteriaratingdescriptionpb.ReadTemplateTaskCriteriaRatingDescriptionRequest) (*templatetaskcriteriaratingdescriptionpb.ReadTemplateTaskCriteriaRatingDescriptionResponse, error)
+	UpdateTemplateTaskCriteriaRatingDescription func(context.Context, *templatetaskcriteriaratingdescriptionpb.UpdateTemplateTaskCriteriaRatingDescriptionRequest) (*templatetaskcriteriaratingdescriptionpb.UpdateTemplateTaskCriteriaRatingDescriptionResponse, error)
+	DeleteTemplateTaskCriteriaRatingDescription func(context.Context, *templatetaskcriteriaratingdescriptionpb.DeleteTemplateTaskCriteriaRatingDescriptionRequest) (*templatetaskcriteriaratingdescriptionpb.DeleteTemplateTaskCriteriaRatingDescriptionResponse, error)
+	ListByTemplateTaskCriteria                  func(context.Context, *templatetaskcriteriaratingdescriptionpb.ListTemplateTaskCriteriaRatingDescriptionsByTemplateTaskCriteriaRequest) (*templatetaskcriteriaratingdescriptionpb.ListTemplateTaskCriteriaRatingDescriptionsByTemplateTaskCriteriaResponse, error)
 }
 
 // JobTemplateRelationUseCases — JobTemplateRelation CRUD + list + the two
@@ -415,7 +429,7 @@ type TaskOutcomeUseCases struct {
 // the read-only + IDOR gates closed.
 type OutcomeMatrixUseCases struct {
 	GetOutcomeMatrix func(context.Context, *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
-	// GetOutcomeSummaryRoster reads the roster-scoped composite (per student:
+	// GetOutcomeSummaryRoster reads the roster-scoped composite (per client:
 	// per-phase composite + stored year-final) for one job_template — espyna's
 	// service/operation/outcome_matrix roster read use case, backing the CSV
 	// "Final" export. OPTIONAL / nil-able: a nil closure 404s a period=final
@@ -435,7 +449,7 @@ type OutcomeMatrixUseCases struct {
 }
 
 // SubscriptionGroupOutcomeExportUseCases is the narrow composite read used by
-// the section download drawer and its explicit CSV/PDF export path.
+// the subscription-group download drawer and its explicit CSV/PDF export path.
 type SubscriptionGroupOutcomeExportUseCases struct {
 	GetSubscriptionGroupOutcomeExport   func(context.Context, *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
 	ListSubscriptionGroupOutcomeLanding func(context.Context, *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
@@ -680,7 +694,7 @@ type PlanUseCases struct {
 }
 
 // SubscriptionGroupWorkspaceUserUseCases — bare list of a group's servicing
-// grants (the *_workspace_user ACCESS family). Backs the report-cards section
+// grants (the *_workspace_user ACCESS family). Backs the report-cards subscription-group
 // header caption (grant-holder names). Optional/nil-safe: nil → the caption
 // falls back to the lyngua'd detail-link label.
 type SubscriptionGroupWorkspaceUserUseCases struct {

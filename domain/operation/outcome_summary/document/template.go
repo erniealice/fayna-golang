@@ -1,4 +1,4 @@
-// Package document renders a student's report card as a .docx through the
+// Package document renders a client's report card as a .docx through the
 // fycha `doctemplate` engine (injected as a GenerateDoc closure — fayna does
 // NOT import fycha). Two template artifacts ship embedded:
 //

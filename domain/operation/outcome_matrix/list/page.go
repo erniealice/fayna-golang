@@ -24,7 +24,6 @@ import (
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
-	outcomecriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
@@ -233,7 +232,6 @@ type ApprovalPhase struct {
 	VerifyConfirm  string
 	PublishConfirm string
 	ReturnConfirm  string
-
 }
 
 // NewView creates the outcome matrix GET view.
@@ -1053,7 +1051,6 @@ func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *ma
 		ap.CanPublish = canPublish && verified && !mixed && !frozen
 		ap.CanReturn = canReturn && !frozen && (mixed || !inProgress)
 
-
 		out = append(out, ap)
 	}
 	return out
@@ -1119,7 +1116,7 @@ func buildColumns(phases []*matrixpb.PhaseColumn, chips map[string]phaseChip, ac
 				l2.Level3 = append(l2.Level3, types.CellGridLevel3{
 					ColumnKey: cr.GetColumnKey(),
 					Label:     criterionLabel(cr),
-					CellInput: buildCellInput(cr.GetCriteria()),
+					CellInput: buildCellInput(cr),
 				})
 			}
 			l1.Level2 = append(l1.Level2, l2)
@@ -1175,10 +1172,11 @@ func phaseEditableFunc(resp *matrixpb.GetOutcomeMatrixResponse) func(colKey stri
 //
 // narrativeBase (the drawer route with {id} already filled; "" ⇒ feature off),
 // criterionLabels (colKey → leaf-column label), and nl (the narrative label
-// templates) drive the per-cell narrative icon: it is emitted ONLY for a cell
-// with a recorded outcome (an outcome_id exists — nothing to annotate otherwise),
-// and its accessible name / dialog title are composed here so the generic pyeza
-// component stays vertical-neutral.
+// templates) drive the per-cell narrative icon: a recorded cell (an outcome_id
+// exists) gets the live drawer URL; an EDITABLE cell also gets the drawer base
+// URL, and with no outcome yet the icon renders dormant until the save ack
+// activates it. Its accessible names / dialog title are composed here so the
+// generic pyeza component stays vertical-neutral.
 func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string, clientNames map[string]clientName, allowEdit func(colKey string) bool, narrativeBase string, criterionLabels map[string]string, nl outcome_matrix.NarrativeLabels) []types.CellGridRow {
 	out := make([]types.CellGridRow, 0, len(rows))
 	for _, r := range rows {
@@ -1205,25 +1203,43 @@ func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string,
 				readOnly = true
 			}
 			gc := types.CellGridCell{
-				OutcomeID:       cell.GetOutcomeId(),
-				JobTaskID:       cell.GetJobTaskId(),
-				CriteriaID:      criteriaIDFromColumnKey(colKey),
-				Value:           cellValue(cell),
-				Editable:        editable,
-				ReadOnly:        readOnly,
-				ReadOnlyTooltip: readOnlyTooltip,
-				TestID:          cellTestID(clientID, colKey, readOnly),
+				OutcomeID:           cell.GetOutcomeId(),
+				JobTaskID:           cell.GetJobTaskId(),
+				CriteriaID:          criteriaIDFromColumnKey(colKey),
+				Value:               cellValue(cell),
+				Editable:            editable,
+				ReadOnly:            readOnly,
+				ReadOnlyTooltip:     readOnlyTooltip,
+				TestID:              cellTestID(clientID, colKey, readOnly),
 			}
-			// Narrative icon: recorded cells only (an outcome exists). The icon's
-			// verb (Add/Edit vs View) mirrors the grid's own editability so the
-			// accessible name agrees with what the server-authoritative drawer will
-			// present; the server re-resolves editability on GET/POST regardless.
-			if narrativeBase != "" && gc.OutcomeID != "" {
-				hasNote := cellHasNarrative(cell)
+			// Narrative icon. A recorded cell (an outcome exists) carries the live
+			// drawer URL. An editable cell also carries the drawer BASE URL; with no
+			// outcome yet it carries ONLY the base: the component renders the icon dormant (hidden) and
+			// cell-grid.js activates it from the save ack's outcomeId, so the icon
+			// appears the moment a score is saved — no reload. The icon's verb
+			// (Add/Edit vs View) mirrors the grid's own editability so the accessible
+			// name agrees with what the server-authoritative drawer will present; the
+			// server re-resolves editability on GET/POST regardless.
+			if narrativeBase != "" && (gc.OutcomeID != "" || (editable && gc.JobTaskID != "")) {
+				hasNote := gc.OutcomeID != "" && cellHasNarrative(cell)
 				column := criterionLabels[colKey]
-				gc.NarrativeURL = narrativeBase + "?outcome_id=" + url.QueryEscape(gc.OutcomeID)
+				if gc.OutcomeID != "" {
+					gc.NarrativeURL = narrativeBase + "?outcome_id=" + url.QueryEscape(gc.OutcomeID)
+				}
+				if editable {
+					// The client re-derives the drawer URL from the base + the save
+					// ack's outcomeId (activating a dormant icon, or re-sleeping it
+					// after a clear).
+					gc.NarrativeBaseURL = narrativeBase
+				}
 				gc.HasNarrative = hasNote
 				gc.NarrativeAria = composeNarrativeAria(nl, name, column, editable, hasNote)
+				if editable {
+					// Both verbs, so the client can flip the accessible name when a
+					// save creates or clears the note.
+					gc.NarrativeAriaAdd = composeNarrativeAria(nl, name, column, true, false)
+					gc.NarrativeAriaEdit = composeNarrativeAria(nl, name, column, true, true)
+				}
 				gc.NarrativeTitle = composeNarrativeTitle(nl, name, column)
 				// Full clientID (not short()): short() collapsed to the shared
 				// tenant/time prefix so every row in a column shared ONE testid (F3).
@@ -1299,8 +1315,9 @@ func replaceNarrativeTokens(tmpl, name, column string) string {
 
 // buildCellInput derives a CellInputDescriptor from the criterion's enforcement
 // contract (the embedded outcome_criteria entity).
-func buildCellInput(oc *outcomecriteriapb.OutcomeCriteria) types.CellInputDescriptor {
+func buildCellInput(cr *matrixpb.CriterionColumn) types.CellInputDescriptor {
 	d := types.CellInputDescriptor{Type: "text"}
+	oc := cr.GetCriteria()
 	if oc == nil {
 		return d
 	}
@@ -1333,6 +1350,7 @@ func buildCellInput(oc *outcomecriteriapb.OutcomeCriteria) types.CellInputDescri
 		d.MaxLength = &v
 	}
 	d.Prompt = oc.GetTextPrompt()
+
 	return d
 }
 

@@ -7,29 +7,29 @@ package outcome_summary
 
 // OutcomeSummaryLabels holds all translatable strings for the outcome summary module.
 type Labels struct {
-	Page    PageLabels    `json:"page"`
-	Buttons ButtonLabels  `json:"buttons"`
-	Columns ColumnLabels  `json:"columns"`
-	Empty   EmptyLabels   `json:"empty"`
-	Detail  DetailLabels  `json:"detail"`
-	Errors  ErrorLabels   `json:"errors"`
-	Landing LandingLabels `json:"landing"`
-	Section SectionLabels `json:"section"`
-	Student PeriodLabels  `json:"student"`
-	// SectionExport holds the consolidated subscription-group drawer/export
+	Page              PageLabels              `json:"page"`
+	Buttons           ButtonLabels            `json:"buttons"`
+	Columns           ColumnLabels            `json:"columns"`
+	Empty             EmptyLabels             `json:"empty"`
+	Detail            DetailLabels            `json:"detail"`
+	Errors            ErrorLabels             `json:"errors"`
+	Landing           LandingLabels           `json:"landing"`
+	SubscriptionGroup SubscriptionGroupLabels `json:"subscription_group"`
+	Client            PeriodLabels            `json:"client_card"`
+	// SubscriptionGroupExport holds the consolidated subscription-group drawer/export
 	// vocabulary. Canonical tags stay generic; vertical wording is a Lyngua value.
-	SectionExport SectionExportLabels `json:"section_export"`
+	SubscriptionGroupExport SubscriptionGroupExportLabels `json:"subscription_group_export"`
 	// TemplateSettings holds the TB3 report-card template management surface
 	// strings. Same snake_case-json-tag rule as LandingLabels — a missing tag
 	// silently falls back to the compiled default.
 	TemplateSettings TemplateSettingsLabels `json:"template_settings"`
-	// SectionTemplateSettings is the separate subscription-group document family.
-	SectionTemplateSettings SectionTemplateSettingsLabels `json:"section_template_settings"`
+	// SubscriptionGroupDocumentTemplateSettings is the separate subscription-group document family.
+	SubscriptionGroupDocumentTemplateSettings SubscriptionGroupDocumentTemplateSettingsLabels `json:"subscription_group_document_template_settings"`
 }
 
-// SectionExportLabels holds the category × period × format drawer and its
+// SubscriptionGroupExportLabels holds the category × period × format drawer and its
 // fail-loud export messages.
-type SectionExportLabels struct {
+type SubscriptionGroupExportLabels struct {
 	DrawerTitle               string `json:"drawer_title"`
 	CategoryLabel             string `json:"category_label"`
 	CategoryPlaceholder       string `json:"category_placeholder"`
@@ -48,10 +48,10 @@ type SectionExportLabels struct {
 	DataUnavailableError      string `json:"data_unavailable_error"`
 }
 
-// SectionTemplateSettingsLabels holds the distinct subscription-group template
+// SubscriptionGroupDocumentTemplateSettingsLabels holds the distinct subscription-group template
 // management surface. Profile identifiers are canonical generic concepts; only
 // their translated values may contain education vocabulary.
-type SectionTemplateSettingsLabels struct {
+type SubscriptionGroupDocumentTemplateSettingsLabels struct {
 	Title                                                 string `json:"title"`
 	Subtitle                                              string `json:"subtitle"`
 	NameColumn                                            string `json:"name_column"`
@@ -131,10 +131,10 @@ type TemplateSettingsLabels struct {
 }
 
 // PeriodLabels holds the view-3 (per-client report card) strings, grouped by
-// grading period. Same snake_case-json-tag rule as LandingLabels/SectionLabels —
+// grading period. Same snake_case-json-tag rule as LandingLabels/SubscriptionGroupLabels —
 // a per-tier override silently falls back to the compiled default without the
-// tag. (Renamed from StudentLabels{Semester1,Semester2}: generic identifiers,
-// vertical wording — "Semester 1/2", "student" — lives in lyngua values only.)
+// tag. (Renamed from ClientLabels{Semester1,Semester2}: generic identifiers,
+// vertical wording — "Semester 1/2", "client" — lives in lyngua values only.)
 type PeriodLabels struct {
 	Title          string `json:"title"`
 	Subtitle       string `json:"subtitle"`
@@ -145,8 +145,8 @@ type PeriodLabels struct {
 	ProgressColumn string `json:"progress_column"`
 	FinalColumn    string `json:"final_column"`
 	ViewAction     string `json:"view_action"`
-	// DownloadAction labels the per-student report-card PDF download link (W5,
-	// ?format=pdf). Siblings LandingLabels/SectionLabels already carry a
+	// DownloadAction labels the per-client report-card PDF download link (W5,
+	// ?format=pdf). Siblings LandingLabels/SubscriptionGroupLabels already carry a
 	// DownloadAction (their CSV export); PeriodLabels lacked one. Generic
 	// identifier — the vertical wording lives in the lyngua value.
 	DownloadAction string `json:"download_action"`
@@ -178,13 +178,13 @@ type LandingLabels struct {
 	TabsAriaLabel   string `json:"tabs_aria_label"`
 	InactiveSuffix  string `json:"inactive_suffix"`
 	// CellViewAction is the aria-label FRAME for each category cell's eye link
-	// (R9 W-A2). It MUST name BOTH nouns — the {category} and {section}
+	// (R9 W-A2). It MUST name BOTH nouns — the {category} and {subscription_group}
 	// placeholders are substituted from DATA at render (job_category.name /
 	// subscription_group.name) so the link's accessible name carries both
 	// dimensions (pyeza renders the first cell as a plain <td>, not a row
-	// header, so the section is NOT automatically in the accessible name). A
-	// frame missing either placeholder falls back to the typed cell's default
-	// "{category} — {section}" composition (fail-safe a11y).
+	// header, so the subscription group is NOT automatically in the accessible
+	// name). A frame missing either placeholder falls back to the typed cell's
+	// default "{category} — {subscription_group}" composition (fail-safe a11y).
 	CellViewAction string `json:"cell_view_action"`
 	// UncategorizedColumn heads the single NULL-category bucket column (plan
 	// §3.0): templates whose effective category is NULL are never dropped and
@@ -213,16 +213,16 @@ type ApprovalStatusChipLabels struct {
 	Mixed      string `json:"mixed"` // attention/mixed overlay (R7 approval.mixed)
 }
 
-// SectionLabels holds the view-2 (per-section report-card grid) strings. Same
+// SubscriptionGroupLabels holds the view-2 (per-group report-card grid) strings. Same
 // snake_case-json-tag rule as LandingLabels.
-type SectionLabels struct {
+type SubscriptionGroupLabels struct {
 	Title             string `json:"title"`
 	ClientColumn      string `json:"client_column"`
 	RatingEmpty       string `json:"rating_empty"`
 	DownloadAction    string `json:"download_action"`
 	DetailLink        string `json:"detail_link"`
 	NotComputedBanner string `json:"not_computed_banner"`
-	// CategoryTabsAriaLabel is the aria-label on the section's ?jc= category
+	// CategoryTabsAriaLabel is the aria-label on the group's ?jc= category
 	// tabstrip <nav> (R9 W-A3). Without it the strip falls back to the pyeza
 	// tabs component's generic "Tabs" default (harmless but generic). Generic
 	// identifier — the vertical wording lives only in the lyngua value. The tab
@@ -340,8 +340,8 @@ func DefaultLabels() Labels {
 			TabsAriaLabel:   "Schedules",
 			InactiveSuffix:  "(inactive)",
 			// Both placeholders are DATA-substituted at render; the frame must
-			// name category AND section (codex §4 pt 8).
-			CellViewAction:      "View {category} for {section}",
+			// name category AND subscription group (codex §4 pt 8).
+			CellViewAction:      "View {category} for {subscription_group}",
 			UncategorizedColumn: "Uncategorized",
 			// Phase-B chip vocabulary — reuses R7's approval ladder wording
 			// verbatim (outcome_matrix approval.status.* / approval.mixed).
@@ -353,7 +353,7 @@ func DefaultLabels() Labels {
 				Mixed:      "Attention — mixed",
 			},
 		},
-		Section: SectionLabels{
+		SubscriptionGroup: SubscriptionGroupLabels{
 			Title:                 "Group outcomes",
 			ClientColumn:          "Client",
 			RatingEmpty:           "—",
@@ -362,7 +362,7 @@ func DefaultLabels() Labels {
 			NotComputedBanner:     "Final outcomes have not been computed yet.",
 			CategoryTabsAriaLabel: "Categories",
 		},
-		SectionExport: SectionExportLabels{
+		SubscriptionGroupExport: SubscriptionGroupExportLabels{
 			DrawerTitle:               "Download Group Outcomes",
 			CategoryLabel:             "Category",
 			CategoryPlaceholder:       "Select a category",
@@ -380,7 +380,7 @@ func DefaultLabels() Labels {
 			GroupingConfigError:       "Outcome export grouping is not configured correctly.",
 			DataUnavailableError:      "The outcome export data is temporarily unavailable.",
 		},
-		Student: PeriodLabels{
+		Client: PeriodLabels{
 			Title:             "Client outcomes",
 			Subtitle:          "Outcomes by grading period",
 			SubjectColumn:     "Item",
@@ -425,7 +425,7 @@ func DefaultLabels() Labels {
 			InvalidFile:        "Only .docx files are accepted.",
 			UploadFailed:       "Failed to upload template.",
 		},
-		SectionTemplateSettings: SectionTemplateSettingsLabels{
+		SubscriptionGroupDocumentTemplateSettings: SubscriptionGroupDocumentTemplateSettingsLabels{
 			Title:          "Group Templates",
 			Subtitle:       "Manage templates used to print consolidated group outcomes",
 			NameColumn:     "Template",

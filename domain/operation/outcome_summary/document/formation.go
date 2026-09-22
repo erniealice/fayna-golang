@@ -53,7 +53,7 @@ type catInfo struct {
 }
 
 // collectFormationGroups builds the Formation-page category blocks from the
-// student's NON-academic categorized jobs (the deportment complement of the
+// client's NON-academic categorized jobs (the deportment complement of the
 // academic subject set, partitioned by the caller in collectCard). It renders one
 // table per job_category, titled by the category's display name, ordered by the
 // category's sort_order (academic=10 < subject_deportment=20 < homeroom_deportment

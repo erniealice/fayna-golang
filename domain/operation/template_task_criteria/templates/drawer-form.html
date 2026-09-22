@@ -2,8 +2,9 @@
 Template task criteria drawer form — loaded into #sheetContent via HTMX.
 Used by both Add and Edit actions.
 Data: .JobTemplateTaskID, .TaskOptions, .OutcomeCriteriaID, .CriteriaOptions,
-      .SequenceOrder, .Active, .ID, .Context, .TemplateID, .FormAction,
-      .IsEdit, .CommonLabels, .Labels
+      .SequenceOrder, .Active, .RatingMode, .RatingModeOptions,
+      .RatingScaleID, .RatingScaleOptions, .RatingDescriptionRows, .ID,
+      .Context, .TemplateID, .FormAction, .IsEdit, .CommonLabels, .Labels
 
 Context discriminator (see ui-drawer-form-template-anatomy): ContextTemplate
 opens from a job_template detail Standards tab (?job_template_id=) — the Job
@@ -97,8 +98,76 @@ template to scope a picker against.
             </div>
         </div>
         {{end}}
+
+        {{/* --- Binding-level rating behavior --- */}}
+        <div class="form-row single ttc-rating-configuration" data-testid="template-task-criteria-rating-configuration">
+            {{template "form-group" (dict
+                "Type"     "select"
+                "Name"     "rating_mode"
+                "ID"       "template-task-criteria-rating-mode"
+                "Label"    .Labels.Form.RatingMode
+                "Value"    .RatingMode
+                "Options"  .RatingModeOptions
+                "Info"     .Labels.Form.RatingModeInfo
+                "TestId"   "template-task-criteria-rating-mode"
+            )}}
+            <div id="template-task-criteria-rating-settings" data-rating-settings{{if ne .RatingMode "RATING_MODE_NUMERIC_WITH_DESCRIPTION"}} hidden{{end}}>
+                {{template "form-group" (dict
+                    "Type"     "select"
+                    "Name"     "rating_scale_id"
+                    "ID"       "template-task-criteria-rating-scale"
+                    "Label"    .Labels.Form.RatingScaleID
+                    "Value"    .RatingScaleID
+                    "Options"  .RatingScaleOptions
+                    "Info"     .Labels.Form.RatingScaleIDInfo
+                    "TestId"   "template-task-criteria-rating-scale"
+                )}}
+
+                <div class="ttc-rating-descriptions" data-rating-descriptions data-testid="template-task-criteria-rating-descriptions">
+                    <div class="form-label">{{.Labels.Form.RatingDescriptions}}</div>
+                    <p class="form-hint">{{.Labels.Form.RatingDescriptionInfo}}</p>
+                    {{range .RatingDescriptionRows}}
+                    <div class="ttc-rating-description-row" data-rating-scale-id="{{.ScaleID}}" data-rating-description-row>
+                        <input type="hidden" name="rating_description_band_id" value="{{.BandID}}">
+                        <input type="hidden" name="rating_description_scale_id" value="{{.ScaleID}}">
+                        {{template "form-group" (dict
+                            "Type"    "textarea"
+                            "Name"    "rating_description_text"
+                            "ID"      (printf "template-task-criteria-rating-description-%s" .BandID)
+                            "Label"   (printf "%s — %s" .BandLabel .InputLabel)
+                            "Value"   .Description
+                            "Rows"    2
+                            "MaxLength" 500
+                            "TestId"  (printf "template-task-criteria-rating-description-%s" .BandID)
+                        )}}
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
     </div>
 
     {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
 </form>
+
+<script>
+(function () {
+    var form = document.currentScript && document.currentScript.previousElementSibling;
+    if (!form || !form.matches('form[data-testid="template-task-criteria-form"]')) return;
+    var mode = form.querySelector('#template-task-criteria-rating-mode');
+    var scale = form.querySelector('#template-task-criteria-rating-scale');
+    var settings = form.querySelector('[data-rating-settings]');
+    if (!mode || !scale || !settings) return;
+    function syncRatingConfiguration() {
+        var enabled = mode.value === 'RATING_MODE_NUMERIC_WITH_DESCRIPTION';
+        settings.hidden = !enabled;
+        settings.querySelectorAll('[data-rating-description-row]').forEach(function (row) {
+            row.hidden = !enabled || row.getAttribute('data-rating-scale-id') !== scale.value;
+        });
+    }
+    mode.addEventListener('change', syncRatingConfiguration);
+    scale.addEventListener('change', syncRatingConfiguration);
+    syncRatingConfiguration();
+})();
+</script>
 {{end}}

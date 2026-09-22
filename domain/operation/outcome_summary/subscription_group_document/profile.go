@@ -1,7 +1,7 @@
-// Package section_document owns generic render-profile contracts for
+// Package subscription_group_document owns generic render-profile contracts for
 // subscription-group outcome documents. It contains no education vocabulary;
 // apps map their trusted job-category codes to these canonical profiles.
-package section_document
+package subscription_group_document
 
 import bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 

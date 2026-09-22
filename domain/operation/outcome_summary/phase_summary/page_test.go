@@ -12,11 +12,11 @@ import (
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 )
 
-// FAY-7: the phase outcome summary detail page (reached from the section
+// FAY-7: the phase outcome summary detail page (reached from the group
 // grid's /jobs/detail/{id}/phase/{phase_id}/summary link) had no Layer-3 read
 // gate. These pin the fail-closed / granted-principal behavior for the
 // job_outcome_summary:list ∧ read capability — the same gate used by the sibling
-// outcome_summary views (list, client_card, section, template_settings) and
+// outcome_summary views (list, client_card, group, template_settings) and
 // its job_summary sibling.
 
 func phaseSummaryFn(s *phasesumpb.PhaseOutcomeSummary) func(context.Context, *phasesumpb.GetPhaseOutcomeSummaryByJobPhaseRequest) (*phasesumpb.GetPhaseOutcomeSummaryByJobPhaseResponse, error) {

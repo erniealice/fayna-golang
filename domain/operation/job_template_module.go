@@ -38,10 +38,13 @@ type JobTemplateModuleDeps struct {
 	// result in tabs with no CTA buttons (read-only view).
 	PhaseRoutes JobTemplatePhaseRoutes
 	TaskRoutes  JobTemplateTaskRoutes
-	// CriteriaRoutes supplies Add/Delete URLs for the Standards tab's
-	// "+ Add Standard" CTA and per-row remove actions. Optional — a zero-value
+	// CriteriaRoutes supplies Add/Edit/Delete URLs for the Standards tab's
+	// "+ Add Standard" CTA and per-row actions. Optional — a zero-value
 	// struct results in a read-only Standards tab.
 	CriteriaRoutes ttcpkg.Routes
+	// CriteriaLabels supplies translated labels for Standards row actions.
+	// Optional — the detail view falls back to the entity defaults.
+	CriteriaLabels ttcpkg.Labels
 	// RelationRoutes supplies Add/Delete URLs for the Spawn Graph tab's
 	// "+ Add Relation" CTA and per-row remove actions. Optional — a zero-value
 	// struct results in a read-only Spawn Graph tab.
@@ -113,6 +116,7 @@ func NewJobTemplateModule(deps *JobTemplateModuleDeps) *JobTemplateModule {
 		PhaseRoutes:             deps.PhaseRoutes,
 		TaskRoutes:              deps.TaskRoutes,
 		CriteriaRoutes:          deps.CriteriaRoutes,
+		CriteriaLabels:          deps.CriteriaLabels,
 		RelationRoutes:          deps.RelationRoutes,
 		ReadJobTemplate:         deps.ReadJobTemplate,
 		ListPhasesByJobTemplate: deps.ListPhasesByJobTemplate,

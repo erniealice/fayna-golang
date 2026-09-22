@@ -1,11 +1,11 @@
-// export.go — CSV download for the per-section report-card grid. Serves the
-// SAME grid buildSectionTable composes for the HTML view (identical band +
+// export.go — CSV download for the per-group report-card grid. Serves the
+// SAME grid buildGroupTable composes for the HTML view (identical band +
 // row order, identical cell text via TableCell.CSVValue), either for the
-// whole section or narrowed to one client row (?id=<client id> — the table
+// whole group or narrowed to one client row (?id=<client id> — the table
 // download action's JS appends the row id). Registered as a raw handler
 // wrapped by the ViewAdapter (WrapHandler), so view.GetUserPermissions sees
 // the same RBAC context as the HTML view — the same Layer-3 gate applies.
-package section
+package subscription_group
 
 import (
 	"bytes"
@@ -17,12 +17,11 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
-	sectiondoc "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/section_document"
+	subscriptiongroupdoc "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/subscription_group_document"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
@@ -47,7 +46,7 @@ func exportSkipColumns(columns []types.TableColumn) map[int]bool {
 	return skip
 }
 
-// NewExportHandler serves both the frozen legacy section-grid CSV path and the
+// NewExportHandler serves both the frozen legacy group-grid CSV path and the
 // explicit category × one-period drawer path. Branching happens before reads:
 // no new selectors stays byte-compatible; legacy `jc` mixed with any new
 // selector is rejected rather than guessed.
@@ -55,8 +54,8 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		perms := view.GetUserPermissions(ctx)
-		sectionID := strings.TrimSpace(r.PathValue("id"))
-		if sectionID == "" {
+		groupID := strings.TrimSpace(r.PathValue("id"))
+		if groupID == "" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -68,7 +67,7 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
-			serveLegacySectionCSV(w, r, deps, sectionID)
+			serveLegacySubscriptionGroupCSV(w, r, deps, groupID)
 			return
 		}
 		if deps == nil {
@@ -79,7 +78,7 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		if !deps.Options.SectionExportEnabled() {
+		if !deps.Options.SubscriptionGroupExportEnabled() {
 			http.NotFound(w, r)
 			return
 		}
@@ -91,7 +90,7 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 		format := strings.TrimSpace(query.Get("format"))
 		categoryID := strings.TrimSpace(query.Get("job_category_id"))
 		period := strings.TrimSpace(query.Get("period"))
-		req, ok := explicitExportRequest(sectionID, categoryID, period)
+		req, ok := explicitExportRequest(groupID, categoryID, period)
 		if !ok || (format != "csv" && format != "pdf") {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
@@ -99,7 +98,7 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 
 		_, _, bandConfigured, bandErr := deps.Options.ExportRowBandConfig()
 		if bandErr != nil {
-			http.Error(w, deps.Labels.SectionExport.GroupingConfigError, http.StatusServiceUnavailable)
+			http.Error(w, deps.Labels.SubscriptionGroupExport.GroupingConfigError, http.StatusServiceUnavailable)
 			return
 		}
 		if bandConfigured && (!perms.Can("attribute", "list") || !perms.Can("client_attribute", "list")) {
@@ -107,12 +106,12 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		if deps.GetSubscriptionGroupOutcomeExport == nil {
-			http.Error(w, deps.Labels.SectionExport.DataUnavailableError, http.StatusServiceUnavailable)
+			http.Error(w, deps.Labels.SubscriptionGroupExport.DataUnavailableError, http.StatusServiceUnavailable)
 			return
 		}
 
 		resp, err := deps.GetSubscriptionGroupOutcomeExport(ctx, req)
-		if resp != nil && (resp.GetContext() == nil || resp.GetContext().GetSubscriptionGroupId() != sectionID) {
+		if resp != nil && (resp.GetContext() == nil || resp.GetContext().GetSubscriptionGroupId() != groupID) {
 			// Missing, foreign, and unauthorized groups have the same shape.
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -133,7 +132,7 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 				http.Error(w, "bad request", http.StatusBadRequest)
 				return
 			}
-			http.Error(w, deps.Labels.SectionExport.DataUnavailableError, http.StatusServiceUnavailable)
+			http.Error(w, deps.Labels.SubscriptionGroupExport.DataUnavailableError, http.StatusServiceUnavailable)
 			return
 		}
 		if !explicitSelectionOffered(resp, categoryID, period) {
@@ -149,7 +148,7 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		if len(resp.GetJobTemplateColumns()) == 0 || len(resp.GetClientRows()) == 0 {
-			http.Error(w, deps.Labels.Section.NotComputedBanner, http.StatusNotFound)
+			http.Error(w, deps.Labels.SubscriptionGroup.NotComputedBanner, http.StatusNotFound)
 			return
 		}
 
@@ -157,7 +156,7 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 		if err != nil {
 			reason, expectedSlots, actualSlots, canonicalOrder := explicitMatrixFailureContext(err)
 			logExplicitExportFailure("normalize", reason, expectedSlots, actualSlots, canonicalOrder)
-			http.Error(w, deps.Labels.SectionExport.DataUnavailableError, explicitMatrixFailureStatus(err))
+			http.Error(w, deps.Labels.SubscriptionGroupExport.DataUnavailableError, explicitMatrixFailureStatus(err))
 			return
 		}
 		if format == "pdf" {
@@ -177,26 +176,26 @@ func writeExplicitPDF(ctx context.Context, w http.ResponseWriter, deps *Deps, ma
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	profile, mapped := deps.Options.SectionExport.ProfileForCategoryCode(category.GetCode())
+	profile, mapped := deps.Options.SubscriptionGroupExport.ProfileForCategoryCode(category.GetCode())
 	if !mapped {
 		logExplicitExportFailure("profile", "missing_profile", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.NoProfileError, http.StatusBadRequest)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.NoProfileError, http.StatusBadRequest)
 		return
 	}
-	registered, supported := sectiondoc.LookupProfile(profile)
+	registered, supported := subscriptiongroupdoc.LookupProfile(profile)
 	if !supported {
 		logExplicitExportFailure("profile", "profile_unavailable", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.IncompatibleTemplateError, http.StatusBadRequest)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusBadRequest)
 		return
 	}
 	if registered.JobTemplateSlots != len(matrix.columns) || !canonicalOrder {
 		logExplicitExportFailure("profile", "slot_count_or_order_mismatch", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.IncompatibleTemplateError, http.StatusBadRequest)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusBadRequest)
 		return
 	}
-	if deps.ResolveSectionTemplate == nil || deps.GeneratePDF == nil {
+	if deps.ResolveSubscriptionGroupDocumentTemplate == nil || deps.GeneratePDF == nil {
 		logExplicitExportFailure("profile", "template_dependency_unavailable", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.NoTemplateError, http.StatusServiceUnavailable)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.NoTemplateError, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -207,62 +206,62 @@ func writeExplicitPDF(ctx context.Context, w http.ResponseWriter, deps *Deps, ma
 		ExpectedPlanId:          cloneOptionalString(matrix.context.PlanId),
 		ExpectedPriceScheduleId: cloneOptionalString(matrix.context.PriceScheduleId),
 	}
-	resolved, err := deps.ResolveSectionTemplate(ctx, request)
+	resolved, err := deps.ResolveSubscriptionGroupDocumentTemplate(ctx, request)
 	if err != nil {
 		logExplicitExportFailure("profile", "template_resolve_failed", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.DataUnavailableError, http.StatusServiceUnavailable)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.DataUnavailableError, http.StatusServiceUnavailable)
 		return
 	}
 	if resolved == nil || len(resolved.Bytes) == 0 {
 		logExplicitExportFailure("profile", "template_not_found", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.NoTemplateError, http.StatusServiceUnavailable)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.NoTemplateError, http.StatusServiceUnavailable)
 		return
 	}
 	if resolved.RenderProfile != profile || resolved.JobCategoryID != categoryID {
 		logExplicitExportFailure("profile", "resolver_profile_category_mismatch", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.IncompatibleTemplateError, http.StatusBadRequest)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusBadRequest)
 		return
 	}
-	if err := sectiondoc.ValidateTemplate(profile, resolved.Bytes); err != nil {
+	if err := subscriptiongroupdoc.ValidateTemplate(profile, resolved.Bytes); err != nil {
 		logExplicitExportFailure("profile", "invalid_template_manifest", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.IncompatibleTemplateError, http.StatusServiceUnavailable)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusServiceUnavailable)
 		return
 	}
 
-	data, err := sectiondoc.BuildData(profile, explicitDocumentMatrix(deps, matrix, category, period))
+	data, err := subscriptiongroupdoc.BuildData(profile, explicitDocumentMatrix(deps, matrix, category, period))
 	if err != nil {
 		logExplicitExportFailure("profile", "manifest_incompatible", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.IncompatibleTemplateError, http.StatusServiceUnavailable)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusServiceUnavailable)
 		return
 	}
 	pdf, err := deps.GeneratePDF(resolved.Bytes, data)
 	if err != nil {
 		status := http.StatusInternalServerError
 		switch {
-		case isSectionStyleContractError(err):
+		case isSubscriptionGroupStyleContractError(err):
 			logExplicitExportFailure("render", "style_contract", len(matrix.columns), len(matrix.rows), canonicalOrder)
 			status = http.StatusServiceUnavailable
-		case isSectionLibreOfficeUnavailable(err):
+		case isSubscriptionGroupLibreOfficeUnavailable(err):
 			logExplicitExportFailure("render", "libreoffice_unavailable", len(matrix.columns), len(matrix.rows), canonicalOrder)
 			status = http.StatusServiceUnavailable
 		default:
 			logExplicitExportFailure("render", "unexpected", len(matrix.columns), len(matrix.rows), canonicalOrder)
 		}
-		http.Error(w, deps.Labels.SectionExport.DataUnavailableError, status)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.DataUnavailableError, status)
 		return
 	}
 	if len(pdf) == 0 || !bytes.HasPrefix(pdf, []byte("%PDF-")) {
 		logExplicitExportFailure("render", "invalid_pdf", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SectionExport.DataUnavailableError, http.StatusInternalServerError)
+		http.Error(w, deps.Labels.SubscriptionGroupExport.DataUnavailableError, http.StatusInternalServerError)
 		return
 	}
 
-	filename := slug(deps.Labels.Section.Title) + "-" + slug(matrix.context.GetSubscriptionGroupName()) + "-" + slug(period) + ".pdf"
+	filename := slug(deps.Labels.SubscriptionGroup.Title) + "-" + slug(matrix.context.GetSubscriptionGroupName()) + "-" + slug(period) + ".pdf"
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	if _, err := w.Write(pdf); err != nil {
-		log.Printf("section explicit PDF: write response: %v", err)
+		log.Printf("group explicit PDF: write response: %v", err)
 	}
 }
 
@@ -306,28 +305,28 @@ func explicitColumnName(column *exportpb.JobTemplateColumn) string {
 	return column.GetJobTemplateId()
 }
 
-func explicitDocumentMatrix(deps *Deps, matrix *explicitMatrix, category *exportpb.JobCategoryOption, period string) sectiondoc.Matrix {
-	result := sectiondoc.Matrix{
+func explicitDocumentMatrix(deps *Deps, matrix *explicitMatrix, category *exportpb.JobCategoryOption, period string) subscriptiongroupdoc.Matrix {
+	result := subscriptiongroupdoc.Matrix{
 		JobCategoryID:         category.GetJobCategoryId(),
 		SheetTitle:            categoryLabel(deps.Labels, category),
 		SubscriptionGroupName: matrix.context.GetSubscriptionGroupName(),
 		PriceScheduleName:     matrix.context.GetPriceScheduleName(),
 		JobTemplatePhaseName:  explicitPeriodName(deps.Labels, category, period),
-		ClientNameLabel:       deps.Labels.Section.ClientColumn,
+		ClientNameLabel:       deps.Labels.SubscriptionGroup.ClientColumn,
 	}
 	for _, column := range matrix.columns {
-		result.Columns = append(result.Columns, sectiondoc.Column{JobTemplateID: column.GetJobTemplateId(), DisplayName: explicitColumnName(column)})
+		result.Columns = append(result.Columns, subscriptiongroupdoc.Column{JobTemplateID: column.GetJobTemplateId(), DisplayName: explicitColumnName(column)})
 	}
 	for _, row := range matrix.rows {
-		documentRow := sectiondoc.Row{Kind: sectiondoc.RowClient, Label: row.name}
+		documentRow := subscriptiongroupdoc.Row{Kind: subscriptiongroupdoc.RowClient, Label: row.name}
 		switch {
 		case row.band:
-			documentRow.Kind = sectiondoc.RowBand
+			documentRow.Kind = subscriptiongroupdoc.RowBand
 		case row.blank:
-			documentRow.Kind = sectiondoc.RowBlank
+			documentRow.Kind = subscriptiongroupdoc.RowBlank
 		default:
 			for index, column := range matrix.columns {
-				documentRow.Cells = append(documentRow.Cells, sectiondoc.Cell{JobTemplateID: column.GetJobTemplateId(), Value: row.values[index]})
+				documentRow.Cells = append(documentRow.Cells, subscriptiongroupdoc.Cell{JobTemplateID: column.GetJobTemplateId(), Value: row.values[index]})
 			}
 		}
 		result.Rows = append(result.Rows, documentRow)
@@ -337,7 +336,7 @@ func explicitDocumentMatrix(deps *Deps, matrix *explicitMatrix, category *export
 
 func explicitPeriodName(labels outcome_summary.Labels, category *exportpb.JobCategoryOption, period string) string {
 	if period == "final" {
-		return labels.SectionExport.PeriodFinal
+		return labels.SubscriptionGroupExport.PeriodFinal
 	}
 	code, _ := strings.CutPrefix(period, "phase:")
 	for _, phase := range category.GetJobTemplatePhases() {
@@ -362,30 +361,30 @@ func cloneOptionalString(value *string) *string {
 type sectionStyleContractError interface{ StyleContractError() bool }
 type sectionLibreOfficeUnavailable interface{ LibreOfficeUnavailable() bool }
 
-func isSectionStyleContractError(err error) bool {
+func isSubscriptionGroupStyleContractError(err error) bool {
 	var marker sectionStyleContractError
 	return errors.As(err, &marker) && marker.StyleContractError()
 }
 
-func isSectionLibreOfficeUnavailable(err error) bool {
+func isSubscriptionGroupLibreOfficeUnavailable(err error) bool {
 	var marker sectionLibreOfficeUnavailable
 	return errors.As(err, &marker) && marker.LibreOfficeUnavailable()
 }
 
-func serveLegacySectionCSV(w http.ResponseWriter, r *http.Request, deps *Deps, sectionID string) {
+func serveLegacySubscriptionGroupCSV(w http.ResponseWriter, r *http.Request, deps *Deps, groupID string) {
 	ctx := r.Context()
-	group, table, _ := buildSectionTable(ctx, deps, sectionID, r.URL.Query().Get("jc"))
+	group, table, _ := buildGroupTable(ctx, deps, groupID, r.URL.Query().Get("jc"))
 	if group == nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	if table == nil {
-		http.Error(w, deps.Labels.Section.NotComputedBanner, http.StatusNotFound)
+		http.Error(w, deps.Labels.SubscriptionGroup.NotComputedBanner, http.StatusNotFound)
 		return
 	}
 
 	rows := allRows(table)
-	prefix := slug(deps.Labels.Section.Title)
+	prefix := slug(deps.Labels.SubscriptionGroup.Title)
 	if prefix == "none" {
 		prefix = "outcomes"
 	}
@@ -432,12 +431,12 @@ func serveLegacySectionCSV(w http.ResponseWriter, r *http.Request, deps *Deps, s
 	cw.Flush()
 }
 
-func explicitExportRequest(sectionID, categoryID, period string) (*exportpb.GetSubscriptionGroupOutcomeExportRequest, bool) {
-	if sectionID == "" || categoryID == "" || period == "" {
+func explicitExportRequest(groupID, categoryID, period string) (*exportpb.GetSubscriptionGroupOutcomeExportRequest, bool) {
+	if groupID == "" || categoryID == "" || period == "" {
 		return nil, false
 	}
 	req := &exportpb.GetSubscriptionGroupOutcomeExportRequest{
-		SubscriptionGroupId: sectionID,
+		SubscriptionGroupId: groupID,
 		JobCategoryId:       &categoryID,
 	}
 	if period == "final" {
@@ -491,6 +490,7 @@ type explicitMatrix struct {
 type explicitRow struct {
 	clientID, name, firstName, lastName, group string
 	values                                     []string
+	cells                                      map[string]*exportpb.SubscriptionGroupOutcomeCell
 	band, blank                                bool
 }
 
@@ -552,7 +552,7 @@ func explicitMatrixFailureContext(err error) (string, int, int, bool) {
 }
 
 func logExplicitExportFailure(stage, reason string, expectedSlots, actualSlots int, canonicalOrder bool) {
-	log.Printf("section explicit export unavailable: stage=%s reason=%s expected_slots=%d actual_slots=%d canonical_order=%t", stage, reason, expectedSlots, actualSlots, canonicalOrder)
+	log.Printf("group explicit export unavailable: stage=%s reason=%s expected_slots=%d actual_slots=%d canonical_order=%t", stage, reason, expectedSlots, actualSlots, canonicalOrder)
 }
 
 func explicitMatrixFailureStatus(err error) int {
@@ -615,22 +615,10 @@ func normalizeExplicitMatrix(ctx context.Context, deps *Deps, resp *exportpb.Get
 			row.name = strings.TrimSpace(strings.Join([]string{row.firstName, row.lastName}, " "))
 		}
 		row.values = make([]string, 0, len(resp.GetJobTemplateColumns()))
+		row.cells = byID
 		for _, column := range resp.GetJobTemplateColumns() {
 			cell := byID[column.GetJobTemplateId()]
-			value := ""
-			if cell.ScaledLabel != nil {
-				value = strings.TrimSpace(cell.GetScaledLabel())
-			}
-			if value == "" && cell.ScaledScore != nil {
-				value = strconv.FormatFloat(cell.GetScaledScore(), 'f', -1, 64)
-			}
-			evidence := cell.GetEnrollmentEvidence()
-			if outcome_summary.IsNonEnrolledCell(outcome_summary.EnrollmentEvidence{
-				HasMarks: evidence.GetHasMarks(), HasPositiveMark: evidence.GetHasPositiveMark(),
-			}, value) {
-				value = ""
-			}
-			row.values = append(row.values, value)
+			row.values = append(row.values, outcome_summary.ExportCellValue(cell, ""))
 		}
 		rows = append(rows, row)
 	}
@@ -796,7 +784,7 @@ func explicitSortValue(row explicitRow, field string) string {
 }
 
 func writeExplicitCSV(w http.ResponseWriter, deps *Deps, matrix *explicitMatrix, period string) {
-	prefix := slug(deps.Labels.Section.Title)
+	prefix := slug(deps.Labels.SubscriptionGroup.Title)
 	if prefix == "none" {
 		prefix = "outcomes"
 	}
@@ -805,7 +793,7 @@ func writeExplicitCSV(w http.ResponseWriter, deps *Deps, matrix *explicitMatrix,
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`.csv"`)
 	cw := csv.NewWriter(w)
 	header := make([]string, 0, len(matrix.columns)+1)
-	header = append(header, csvSafe(deps.Labels.Section.ClientColumn))
+	header = append(header, csvSafe(deps.Labels.SubscriptionGroup.ClientColumn))
 	for _, column := range matrix.columns {
 		name := strings.TrimSpace(column.GetDisplayName())
 		if name == "" {
@@ -814,7 +802,7 @@ func writeExplicitCSV(w http.ResponseWriter, deps *Deps, matrix *explicitMatrix,
 		header = append(header, csvSafe(name))
 	}
 	if err := cw.Write(header); err != nil {
-		log.Printf("section explicit export: write header: %v", err)
+		log.Printf("group explicit export: write header: %v", err)
 		return
 	}
 	for _, row := range matrix.rows {
@@ -826,13 +814,13 @@ func writeExplicitCSV(w http.ResponseWriter, deps *Deps, matrix *explicitMatrix,
 			}
 		}
 		if err := cw.Write(record); err != nil {
-			log.Printf("section explicit export: write row: %v", err)
+			log.Printf("group explicit export: write row: %v", err)
 			return
 		}
 	}
 	cw.Flush()
 	if err := cw.Error(); err != nil {
-		log.Printf("section explicit export: flush: %v", err)
+		log.Printf("group explicit export: flush: %v", err)
 	}
 }
 

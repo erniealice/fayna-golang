@@ -74,11 +74,11 @@ func faynaRouteContractCases() []routeContractCase {
 			routes:   operation.DefaultOutcomeSummaryRoutes(),
 			routeMap: operation.DefaultOutcomeSummaryRoutes().RouteMap(),
 			optionalURLs: map[string]bool{
-				"SectionDownloadDrawerURL":   true,
-				"SectionTemplateSettingsURL": true,
-				"SectionTemplateUploadURL":   true,
-				"SectionTemplatePublishURL":  true,
-				"SectionTemplateDeleteURL":   true,
+				"SubscriptionGroupDownloadDrawerURL":           true,
+				"SubscriptionGroupDocumentTemplateSettingsURL": true,
+				"SubscriptionGroupDocumentTemplateUploadURL":   true,
+				"SubscriptionGroupDocumentTemplatePublishURL":  true,
+				"SubscriptionGroupDocumentTemplateDeleteURL":   true,
 			},
 		},
 		{
@@ -155,11 +155,11 @@ func assertRouteMapContract(t *testing.T, routes any, routeMap map[string]string
 func TestOutcomeSummaryRoutes_OptionalAppRoutesAreConditional(t *testing.T) {
 	routes := operation.DefaultOutcomeSummaryRoutes()
 	optional := map[string]string{
-		"outcome_summary.section_download_drawer":   "/action/outcomes/summaries/section/{id}/download",
-		"outcome_summary.section_template_settings": "/outcomes/summaries/section-templates",
-		"outcome_summary.section_template_upload":   "/action/outcomes/summaries/section-templates/upload",
-		"outcome_summary.section_template_publish":  "/action/outcomes/summaries/section-templates/publish",
-		"outcome_summary.section_template_delete":   "/action/outcomes/summaries/section-templates/delete",
+		"outcome_summary.subscription_group_download_drawer":            "/action/outcomes/summaries/subscription-group/{id}/download",
+		"outcome_summary.subscription_group_document_template_settings": "/outcomes/summaries/subscription-group-templates",
+		"outcome_summary.subscription_group_document_template_upload":   "/action/outcomes/summaries/subscription-group-templates/upload",
+		"outcome_summary.subscription_group_document_template_publish":  "/action/outcomes/summaries/subscription-group-templates/publish",
+		"outcome_summary.subscription_group_document_template_delete":   "/action/outcomes/summaries/subscription-group-templates/delete",
 	}
 	for key := range optional {
 		if _, ok := routes.RouteMap()[key]; ok {
@@ -167,11 +167,11 @@ func TestOutcomeSummaryRoutes_OptionalAppRoutesAreConditional(t *testing.T) {
 		}
 	}
 
-	routes.SectionDownloadDrawerURL = optional["outcome_summary.section_download_drawer"]
-	routes.SectionTemplateSettingsURL = optional["outcome_summary.section_template_settings"]
-	routes.SectionTemplateUploadURL = optional["outcome_summary.section_template_upload"]
-	routes.SectionTemplatePublishURL = optional["outcome_summary.section_template_publish"]
-	routes.SectionTemplateDeleteURL = optional["outcome_summary.section_template_delete"]
+	routes.SubscriptionGroupDownloadDrawerURL = optional["outcome_summary.subscription_group_download_drawer"]
+	routes.SubscriptionGroupDocumentTemplateSettingsURL = optional["outcome_summary.subscription_group_document_template_settings"]
+	routes.SubscriptionGroupDocumentTemplateUploadURL = optional["outcome_summary.subscription_group_document_template_upload"]
+	routes.SubscriptionGroupDocumentTemplatePublishURL = optional["outcome_summary.subscription_group_document_template_publish"]
+	routes.SubscriptionGroupDocumentTemplateDeleteURL = optional["outcome_summary.subscription_group_document_template_delete"]
 	got := routes.RouteMap()
 	for key, want := range optional {
 		if got[key] != want {

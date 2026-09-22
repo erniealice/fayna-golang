@@ -1,4 +1,4 @@
-package section_template_settings
+package subscription_group_document_template_settings
 
 import (
 	"bytes"
@@ -31,7 +31,7 @@ func settingsPerms(codes ...string) context.Context {
 
 func canonicalSettingsDOCX(t *testing.T) []byte {
 	t.Helper()
-	data, err := os.ReadFile("../section_document/subscription-group-outcome-matrix-single-period-11-v1.docx")
+	data, err := os.ReadFile("../subscription_group_document/subscription-group-outcome-matrix-single-period-11-v1.docx")
 	if err != nil {
 		t.Fatalf("read canonical DOCX: %v", err)
 	}
@@ -62,9 +62,9 @@ func (r *settingsRecorder) deps(t *testing.T) *Deps {
 	t.Helper()
 	labels := outcome_summary.DefaultLabels()
 	return &Deps{
-		Routes:  outcome_summary.Routes{SectionTemplateSettingsURL: "/section-templates", SectionTemplateUploadURL: "/section-templates/upload", SectionTemplatePublishURL: "/section-templates/publish", SectionTemplateDeleteURL: "/section-templates/delete"},
+		Routes:  outcome_summary.Routes{SubscriptionGroupDocumentTemplateSettingsURL: "/section-templates", SubscriptionGroupDocumentTemplateUploadURL: "/section-templates/upload", SubscriptionGroupDocumentTemplatePublishURL: "/section-templates/publish", SubscriptionGroupDocumentTemplateDeleteURL: "/section-templates/delete"},
 		Labels:  labels,
-		Options: outcome_summary.Options{SectionExport: outcome_summary.SectionExportOptions{ProfileByCategoryCode: map[string]bindingpb.RenderProfile{"academic": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1}}},
+		Options: outcome_summary.Options{SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{ProfileByCategoryCode: map[string]bindingpb.RenderProfile{"academic": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1}}},
 		ListJobCategories: func(context.Context, *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error) {
 			return &jobcategorypb.ListJobCategoriesResponse{Success: true, Data: []*jobcategorypb.JobCategory{settingsCategory()}}, nil
 		},
@@ -131,7 +131,7 @@ func settingsUploadPost(t *testing.T, content []byte, fields map[string]string) 
 	return &view.ViewContext{Request: req}
 }
 
-func TestSectionTemplateSettings_PermissionAndLifecycleActions(t *testing.T) {
+func TestSubscriptionGroupDocumentTemplateSettings_PermissionAndLifecycleActions(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		perms  []string
@@ -173,12 +173,12 @@ func TestSectionTemplateSettings_PermissionAndLifecycleActions(t *testing.T) {
 
 	rec = &settingsRecorder{pairErr: errors.New("pair failed"), deleteObjectErr: errors.New("cleanup failed")}
 	res = NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-academic"}))
-	if got := res.Headers["HX-Error-Message"]; got != rec.deps(t).Labels.SectionTemplateSettings.CleanupFailed {
+	if got := res.Headers["HX-Error-Message"]; got != rec.deps(t).Labels.SubscriptionGroupDocumentTemplateSettings.CleanupFailed {
 		t.Fatalf("cleanup failure message=%q", got)
 	}
 }
 
-func TestSectionTemplateSettings_ProfileAwareWildcardScopes(t *testing.T) {
+func TestSubscriptionGroupDocumentTemplateSettings_ProfileAwareWildcardScopes(t *testing.T) {
 	rec := &settingsRecorder{}
 	res := NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-academic"}))
 	if res.StatusCode != http.StatusOK {
@@ -208,7 +208,7 @@ func TestSectionTemplateSettings_ProfileAwareWildcardScopes(t *testing.T) {
 	}
 }
 
-func TestSectionTemplateSettings_RejectsManifestMismatch(t *testing.T) {
+func TestSubscriptionGroupDocumentTemplateSettings_RejectsManifestMismatch(t *testing.T) {
 	rec := &settingsRecorder{}
 	res := NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, []byte("not a DOCX"), map[string]string{"job_category_id": "cat-academic"}))
 	if res.StatusCode == http.StatusOK || len(rec.order) != 0 {
@@ -216,7 +216,7 @@ func TestSectionTemplateSettings_RejectsManifestMismatch(t *testing.T) {
 	}
 }
 
-func TestSectionTemplateSettings_PublishDeleteAndListActionState(t *testing.T) {
+func TestSubscriptionGroupDocumentTemplateSettings_PublishDeleteAndListActionState(t *testing.T) {
 	rec := &settingsRecorder{}
 	published := ""
 	deps := rec.deps(t)
@@ -260,7 +260,7 @@ func TestSectionTemplateSettings_PublishDeleteAndListActionState(t *testing.T) {
 	if got := renderedAttrs.String(); strings.Contains(got, "ZgotmplZ") || !strings.Contains(got, `data-renderprofile="subscription_group_outcome_matrix_single_period_11_v1"`) {
 		t.Fatalf("unsafe list row contract attributes=%s", got)
 	}
-	if data.Table.Rows[0].Actions[0].TestID != "section-template-publish-b-1" || data.Table.Rows[0].Actions[1].TestID != "section-template-delete-b-1" {
+	if data.Table.Rows[0].Actions[0].TestID != "subscription-group-document-template-publish-b-1" || data.Table.Rows[0].Actions[1].TestID != "subscription-group-document-template-delete-b-1" {
 		t.Fatalf("list row action test IDs=%+v", data.Table.Rows[0].Actions)
 	}
 
@@ -287,7 +287,7 @@ func TestSectionTemplateSettings_PublishDeleteAndListActionState(t *testing.T) {
 	rec = &settingsRecorder{deleteObjectErr: errors.New("cleanup failed")}
 	deps = rec.deps(t)
 	res = NewDeleteAction(deps).Handle(settingsPerms("subscription_group_document_template:delete", "document_template:delete"), vc)
-	if got := res.Headers["HX-Error-Message"]; got != deps.Labels.SectionTemplateSettings.CleanupFailed {
+	if got := res.Headers["HX-Error-Message"]; got != deps.Labels.SubscriptionGroupDocumentTemplateSettings.CleanupFailed {
 		t.Fatalf("post-commit cleanup failure message=%q", got)
 	}
 	if fmt.Sprint(rec.order) != "[pair-delete delete-object]" {
@@ -298,7 +298,7 @@ func TestSectionTemplateSettings_PublishDeleteAndListActionState(t *testing.T) {
 	}
 }
 
-func TestSectionTemplateSettings_PaginatesAndRefusesTypedDeleteFromSharedReference(t *testing.T) {
+func TestSubscriptionGroupDocumentTemplateSettings_PaginatesAndRefusesTypedDeleteFromSharedReference(t *testing.T) {
 	rec := &settingsRecorder{}
 	pageOne := make([]*bindingpb.SubscriptionGroupDocumentTemplate, 0, 100)
 	for i := 0; i < 99; i++ {
@@ -364,7 +364,7 @@ func TestSectionTemplateSettings_PaginatesAndRefusesTypedDeleteFromSharedReferen
 			break
 		}
 	}
-	if pageTwoRow == nil || pageTwoRow.DataAttrs["testid"] != "section-template-row-2-shared" {
+	if pageTwoRow == nil || pageTwoRow.DataAttrs["testid"] != "subscription-group-document-template-row-2-shared" {
 		t.Fatalf("page 2 row=%+v", pageTwoRow)
 	}
 
@@ -386,7 +386,7 @@ func TestSectionTemplateSettings_PaginatesAndRefusesTypedDeleteFromSharedReferen
 	}
 }
 
-func TestSectionTemplateSettings_ListMaxPageGuard(t *testing.T) {
+func TestSubscriptionGroupDocumentTemplateSettings_ListMaxPageGuard(t *testing.T) {
 	fullPage := make([]*bindingpb.SubscriptionGroupDocumentTemplate, 100)
 	entry := &bindingpb.SubscriptionGroupDocumentTemplate{Id: "reused"}
 	for i := range fullPage {

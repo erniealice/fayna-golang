@@ -23,13 +23,13 @@
 {{end}}
 {{end}}
 
-{{/* Content-only partial — report-cards landing (tabbed section list, view-1) */}}
+{{/* Content-only partial — report-cards landing (tabbed group list, view-1) */}}
 {{define "outcome-summary-landing-content"}}
 <div class="page-content page-content--table">
     {{if .TabItems}}
     {{/* "default" = the app-canonical pill-tab strip (the clients list-page
          precedent). The default variant's link tabs carry
-         aria-controls="tabContent"; the section table below IS the panel each
+         aria-controls="tabContent"; the group table below IS the panel each
          AY tab reveals, so give it the matching tabpanel region (resolves the
          reference + is semantically honest). */}}
     {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "report-cards-tabs" "Label" .TabsAria)}}

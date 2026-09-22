@@ -91,30 +91,30 @@ type itemRow struct {
 // the .docx template's placeholder keys (school_name/academic_year/… — the
 // operator template contract, unchanged).
 type reportCard struct {
-	DocumentHeaderName string
-	SchedulePeriod     string
-	ClientName         string
-	GroupLevel         string
-	SectionName        string
-	LRN                string
-	PrintedBy          string
-	PrintedAt          string
-	Subjects           []itemRow
-	// PriceScheduleID is the section's AY anchor (subscription_group.price_schedule_id),
+	DocumentHeaderName    string
+	SchedulePeriod        string
+	ClientName            string
+	GroupLevel            string
+	SubscriptionGroupName string
+	LRN                   string
+	PrintedBy             string
+	PrintedAt             string
+	Subjects              []itemRow
+	// PriceScheduleID is the group's AY anchor (subscription_group.price_schedule_id),
 	// threaded to the report-card template-binding resolver. Empty → the resolver
 	// returns the workspace-wide fallback binding (or none → embedded template).
 	PriceScheduleID string
 	// FormationGroups are the Formation-page (DOCX v2) category blocks — the
 	// non-academic outcome categories (subject/homeroom deportment) with each
 	// strand's frozen authoritative average. Empty when no category filter is
-	// configured or the student has no deportment data. See formation.go.
+	// configured or the client has no deportment data. See formation.go.
 	FormationGroups []formationGroup
 
 	// block-layout enrichments — additive root fields; every one renders
 	// blank when its source is unwired/absent (never a placeholder leak).
-	SchedulePeriodDisplay string         // "2025-2026" — the price_schedule display period (v2 key ONLY; SchedulePeriod keeps the v1 section-derived value, M4)
+	SchedulePeriodDisplay string         // "2025-2026" — the price_schedule display period (v2 key ONLY; SchedulePeriod keeps the v1 group-derived value, M4)
 	SchedulePeriodSpaced  string         // "2025 - 2026" (cover-page variant of SchedulePeriodDisplay)
-	GroupLabel            string         // "Grade 7 - Nickel" (subscription_group display; identity-line variant of GroupLevel+SectionName)
+	GroupLabel            string         // "Grade 7 - Nickel" (subscription_group display; identity-line variant of GroupLevel+SubscriptionGroupName)
 	GroupLead             string         // group-lead staff name (the group-category job's task assignee) — FROZEN v1/v2 "adviser" key (first-job behavior)
 	LeadStaffDisplay      string         // block-layout root alias (lead_staff_name_display); populated ONLY when the group category has exactly one job (0/2+ ⇒ blank, so an arbitrary first-job adviser never leaks onto the cover/headers)
 	ClientReference       string         // client_attributes.<configured code> value (e.g. LRN)
@@ -215,7 +215,7 @@ func buildReportCardData(rc reportCard) map[string]any {
 		"academic_year":    orBlank(rc.SchedulePeriod),
 		"student_name":     orBlank(rc.ClientName),
 		"grade_level":      orBlank(rc.GroupLevel),
-		"section_name":     orBlank(rc.SectionName),
+		"section_name":     orBlank(rc.SubscriptionGroupName),
 		"lrn":              orDash(rc.LRN),
 		"printed_by":       orBlank(rc.PrintedBy),
 		"printed_at":       orBlank(rc.PrintedAt),
@@ -250,18 +250,18 @@ func buildReportCardData(rc reportCard) map[string]any {
 }
 
 // collectCard assembles one client's report card by mirroring the view-3
-// client_card fetch (section EXISTS gate → membership IDOR gate → jobs →
+// client_card fetch (group EXISTS gate → membership IDOR gate → jobs →
 // phase/year summaries) and ADDING the job_outcome_line per-criterion fetch.
 // Returns (nil,false) on any gate failure (fail-closed; the handler maps to
 // 403/404 without leaking which check failed).
-func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*reportCard, bool) {
-	group := fetchSection(ctx, d, sectionID)
+func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*reportCard, bool) {
+	group := fetchGroup(ctx, d, groupID)
 	if group == nil {
 		return nil, false
 	}
 	historical := !group.GetActive()
 
-	subID := memberSubscription(ctx, d, sectionID, clientID, historical)
+	subID := memberSubscription(ctx, d, groupID, clientID, historical)
 	if subID == "" {
 		return nil, false
 	}
@@ -338,7 +338,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 	// its prior assignee-only behavior. Built over ALL of this card's subscription
 	// jobs (academic + deportment + group) so both the subject line and the group
 	// lead can fall back to the class edge.
-	classStaff := fetchClassEdgeTeachers(ctx, d, sectionID, jobs)
+	classStaff := fetchClassEdgeTeachers(ctx, d, groupID, jobs)
 
 	// Display enrichment lookups (all optional/nil-safe → blank fields).
 	critNames := fetchCriterionNames(ctx, d, transcripts)
@@ -440,7 +440,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 			YearFinal: yearByJob[e.jobID],
 		}
 		// Suppress NON-ENROLLED placeholder subjects (mirrors the grade-loader
-		// T8 suppressed_zero_grade rule at the DOCX layer). A subject the student
+		// T8 suppressed_zero_grade rule at the DOCX layer). A subject the client
 		// is not taking — a parallel-language track (Korean / the other of an
 		// English/Filipino pair) — rides in as an all-zero scaffold: every
 		// criterion is 0 and the year-final is only the transmute-of-zero floor
@@ -457,7 +457,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		}
 		// block-layout enrichments (blank-safe when sources are unwired).
 		row.ItemTitle = merged.titleFor(display)
-		row.StaffLine = staffLine(d.Labels.Student, tr, staffNames, classStaff[e.jobID])
+		row.StaffLine = staffLine(d.Labels.Client, tr, staffNames, classStaff[e.jobID])
 		row.Criteria, row.OrderTotals = tr.criterionRowsByOrder(critNames)
 		row.Sem1Total, row.Sem2Total = "", ""
 		if row.OrderTotals != nil {
@@ -470,7 +470,7 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 
 	// Formation page (DOCX v2): the deportment-category tables. Additive to the
 	// academic subject transcript; empty when the tier has no category filter or the
-	// student has no deportment data.
+	// client has no deportment data.
 	formationGroups := collectFormationGroups(ctx, d, deportJobs, historical)
 
 	// Per-item rating rows + group rating (block layout).
@@ -514,19 +514,19 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		historical:   historical,
 	}, treeStrictYear)
 
-	name, ay := sectionParts(group.GetName())
-	grade, section := gradeSection(name)
+	name, ay := groupParts(group.GetName())
+	grade, sectionName := gradeSection(name)
 	// The v2 display period prefers the price_schedule name (live format
 	// "2025-2026", active+inactive two-pass); the v1 `academic_year` key KEEPS
-	// the section-derived value — an operator-bound v1 template must not see
+	// the group-derived value — an operator-bound v1 template must not see
 	// its data contract change (M4).
 	displayPeriod := ay
 	if psPeriod := fetchSchedulePeriod(ctx, d, group.GetPriceScheduleId()); psPeriod != "" {
 		displayPeriod = psPeriod
 	}
-	gradeSectionLine := section
+	gradeSectionLine := sectionName
 	if grade != "" {
-		gradeSectionLine = grade + " - " + section
+		gradeSectionLine = grade + " - " + sectionName
 	}
 	// D5 render-gate scope: every active job feeding this card (academic +
 	// deportment complement + group). A workflow-entered, data-present, not-
@@ -547,9 +547,9 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 		SchedulePeriod:        ay,
 		SchedulePeriodDisplay: displayPeriod,
 		SchedulePeriodSpaced:  strings.Replace(displayPeriod, "-", " - ", 1),
-		ClientName:            studentName(ctx, d, clientID),
+		ClientName:            clientName(ctx, d, clientID),
 		GroupLevel:            grade,
-		SectionName:           section,
+		SubscriptionGroupName: sectionName,
 		GroupLabel:            gradeSectionLine,
 		LRN:                   "",
 		ClientReference:       fetchClientReference(ctx, d, clientID),
@@ -569,13 +569,13 @@ func collectCard(ctx context.Context, d *Deps, sectionID, clientID string) (*rep
 
 // --- fetch helpers (mirror client_card) ----------------------------------
 
-func fetchSection(ctx context.Context, d *Deps, sectionID string) *subscriptiongrouppb.SubscriptionGroup {
+func fetchGroup(ctx context.Context, d *Deps, groupID string) *subscriptiongrouppb.SubscriptionGroup {
 	if d.ListSubscriptionGroups == nil {
 		return nil
 	}
 	requests := []*subscriptiongrouppb.ListSubscriptionGroupsRequest{
-		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", sectionID)}}},
-		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", sectionID), boolEq("active", false)}}},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", groupID)}}},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", groupID), boolEq("active", false)}}},
 	}
 	for _, req := range requests {
 		resp, err := d.ListSubscriptionGroups(ctx, req)
@@ -584,7 +584,7 @@ func fetchSection(ctx context.Context, d *Deps, sectionID string) *subscriptiong
 			continue
 		}
 		for _, g := range resp.GetData() {
-			if g.GetId() == sectionID {
+			if g.GetId() == groupID {
 				return g
 			}
 		}
@@ -592,17 +592,17 @@ func fetchSection(ctx context.Context, d *Deps, sectionID string) *subscriptiong
 	return nil
 }
 
-func memberSubscription(ctx context.Context, d *Deps, sectionID, clientID string, historical bool) string {
+func memberSubscription(ctx context.Context, d *Deps, groupID, clientID string, historical bool) string {
 	if d.ListSubscriptionGroupMembers == nil {
 		return ""
 	}
 	requests := []*subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
-		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", sectionID)}}},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", groupID)}}},
 	}
 	if historical {
 		requests = append(requests, &subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
 			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
-				stringEq("subscription_group_id", sectionID), boolEq("active", false),
+				stringEq("subscription_group_id", groupID), boolEq("active", false),
 			}},
 		})
 	}
@@ -959,8 +959,8 @@ func (t *transcript) criterionRowsByOrder(names map[string]string) ([]criterionR
 // assignees for the card's jobs from job_task / task_outcome — the
 // authoritative per-criterion leaf (job_outcome_line on education1 is
 // per-subject only). It walks the grade-sheet join path job_phase → job_task →
-// task_outcome, SCOPED to this card's phases/jobs (so a student's prior-AY /
-// other-section grades never accumulate in), resolves the LATEST active outcome
+// task_outcome, SCOPED to this card's phases/jobs (so a client's prior-AY /
+// other-group grades never accumulate in), resolves the LATEST active outcome
 // per (job_task, criterion) (recorded_date DESC, id DESC) and THEN takes the MAX
 // across tasks per (job, period, criterion) — D1 layering — and resolves the
 // criterion order via
@@ -1502,23 +1502,23 @@ func classStaffIDs(byJob map[string]string) []string {
 // services this cohort's offering" source of truth. Resolution (GENERIC, no
 // vertical nouns):
 //
-//   - active sgpps for THIS section → product_plan_id → staff_id;
+//   - active sgpps for THIS group → product_plan_id → staff_id;
 //   - the referenced product_plans → product_plan_id → product_id;
 //   - a job matches its subject on job.output_product_id == product_plan.product_id
 //     (NO job_template hop — spawn copies output_product_id onto the job).
 //
-// Fully nil-safe: a missing closure (or an empty section / job set) yields an empty
+// Fully nil-safe: a missing closure (or an empty group / job set) yields an empty
 // map and the teacher line falls back to blank exactly as before. Only ACTIVE
-// edges for THIS section are honored (defense-in-depth against an adapter that
+// edges for THIS group are honored (defense-in-depth against an adapter that
 // ignores the filter — a stale or foreign-cohort edge must never attribute a
 // teacher).
-func fetchClassEdgeTeachers(ctx context.Context, d *Deps, sectionID string, jobs []*jobpb.Job) map[string]string {
+func fetchClassEdgeTeachers(ctx context.Context, d *Deps, groupID string, jobs []*jobpb.Job) map[string]string {
 	out := map[string]string{}
-	if d.ListSubscriptionGroupProductPlanStaffs == nil || d.ListProductPlans == nil || sectionID == "" || len(jobs) == 0 {
+	if d.ListSubscriptionGroupProductPlanStaffs == nil || d.ListProductPlans == nil || groupID == "" || len(jobs) == 0 {
 		return out
 	}
 
-	// Active class edges for this section: product_plan_id → staff_id.
+	// Active class edges for this group: product_plan_id → staff_id.
 	//
 	// CF-3: the sgpps unique is (group, product_plan, staff), so >1 active edge can
 	// service one product_plan. A plain last-write-wins map assignment would flip the
@@ -1535,7 +1535,7 @@ func fetchClassEdgeTeachers(ctx context.Context, d *Deps, sectionID string, jobs
 	seenPlan := map[string]bool{}
 	for page := int32(1); page <= maxPages; page++ {
 		resp, err := d.ListSubscriptionGroupProductPlanStaffs(ctx, &sgppspb.ListSubscriptionGroupProductPlanStaffsRequest{
-			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", sectionID)}},
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", groupID)}},
 			Pagination: &commonpb.PaginationRequest{
 				Limit:  int32(pageLimit),
 				Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
@@ -1547,7 +1547,7 @@ func fetchClassEdgeTeachers(ctx context.Context, d *Deps, sectionID string, jobs
 		}
 		data := resp.GetData()
 		for _, e := range data {
-			if !e.GetActive() || e.GetSubscriptionGroupId() != sectionID {
+			if !e.GetActive() || e.GetSubscriptionGroupId() != groupID {
 				continue
 			}
 			pp := strings.TrimSpace(e.GetProductPlanId())
@@ -1633,10 +1633,10 @@ func fetchClassEdgeTeachers(ctx context.Context, d *Deps, sectionID string, jobs
 	return out
 }
 
-// fetchSchedulePeriod resolves the section's price_schedule display period —
+// fetchSchedulePeriod resolves the group's price_schedule display period —
 // the schedule name with any non-numeric prefix dropped ("AY 2025-2026" →
 // "2025-2026"). Blank when the schedule is unresolvable (callers keep the
-// section-name fallback).
+// group-name fallback).
 func fetchSchedulePeriod(ctx context.Context, d *Deps, priceScheduleID string) string {
 	if d.ListPriceSchedules == nil || priceScheduleID == "" {
 		return ""
@@ -1644,7 +1644,7 @@ func fetchSchedulePeriod(ctx context.Context, d *Deps, priceScheduleID string) s
 	// List-and-match: the schedule list is tiny and the workspace-bound list is
 	// the closure every sibling surface already uses. TWO passes — the default
 	// (active) list and an explicit inactive list — because a CLOSED historical
-	// schedule row is active=false (the fetchSection precedent).
+	// schedule row is active=false (the fetchGroup precedent).
 	requests := []*priceschedulepb.ListPriceSchedulesRequest{
 		{},
 		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{boolEq("active", false)}}},
@@ -1821,8 +1821,8 @@ var ayRe = regexp.MustCompile(`\(\s*AY\s*([^)]+?)\s*\)`)
 var gradeRe = regexp.MustCompile(`^(Grade\s+\S+)\s+(.+)$`)
 var subjSuffixRe = regexp.MustCompile(`\s*(?:—|–|-)\s*AY\s.*$`)
 
-// sectionParts splits "Grade 9 Gold (AY 2025-26)" → ("Grade 9 Gold", "2025-26").
-func sectionParts(full string) (name, ay string) {
+// groupParts splits "Grade 9 Gold (AY 2025-26)" → ("Grade 9 Gold", "2025-26").
+func groupParts(full string) (name, ay string) {
 	full = strings.TrimSpace(full)
 	if m := ayRe.FindStringSubmatch(full); len(m) == 2 {
 		ay = strings.TrimSpace(m[1])
@@ -1832,7 +1832,7 @@ func sectionParts(full string) (name, ay string) {
 }
 
 // gradeSection splits "Grade 9 Gold" → ("Grade 9", "Gold").
-func gradeSection(name string) (grade, section string) {
+func gradeSection(name string) (grade, group string) {
 	if m := gradeRe.FindStringSubmatch(name); len(m) == 3 {
 		return strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
 	}
@@ -1844,7 +1844,7 @@ func cleanSubject(name string) string {
 	return strings.TrimSpace(subjSuffixRe.ReplaceAllString(name, ""))
 }
 
-func studentName(ctx context.Context, d *Deps, clientID string) string {
+func clientName(ctx context.Context, d *Deps, clientID string) string {
 	if d.ListClients == nil || clientID == "" {
 		return clientID
 	}

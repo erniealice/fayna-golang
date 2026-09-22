@@ -100,9 +100,9 @@ func wireJobOutcomeMatrixListDeps(deps *operation.JobModuleDeps, routes *outcome
 		return
 	}
 	deps.MatrixDetailURL = routes.MatrixURL
-	// Section-scoped sibling. Each summary row is already at
+	// Group-scoped sibling. Each summary row is already at
 	// (template x group) grain, so linking to the template alone made every
-	// section of a multi-section template share one URL.
+	// group of a multi-group template share one URL.
 	deps.MatrixGroupDetailURL = routes.GroupMatrixURL
 	deps.MatrixDownloadDrawerURL = routes.DownloadDrawerURL
 	deps.MatrixGroupDownloadDrawerURL = routes.GroupDownloadDrawerURL
@@ -159,6 +159,9 @@ func JobTemplateUnit(uc *UseCases, infra *Infra) compose.Unit {
 		}
 		if ttcRoutes, ok := compose.RoutesOf[*template_task_criteria.Routes](mc, "operation.template_task_criteria"); ok {
 			deps.CriteriaRoutes = *ttcRoutes
+		}
+		if ttcLabels, ok := compose.LabelsOf[*template_task_criteria.Labels](mc, "operation.template_task_criteria"); ok {
+			deps.CriteriaLabels = *ttcLabels
 		}
 		if jtrRoutes, ok := compose.RoutesOf[*job_template_relation.Routes](mc, "operation.job_template_relation"); ok {
 			deps.RelationRoutes = *jtrRoutes
@@ -687,8 +690,8 @@ func OutcomeMatrixUnit(uc *UseCases, infra *Infra, options outcome_matrix.Option
 
 // OutcomeSummaryUnit registers the report-cards surfaces (the fayna
 // outcome_summary unit): view-1 list (flat job summaries by default; a tabbed
-// subscription_group section list when options.List.Entity resolves) and view-2
-// per-section grid (client × job_template year-final ratings). options is the
+// subscription_group group list when options.List.Entity resolves) and view-2
+// per-subscription-group grid (client × job_template year-final ratings). options is the
 // app's presentation config (EngineBlock's view option block); the zero value
 // renders the current flat list unchanged (backward-compatible).
 func OutcomeSummaryUnit(uc *UseCases, infra *Infra, options outcome_summary.Options, principalKindResolvers ...func(context.Context) int32) compose.Unit {
@@ -698,7 +701,7 @@ func OutcomeSummaryUnit(uc *UseCases, infra *Infra, options outcome_summary.Opti
 	}
 	u := outcome_summary.Describe()
 	if options.List.SubscriptionGroups() {
-		u.Nav.Items = append(u.Nav.Items, outcome_summary.SectionTemplateSettingsNavItem())
+		u.Nav.Items = append(u.Nav.Items, outcome_summary.SubscriptionGroupDocumentTemplateSettingsNavItem())
 	}
 	u.Mount = func(mc *compose.MountContext) error {
 		r := u.Routes.(*outcome_summary.Routes)
@@ -716,9 +719,9 @@ func OutcomeSummaryUnit(uc *UseCases, infra *Infra, options outcome_summary.Opti
 			deps.GenerateDoc = infra.GenerateDoc
 			deps.GeneratePDF = infra.GeneratePDF
 			deps.ResolveTemplateBytes = infra.ResolveTemplateBytes
-			deps.ResolveSectionTemplate = infra.ResolveSectionTemplate
-			deps.StoreSectionTemplate = infra.StoreSectionTemplate
-			deps.DeleteSectionTemplateObject = infra.DeleteSectionTemplateObject
+			deps.ResolveSubscriptionGroupDocumentTemplate = infra.ResolveSubscriptionGroupDocumentTemplate
+			deps.StoreSubscriptionGroupDocumentTemplate = infra.StoreSubscriptionGroupDocumentTemplate
+			deps.DeleteSubscriptionGroupDocumentTemplateObject = infra.DeleteSubscriptionGroupDocumentTemplateObject
 			// TB3 template settings artifact closures.
 			deps.UploadTemplate = infra.UploadTemplate
 			deps.ListDocumentTemplates = infra.ListDocTemplates

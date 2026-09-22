@@ -1,4 +1,4 @@
-package section
+package subscription_group
 
 import (
 	"context"
@@ -70,12 +70,12 @@ func row(clientID, name string) types.TableRow {
 }
 
 // TestApplyRowPresentation_BandOrderAndNumbering pins two owner-locked
-// contracts on the section grid: (1) gender bands order per
+// contracts on the group grid: (1) gender bands order per
 // Options.Row.GroupValueOrder ["male","female"] — MALE band first regardless
 // of value-alpha (which would put female first); (2) row numbering is
 // CONTINUOUS across bands (male 1..N, female N+1..M), applied after banding.
 func TestApplyRowPresentation_BandOrderAndNumbering(t *testing.T) {
-	students := map[string]student{
+	clients := map[string]client{
 		"f1": {clientID: "f1", name: "Ann Fem", lastName: "Fem", firstName: "Ann"},
 		"m1": {clientID: "m1", name: "Bob Male", lastName: "Male", firstName: "Bob"},
 		"m2": {clientID: "m2", name: "Al Male", lastName: "Aale", firstName: "Al"},
@@ -91,7 +91,7 @@ func TestApplyRowPresentation_BandOrderAndNumbering(t *testing.T) {
 	}}
 
 	table := &types.TableConfig{}
-	applyRowPresentation(table, rows, students, attrValues, opts)
+	applyRowPresentation(table, rows, clients, attrValues, opts)
 	numberRows(table)
 
 	if len(table.Groups) != 2 {
@@ -140,13 +140,13 @@ func TestCSVSafe(t *testing.T) {
 }
 
 // TestBuildRows_PhantomBlank_RealShown pins the phantom-blank invariant on the
-// section grid cell render: an untaken-elective all-zero scaffold whose
+// group grid cell render: an untaken-elective all-zero scaffold whose
 // year-final floored to "1" renders a truly BLANK cell (empty HTML + empty CSV,
 // NOT the floor and NOT the "—" no-data marker); a genuinely-enrolled subject
 // scored a real 1 or 0 (positive mark evidence) KEEPS its rating link; a
 // subject with no summary at all still renders "—". NEVER blank a real grade.
 func TestBuildRows_PhantomBlank_RealShown(t *testing.T) {
-	students := map[string]student{
+	clients := map[string]client{
 		"stu1": {clientID: "stu1", name: "Doe, Jane", lastName: "Doe", firstName: "Jane"},
 	}
 	// Columns: phantom, real-1, real-0, no-data (no job).
@@ -168,7 +168,7 @@ func TestBuildRows_PhantomBlank_RealShown(t *testing.T) {
 		"jobR0": {HasMarks: true, HasPositiveMark: true},  // enrolled → keep
 	}
 
-	rows := buildRows(students, templateIDs, cellJob, labelByJob, evByJob, "sec1", outcome_summary.Routes{}, outcome_summary.Labels{})
+	rows := buildRows(clients, templateIDs, cellJob, labelByJob, evByJob, "sec1", outcome_summary.Routes{}, outcome_summary.Labels{})
 	if len(rows) != 1 {
 		t.Fatalf("want 1 row, got %d", len(rows))
 	}
@@ -252,11 +252,11 @@ func TestActionsColumnSkipContract(t *testing.T) {
 	}
 }
 
-// TestSectionBucket pins the strict authoritative partition (plan §3.0): the
+// TestSubscriptionGroupBucket pins the strict authoritative partition (plan §3.0): the
 // CURRENT template FK wins over the frozen job snapshot; a NULL FK or any
 // out-of-corpus category folds into the single Uncategorized bucket; the
 // snapshot is consulted ONLY when the template row is absent.
-func TestSectionBucket(t *testing.T) {
+func TestSubscriptionGroupBucket(t *testing.T) {
 	corpus := map[string]bool{"idA": true, "idD": true}
 	meta := map[string]templateMeta{
 		"tA":     {categoryID: "idA"}, // active FK
@@ -277,17 +277,17 @@ func TestSectionBucket(t *testing.T) {
 		{"missing template + stale snapshot → Uncategorized", "idOld", "tMissing", uncategorizedTab},
 	}
 	for _, c := range cases {
-		if got := sectionBucket(c.snapshot, c.templateID, meta, corpus); got != c.want {
-			t.Errorf("%s: sectionBucket(%q,%q) = %q, want %q", c.name, c.snapshot, c.templateID, got, c.want)
+		if got := groupBucket(c.snapshot, c.templateID, meta, corpus); got != c.want {
+			t.Errorf("%s: groupBucket(%q,%q) = %q, want %q", c.name, c.snapshot, c.templateID, got, c.want)
 		}
 	}
 }
 
-// TestResolveSectionSelection pins the fail-closed ?jc= resolver (plan §3.3):
+// TestResolveSubscriptionGroupSelection pins the fail-closed ?jc= resolver (plan §3.3):
 // unknown/foreign/inactive/empty falls back to the configured category, then
 // the first present active category, then Uncategorized — NEVER all-categories,
 // NEVER a raw stale id.
-func TestResolveSectionSelection(t *testing.T) {
+func TestResolveSubscriptionGroupSelection(t *testing.T) {
 	academic := jcat("idA", "academic", "Academic", 1)
 	deport := jcat("idD", "subject_deportment", "Deportment", 2)
 	cats := []*jobcategorypb.JobCategory{academic, deport} // pre-sorted
@@ -311,21 +311,21 @@ func TestResolveSectionSelection(t *testing.T) {
 		{"nothing present → empty", "", map[string]int{}, "academic", ""},
 	}
 	for _, c := range cases {
-		if got := resolveSectionSelection(c.rawJC, cats, c.counts, c.configed); got != c.want {
-			t.Errorf("%s: resolveSectionSelection(%q) = %q, want %q", c.name, c.rawJC, got, c.want)
+		if got := resolveGroupSelection(c.rawJC, cats, c.counts, c.configed); got != c.want {
+			t.Errorf("%s: resolveGroupSelection(%q) = %q, want %q", c.name, c.rawJC, got, c.want)
 		}
 	}
 }
 
-// TestSortSectionCategories pins the category-tab sort contract: sort_order ASC
+// TestSortSubscriptionGroupCategories pins the category-tab sort contract: sort_order ASC
 // with NULLs LAST, then name ASC, then id (plan §3.3; mirrors
 // list.sortLandingCategories).
-func TestSortSectionCategories(t *testing.T) {
+func TestSortSubscriptionGroupCategories(t *testing.T) {
 	alpha := jcat("a", "a", "Alpha", 2)
 	beta := jcat("b", "b", "Beta", 1)
 	noOrder := &jobcategorypb.JobCategory{Id: "z", Name: "Zeta", Active: true, Code: strp("z")} // NULL sort_order → last
 	cats := []*jobcategorypb.JobCategory{noOrder, alpha, beta}
-	sortSectionCategories(cats)
+	sortGroupCategories(cats)
 	got := []string{cats[0].GetId(), cats[1].GetId(), cats[2].GetId()}
 	want := []string{"b", "a", "z"}
 	for i := range want {
@@ -347,33 +347,33 @@ func TestCategoryIDByCode(t *testing.T) {
 	}
 }
 
-// TestSectionTabKey_CollisionProof pins the stable, collision-proof tab key: the
+// TestSubscriptionGroupTabKey_CollisionProof pins the stable, collision-proof tab key: the
 // last-8 slug for a real id, the full Uncategorized word (which can never
 // collide with a ≤8-char short() key nor with a real uuidv7 id).
-func TestSectionTabKey_CollisionProof(t *testing.T) {
-	if got := sectionTabKey(uncategorizedTab); got != "jc-tab-uncategorized" {
+func TestSubscriptionGroupTabKey_CollisionProof(t *testing.T) {
+	if got := groupTabKey(uncategorizedTab); got != "jc-tab-uncategorized" {
 		t.Errorf("Uncategorized key = %q", got)
 	}
 	id := "0192f000-1111-7abc-aaaa-deadbeef1234"
-	if got, want := sectionTabKey(id), "jc-tab-"+id[len(id)-8:]; got != want {
+	if got, want := groupTabKey(id), "jc-tab-"+id[len(id)-8:]; got != want {
 		t.Errorf("real key = %q, want %q", got, want)
 	}
-	if sectionTabKey("anything-eef1234") == sectionTabKey(uncategorizedTab) {
+	if groupTabKey("anything-eef1234") == groupTabKey(uncategorizedTab) {
 		t.Errorf("real short key collided with the Uncategorized sentinel key")
 	}
-	if got := sectionTabKey(""); got != "" {
+	if got := groupTabKey(""); got != "" {
 		t.Errorf("empty id key = %q, want \"\"", got)
 	}
 }
 
-// TestResolveSectionPartition_Tabbed pins the tabbed happy path end-to-end: the
+// TestResolveSubscriptionGroupPartition_Tabbed pins the tabbed happy path end-to-end: the
 // authoritative template→category meta, the present-only sorted tabstrip
 // (Uncategorized last), the distinct-template counts, and the default-tab keep
 // predicate (rawJC="" → configured "academic").
-func TestResolveSectionPartition_Tabbed(t *testing.T) {
+func TestResolveSubscriptionGroupPartition_Tabbed(t *testing.T) {
 	academic := jcat("cat-academic-aaaa1111", "academic", "Academic", 1)
 	deport := jcat("cat-deport-bbbb2222", "subject_deportment", "Subject Deportment", 2)
-	emptyCat := jcat("cat-extra-cccc3333", "extracurricular", "Extracurricular", 3) // active but NO templates in section
+	emptyCat := jcat("cat-extra-cccc3333", "extracurricular", "Extracurricular", 3) // active but NO templates in group
 	cats := []*jobcategorypb.JobCategory{deport, emptyCat, academic}                // deliberately unsorted
 	tmpls := []*jobtemplatepb.JobTemplate{
 		jtmpl("tA", "Math", academic.GetId()),
@@ -394,13 +394,13 @@ func TestResolveSectionPartition_Tabbed(t *testing.T) {
 		},
 		ListJobCategories: catListStub(cats, nil),
 		ListJobTemplates:  tmplListStub(tmpls),
-		Routes:            outcome_summary.Routes{SectionURL: "/report-cards/section/{id}"},
+		Routes:            outcome_summary.Routes{SubscriptionGroupURL: "/report-cards/group/{id}"},
 	}
 	l := outcome_summary.Labels{}
-	l.Section.CategoryTabsAriaLabel = "Report card categories"
+	l.SubscriptionGroup.CategoryTabsAriaLabel = "Report card categories"
 	l.Landing.UncategorizedColumn = "Uncategorized"
 
-	keep, meta, tabs := resolveSectionPartition(context.Background(), deps, "sec1", "", jobs, map[string]string{}, false, l)
+	keep, meta, tabs := resolveGroupPartition(context.Background(), deps, "sec1", "", jobs, map[string]string{}, false, l)
 
 	// Authoritative meta captured the FKs (NULL FK stays "").
 	if meta["tA"].categoryID != academic.GetId() {
@@ -435,8 +435,8 @@ func TestResolveSectionPartition_Tabbed(t *testing.T) {
 	if tabs.Items[2].Count != 1 { // tN
 		t.Errorf("Uncategorized count = %d, want 1", tabs.Items[2].Count)
 	}
-	if tabs.ActiveTab != sectionTabKey(academic.GetId()) {
-		t.Errorf("active tab = %q, want %q", tabs.ActiveTab, sectionTabKey(academic.GetId()))
+	if tabs.ActiveTab != groupTabKey(academic.GetId()) {
+		t.Errorf("active tab = %q, want %q", tabs.ActiveTab, groupTabKey(academic.GetId()))
 	}
 	if tabs.Aria != "Report card categories" {
 		t.Errorf("aria = %q", tabs.Aria)
@@ -449,19 +449,19 @@ func TestResolveSectionPartition_Tabbed(t *testing.T) {
 	}
 
 	// Selecting the deportment tab keeps ONLY deportment jobs (labelled tab, no leak).
-	keepD, _, tabsD := resolveSectionPartition(context.Background(), deps, "sec1", deport.GetId(), jobs, map[string]string{}, false, l)
+	keepD, _, tabsD := resolveGroupPartition(context.Background(), deps, "sec1", deport.GetId(), jobs, map[string]string{}, false, l)
 	if keepD(jobs[0]) || !keepD(jobs[2]) {
 		t.Errorf("deportment tab must keep only deportment jobs")
 	}
-	if tabsD.ActiveTab != sectionTabKey(deport.GetId()) {
+	if tabsD.ActiveTab != groupTabKey(deport.GetId()) {
 		t.Errorf("deportment active tab = %q", tabsD.ActiveTab)
 	}
 }
 
-// TestResolveSectionPartition_StaticWhenKnobOff pins the config-gated degrade:
-// with no category-columns Options the section renders today's single static-H2
+// TestResolveSubscriptionGroupPartition_StaticWhenKnobOff pins the config-gated degrade:
+// with no category-columns Options the group renders today's single static-H2
 // grid, no tabs, no meta read — byte-for-byte the pre-tab behavior.
-func TestResolveSectionPartition_StaticWhenKnobOff(t *testing.T) {
+func TestResolveSubscriptionGroupPartition_StaticWhenKnobOff(t *testing.T) {
 	academic := jcat("idA", "academic", "Academic", 1)
 	deport := jcat("idD", "subject_deportment", "Deportment", 2)
 	deps := &Deps{
@@ -469,7 +469,7 @@ func TestResolveSectionPartition_StaticWhenKnobOff(t *testing.T) {
 		ListJobCategories: catListStub([]*jobcategorypb.JobCategory{academic, deport}, nil),
 	}
 	jobs := []*jobpb.Job{jjob("j1", "tA", "idA", "c1"), jjob("j2", "tD", "idD", "c1")}
-	keep, meta, tabs := resolveSectionPartition(context.Background(), deps, "s", "", jobs, map[string]string{}, false, outcome_summary.Labels{})
+	keep, meta, tabs := resolveGroupPartition(context.Background(), deps, "s", "", jobs, map[string]string{}, false, outcome_summary.Labels{})
 	if tabs != nil {
 		t.Errorf("static path must render no tabs")
 	}
@@ -484,12 +484,12 @@ func TestResolveSectionPartition_StaticWhenKnobOff(t *testing.T) {
 	}
 }
 
-// TestResolveSectionPartition_FailClosedOnCorpusError pins the fail-closed
+// TestResolveSubscriptionGroupPartition_FailClosedOnCorpusError pins the fail-closed
 // contract: a category read error degrades to the static H2 filter with NO tabs
 // — never an all-categories render (which would strip H2 and leak deportment).
 // The static filter itself fails closed (keeps no jobs) when the configured
 // category cannot resolve.
-func TestResolveSectionPartition_FailClosedOnCorpusError(t *testing.T) {
+func TestResolveSubscriptionGroupPartition_FailClosedOnCorpusError(t *testing.T) {
 	deps := &Deps{
 		Options: outcome_summary.Options{
 			List:           outcome_summary.ListOptions{ColumnsByField: "job_category"},
@@ -498,7 +498,7 @@ func TestResolveSectionPartition_FailClosedOnCorpusError(t *testing.T) {
 		ListJobCategories: catListStub(nil, errors.New("boom")),
 	}
 	jobs := []*jobpb.Job{jjob("j1", "tA", "idA", "c1")}
-	keep, meta, tabs := resolveSectionPartition(context.Background(), deps, "s", "idA", jobs, map[string]string{}, false, outcome_summary.Labels{})
+	keep, meta, tabs := resolveGroupPartition(context.Background(), deps, "s", "idA", jobs, map[string]string{}, false, outcome_summary.Labels{})
 	if tabs != nil {
 		t.Errorf("a corpus read error must degrade to NO tabs (never all-categories)")
 	}
@@ -510,30 +510,30 @@ func TestResolveSectionPartition_FailClosedOnCorpusError(t *testing.T) {
 	}
 }
 
-// TestSectionTemplate_R8ScriptAndTabsContract pins that the R8 entries-seed
+// TestSubscriptionGroupDocumentTemplate_R8ScriptAndTabsContract pins that the R8 entries-seed
 // script (constant table id "report-cards-grid") survives the tabstrip addition,
 // that the tabs live inside the SINGLE content define (goldens untouched), and
 // that the constant Table.ID literal remains in page.go.
-func TestSectionTemplate_R8ScriptAndTabsContract(t *testing.T) {
-	tpl, err := os.ReadFile("../templates/section.html")
+func TestSubscriptionGroupDocumentTemplate_R8ScriptAndTabsContract(t *testing.T) {
+	tpl, err := os.ReadFile("../templates/subscription_group.html")
 	if err != nil {
-		t.Fatalf("read section.html: %v", err)
+		t.Fatalf("read subscription_group.html: %v", err)
 	}
 	s := string(tpl)
 	for _, want := range []string{
 		"getElementById('report-cards-grid-entries')", // R8 seed script — constant id
-		"{{if .TabItems}}",                            // tabstrip gate
-		`{{template "tabs"`,                           // pyeza tabs component
-		`"report-cards-category-tabs"`,                // tabstrip nav id
-		`"Indicator" "#tabContent"`,                   // R2 indicator precedent
+		"{{if .TabItems}}",             // tabstrip gate
+		`{{template "tabs"`,            // pyeza tabs component
+		`"report-cards-category-tabs"`, // tabstrip nav id
+		`"Indicator" "#tabContent"`,    // R2 indicator precedent
 		`id="tabContent"`,
 		`role="tabpanel"`,
 	} {
 		if !strings.Contains(s, want) {
-			t.Errorf("section.html must contain %q", want)
+			t.Errorf("group.html must contain %q", want)
 		}
 	}
-	if n := strings.Count(s, `{{define "outcome-summary-section-content"}}`); n != 1 {
+	if n := strings.Count(s, `{{define "outcome-summary-subscription-group-content"}}`); n != 1 {
 		t.Errorf("want exactly ONE content define block (templates_golden untouched), got %d", n)
 	}
 

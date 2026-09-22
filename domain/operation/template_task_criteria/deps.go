@@ -9,7 +9,10 @@ import (
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
+	scorescalepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/score_scale"
+	scorescalebandpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/score_scale_band"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	ttcrdpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria_rating_description"
 )
 
 // ModuleDeps holds the typed closures that action builders and sub-packages need.
@@ -36,4 +39,13 @@ type ModuleDeps struct {
 	// nil-safe (falls back to a raw-id text input).
 	ListPhasesByJobTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
 	ListTasksByPhase        func(ctx context.Context, req *jobtemplateTaskpb.ListJobTemplateTasksByPhaseRequest) (*jobtemplateTaskpb.ListJobTemplateTasksByPhaseResponse, error)
+
+	// Rating configuration sources and binding-specific description CRUD.
+	ListScoreScales                                                  func(ctx context.Context, req *scorescalepb.ListScoreScalesRequest) (*scorescalepb.ListScoreScalesResponse, error)
+	ListScoreScaleBands                                              func(ctx context.Context, req *scorescalebandpb.ListScoreScaleBandsRequest) (*scorescalebandpb.ListScoreScaleBandsResponse, error)
+	CreateTemplateTaskCriteriaRatingDescription                      func(ctx context.Context, req *ttcrdpb.CreateTemplateTaskCriteriaRatingDescriptionRequest) (*ttcrdpb.CreateTemplateTaskCriteriaRatingDescriptionResponse, error)
+	ReadTemplateTaskCriteriaRatingDescription                        func(ctx context.Context, req *ttcrdpb.ReadTemplateTaskCriteriaRatingDescriptionRequest) (*ttcrdpb.ReadTemplateTaskCriteriaRatingDescriptionResponse, error)
+	UpdateTemplateTaskCriteriaRatingDescription                      func(ctx context.Context, req *ttcrdpb.UpdateTemplateTaskCriteriaRatingDescriptionRequest) (*ttcrdpb.UpdateTemplateTaskCriteriaRatingDescriptionResponse, error)
+	DeleteTemplateTaskCriteriaRatingDescription                      func(ctx context.Context, req *ttcrdpb.DeleteTemplateTaskCriteriaRatingDescriptionRequest) (*ttcrdpb.DeleteTemplateTaskCriteriaRatingDescriptionResponse, error)
+	ListTemplateTaskCriteriaRatingDescriptionsByTemplateTaskCriteria func(ctx context.Context, req *ttcrdpb.ListTemplateTaskCriteriaRatingDescriptionsByTemplateTaskCriteriaRequest) (*ttcrdpb.ListTemplateTaskCriteriaRatingDescriptionsByTemplateTaskCriteriaResponse, error)
 }

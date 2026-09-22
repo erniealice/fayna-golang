@@ -104,7 +104,7 @@ func categoryIDSet(cats []*jobcategorypb.JobCategory) map[string]bool {
 }
 
 // uncategorizedCount folds every bucket OUTSIDE the active corpus into the
-// single Uncategorized count for one section: the "" NULL bucket PLUS any
+// single Uncategorized count for one group: the "" NULL bucket PLUS any
 // count keyed by a non-corpus category id (a stale/inactive/foreign effective
 // category — §3.0's corpus/authority mismatch). Folding keeps the pinned
 // "never dropped" invariant without adding inactive columns or a dangling eye
@@ -119,7 +119,7 @@ func uncategorizedCount(byCat map[string]int, corpus map[string]bool) int {
 	return n
 }
 
-// anyUncategorizedCount reports whether any section holds ≥1 subject outside
+// anyUncategorizedCount reports whether any group holds ≥1 subject outside
 // the active corpus (the Uncategorized bucket-column trigger).
 func anyUncategorizedCount(subjectsByCat map[string]map[string]int, corpus map[string]bool) bool {
 	for _, byCat := range subjectsByCat {
@@ -134,16 +134,16 @@ func anyUncategorizedCount(subjectsByCat map[string]map[string]int, corpus map[s
 // for a category cell's eye link. A frame missing either placeholder returns
 // "" so BuildCompositeCell composes its default name (which always carries
 // both) — the accessible name never loses a dimension to a bad translation.
-func cellAccessibleName(frame, category, section string) string {
-	if !strings.Contains(frame, "{category}") || !strings.Contains(frame, "{section}") {
+func cellAccessibleName(frame, category, group string) string {
+	if !strings.Contains(frame, "{category}") || !strings.Contains(frame, "{subscription_group}") {
 		return ""
 	}
-	return strings.NewReplacer("{category}", category, "{section}", section).Replace(frame)
+	return strings.NewReplacer("{category}", category, "{subscription_group}", group).Replace(frame)
 }
 
 // landingColumnsFor returns the landing column set: the static 3-column set
 // when the category corpus is empty (the degrade contract — byte-identical to
-// landingColumns), else section + students + one column per ACTIVE category
+// landingColumns), else group + clients + one column per ACTIVE category
 // (headers = job_category.name DATA, sort_order-ordered) + the optional
 // Uncategorized bucket column. Column keys embed the FULL category id
 // (collision-proof, mirroring the composite cell's test-id contract).
@@ -152,8 +152,8 @@ func landingColumnsFor(l outcome_summary.Labels, cats []*jobcategorypb.JobCatego
 		return landingColumns(l)
 	}
 	cols := []types.TableColumn{
-		{Key: "section", Label: l.Landing.GroupColumn, MinWidth: "12.5rem"},
-		{Key: "students", Label: l.Landing.MembersColumn, MinWidth: "6.25rem", Align: "right"},
+		{Key: "group", Label: l.Landing.GroupColumn, MinWidth: "12.5rem"},
+		{Key: "clients", Label: l.Landing.MembersColumn, MinWidth: "6.25rem", Align: "right"},
 	}
 	for _, c := range cats {
 		cols = append(cols, types.TableColumn{Key: "jc-" + c.GetId(), Label: c.GetName(), MinWidth: "6.25rem", Align: "center"})

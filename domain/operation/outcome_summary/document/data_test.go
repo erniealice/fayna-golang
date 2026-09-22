@@ -22,7 +22,7 @@ import (
 )
 
 // M4 (audit T5): the report-card .docx builder duplicates the client_card IDOR
-// gates verbatim (fetchSection + memberSubscription, "mirror student_card").
+// gates verbatim (fetchGroup + memberSubscription, "mirror student_card").
 // These pin the SAME fail-closed contract on this second copy so a drift in
 // either package is caught.
 
@@ -38,18 +38,18 @@ func membersFn(members ...*subscriptiongroupmemberpb.SubscriptionGroupMember) fu
 	}
 }
 
-func TestFetchSection_ForeignSection_Nil(t *testing.T) {
+func TestFetchGroup_ForeignGroup_Nil(t *testing.T) {
 	d := &Deps{ListSubscriptionGroups: groupsFn()}
-	if g := fetchSection(context.Background(), d, "sec-1"); g != nil {
-		t.Fatalf("foreign section must resolve nil, got %v", g)
+	if g := fetchGroup(context.Background(), d, "sec-1"); g != nil {
+		t.Fatalf("foreign group must resolve nil, got %v", g)
 	}
 }
 
-func TestFetchSection_Present(t *testing.T) {
+func TestFetchGroup_Present(t *testing.T) {
 	d := &Deps{ListSubscriptionGroups: groupsFn(&subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Active: true})}
-	g := fetchSection(context.Background(), d, "sec-1")
+	g := fetchGroup(context.Background(), d, "sec-1")
 	if g == nil || g.GetId() != "sec-1" {
-		t.Fatalf("present section must resolve, got %v", g)
+		t.Fatalf("present group must resolve, got %v", g)
 	}
 }
 
@@ -76,7 +76,7 @@ func TestMemberSubscription_InactiveInActiveGroup_Empty(t *testing.T) {
 		&subscriptiongroupmemberpb.SubscriptionGroupMember{ClientId: "target", SubscriptionId: "sub-1", Active: false},
 	)}
 	if sub := memberSubscription(context.Background(), d, "sec-1", "target", false); sub != "" {
-		t.Fatalf("inactive member in a live section must resolve empty, got %q", sub)
+		t.Fatalf("inactive member in a live group must resolve empty, got %q", sub)
 	}
 }
 
@@ -93,9 +93,9 @@ func TestMemberSubscription_HistoricalAccepted(t *testing.T) {
 // jobs in the configured GROUP (homeroom) category, each advised by the SAME
 // staff. Used to exercise the singleton-cardinality gate for the block-layout
 // root alias. No academic jobs (the transcript is irrelevant to the lead gate).
-func depsForGroupJobs(n int) (d *Deps, section, client string) {
+func depsForGroupJobs(n int) (d *Deps, group, client string) {
 	const sub, catAcad, catHome, staffID = "sub-1", "cat-acad", "cat-home", "staff-1"
-	section, client = "sec-1", "cli-1"
+	group, client = "sec-1", "cli-1"
 
 	var jobs []*jobpb.Job
 	var phases []*jobphasepb.JobPhase
@@ -117,10 +117,10 @@ func depsForGroupJobs(n int) (d *Deps, section, client string) {
 		CategoryFilter: "academic",
 		DocOptions:     outcome_summary.DocumentOptions{GroupCategoryFilter: "homeroom_deportment"},
 		ListSubscriptionGroups: groupsFn(&subscriptiongrouppb.SubscriptionGroup{
-			Id: section, Active: true, Name: "Grade 7 Nickel (AY 2025-2026)",
+			Id: group, Active: true, Name: "Grade 7 Nickel (AY 2025-2026)",
 		}),
 		ListSubscriptionGroupMembers: membersFn(&subscriptiongroupmemberpb.SubscriptionGroupMember{
-			SubscriptionGroupId: section, ClientId: client, SubscriptionId: sub, Active: true,
+			SubscriptionGroupId: group, ClientId: client, SubscriptionId: sub, Active: true,
 		}),
 		ListJobs: func(_ context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error) {
 			// The inactive-subject probe filters active=false — return nothing so
@@ -153,7 +153,7 @@ func depsForGroupJobs(n int) (d *Deps, section, client string) {
 			}}, nil
 		},
 	}
-	return d, section, client
+	return d, group, client
 }
 
 // The singleton-cardinality gate for the block-layout root alias
@@ -175,8 +175,8 @@ func TestCollectCard_GroupLeadSingletonGate(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("%d-jobs", tc.n), func(t *testing.T) {
-			d, section, client := depsForGroupJobs(tc.n)
-			rc, ok := collectCard(context.Background(), d, section, client)
+			d, group, client := depsForGroupJobs(tc.n)
+			rc, ok := collectCard(context.Background(), d, group, client)
 			if !ok {
 				t.Fatalf("collectCard returned !ok")
 			}
@@ -205,7 +205,7 @@ func TestCollectCard_GroupLeadSingletonGate(t *testing.T) {
 // progress.md "B1 unit test"): the DOCX-layer row→evidence adaptation that
 // wraps the shared outcome_summary.IsNonEnrolledCell predicate. It pins the
 // row-level contract collectCard relies on at data.go:199 — a subject the
-// student never took (an all-zero active scaffold, e.g. the untaken half of
+// client never took (an all-zero active scaffold, e.g. the untaken half of
 // an English/Filipino-style language pair) is suppressed, while a REAL zero
 // for an enrolled subject (a positive per-criterion mark somewhere, or a real
 // >1 stored band) is protected and still renders. NEVER blank a real grade.

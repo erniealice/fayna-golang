@@ -11,8 +11,8 @@ import (
 	jobsummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/job_summary"
 	summarylist "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/list"
 	phasesummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/phase_summary"
-	sectionview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/section"
-	sectiontemplatesettings "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/section_template_settings"
+	subscriptiongroupview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/subscription_group"
+	subscriptiongroupdocumenttemplate "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/subscription_group_document_template_settings"
 	templatesettings "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/template_settings"
 
 	espynaports "github.com/erniealice/espyna-golang/ports"
@@ -37,7 +37,7 @@ import (
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
-	sectionbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
+	subscriptiongroupdocumenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	planpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/plan"
@@ -62,7 +62,7 @@ type OutcomeSummaryModuleDeps struct {
 	// view-1 renders the flat job_outcome_summary list unchanged.
 	Options outcomesummarypkg.Options
 	// ResolvePrincipalKind is owned by app composition and returns the active
-	// session principal kind. Nil is fail-closed for explicit section exports.
+	// session principal kind. Nil is fail-closed for explicit group exports.
 	ResolvePrincipalKind func(context.Context) int32
 
 	// Job outcome summary operations
@@ -110,7 +110,7 @@ type OutcomeSummaryModuleDeps struct {
 	GetPhaseOutcomeSummaryByJobPhase func(ctx context.Context, req *phasesumpb.GetPhaseOutcomeSummaryByJobPhaseRequest) (*phasesumpb.GetPhaseOutcomeSummaryByJobPhaseResponse, error)
 	ListPhaseOutcomeSummarysByJob    func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
 
-	// Report-cards navigation deps (view-1 landing + view-2 section grid). All
+	// Report-cards navigation deps (view-1 landing + view-2 group grid). All
 	// optional/nil-safe: a nil closure degrades the affected surface to its
 	// empty/flat state, never a panic.
 	ListPriceSchedules                  func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
@@ -131,16 +131,16 @@ type OutcomeSummaryModuleDeps struct {
 	// ListJobTemplatePhasesByTemplate resolves a job_template's phases (with their
 	// stable `code`) so the report-card block tree can key per-phase leaves by
 	// phase code. Optional/nil-safe.
-	ListJobTemplatePhasesByTemplate     func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
-	ListJobTemplates                    func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
-	ListClients                         func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
-	ListClientAttributes                func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
-	ListAttributes                      func(ctx context.Context, req *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error)
-	ResolveAttributeIDByCode            func(ctx context.Context, code string) (string, error)
-	GetSubscriptionGroupOutcomeExport   func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
-	ListSubscriptionGroupOutcomeLanding func(ctx context.Context, req *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
-	ResolveSectionTemplate              func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcomesummarypkg.ResolvedSectionTemplate, error)
-	ListJobTemplateSummaries            func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
+	ListJobTemplatePhasesByTemplate          func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListJobTemplates                         func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+	ListClients                              func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+	ListClientAttributes                     func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
+	ListAttributes                           func(ctx context.Context, req *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error)
+	ResolveAttributeIDByCode                 func(ctx context.Context, code string) (string, error)
+	GetSubscriptionGroupOutcomeExport        func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	ListSubscriptionGroupOutcomeLanding      func(ctx context.Context, req *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
+	ResolveSubscriptionGroupDocumentTemplate func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcomesummarypkg.ResolvedSubscriptionGroupDocumentTemplate, error)
+	ListJobTemplateSummaries                 func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
 
 	// ListJobListTabSupport (R9 W-A2) — the ONE no-argument single-statement
 	// UNION tab-support read (all job_category rows + ACTIVE job_template
@@ -152,7 +152,7 @@ type OutcomeSummaryModuleDeps struct {
 	ListJobListTabSupport func(ctx context.Context) ([]*jobcategorypb.JobCategory, []*jobtemplatepb.JobTemplate, error)
 
 	// ListJobCategories resolves Options.CategoryFilter (a job_category code, e.g.
-	// "academic") to its id so the section grid, client card, and report-card
+	// "academic") to its id so the group grid, client card, and report-card
 	// document drop same-origin deportment jobs (gate H2). Optional/nil-safe —
 	// a nil closure (or empty CategoryFilter) applies no filter.
 	ListJobCategories func(ctx context.Context, req *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error)
@@ -174,37 +174,37 @@ type OutcomeSummaryModuleDeps struct {
 	DeleteTemplateBinding  func(ctx context.Context, req *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error)
 	PublishTemplateBinding func(ctx context.Context, req *bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse, error)
 
-	// Section Template settings use a distinct binding family and a bytes-first,
+	// Subscription-group document template settings use a distinct binding family and a bytes-first,
 	// atomic artifact+DRAFT pair. Storage closures accept only the generated
 	// exact locator and are never exposed as routes.
-	StoreSectionTemplate            func(context.Context, string, []byte, string) (string, error)
-	DeleteSectionTemplateObject     func(context.Context, string, string) error
-	CreateSectionTemplateUploadPair func(context.Context, *documenttemplatepb.DocumentTemplate, *sectionbindingpb.SubscriptionGroupDocumentTemplate) (*documenttemplatepb.DocumentTemplate, *sectionbindingpb.SubscriptionGroupDocumentTemplate, error)
-	ListSectionTemplateBindings     func(context.Context, *sectionbindingpb.ListSubscriptionGroupDocumentTemplatesRequest) (*sectionbindingpb.ListSubscriptionGroupDocumentTemplatesResponse, error)
-	DeleteSectionTemplateDraftPair  func(context.Context, string) (*documenttemplatepb.DocumentTemplate, error)
-	DeleteSectionTemplateBinding    func(context.Context, *sectionbindingpb.DeleteSubscriptionGroupDocumentTemplateRequest) (*sectionbindingpb.DeleteSubscriptionGroupDocumentTemplateResponse, error)
-	PublishSectionTemplateBinding   func(context.Context, *sectionbindingpb.PublishSubscriptionGroupDocumentTemplateRequest) (*sectionbindingpb.PublishSubscriptionGroupDocumentTemplateResponse, error)
+	StoreSubscriptionGroupDocumentTemplate            func(context.Context, string, []byte, string) (string, error)
+	DeleteSubscriptionGroupDocumentTemplateObject     func(context.Context, string, string) error
+	CreateSubscriptionGroupDocumentTemplateUploadPair func(context.Context, *documenttemplatepb.DocumentTemplate, *subscriptiongroupdocumenttemplatepb.SubscriptionGroupDocumentTemplate) (*documenttemplatepb.DocumentTemplate, *subscriptiongroupdocumenttemplatepb.SubscriptionGroupDocumentTemplate, error)
+	ListSubscriptionGroupDocumentTemplateBindings     func(context.Context, *subscriptiongroupdocumenttemplatepb.ListSubscriptionGroupDocumentTemplatesRequest) (*subscriptiongroupdocumenttemplatepb.ListSubscriptionGroupDocumentTemplatesResponse, error)
+	DeleteSubscriptionGroupDocumentTemplateDraftPair  func(context.Context, string) (*documenttemplatepb.DocumentTemplate, error)
+	DeleteSubscriptionGroupDocumentTemplateBinding    func(context.Context, *subscriptiongroupdocumenttemplatepb.DeleteSubscriptionGroupDocumentTemplateRequest) (*subscriptiongroupdocumenttemplatepb.DeleteSubscriptionGroupDocumentTemplateResponse, error)
+	PublishSubscriptionGroupDocumentTemplateBinding   func(context.Context, *subscriptiongroupdocumenttemplatepb.PublishSubscriptionGroupDocumentTemplateRequest) (*subscriptiongroupdocumenttemplatepb.PublishSubscriptionGroupDocumentTemplateResponse, error)
 }
 
 // OutcomeSummaryModule holds all constructed outcome summary views.
 type OutcomeSummaryModule struct {
-	routes               outcomesummarypkg.Routes
-	sectionExportEnabled bool
-	List                 view.View
-	Section              view.View
-	// SectionDownload is the HTMX drawer fragment for category, one period,
+	routes                         outcomesummarypkg.Routes
+	subscriptionGroupExportEnabled bool
+	List                           view.View
+	SubscriptionGroup              view.View
+	// SubscriptionGroupDownload is the HTMX drawer fragment for category, one period,
 	// and output format selection. It remains report-read gated and separate
-	// from Section Template management permissions.
-	SectionDownload view.View
-	ClientCard      view.View
-	JobSummary      view.View
-	PhaseSummary    view.View
-	// SectionExport is the section-grid CSV download (a raw handler — the
+	// from subscription-group document template management permissions.
+	SubscriptionGroupDownload view.View
+	ClientCard                view.View
+	JobSummary                view.View
+	PhaseSummary              view.View
+	// SubscriptionGroupExport is the group-grid CSV download (a raw handler — the
 	// registrar wraps it with the same RBAC context injection as views).
-	SectionExport http.HandlerFunc
-	// StudentDocument is the per-student report-card .docx download (a raw
-	// handler wrapped like SectionExport). Nil when GenerateDoc is not wired.
-	StudentDocument http.HandlerFunc
+	SubscriptionGroupExport http.HandlerFunc
+	// ClientDocument is the per-client report-card .docx download (a raw
+	// handler wrapped like SubscriptionGroupExport). Nil when GenerateDoc is not wired.
+	ClientDocument http.HandlerFunc
 
 	// Report-card template settings surface (TB3).
 	TemplateSettings view.View
@@ -212,36 +212,36 @@ type OutcomeSummaryModule struct {
 	TemplatePublish  view.View
 	TemplateDelete   view.View
 
-	SectionTemplateSettings view.View
-	SectionTemplateUpload   view.View
-	SectionTemplatePublish  view.View
-	SectionTemplateDelete   view.View
+	SubscriptionGroupDocumentTemplateSettings view.View
+	SubscriptionGroupDocumentTemplateUpload   view.View
+	SubscriptionGroupDocumentTemplatePublish  view.View
+	SubscriptionGroupDocumentTemplateDelete   view.View
 }
 
 // NewOutcomeSummaryModule creates a new outcome summary module with all views wired.
 func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModule {
-	sectionDeps := &sectionview.Deps{
-		Routes:                              deps.Routes,
-		Labels:                              deps.Labels,
-		CommonLabels:                        deps.CommonLabels,
-		TableLabels:                         deps.TableLabels,
-		Options:                             deps.Options,
-		ResolvePrincipalKind:                deps.ResolvePrincipalKind,
-		ListSubscriptionGroups:              deps.ListSubscriptionGroups,
-		ListSubscriptionGroupMembers:        deps.ListSubscriptionGroupMembers,
-		ListJobs:                            deps.ListJobs,
-		ListJobTemplates:                    deps.ListJobTemplates,
-		ListClients:                         deps.ListClients,
-		ListJobOutcomeSummarys:              deps.ListJobOutcomeSummarys,
-		ListClientAttributes:                deps.ListClientAttributes,
-		ListAttributes:                      deps.ListAttributes,
-		ResolveAttributeIDByCode:            deps.ResolveAttributeIDByCode,
-		GetSubscriptionGroupOutcomeExport:   deps.GetSubscriptionGroupOutcomeExport,
-		ResolveSectionTemplate:              deps.ResolveSectionTemplate,
-		GeneratePDF:                         deps.GeneratePDF,
-		ListSubscriptionGroupWorkspaceUsers: deps.ListSubscriptionGroupWorkspaceUsers,
-		ListWorkspaceUsers:                  deps.ListWorkspaceUsers,
-		ListJobCategories:                   deps.ListJobCategories,
+	subscriptionGroupDeps := &subscriptiongroupview.Deps{
+		Routes:                                   deps.Routes,
+		Labels:                                   deps.Labels,
+		CommonLabels:                             deps.CommonLabels,
+		TableLabels:                              deps.TableLabels,
+		Options:                                  deps.Options,
+		ResolvePrincipalKind:                     deps.ResolvePrincipalKind,
+		ListSubscriptionGroups:                   deps.ListSubscriptionGroups,
+		ListSubscriptionGroupMembers:             deps.ListSubscriptionGroupMembers,
+		ListJobs:                                 deps.ListJobs,
+		ListJobTemplates:                         deps.ListJobTemplates,
+		ListClients:                              deps.ListClients,
+		ListJobOutcomeSummarys:                   deps.ListJobOutcomeSummarys,
+		ListClientAttributes:                     deps.ListClientAttributes,
+		ListAttributes:                           deps.ListAttributes,
+		ResolveAttributeIDByCode:                 deps.ResolveAttributeIDByCode,
+		GetSubscriptionGroupOutcomeExport:        deps.GetSubscriptionGroupOutcomeExport,
+		ResolveSubscriptionGroupDocumentTemplate: deps.ResolveSubscriptionGroupDocumentTemplate,
+		GeneratePDF:                              deps.GeneratePDF,
+		ListSubscriptionGroupWorkspaceUsers:      deps.ListSubscriptionGroupWorkspaceUsers,
+		ListWorkspaceUsers:                       deps.ListWorkspaceUsers,
+		ListJobCategories:                        deps.ListJobCategories,
 		// Non-enrolled-placeholder evidence walk (blanks untaken-elective floor
 		// cells on the grid + CSV). Already injected for the DOCX handler.
 		ListJobPhases:    deps.ListJobPhases,
@@ -249,8 +249,8 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		ListTaskOutcomes: deps.ListTaskOutcomes,
 	}
 	return &OutcomeSummaryModule{
-		routes:               deps.Routes,
-		sectionExportEnabled: deps.Options.SectionExportEnabled(),
+		routes:                         deps.Routes,
+		subscriptionGroupExportEnabled: deps.Options.SubscriptionGroupExportEnabled(),
 		List: summarylist.NewView(&summarylist.ListViewDeps{
 			Routes:                              deps.Routes,
 			Labels:                              deps.Labels,
@@ -263,60 +263,63 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			ListSubscriptionGroups:              deps.ListSubscriptionGroups,
 			ListJobTemplateSummaries:            deps.ListJobTemplateSummaries,
 			ListSubscriptionGroupOutcomeLanding: deps.ListSubscriptionGroupOutcomeLanding,
+			GetSubscriptionGroupOutcomeExport:   deps.GetSubscriptionGroupOutcomeExport,
 			ListJobListTabSupport:               deps.ListJobListTabSupport,
 			ListSubscriptionGroupMembers:        deps.ListSubscriptionGroupMembers,
 			ListJobs:                            deps.ListJobs,
-			// Section-visibility scoping (Options.List.ScopeByServicingGrant).
+			// Group-visibility scoping (Options.List.ScopeByServicingGrant).
 			ListWorkspaceUsers:                  deps.ListWorkspaceUsers,
 			ListSubscriptionGroupWorkspaceUsers: deps.ListSubscriptionGroupWorkspaceUsers,
 		}),
-		Section: sectionview.NewView(sectionDeps),
-		SectionDownload: sectionview.NewDownloadDrawer(&sectionview.DrawerDeps{
+		SubscriptionGroup: subscriptiongroupview.NewView(subscriptionGroupDeps),
+		SubscriptionGroupDownload: subscriptiongroupview.NewDownloadDrawer(&subscriptiongroupview.DrawerDeps{
 			Routes:                            deps.Routes,
 			Labels:                            deps.Labels,
 			Options:                           deps.Options,
 			ResolvePrincipalKind:              deps.ResolvePrincipalKind,
 			GetSubscriptionGroupOutcomeExport: deps.GetSubscriptionGroupOutcomeExport,
 		}),
-		SectionExport:   sectionview.NewExportHandler(sectionDeps),
-		StudentDocument: newStudentDocumentHandler(deps),
+		SubscriptionGroupExport: subscriptiongroupview.NewExportHandler(subscriptionGroupDeps),
+		ClientDocument:          newClientDocumentHandler(deps),
 		ClientCard: clientcard.NewView(&clientcard.Deps{
 			Routes:               deps.Routes,
 			Labels:               deps.Labels,
 			CommonLabels:         deps.CommonLabels,
 			TableLabels:          deps.TableLabels,
+			Options:              deps.Options,
 			ResolvePrincipalKind: deps.ResolvePrincipalKind,
 			CategoryFilter:       deps.Options.CategoryFilter,
 			// Client-card job-category banding (R9 W-A6, dedicated Options.ClientCard
 			// — NOT Options.Row). BandByCategory groups the subject rows into native
 			// job-category TableRowGroup bands; IncludeAllCategories lifts the card's
 			// H2 academic-only filter FOR BANDING so deportment subjects appear under
-			// their own band (the document/section paths keep H2 — separate fetches).
+			// their own band (the document/group paths keep H2 — separate fetches).
 			// Both zero (service-admin / unset) → today's flat card, byte-identical.
-			BandByCategory:                deps.Options.ClientCard.BandByCategory(),
-			IncludeAllCategories:          deps.Options.ClientCard.IncludeAllCategories,
-			ListJobCategories:             deps.ListJobCategories,
-			ListSubscriptionGroups:        deps.ListSubscriptionGroups,
-			ListSubscriptionGroupMembers:  deps.ListSubscriptionGroupMembers,
-			ListJobs:                      deps.ListJobs,
-			ListJobTemplates:              deps.ListJobTemplates,
-			ListClients:                   deps.ListClients,
-			ListJobOutcomeSummarys:        deps.ListJobOutcomeSummarys,
-			ListPhaseOutcomeSummarysByJob: deps.ListPhaseOutcomeSummarysByJob,
-			ListJobPhases:                 deps.ListJobPhases,
+			BandByCategory:                    deps.Options.ClientCard.BandByCategory(),
+			IncludeAllCategories:              deps.Options.ClientCard.IncludeAllCategories,
+			ListJobCategories:                 deps.ListJobCategories,
+			GetSubscriptionGroupOutcomeExport: deps.GetSubscriptionGroupOutcomeExport,
+			ListSubscriptionGroups:            deps.ListSubscriptionGroups,
+			ListSubscriptionGroupMembers:      deps.ListSubscriptionGroupMembers,
+			ListJobs:                          deps.ListJobs,
+			ListJobTemplates:                  deps.ListJobTemplates,
+			ListClients:                       deps.ListClients,
+			ListJobOutcomeSummarys:            deps.ListJobOutcomeSummarys,
+			ListPhaseOutcomeSummarysByJob:     deps.ListPhaseOutcomeSummarysByJob,
+			ListJobPhases:                     deps.ListJobPhases,
 			// Non-enrolled-placeholder evidence walk (blanks untaken-elective
 			// floor grade cells). Already injected for the DOCX handler.
 			ListJobTasks:     deps.ListJobTasks,
 			ListTaskOutcomes: deps.ListTaskOutcomes,
 		}),
-		TemplateSettings:        templatesettings.NewListView(templateSettingsDeps(deps)),
-		TemplateUpload:          templatesettings.NewUploadAction(templateSettingsDeps(deps)),
-		TemplatePublish:         templatesettings.NewPublishAction(templateSettingsDeps(deps)),
-		TemplateDelete:          templatesettings.NewDeleteAction(templateSettingsDeps(deps)),
-		SectionTemplateSettings: sectiontemplatesettings.NewListView(sectionTemplateSettingsDeps(deps)),
-		SectionTemplateUpload:   sectiontemplatesettings.NewUploadAction(sectionTemplateSettingsDeps(deps)),
-		SectionTemplatePublish:  sectiontemplatesettings.NewPublishAction(sectionTemplateSettingsDeps(deps)),
-		SectionTemplateDelete:   sectiontemplatesettings.NewDeleteAction(sectionTemplateSettingsDeps(deps)),
+		TemplateSettings: templatesettings.NewListView(templateSettingsDeps(deps)),
+		TemplateUpload:   templatesettings.NewUploadAction(templateSettingsDeps(deps)),
+		TemplatePublish:  templatesettings.NewPublishAction(templateSettingsDeps(deps)),
+		TemplateDelete:   templatesettings.NewDeleteAction(templateSettingsDeps(deps)),
+		SubscriptionGroupDocumentTemplateSettings: subscriptiongroupdocumenttemplate.NewListView(subscriptionGroupDocumentTemplateSettingsDeps(deps)),
+		SubscriptionGroupDocumentTemplateUpload:   subscriptiongroupdocumenttemplate.NewUploadAction(subscriptionGroupDocumentTemplateSettingsDeps(deps)),
+		SubscriptionGroupDocumentTemplatePublish:  subscriptiongroupdocumenttemplate.NewPublishAction(subscriptionGroupDocumentTemplateSettingsDeps(deps)),
+		SubscriptionGroupDocumentTemplateDelete:   subscriptiongroupdocumenttemplate.NewDeleteAction(subscriptionGroupDocumentTemplateSettingsDeps(deps)),
 		JobSummary: jobsummary.NewView(&jobsummary.Deps{
 			Routes:                    deps.Routes,
 			Labels:                    deps.Labels,
@@ -332,8 +335,8 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 	}
 }
 
-func sectionTemplateSettingsDeps(deps *OutcomeSummaryModuleDeps) *sectiontemplatesettings.Deps {
-	return &sectiontemplatesettings.Deps{
+func subscriptionGroupDocumentTemplateSettingsDeps(deps *OutcomeSummaryModuleDeps) *subscriptiongroupdocumenttemplate.Deps {
+	return &subscriptiongroupdocumenttemplate.Deps{
 		Routes:                 deps.Routes,
 		Labels:                 deps.Labels,
 		CommonLabels:           deps.CommonLabels,
@@ -342,12 +345,12 @@ func sectionTemplateSettingsDeps(deps *OutcomeSummaryModuleDeps) *sectiontemplat
 		ListPriceSchedules:     deps.ListPriceSchedules,
 		ListPlans:              deps.ListPlans,
 		ListJobCategories:      deps.ListJobCategories,
-		StoreTemplate:          deps.StoreSectionTemplate,
-		DeleteTemplateObject:   deps.DeleteSectionTemplateObject,
-		CreateUploadPair:       deps.CreateSectionTemplateUploadPair,
-		ListTemplateBindings:   deps.ListSectionTemplateBindings,
-		DeleteDraftPair:        deps.DeleteSectionTemplateDraftPair,
-		PublishTemplateBinding: deps.PublishSectionTemplateBinding,
+		StoreTemplate:          deps.StoreSubscriptionGroupDocumentTemplate,
+		DeleteTemplateObject:   deps.DeleteSubscriptionGroupDocumentTemplateObject,
+		CreateUploadPair:       deps.CreateSubscriptionGroupDocumentTemplateUploadPair,
+		ListTemplateBindings:   deps.ListSubscriptionGroupDocumentTemplateBindings,
+		DeleteDraftPair:        deps.DeleteSubscriptionGroupDocumentTemplateDraftPair,
+		PublishTemplateBinding: deps.PublishSubscriptionGroupDocumentTemplateBinding,
 	}
 }
 
@@ -371,45 +374,45 @@ func templateSettingsDeps(deps *OutcomeSummaryModuleDeps) *templatesettings.Deps
 	}
 }
 
-// newStudentDocumentHandler builds the per-student report-card .docx download
+// newClientDocumentHandler builds the per-client report-card .docx download
 // handler from the module deps. Returns nil when GenerateDoc is not wired (the
 // app did not inject the fycha doctemplate closure) — RegisterRoutes then skips
 // the route rather than registering a handler that would always 503.
-func newStudentDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc {
+func newClientDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc {
 	if deps.GenerateDoc == nil {
 		return nil
 	}
 	return documentview.NewDownloadHandler(&documentview.Deps{
-		Labels:                                    deps.Labels,
-		ResolvePrincipalKind:                      deps.ResolvePrincipalKind,
-		CommonLabels:                              deps.CommonLabels,
-		DocumentHeaderName:                        deps.DocumentHeaderName,
-		CategoryFilter:                            deps.Options.CategoryFilter,
-		DocOptions:                                deps.Options.Document,
-		ListJobCategories:                         deps.ListJobCategories,
-		ListOutcomeCriterias:                      deps.ListOutcomeCriterias,
-		GetStaffListPageData:                      deps.GetStaffListPageData,
-		ListPriceSchedules:                        deps.ListPriceSchedules,
-		ListClientAttributes:                      deps.ListClientAttributes,
-		ResolveAttributeIDByCode:                  deps.ResolveAttributeIDByCode,
-		ListWorkspaceUsers:                        deps.ListWorkspaceUsers,
-		GenerateDoc:                               deps.GenerateDoc,
-		GeneratePDF:                               deps.GeneratePDF,
-		ResolveTemplateBytes:                      deps.ResolveTemplateBytes,
-		ListSubscriptionGroups:                    deps.ListSubscriptionGroups,
-		ListSubscriptionGroupMembers:              deps.ListSubscriptionGroupMembers,
-		ListJobs:                                  deps.ListJobs,
-		ListJobTemplates:                          deps.ListJobTemplates,
-		ListClients:                               deps.ListClients,
-		ListJobOutcomeSummarys:                    deps.ListJobOutcomeSummarys,
-		ListPhaseOutcomeSummarysByJob:             deps.ListPhaseOutcomeSummarysByJob,
-		ListJobPhases:                             deps.ListJobPhases,
-		GetPhaseApprovalGateRollup:                deps.GetPhaseApprovalGateRollup,
-		ListJobTemplatePhasesByTemplate:           deps.ListJobTemplatePhasesByTemplate,
-		ListJobOutcomeLines:                       deps.ListJobOutcomeLines,
-		ListJobTasks:                              deps.ListJobTasks,
-		ListTaskOutcomes:                          deps.ListTaskOutcomes,
-		ListCodedTaskOutcomeValuesByJob:           deps.ListCodedTaskOutcomeValuesByJob,
+		Labels:                          deps.Labels,
+		ResolvePrincipalKind:            deps.ResolvePrincipalKind,
+		CommonLabels:                    deps.CommonLabels,
+		DocumentHeaderName:              deps.DocumentHeaderName,
+		CategoryFilter:                  deps.Options.CategoryFilter,
+		DocOptions:                      deps.Options.Document,
+		ListJobCategories:               deps.ListJobCategories,
+		ListOutcomeCriterias:            deps.ListOutcomeCriterias,
+		GetStaffListPageData:            deps.GetStaffListPageData,
+		ListPriceSchedules:              deps.ListPriceSchedules,
+		ListClientAttributes:            deps.ListClientAttributes,
+		ResolveAttributeIDByCode:        deps.ResolveAttributeIDByCode,
+		ListWorkspaceUsers:              deps.ListWorkspaceUsers,
+		GenerateDoc:                     deps.GenerateDoc,
+		GeneratePDF:                     deps.GeneratePDF,
+		ResolveTemplateBytes:            deps.ResolveTemplateBytes,
+		ListSubscriptionGroups:          deps.ListSubscriptionGroups,
+		ListSubscriptionGroupMembers:    deps.ListSubscriptionGroupMembers,
+		ListJobs:                        deps.ListJobs,
+		ListJobTemplates:                deps.ListJobTemplates,
+		ListClients:                     deps.ListClients,
+		ListJobOutcomeSummarys:          deps.ListJobOutcomeSummarys,
+		ListPhaseOutcomeSummarysByJob:   deps.ListPhaseOutcomeSummarysByJob,
+		ListJobPhases:                   deps.ListJobPhases,
+		GetPhaseApprovalGateRollup:      deps.GetPhaseApprovalGateRollup,
+		ListJobTemplatePhasesByTemplate: deps.ListJobTemplatePhasesByTemplate,
+		ListJobOutcomeLines:             deps.ListJobOutcomeLines,
+		ListJobTasks:                    deps.ListJobTasks,
+		ListTaskOutcomes:                deps.ListTaskOutcomes,
+		ListCodedTaskOutcomeValuesByJob: deps.ListCodedTaskOutcomeValuesByJob,
 		ListCodedTaskOutcomeValuesByJobHistorical: deps.ListCodedTaskOutcomeValuesByJobHistorical,
 		ListTemplateTaskCriterias:                 deps.ListTemplateTaskCriterias,
 	})
@@ -426,36 +429,36 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 	if m.routes.ListScopeURL != "" && m.routes.ListScopeURL != m.routes.ListURL {
 		r.GET(m.routes.ListScopeURL, m.List)
 	}
-	if m.Section != nil && m.routes.SectionURL != "" {
-		r.GET(m.routes.SectionURL, m.Section)
+	if m.SubscriptionGroup != nil && m.routes.SubscriptionGroupURL != "" {
+		r.GET(m.routes.SubscriptionGroupURL, m.SubscriptionGroup)
 	}
-	if m.sectionExportEnabled && m.SectionDownload != nil && m.routes.SectionDownloadDrawerURL != "" {
-		r.GET(m.routes.SectionDownloadDrawerURL, m.SectionDownload)
+	if m.subscriptionGroupExportEnabled && m.SubscriptionGroupDownload != nil && m.routes.SubscriptionGroupDownloadDrawerURL != "" {
+		r.GET(m.routes.SubscriptionGroupDownloadDrawerURL, m.SubscriptionGroupDownload)
 	}
 	if m.ClientCard != nil && m.routes.ClientCardURL != "" {
 		r.GET(m.routes.ClientCardURL, m.ClientCard)
 	}
-	if m.SectionExport != nil && m.routes.SectionExportURL != "" {
+	if m.SubscriptionGroupExport != nil && m.routes.SubscriptionGroupExportURL != "" {
 		// Raw (non-view) route — the registrar's HandleFunc path wraps it with
 		// the ViewAdapter's RBAC context injection (WrapHandler), so the
 		// handler's view.GetUserPermissions gate observes real permissions.
 		if rr, ok := r.(interface {
 			HandleFunc(method, path string, handler http.HandlerFunc, middlewares ...string)
 		}); ok {
-			rr.HandleFunc("GET", m.routes.SectionExportURL, m.SectionExport)
+			rr.HandleFunc("GET", m.routes.SubscriptionGroupExportURL, m.SubscriptionGroupExport)
 		} else {
-			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.SectionExportURL)
+			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.SubscriptionGroupExportURL)
 		}
 	}
-	if m.StudentDocument != nil && m.routes.ClientDocumentURL != "" {
+	if m.ClientDocument != nil && m.routes.ClientDocumentURL != "" {
 		// Raw (non-view) route — the registrar's HandleFunc path wraps it with
 		// the ViewAdapter's RBAC context injection (WrapHandler), exactly like
-		// SectionExport, so the handler's view.GetUserPermissions gate observes
+		// SubscriptionGroupExport, so the handler's view.GetUserPermissions gate observes
 		// real permissions.
 		if rr, ok := r.(interface {
 			HandleFunc(method, path string, handler http.HandlerFunc, middlewares ...string)
 		}); ok {
-			rr.HandleFunc("GET", m.routes.ClientDocumentURL, m.StudentDocument)
+			rr.HandleFunc("GET", m.routes.ClientDocumentURL, m.ClientDocument)
 		} else {
 			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.ClientDocumentURL)
 		}
@@ -480,19 +483,19 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 		r.POST(m.routes.TemplateDeleteURL, m.TemplateDelete)
 	}
 
-	if m.sectionExportEnabled {
-		if m.SectionTemplateSettings != nil && m.routes.SectionTemplateSettingsURL != "" {
-			r.GET(m.routes.SectionTemplateSettingsURL, m.SectionTemplateSettings)
+	if m.subscriptionGroupExportEnabled {
+		if m.SubscriptionGroupDocumentTemplateSettings != nil && m.routes.SubscriptionGroupDocumentTemplateSettingsURL != "" {
+			r.GET(m.routes.SubscriptionGroupDocumentTemplateSettingsURL, m.SubscriptionGroupDocumentTemplateSettings)
 		}
-		if m.SectionTemplateUpload != nil && m.routes.SectionTemplateUploadURL != "" {
-			r.GET(m.routes.SectionTemplateUploadURL, m.SectionTemplateUpload)
-			r.POST(m.routes.SectionTemplateUploadURL, m.SectionTemplateUpload)
+		if m.SubscriptionGroupDocumentTemplateUpload != nil && m.routes.SubscriptionGroupDocumentTemplateUploadURL != "" {
+			r.GET(m.routes.SubscriptionGroupDocumentTemplateUploadURL, m.SubscriptionGroupDocumentTemplateUpload)
+			r.POST(m.routes.SubscriptionGroupDocumentTemplateUploadURL, m.SubscriptionGroupDocumentTemplateUpload)
 		}
-		if m.SectionTemplatePublish != nil && m.routes.SectionTemplatePublishURL != "" {
-			r.POST(m.routes.SectionTemplatePublishURL, m.SectionTemplatePublish)
+		if m.SubscriptionGroupDocumentTemplatePublish != nil && m.routes.SubscriptionGroupDocumentTemplatePublishURL != "" {
+			r.POST(m.routes.SubscriptionGroupDocumentTemplatePublishURL, m.SubscriptionGroupDocumentTemplatePublish)
 		}
-		if m.SectionTemplateDelete != nil && m.routes.SectionTemplateDeleteURL != "" {
-			r.POST(m.routes.SectionTemplateDeleteURL, m.SectionTemplateDelete)
+		if m.SubscriptionGroupDocumentTemplateDelete != nil && m.routes.SubscriptionGroupDocumentTemplateDeleteURL != "" {
+			r.POST(m.routes.SubscriptionGroupDocumentTemplateDeleteURL, m.SubscriptionGroupDocumentTemplateDelete)
 		}
 	}
 }

@@ -17,7 +17,7 @@ import (
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 )
 
-// R9 W-A6 — the per-student client card's job-category bands (dedicated
+// R9 W-A6 — the per-client client card's job-category bands (dedicated
 // Options.ClientCard). These pin: banding-on (ordered bands, rows under the
 // right band), the <2-category degrade → flat byte-equal, the Uncategorized
 // band, H2 preservation on the non-lift path, and the CSS-inert bulk-state of
@@ -142,7 +142,7 @@ func TestBuildTable_Banded_ThreeBands_Ordered(t *testing.T) {
 }
 
 // TestBuildTable_DegradeFewerThanTwoCategories_FlatByteEqual: banding on but the
-// student has subjects in only ONE category → degrade to flat rows, byte-equal
+// client has subjects in only ONE category → degrade to flat rows, byte-equal
 // to a plainly-unbanded render of the same jobs.
 func TestBuildTable_DegradeFewerThanTwoCategories_FlatByteEqual(t *testing.T) {
 	jobs := []*jobpb.Job{job("jEng", "tEng"), job("jKor", "tKor")}
@@ -269,7 +269,7 @@ func renderTableCard(t *testing.T, cfg types.TableConfig) string {
 // .table-group-selection{display:none}), so they render INERTLY, not absent.
 func TestBandedTable_BulkControlsInert(t *testing.T) {
 	cfg := types.TableConfig{
-		ID: "report-cards-student",
+		ID: "report-cards-client",
 		Groups: []types.TableRowGroup{
 			{ID: "rc-band-academic", Title: "Academic", DataAttrs: map[string]string{"testid": "rc-band-academic"}, Rows: []types.TableRow{{ID: "j1", Cells: []types.TableCell{{Value: "English"}}}}},
 			{ID: "rc-band-uncategorized", Title: "Uncategorized", DataAttrs: map[string]string{"testid": "rc-band-uncategorized"}, Rows: []types.TableRow{{ID: "j2", Cells: []types.TableCell{{Value: "Mystery"}}}}},

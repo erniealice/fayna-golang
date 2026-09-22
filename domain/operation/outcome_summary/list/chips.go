@@ -1,7 +1,7 @@
 package list
 
 // chips.go — the landing's Phase-B approval-status DISTRIBUTION chips (R9
-// W-B1/W-B2; Q-R9-1, Q-R9-4). Each (section × category) composite cell gains
+// W-B1/W-B2; Q-R9-1, Q-R9-4). Each (group × category) composite cell gains
 // one pyeza status-badge chip per NONZERO approval state, ladder-ordered, plus
 // an attention (mixed) overlay chip. The chips ride the SAME single
 // ListJobTemplateSummaries read as the Phase-A counts (statement budget +0,
@@ -35,7 +35,7 @@ var ladder = []jobphasepb.PhaseApprovalStatus{
 }
 
 // cellStatusDist is the Phase-B approval-status distribution for ONE
-// (section, category) cell: how many SUBJECTS (distinct templates, staff-folded)
+// (group, category) cell: how many SUBJECTS (distinct templates, staff-folded)
 // sit at each conservative group_lowest_status, plus how many carry the
 // group_mixed_attention overlay. Subjects with NO data-bearing phase
 // (group_phase_count == 0) are EXCLUDED here — they still count in the Phase-A
@@ -51,7 +51,7 @@ type cellStatusDist struct {
 
 // recordSubjectStatus folds ONE distinct (group, template) subject's group-grain
 // approval state into the (gid, cat) cell distribution. It is called EXACTLY
-// ONCE per distinct subject — from inside sectionCounts' existing seen[gid][tid]
+// ONCE per distinct subject — from inside groupCounts' existing seen[gid][tid]
 // dedup — so staff-folded summary rows (one row per deliverer, all carrying the
 // SAME group-grain fields 18–21) never double-count: THIS is the staff-fold
 // dedupe proof. A subject with zero data-bearing phases (group_phase_count == 0,
@@ -86,7 +86,7 @@ func recordSubjectStatus(dist map[string]map[string]*cellStatusDist, gid, cat st
 // the mixed overlay, a trailing WARNING attention chip is appended — the R7-P3
 // outcome_matrix "Attention — mixed" idiom, adapted to the count-bearing
 // composite chip (Count = subjects internally mixed). A nil/empty distribution
-// (all subjects no-data, or a historical section the active-bound summary
+// (all subjects no-data, or a historical group the active-bound summary
 // aggregate never saw) yields NO chips → the Phase-A count-only cell (the
 // degrade contract, acceptance #13).
 func buildStatusChips(d *cellStatusDist, l outcome_summary.Labels) []types.CompositeStatusChip {

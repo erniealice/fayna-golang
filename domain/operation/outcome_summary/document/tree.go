@@ -288,7 +288,7 @@ type treeInputs struct {
 	groupCatID string // the configured group category id (lead alias only)
 	groupLead  string // resolved group-lead ("Adviser") display name
 
-	// historical is set when the card's section is inactive (a past academic
+	// historical is set when the card's group is inactive (a past academic
 	// year). A past card's job/phase/task ancestry is inactive, so the singleton
 	// coded-cell read must route to the inactive-admitting historical reader.
 	historical bool

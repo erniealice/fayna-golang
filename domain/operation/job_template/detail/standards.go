@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
@@ -12,6 +13,7 @@ import (
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	templatetaskcriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	templateTaskCriteria "github.com/erniealice/fayna-golang/domain/operation/template_task_criteria"
 )
 
 // loadStandardsTab populates PageData.StandardsTable with TemplateTaskCriteria
@@ -20,9 +22,10 @@ import (
 // Strategy: walk phases → tasks → criteria (three nested calls). All three deps
 // must be non-nil; otherwise an empty-state panel is shown.
 //
-// The "+ Add Standard" CTA and per-row remove actions are wired to the
+// The "+ Add Standard" CTA and per-row edit/remove actions are wired to the
 // template_task_criteria module's real routes (CriteriaRoutes), permission-
-// gated on template_task_criteria:create / template_task_criteria:delete —
+// gated on template_task_criteria:create / template_task_criteria:update /
+// template_task_criteria:delete —
 // fail-closed inside the tab body per the child-list roster pattern (an
 // empty/no-CTA table, never view.Forbidden — a tab-swap target must stay a
 // partial).
@@ -87,10 +90,16 @@ func loadStandardsTab(ctx context.Context, deps *DetailViewDeps, pageData *PageD
 		}
 	}
 
-	// 3. Build table rows. Per-row remove action, permission-gated on
-	// template_task_criteria:delete — fail-closed (no action rendered when
-	// unpermitted or the route is unwired).
+	// 3. Build table rows. Per-row edit/remove actions are permission-gated —
+	// fail-closed (no action rendered when unpermitted or the route is
+	// unwired).
+	criteriaLabels := deps.CriteriaLabels
+	if criteriaLabels.Actions.Edit == "" || criteriaLabels.Actions.Delete == "" {
+		criteriaLabels = templateTaskCriteria.DefaultLabels()
+	}
+	canEdit := deps.CriteriaRoutes.EditURL != "" && perms.Can("template_task_criteria", "update")
 	canDelete := deps.CriteriaRoutes.DeleteURL != "" && perms.Can("template_task_criteria", "delete")
+	hasActions := (canEdit || canDelete) && len(allRows) > 0
 	rows := make([]types.TableRow, 0, len(allRows))
 	for _, r := range allRows {
 		criteriaName := ""
@@ -101,11 +110,26 @@ func loadStandardsTab(ctx context.Context, deps *DetailViewDeps, pageData *PageD
 			criteriaName = r.criteria.GetOutcomeCriteriaId()
 		}
 		var actions []types.TableAction
+		if canEdit {
+			editURL := route.ResolveURL(deps.CriteriaRoutes.EditURL, "id", r.criteria.GetId())
+			editURL += "?" + url.Values{
+				"job_template_id": {templateID},
+			}.Encode()
+			actions = append(actions, types.TableAction{
+				Type:        "edit",
+				Label:       criteriaLabels.Actions.Edit,
+				HxGet:       editURL,
+				HxTarget:    "#sheetContent",
+				HxSwap:      "innerHTML",
+				OnClick:     "lf.Sheet.open()",
+				DrawerTitle: criteriaLabels.Actions.Edit,
+			})
+		}
 		if canDelete {
 			actions = append(actions, types.TableAction{
 				Type:     "delete",
 				Action:   "delete",
-				Label:    "Remove Standard",
+				Label:    criteriaLabels.Actions.Delete,
 				URL:      deps.CriteriaRoutes.DeleteURL + "?return_table=jt-standards-table",
 				ItemName: criteriaName,
 			})
@@ -135,7 +159,7 @@ func loadStandardsTab(ctx context.Context, deps *DetailViewDeps, pageData *PageD
 		Rows:        rows,
 		Labels:      deps.TableLabels,
 		ShowSearch:  false,
-		ShowActions: canDelete && len(rows) > 0,
+		ShowActions: hasActions,
 		ShowSort:    false,
 		ShowColumns: false,
 		ShowDensity: false,

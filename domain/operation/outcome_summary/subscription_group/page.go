@@ -1,17 +1,17 @@
-// Package section renders view-2 of the report-cards surface: a per-section
-// (subscription_group) grid of students × subjects, each cell = the student's
+// Package group renders view-2 of the report-cards surface: a per-group
+// (subscription_group) grid of clients × subjects, each cell = the client's
 // year-final rating (job_outcome_summary.scaled_label) for that subject,
 // linking out to the existing per-job summary. It is a READ-ONLY reporting
 // table (types.TableConfig + Groups gender bands) — the editing surface is the
 // grade sheet (outcome_matrix).
 //
-// Security (Q-SEC-7): the section id is EXISTS-gated against the session
+// Security (Q-SEC-7): the group id is EXISTS-gated against the session
 // workspace (the workspace-aware ListSubscriptionGroups adapter returns a
 // foreign-workspace group as no-rows → fail-closed). Every read is
 // workspace-bound at the espyna adapter; the row/column set is derived from the
-// section's JOBS (ListJobs), which the adapter narrows to the acting STAFF
-// principal's reachable jobs — so a teacher sees only their students' cards.
-package section
+// group's JOBS (ListJobs), which the adapter narrows to the acting STAFF
+// principal's reachable jobs — so a teacher sees only their clients' cards.
+package subscription_group
 
 import (
 	"context"
@@ -50,7 +50,7 @@ import (
 )
 
 // actionsColumnKey is the column Key of the frozen per-row action cell (view
-// student card + CSV download). It is a UI control, not report data, so the CSV
+// client card + CSV download). It is a UI control, not report data, so the CSV
 // export skips it (header + each row's cell). Declared once here (T8) and shared
 // by buildColumns + the export handler so a rename can never desync the two —
 // a mismatch would leak raw HTML action anchors into every CSV row.
@@ -59,7 +59,7 @@ const actionsColumnKey = "rc-actions"
 // uncategorizedTab is the stable, URL-safe ?jc= sentinel for the single
 // NULL/out-of-corpus category tab (plan §3.0). It can never collide with a real
 // job_category id (a uuidv7) nor with short(id) (max 8 chars) — see
-// sectionTabKey. Templates whose effective category is NULL, or whose category
+// groupTabKey. Templates whose effective category is NULL, or whose category
 // is outside the active corpus (stale/inactive/foreign), fold into this one
 // bucket — never dropped, never duplicated across category tabs.
 const uncategorizedTab = "uncategorized"
@@ -69,23 +69,23 @@ const uncategorizedTab = "uncategorized"
 const pageLimit = 100
 
 // maxPages bounds every offset page-loop independently of the adapter's own
-// termination (which relies on a short final page). A section's job set is
+// termination (which relies on a short final page). A group's job set is
 // ≤ roster×subjects (≈300–500); this ceiling (100 pages × 100 rows = 10k) is
-// far above any real section yet guarantees the loop halts even if a
+// far above any real group yet guarantees the loop halts even if a
 // misbehaving adapter ignored OFFSET and returned a full page forever.
 const maxPages = 100
 
 // downloadIcon is the inline SVG for the per-row CSV download button. The
-// section grid renders the download as the frozen SECOND column (an HTML cell),
+// group grid renders the download as the frozen SECOND column (an HTML cell),
 // not a trailing actions cell, so it needs the icon markup inline (mirrors
 // pyeza's icon-download) rather than via a {{template}} call.
 const downloadIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
 
 // viewIcon is the inline SVG (mirrors pyeza's icon-eye) for the per-row "view
-// student card" action rendered in the frozen actions column.
+// client card" action rendered in the frozen actions column.
 const viewIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>`
 
-// Deps holds the section-grid view dependencies. All list closures are
+// Deps holds the group-grid view dependencies. All list closures are
 // workspace-bound at the espyna adapter; the view composes no client_id/
 // workspace filter of its own.
 type Deps struct {
@@ -118,11 +118,11 @@ type Deps struct {
 	// official export requires exactly one active code+module definition.
 	ListAttributes                    func(ctx context.Context, req *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error)
 	GetSubscriptionGroupOutcomeExport func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
-	// ResolveSectionTemplate composes the report-scoped Espyna resolver with
+	// ResolveSubscriptionGroupDocumentTemplate composes the report-scoped Espyna resolver with
 	// app storage and returns no locator. GeneratePDF is Fycha's injected
 	// template+data -> PDF closure. Both are optional and PDF fails loud if nil.
-	ResolveSectionTemplate func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSectionTemplate, error)
-	GeneratePDF            func(templateData []byte, data map[string]any) ([]byte, error)
+	ResolveSubscriptionGroupDocumentTemplate func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error)
+	GeneratePDF                              func(templateData []byte, data map[string]any) ([]byte, error)
 
 	// Non-enrolled-placeholder evidence walk (job_phase → job_task →
 	// task_outcome). Optional/nil-safe: when any is nil (a tier that never wired
@@ -140,7 +140,7 @@ type Deps struct {
 	ListWorkspaceUsers                  func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
 }
 
-// PageData is the section-grid page data.
+// PageData is the group-grid page data.
 type PageData struct {
 	types.PageData
 	ContentTemplate string
@@ -157,16 +157,16 @@ type PageData struct {
 	TabsAria  string
 }
 
-// sectionTabInfo carries the resolved ?jc= tabstrip for one render — the shared
-// output of resolveSectionPartition, consumed by the HTML view (into PageData)
+// groupTabInfo carries the resolved ?jc= tabstrip for one render — the shared
+// output of resolveGroupPartition, consumed by the HTML view (into PageData)
 // and discarded by the CSV export (which needs only the filtered table).
-type sectionTabInfo struct {
+type groupTabInfo struct {
 	Items     []pyeza.TabItem
 	ActiveTab string
 	Aria      string
 }
 
-// templateMeta is the per-template metadata the section grid needs: the display
+// templateMeta is the per-template metadata the group grid needs: the display
 // name (columns) and the authoritative CURRENT category FK
 // (job_template.job_category_id, proto field 32 — plan §3.0), NOT the possibly
 // stale job.job_category_id snapshot.
@@ -175,8 +175,8 @@ type templateMeta struct {
 	categoryID string
 }
 
-// student is one row's resolved identity.
-type student struct {
+// client is one row's resolved identity.
+type client struct {
 	clientID  string
 	name      string
 	lastName  string
@@ -186,40 +186,43 @@ type student struct {
 // listName renders the class-list name form "{last_name}, {first_name}"
 // (prod's report-card roster format), falling back to the plain display name
 // when either part is missing.
-func (s student) listName() string {
+func (s client) listName() string {
 	if s.lastName != "" && s.firstName != "" {
 		return s.lastName + ", " + s.firstName
 	}
 	return s.name
 }
 
-// NewView creates the per-section report-card grid view.
+// NewView creates the per-group report-card grid view.
 func NewView(deps *Deps) view.View {
 	return view.ViewFunc(func(ctx context.Context, viewCtx *view.ViewContext) view.ViewResult {
 		perms := view.GetUserPermissions(ctx)
+		groupID := strings.TrimSpace(viewCtx.Request.PathValue("id"))
+		if narrowReportViewEnabled(ctx, deps, perms) {
+			return renderReportView(ctx, viewCtx, deps, groupID)
+		}
 		if !outcome_summary.CanLegacyDetail(perms) {
 			return view.Forbidden("job_outcome_summary:read")
 		}
 
-		sectionID := strings.TrimSpace(viewCtx.Request.PathValue("id"))
-		if sectionID == "" {
+		if groupID == "" {
 			return view.Forbidden("job_outcome_summary:list")
 		}
 
 		// ?jc= selects the active category tab (validated fail-closed inside
-		// buildSectionTable's shared resolver). The same raw value flows to the CSV
+		// buildGroupTable's shared resolver). The same raw value flows to the CSV
 		// export handler, so HTML and CSV never disagree (plan §3.3-3.4).
 		rawJC := viewCtx.Request.URL.Query().Get("jc")
-		group, table, tabs := buildSectionTable(ctx, deps, sectionID, rawJC)
+		group, table, tabs := buildGroupTable(ctx, deps, groupID, rawJC)
 		if group == nil {
 			return view.Forbidden("job_outcome_summary:list")
 		}
-		grantHolders := fetchGrantHolderNames(ctx, deps, sectionID)
+		grantHolders := fetchGrantHolderNames(ctx, deps, groupID)
 		if table == nil {
-			// Empty-state: no computed summaries for this section → banner, not
+			// Empty-state: no computed summaries for this group → banner, not
 			// a blank grid (D.4 do-not-ship-blank). The tabstrip still renders
 			// (OUTSIDE the NotComputed branch) so an empty tab stays navigable.
-			return okPage(viewCtx, deps, group, grantHolders, nil, deps.Labels.Section.NotComputedBanner, tabs)
+			return okPage(viewCtx, deps, group, grantHolders, nil, deps.Labels.SubscriptionGroup.NotComputedBanner, tabs)
 		}
 		return okPage(viewCtx, deps, group, grantHolders, table, "", tabs)
 	})
@@ -233,17 +236,17 @@ func NewView(deps *Deps) view.View {
 // workspace's members, so build a map). Nil-safe: missing closures, no owner
 // grants, or unresolvable names → nil (caption falls back to the lyngua'd
 // detail-link label).
-func fetchGrantHolderNames(ctx context.Context, deps *Deps, sectionID string) []string {
+func fetchGrantHolderNames(ctx context.Context, deps *Deps, groupID string) []string {
 	if deps.ListSubscriptionGroupWorkspaceUsers == nil || deps.ListWorkspaceUsers == nil {
 		return nil
 	}
 	resp, err := deps.ListSubscriptionGroupWorkspaceUsers(ctx, &subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest{
 		Filters: &commonpb.FilterRequest{
-			Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", sectionID)},
+			Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", groupID)},
 		},
 	})
 	if err != nil {
-		log.Printf("report cards section: list group workspace users: %v", err)
+		log.Printf("report cards group: list group workspace users: %v", err)
 		return nil
 	}
 	owners := map[string]bool{} // workspace_user_id of is_owner grants
@@ -257,7 +260,7 @@ func fetchGrantHolderNames(ctx context.Context, deps *Deps, sectionID string) []
 	}
 	wuResp, err := deps.ListWorkspaceUsers(ctx, &workspaceuserpb.ListWorkspaceUsersRequest{})
 	if err != nil {
-		log.Printf("report cards section: list workspace users: %v", err)
+		log.Printf("report cards group: list workspace users: %v", err)
 		return nil
 	}
 	var names []string
@@ -275,43 +278,43 @@ func fetchGrantHolderNames(ctx context.Context, deps *Deps, sectionID string) []
 	return names
 }
 
-// buildSectionTable assembles the per-section grid: the workspace-gated group
+// buildGroupTable assembles the per-group grid: the workspace-gated group
 // plus a fully-ordered TableConfig (bands + rows + cells) and (when the
 // category-columns Options knob is set) the ?jc= category tabstrip. Shared by
 // the HTML view and the CSV export handler so both render the identical grid
 // for the same rawJC — HTML and CSV never disagree (plan §3.3-3.4).
 //
 // Returns (nil, nil, nil) when the group fails the workspace EXISTS gate and
-// (group, nil, tabs) when the section has no computed summaries yet — the tabs
+// (group, nil, tabs) when the group has no computed summaries yet — the tabs
 // are still returned so the empty-state banner stays navigable (plan §3.3).
-func buildSectionTable(ctx context.Context, deps *Deps, sectionID, rawJC string) (*subscriptiongrouppb.SubscriptionGroup, *types.TableConfig, *sectionTabInfo) {
+func buildGroupTable(ctx context.Context, deps *Deps, groupID, rawJC string) (*subscriptiongrouppb.SubscriptionGroup, *types.TableConfig, *groupTabInfo) {
 	// EXISTS gate: the group must belong to the session workspace. The
 	// ListSubscriptionGroups adapter is workspace-scoped, so a foreign or
 	// missing id returns no rows → fail-closed (no leak).
-	group := fetchSection(ctx, deps, sectionID)
+	group := fetchGroup(ctx, deps, groupID)
 	if group == nil {
 		return nil, nil, nil
 	}
 
 	l := deps.Labels
 
-	// Historical mode: an inactive group is a FROZEN past section — its
+	// Historical mode: an inactive group is a FROZEN past group — its
 	// members (and possibly jobs) are inactive rows, so the liveness filters
 	// below relax to render the roster as it stood.
 	historical := !group.GetActive()
 
-	// members(section) → subscription_id → client_id.
-	subToClient := fetchMembers(ctx, deps, sectionID, historical)
+	// members(group) → subscription_id → client_id.
+	subToClient := fetchMembers(ctx, deps, groupID, historical)
 
 	// jobs(origin_id IN subs, active, SUBSCRIPTION) — staff-narrowed at the
 	// adapter. Rows + columns are derived from THIS set (Q-SEC-7).
-	jobs := fetchSectionJobs(ctx, deps, keysOf(subToClient), historical)
+	jobs := fetchGroupJobs(ctx, deps, keysOf(subToClient), historical)
 
 	// SHARED fail-closed resolver (view + export): decide the job-keep predicate,
 	// the tabstrip, and — on the tabbed path — the template metadata that also
 	// supplies the column names. The static (tabs-disabled / degraded) path keeps
 	// today's H2 category filter byte-for-byte (plan §3.3).
-	keep, tmplMeta, tabs := resolveSectionPartition(ctx, deps, sectionID, rawJC, jobs, subToClient, historical, l)
+	keep, tmplMeta, tabs := resolveGroupPartition(ctx, deps, groupID, rawJC, jobs, subToClient, historical, l)
 
 	// Build the (client, template) → job map + distinct sets.
 	cellJob := map[string]string{} // clientID+"\x00"+templateID -> jobID
@@ -352,7 +355,7 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID, rawJC string)
 	}
 
 	// Non-enrolled-placeholder evidence: one bulk job_phase → job_task →
-	// task_outcome walk keyed by the section's jobs. An untaken-elective
+	// task_outcome walk keyed by the group's jobs. An untaken-elective
 	// scaffold rides in with an all-zero task set and a floored ("1") year-final;
 	// its cell must render BLANK (matching prod), not the floor. A genuinely
 	// enrolled subject — even one scored a real 0/1 — carries a positive task
@@ -361,18 +364,18 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID, rawJC string)
 	// grade (blank nothing) rather than risk blanking a real one.
 	evByJob, err := outcome_summary.FetchJobMarkEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
 	if err != nil {
-		log.Printf("outcome summary section: enrollment evidence unavailable, keeping all grades: %v", err)
+		log.Printf("outcome summary group: enrollment evidence unavailable, keeping all grades: %v", err)
 		evByJob = nil
 	}
 
 	// client display names + last_name (for the row sort).
-	students := fetchStudents(ctx, deps, clientIDs)
+	clients := fetchClients(ctx, deps, clientIDs)
 
 	// gender (or configured) attribute values for bands.
 	attrValues := fetchAttributeValues(ctx, deps, clientIDs)
 
 	// template names (columns), name ASC. On the tabbed path the metadata is
-	// already fetched (resolveSectionPartition needed the category FK); reuse it
+	// already fetched (resolveGroupPartition needed the category FK); reuse it
 	// so no second ListJobTemplates read is issued. The static path reads names
 	// exactly as before (byte-for-byte).
 	var tmplNames map[string]string
@@ -394,26 +397,26 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID, rawJC string)
 		// The per-row download is now the frozen SECOND column, not a trailing
 		// actions cell — so no trailing actions column.
 		ShowActions: false,
-		// Freeze the first two columns (student + download) while the subject
+		// Freeze the first two columns (client + download) while the subject
 		// columns scroll horizontally (pyeza generic, ID-agnostic).
 		TableClass:  "data-table-freeze2",
 		Labels:      deps.TableLabels,
-		Caption:     l.Section.Title,
+		Caption:     l.SubscriptionGroup.Title,
 		FixedLayout: false,
 		EmptyState: types.TableEmptyState{
 			Title:   l.Empty.Title,
-			Message: l.Section.NotComputedBanner,
+			Message: l.SubscriptionGroup.NotComputedBanner,
 		},
 	}
 
-	rows := buildRows(students, orderedColumnIDs(columns), cellJob, labelByJob, evByJob, sectionID, deps.Routes, l)
-	applyRowPresentation(table, rows, students, attrValues, deps.Options)
+	rows := buildRows(clients, orderedColumnIDs(columns), cellJob, labelByJob, evByJob, groupID, deps.Routes, l)
+	applyRowPresentation(table, rows, clients, attrValues, deps.Options)
 	numberRows(table)
 	types.ApplyColumnStyles(table.Columns, allRows(table))
 	return group, table, tabs
 }
 
-// resolveSectionPartition is the SHARED fail-closed resolver behind both the
+// resolveGroupPartition is the SHARED fail-closed resolver behind both the
 // HTML view and the CSV export. It returns the job-keep predicate the grid
 // builder filters with, plus — on the tabbed path — the template metadata
 // (name + authoritative category FK) and the ?jc= tabstrip. Identical inputs
@@ -430,15 +433,15 @@ func buildSectionTable(ctx context.Context, deps *Deps, sectionID, rawJC string)
 //     present active category;
 //   - a stale/foreign/inactive/empty ?jc= is never trusted raw — it falls back
 //     to that default.
-func resolveSectionPartition(
+func resolveGroupPartition(
 	ctx context.Context,
 	deps *Deps,
-	sectionID, rawJC string,
+	groupID, rawJC string,
 	jobs []*jobpb.Job,
 	subToClient map[string]string,
 	historical bool,
 	l outcome_summary.Labels,
-) (keep func(*jobpb.Job) bool, tmplMeta map[string]templateMeta, tabs *sectionTabInfo) {
+) (keep func(*jobpb.Job) bool, tmplMeta map[string]templateMeta, tabs *groupTabInfo) {
 	// static returns the today's-behavior predicate: the configured H2 category
 	// filter (Options.CategoryFilter), resolved fail-closed. catOK=false (a
 	// configured code that would not resolve) drops every job — never leaks.
@@ -449,7 +452,7 @@ func resolveSectionPartition(
 		}
 	}
 
-	// Config gate: without the category-columns Options knob the section renders
+	// Config gate: without the category-columns Options knob the group renders
 	// today's single static-category grid, no tabs (service-admin / any tier that
 	// does not opt in is byte-identical).
 	if !deps.Options.List.CategoryColumns() {
@@ -457,18 +460,18 @@ func resolveSectionPartition(
 	}
 
 	// Corpus = ACTIVE categories (the ONE shared corpus, plan §3.0), via the
-	// section's already-wired ListJobCategories closure — zero new espyna surface.
+	// group's already-wired ListJobCategories closure — zero new espyna surface.
 	// A read error or empty corpus fails CLOSED to the static path (no tabs,
 	// never all-categories).
 	cats, err := listActiveCategories(ctx, deps)
 	if err != nil {
-		log.Printf("report cards section: list categories (FAIL CLOSED to static H2 filter, no tabs): %v", err)
+		log.Printf("report cards group: list categories (FAIL CLOSED to static H2 filter, no tabs): %v", err)
 		return static(), nil, nil
 	}
 	if len(cats) == 0 {
 		return static(), nil, nil
 	}
-	sortSectionCategories(cats)
+	sortGroupCategories(cats)
 	corpus := categoryIDSet(cats)
 
 	// Strict authoritative partition (plan §3.0): job_template.job_category_id
@@ -477,11 +480,11 @@ func resolveSectionPartition(
 	// snapshot is consulted ONLY when a job's template row is absent.
 	tmplMeta = fetchTemplateMeta(ctx, deps, distinctTemplateIDs(jobs), historical)
 	bucketOf := func(j *jobpb.Job) string {
-		return sectionBucket(j.GetJobCategoryId(), j.GetJobTemplateId(), tmplMeta, corpus)
+		return groupBucket(j.GetJobCategoryId(), j.GetJobTemplateId(), tmplMeta, corpus)
 	}
 
-	// Per-bucket distinct-template (subject) counts over the section's VALID jobs
-	// — the tab badges + the "present in this section" filter.
+	// Per-bucket distinct-template (subject) counts over the group's VALID jobs
+	// — the tab badges + the "present in this group" filter.
 	counts := map[string]int{}
 	seenBucketTid := map[string]bool{}
 	for _, j := range jobs {
@@ -502,20 +505,20 @@ func resolveSectionPartition(
 
 	// Selection (fail-closed): validate ?jc= against the present buckets, else the
 	// configured-then-first-active default.
-	selected := resolveSectionSelection(rawJC, cats, counts, deps.Options.CategoryFilter)
+	selected := resolveGroupSelection(rawJC, cats, counts, deps.Options.CategoryFilter)
 
 	keep = func(j *jobpb.Job) bool { return bucketOf(j) == selected }
-	tabs = buildSectionCategoryTabs(cats, counts, selected, sectionID, deps.Routes, l)
+	tabs = buildGroupCategoryTabs(cats, counts, selected, groupID, deps.Routes, l)
 	return keep, tmplMeta, tabs
 }
 
-// sectionBucket resolves one job's tab bucket under the strict authoritative
+// groupBucket resolves one job's tab bucket under the strict authoritative
 // partition (plan §3.0): the CURRENT template FK (job_template.job_category_id)
 // when the template row is known — even if the frozen job snapshot disagrees —
 // and the snapshot ONLY as a missing-template fallback. Any effective category
 // outside the active corpus (NULL, inactive, stale, foreign) folds into the
 // single Uncategorized bucket: never dropped, never duplicated across tabs.
-func sectionBucket(jobCategorySnapshot, templateID string, tmplMeta map[string]templateMeta, corpus map[string]bool) string {
+func groupBucket(jobCategorySnapshot, templateID string, tmplMeta map[string]templateMeta, corpus map[string]bool) string {
 	cat := jobCategorySnapshot
 	if m, ok := tmplMeta[templateID]; ok {
 		cat = m.categoryID // authoritative current FK (may be "" for a NULL FK)
@@ -526,12 +529,12 @@ func sectionBucket(jobCategorySnapshot, templateID string, tmplMeta map[string]t
 	return uncategorizedTab
 }
 
-// resolveSectionSelection validates the raw ?jc= against the PRESENT buckets and
+// resolveGroupSelection validates the raw ?jc= against the PRESENT buckets and
 // returns the selected bucket, defaulting fail-closed to the configured category
 // (today's static H2 category — backward-compatible), then the first present
 // active category, then Uncategorized. It NEVER returns an all-categories
 // selection and NEVER trusts a stale/foreign/inactive/empty ?jc= raw.
-func resolveSectionSelection(rawJC string, cats []*jobcategorypb.JobCategory, counts map[string]int, configuredCode string) string {
+func resolveGroupSelection(rawJC string, cats []*jobcategorypb.JobCategory, counts map[string]int, configuredCode string) string {
 	present := func(bucket string) bool { return counts[bucket] > 0 }
 	jc := strings.TrimSpace(rawJC)
 
@@ -563,52 +566,52 @@ func resolveSectionSelection(rawJC string, cats []*jobcategorypb.JobCategory, co
 	return "" // nothing present → an empty grid (no matching jobs)
 }
 
-// buildSectionCategoryTabs builds one TabItem per active category PRESENT in the
-// section (count > 0), in the canonical sort order, plus a trailing
+// buildGroupCategoryTabs builds one TabItem per active category PRESENT in the
+// group (count > 0), in the canonical sort order, plus a trailing
 // Uncategorized tab when that bucket is present. Href is the query-encoded
-// ?jc= deep-link onto the same section URL; the tab whose key == selected is
+// ?jc= deep-link onto the same group URL; the tab whose key == selected is
 // active. Returns nil when no bucket is present (degrade to no tabstrip).
-func buildSectionCategoryTabs(
+func buildGroupCategoryTabs(
 	cats []*jobcategorypb.JobCategory,
 	counts map[string]int,
-	selected, sectionID string,
+	selected, groupID string,
 	routes outcome_summary.Routes,
 	l outcome_summary.Labels,
-) *sectionTabInfo {
-	base := route.ResolveURL(routes.SectionURL, "id", sectionID)
+) *groupTabInfo {
+	base := route.ResolveURL(routes.SubscriptionGroupURL, "id", groupID)
 	items := make([]pyeza.TabItem, 0, len(cats)+1)
 	for _, c := range cats {
 		id := c.GetId()
 		if counts[id] == 0 {
-			continue // only categories present in THIS section's template set
+			continue // only categories present in THIS group's template set
 		}
 		items = append(items, pyeza.TabItem{
-			Key:   sectionTabKey(id),
+			Key:   groupTabKey(id),
 			Label: c.GetName(), // job_category.name is DATA (lyngua.md)
-			Href:  sectionCategoryURL(base, id),
+			Href:  groupCategoryURL(base, id),
 			Count: counts[id],
 		})
 	}
 	if counts[uncategorizedTab] > 0 {
 		items = append(items, pyeza.TabItem{
-			Key:   sectionTabKey(uncategorizedTab),
+			Key:   groupTabKey(uncategorizedTab),
 			Label: l.Landing.UncategorizedColumn, // reuse the landing's lyngua'd label
-			Href:  sectionCategoryURL(base, uncategorizedTab),
+			Href:  groupCategoryURL(base, uncategorizedTab),
 			Count: counts[uncategorizedTab],
 		})
 	}
 	if len(items) == 0 {
 		return nil
 	}
-	return &sectionTabInfo{
+	return &groupTabInfo{
 		Items:     items,
-		ActiveTab: sectionTabKey(selected),
-		Aria:      l.Section.CategoryTabsAriaLabel,
+		ActiveTab: groupTabKey(selected),
+		Aria:      l.SubscriptionGroup.CategoryTabsAriaLabel,
 	}
 }
 
 // listActiveCategories fetches the workspace's ACTIVE job_category corpus via the
-// section's already-wired ListJobCategories closure. The filterless generic list
+// group's already-wired ListJobCategories closure. The filterless generic list
 // defaults to active=true rows; the explicit GetActive() guard keeps the corpus
 // active-only even if an adapter ever changed that default (plan §3.0). Nil-safe.
 func listActiveCategories(ctx context.Context, deps *Deps) ([]*jobcategorypb.JobCategory, error) {
@@ -628,11 +631,11 @@ func listActiveCategories(ctx context.Context, deps *Deps) ([]*jobcategorypb.Job
 	return cats, nil
 }
 
-// sortSectionCategories orders the tabs by job_category.sort_order ASC with
+// sortGroupCategories orders the tabs by job_category.sort_order ASC with
 // NULLs LAST, then name ASC, then id — the category primitive's OWN sort
 // contract (plan §3.3; mirrors list.sortLandingCategories). TabOptions governs
 // only the price_schedule tabstrip and never this axis.
-func sortSectionCategories(cats []*jobcategorypb.JobCategory) {
+func sortGroupCategories(cats []*jobcategorypb.JobCategory) {
 	sort.SliceStable(cats, func(i, j int) bool {
 		a, b := cats[i], cats[j]
 		ai, aok := categoryOrderOf(a)
@@ -699,7 +702,7 @@ func isActiveCategory(cats []*jobcategorypb.JobCategory, id string) bool {
 }
 
 // distinctTemplateIDs collects the distinct non-empty job_template_ids across the
-// section's (pre-filter) jobs — the id set fetchTemplateMeta resolves for the
+// group's (pre-filter) jobs — the id set fetchTemplateMeta resolves for the
 // authoritative partition + column names.
 func distinctTemplateIDs(jobs []*jobpb.Job) []string {
 	seen := map[string]bool{}
@@ -713,11 +716,11 @@ func distinctTemplateIDs(jobs []*jobpb.Job) []string {
 	return out
 }
 
-// sectionTabKey builds a stable, collision-proof tab key from a category id: the
+// groupTabKey builds a stable, collision-proof tab key from a category id: the
 // last-8-char slug of the id (short()), or the full-word Uncategorized key. The
 // Uncategorized word (13 chars) can never collide with "jc-tab-"+short(id) (≤8
 // chars), and the sentinel can never equal a real uuidv7 id.
-func sectionTabKey(id string) string {
+func groupTabKey(id string) string {
 	if id == "" {
 		return ""
 	}
@@ -727,13 +730,13 @@ func sectionTabKey(id string) string {
 	return "jc-tab-" + short(id)
 }
 
-// sectionCategoryURL appends a query-encoded ?jc= onto the resolved section URL
+// groupCategoryURL appends a query-encoded ?jc= onto the resolved group URL
 // (plan §3.2: url.Values encoding, not string concatenation).
-func sectionCategoryURL(base, catID string) string {
+func groupCategoryURL(base, catID string) string {
 	return base + "?" + url.Values{"jc": {catID}}.Encode()
 }
 
-// numberRows prefixes each student cell with its sequence number in final
+// numberRows prefixes each client cell with its sequence number in final
 // presentation order — CONTINUOUS across bands (prod's class-list numbering:
 // male 1..N, female N+1..M), applied after banding/sorting so the numbers
 // reflect what renders. The CSV export shares the cell value, so exports
@@ -764,20 +767,20 @@ func numberRows(table *types.TableConfig) {
 // the group's servicing-grant holder names (comma-separated — a group can
 // carry several subscription_group_workspace_user rows), falling back to the
 // lyngua'd DetailLink label when no grants resolve.
-func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, grantHolders []string, table *types.TableConfig, banner string, tabs *sectionTabInfo) view.ViewResult {
+func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, grantHolders []string, table *types.TableConfig, banner string, tabs *groupTabInfo) view.ViewResult {
 	l := deps.Labels
 	caption := strings.Join(grantHolders, ", ")
 	if caption == "" {
-		caption = l.Section.DetailLink
+		caption = l.SubscriptionGroup.DetailLink
 	}
 	pd := &PageData{
 		PageData: types.PageData{
 			CacheVersion:        viewCtx.CacheVersion,
-			Title:               l.Section.Title,
+			Title:               l.SubscriptionGroup.Title,
 			CurrentPath:         viewCtx.CurrentPath,
 			ActiveNav:           deps.Routes.ActiveNav,
 			ActiveSubNav:        "report-cards",
-			HeaderBreadcrumb:    l.Section.Title,
+			HeaderBreadcrumb:    l.SubscriptionGroup.Title,
 			HeaderBreadcrumbURL: deps.Routes.ListURL,
 			HeaderTitle:         group.GetName(),
 			HeaderSubtitle:      caption,
@@ -785,7 +788,7 @@ func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.Su
 			HeaderIcon:          "icon-award",
 			CommonLabels:        deps.CommonLabels,
 		},
-		ContentTemplate: "outcome-summary-section-content",
+		ContentTemplate: "outcome-summary-subscription-group-content",
 		Table:           table,
 		NotComputed:     table == nil,
 		Banner:          banner,
@@ -795,32 +798,32 @@ func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.Su
 		pd.ActiveTab = tabs.ActiveTab
 		pd.TabsAria = tabs.Aria
 	}
-	return view.OK("outcome-summary-section", pd)
+	return view.OK("outcome-summary-subscription-group", pd)
 }
 
-// fetchSection returns the section (workspace-scoped EXISTS gate) or nil.
+// fetchGroup returns the group (workspace-scoped EXISTS gate) or nil.
 // Historical (inactive) groups resolve too — the generic List defaults to
 // active=true, so a second explicit active=false read covers them (the
 // listAllSchedules pattern). The workspace scope applies to both reads.
-func fetchSection(ctx context.Context, deps *Deps, sectionID string) *subscriptiongrouppb.SubscriptionGroup {
+func fetchGroup(ctx context.Context, deps *Deps, groupID string) *subscriptiongrouppb.SubscriptionGroup {
 	if deps.ListSubscriptionGroups == nil {
 		return nil
 	}
 	requests := []*subscriptiongrouppb.ListSubscriptionGroupsRequest{
-		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", sectionID)}}},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", groupID)}}},
 		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
-			stringEq("id", sectionID),
+			stringEq("id", groupID),
 			{Field: "active", FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: false}}},
 		}}},
 	}
 	for _, req := range requests {
 		resp, err := deps.ListSubscriptionGroups(ctx, req)
 		if err != nil {
-			log.Printf("report cards section: list subscription group by id: %v", err)
+			log.Printf("report cards group: list subscription group by id: %v", err)
 			continue
 		}
 		for _, g := range resp.GetData() {
-			if g.GetId() == sectionID {
+			if g.GetId() == groupID {
 				return g
 			}
 		}
@@ -828,22 +831,22 @@ func fetchSection(ctx context.Context, deps *Deps, sectionID string) *subscripti
 	return nil
 }
 
-// fetchMembers returns subscription_id → client_id for the section's members
+// fetchMembers returns subscription_id → client_id for the group's members
 // (active only — or the frozen full roster in historical mode). The generic
 // List defaults to active=true rows, so historical mode adds an explicit
 // active=false read (the listAllSchedules merge pattern).
-func fetchMembers(ctx context.Context, deps *Deps, sectionID string, historical bool) map[string]string {
+func fetchMembers(ctx context.Context, deps *Deps, groupID string, historical bool) map[string]string {
 	out := map[string]string{}
 	if deps.ListSubscriptionGroupMembers == nil {
 		return out
 	}
 	requests := []*subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
-		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", sectionID)}}},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", groupID)}}},
 	}
 	if historical {
 		requests = append(requests, &subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest{
 			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{
-				stringEq("subscription_group_id", sectionID),
+				stringEq("subscription_group_id", groupID),
 				{Field: "active", FilterType: &commonpb.TypedFilter_BooleanFilter{BooleanFilter: &commonpb.BooleanFilter{Value: false}}},
 			}},
 		})
@@ -851,7 +854,7 @@ func fetchMembers(ctx context.Context, deps *Deps, sectionID string, historical 
 	for _, req := range requests {
 		resp, err := deps.ListSubscriptionGroupMembers(ctx, req)
 		if err != nil {
-			log.Printf("report cards section: list members: %v", err)
+			log.Printf("report cards group: list members: %v", err)
 			continue
 		}
 		for _, m := range resp.GetData() {
@@ -866,16 +869,16 @@ func fetchMembers(ctx context.Context, deps *Deps, sectionID string, historical 
 	return out
 }
 
-// fetchSectionJobs returns the section's active subscription-origin jobs
+// fetchGroupJobs returns the group's active subscription-origin jobs
 // (staff-narrowed at the adapter), chunked by origin_id. Historical mode also
-// accepts inactive jobs (a frozen past section's jobs may be retired) via an
+// accepts inactive jobs (a frozen past group's jobs may be retired) via an
 // extra explicit active=false read per chunk.
 //
 // Every read PAGES explicitly (Limit 100 + offset pages) until exhausted: a
-// section's job set (roster × subjects ≈ 300) far exceeds the adapters'
+// group's job set (roster × subjects ≈ 300) far exceeds the adapters'
 // default row caps, and an uncapped single call silently truncates — the
 // grid then renders the missing cells as "—" with no error.
-func fetchSectionJobs(ctx context.Context, deps *Deps, subIDs []string, historical bool) []*jobpb.Job {
+func fetchGroupJobs(ctx context.Context, deps *Deps, subIDs []string, historical bool) []*jobpb.Job {
 	var out []*jobpb.Job
 	if deps.ListJobs == nil || len(subIDs) == 0 {
 		return out
@@ -905,7 +908,7 @@ func fetchSectionJobs(ctx context.Context, deps *Deps, subIDs []string, historic
 					},
 				})
 				if err != nil {
-					log.Printf("report cards section: list jobs (page %d): %v", page, err)
+					log.Printf("report cards group: list jobs (page %d): %v", page, err)
 					break
 				}
 				for _, j := range resp.GetData() {
@@ -947,7 +950,7 @@ func fetchSummaryLabels(ctx context.Context, deps *Deps, jobIDs []string, l outc
 			},
 		})
 		if err != nil {
-			log.Printf("report cards section: list job outcome summaries: %v", err)
+			log.Printf("report cards group: list job outcome summaries: %v", err)
 			continue
 		}
 		for _, s := range resp.GetData() {
@@ -968,9 +971,9 @@ func fetchSummaryLabels(ctx context.Context, deps *Deps, jobIDs []string, l outc
 	return out
 }
 
-// fetchStudents resolves client_id → display name + last_name, chunked.
-func fetchStudents(ctx context.Context, deps *Deps, clientIDs []string) map[string]student {
-	out := map[string]student{}
+// fetchClients resolves client_id → display name + last_name, chunked.
+func fetchClients(ctx context.Context, deps *Deps, clientIDs []string) map[string]client {
+	out := map[string]client{}
 	if deps.ListClients == nil || len(clientIDs) == 0 {
 		return out
 	}
@@ -985,7 +988,7 @@ func fetchStudents(ctx context.Context, deps *Deps, clientIDs []string) map[stri
 			},
 		})
 		if err != nil {
-			log.Printf("report cards section: list clients: %v", err)
+			log.Printf("report cards group: list clients: %v", err)
 			continue
 		}
 		for _, c := range resp.GetData() {
@@ -993,7 +996,7 @@ func fetchStudents(ctx context.Context, deps *Deps, clientIDs []string) map[stri
 			if id == "" {
 				continue
 			}
-			out[id] = student{clientID: id, name: clientDisplayName(c), lastName: clientLastName(c), firstName: clientFirstName(c)}
+			out[id] = client{clientID: id, name: clientDisplayName(c), lastName: clientLastName(c), firstName: clientFirstName(c)}
 		}
 	}
 	return out
@@ -1011,7 +1014,7 @@ func fetchAttributeValues(ctx context.Context, deps *Deps, clientIDs []string) m
 	for _, code := range codes {
 		attrID, err := deps.ResolveAttributeIDByCode(ctx, code)
 		if err != nil || attrID == "" {
-			log.Printf("report cards section: attribute code %q did not resolve (bands ignored for it): %v", code, err)
+			log.Printf("report cards group: attribute code %q did not resolve (bands ignored for it): %v", code, err)
 			continue
 		}
 		vals := map[string]string{}
@@ -1029,7 +1032,7 @@ func fetchAttributeValues(ctx context.Context, deps *Deps, clientIDs []string) m
 				},
 			})
 			if err != nil {
-				log.Printf("report cards section: list client attributes for %q: %v", code, err)
+				log.Printf("report cards group: list client attributes for %q: %v", code, err)
 				continue
 			}
 			for _, ca := range resp.GetData() {
@@ -1073,7 +1076,7 @@ func fetchTemplateMeta(ctx context.Context, deps *Deps, templateIDs []string, hi
 				Filters: &commonpb.FilterRequest{Filters: filters},
 			})
 			if err != nil {
-				log.Printf("report cards section: list job templates: %v", err)
+				log.Printf("report cards group: list job templates: %v", err)
 				continue
 			}
 			for _, t := range resp.GetData() {
@@ -1088,7 +1091,7 @@ func fetchTemplateMeta(ctx context.Context, deps *Deps, templateIDs []string, hi
 
 // fetchTemplateNames resolves job_template_id → name (the static path's column
 // labels), a thin projection over fetchTemplateMeta — behavior byte-identical to
-// the pre-tab section grid.
+// the pre-tab group grid.
 func fetchTemplateNames(ctx context.Context, deps *Deps, templateIDs []string, historical bool) map[string]string {
 	meta := fetchTemplateMeta(ctx, deps, templateIDs, historical)
 	out := make(map[string]string, len(meta))
@@ -1110,7 +1113,7 @@ func namesFromMeta(meta map[string]templateMeta, templateIDs []string) map[strin
 	return out
 }
 
-// buildColumns builds the first (student) column + one column per template,
+// buildColumns builds the first (client) column + one column per template,
 // ordered by template name ASC (prod's canonical subject order).
 func buildColumns(templateIDs []string, names map[string]string, l outcome_summary.Labels) []types.TableColumn {
 	ordered := append([]string(nil), templateIDs...)
@@ -1125,12 +1128,12 @@ func buildColumns(templateIDs []string, names map[string]string, l outcome_summa
 	cols := make([]types.TableColumn, 0, len(ordered)+2)
 	// NoSort: header sorting operates on a single tbody; the banded grid's
 	// order is server-composed (Options.Row), so the control would be inert.
-	// The student column is the first FROZEN column (TableClass
-	// "data-table-freeze2", set in buildSectionTable). Its width must equal the
+	// The client column is the first FROZEN column (TableClass
+	// "data-table-freeze2", set in buildGroupTable). Its width must equal the
 	// CSS --freeze2-c2 default (14rem) so the second frozen column's sticky left
 	// offset lines up.
-	cols = append(cols, types.TableColumn{Key: "student", Label: l.Section.ClientColumn, Width: "14rem", MinWidth: "14rem", NoSort: true})
-	// Second frozen column: the per-row actions (view student card + CSV
+	cols = append(cols, types.TableColumn{Key: "client", Label: l.SubscriptionGroup.ClientColumn, Width: "14rem", MinWidth: "14rem", NoSort: true})
+	// Second frozen column: the per-row actions (view client card + CSV
 	// download). Blank header mirrors the prod report card's action column.
 	// Excluded from the CSV export by key (export.go skips "rc-actions").
 	cols = append(cols, types.TableColumn{Key: actionsColumnKey, Label: "", Width: "5rem", MinWidth: "5rem", Align: "center", NoSort: true})
@@ -1141,7 +1144,7 @@ func buildColumns(templateIDs []string, names map[string]string, l outcome_summa
 }
 
 // orderedColumnIDs returns the template ids in the same order as buildColumns
-// laid out the subject columns (skipping the leading student column).
+// laid out the subject columns (skipping the leading client column).
 func orderedColumnIDs(cols []types.TableColumn) []string {
 	var ids []string
 	for _, c := range cols {
@@ -1152,38 +1155,38 @@ func orderedColumnIDs(cols []types.TableColumn) []string {
 	return ids
 }
 
-// buildRows builds one row per student: student-name cell + a rating cell per
+// buildRows builds one row per client: client-name cell + a rating cell per
 // subject column (linking to the per-job summary; "—" when no summary) + a
 // per-row report-card PDF download action (the per-client document endpoint,
 // ?format=pdf). CSVValue carries the raw rating so the client-side table
-// export and the section CSV endpoint emit clean text.
+// export and the group CSV endpoint emit clean text.
 func buildRows(
-	students map[string]student,
+	clients map[string]client,
 	templateIDs []string,
 	cellJob, labelByJob map[string]string,
 	evByJob map[string]outcome_summary.EnrollmentEvidence,
-	sectionID string,
+	groupID string,
 	routes outcome_summary.Routes,
 	l outcome_summary.Labels,
 ) []types.TableRow {
-	empty := l.Section.RatingEmpty
+	empty := l.SubscriptionGroup.RatingEmpty
 	if empty == "" {
 		empty = "—"
 	}
-	rows := make([]types.TableRow, 0, len(students))
-	for clientID, st := range students {
+	rows := make([]types.TableRow, 0, len(clients))
+	for clientID, st := range clients {
 		cells := make([]types.TableCell, 0, len(templateIDs)+2)
 		cells = append(cells, types.TableCell{Value: st.listName()})
-		// Frozen 2nd column: per-row actions — VIEW this student's report card
+		// Frozen 2nd column: per-row actions — VIEW this client's report card
 		// (boosted nav → view-3), then DOWNLOAD the rendered card as a PDF (the
 		// per-client document endpoint, ?format=pdf — same idiom as the client
 		// card's header button). The view link is a normal boosted anchor
 		// (hx-push-url); the download is hx-boost="false" + download so the
 		// boosted body doesn't AJAX-swap the attachment response.
-		studentURL := route.ResolveURL(routes.ClientCardURL, "id", sectionID, "client_id", clientID)
-		docURL := route.ResolveURL(routes.ClientDocumentURL, "id", sectionID, "client_id", clientID) + "?format=pdf"
-		viewAnchor := `<a href="` + html.EscapeString(studentURL) + `" class="action-btn view" title="` + html.EscapeString(l.Student.ViewAction) + `" aria-label="` + html.EscapeString(l.Student.ViewAction) + `" data-testid="rc-view-` + short(clientID) + `" hx-push-url="true">` + viewIcon + `</a>`
-		dlAnchor := `<a href="` + html.EscapeString(docURL) + `" class="action-btn download" title="` + html.EscapeString(l.Student.DownloadAction) + `" aria-label="` + html.EscapeString(l.Student.DownloadAction) + `" data-testid="rc-download-` + short(clientID) + `" hx-boost="false" download>` + downloadIcon + `</a>`
+		clientURL := route.ResolveURL(routes.ClientCardURL, "id", groupID, "client_id", clientID)
+		docURL := route.ResolveURL(routes.ClientDocumentURL, "id", groupID, "client_id", clientID) + "?format=pdf"
+		viewAnchor := `<a href="` + html.EscapeString(clientURL) + `" class="action-btn view" title="` + html.EscapeString(l.Client.ViewAction) + `" aria-label="` + html.EscapeString(l.Client.ViewAction) + `" data-testid="rc-view-` + short(clientID) + `" hx-push-url="true">` + viewIcon + `</a>`
+		dlAnchor := `<a href="` + html.EscapeString(docURL) + `" class="action-btn download" title="` + html.EscapeString(l.Client.DownloadAction) + `" aria-label="` + html.EscapeString(l.Client.DownloadAction) + `" data-testid="rc-download-` + short(clientID) + `" hx-boost="false" download>` + downloadIcon + `</a>`
 		cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(`<div class="action-buttons">` + viewAnchor + dlAnchor + `</div>`)})
 		for _, tid := range templateIDs {
 			testid := html.EscapeString("rc-cell-" + short(clientID) + "-" + short(tid))
@@ -1223,11 +1226,11 @@ func buildRows(
 func applyRowPresentation(
 	table *types.TableConfig,
 	rows []types.TableRow,
-	students map[string]student,
+	clients map[string]client,
 	attrValues map[string]map[string]string,
 	opts outcome_summary.Options,
 ) {
-	sortRows(rows, students, opts.Row)
+	sortRows(rows, clients, opts.Row)
 
 	groupCode, ok := outcome_summary.ClientAttributeCode(opts.Row.GroupByField)
 	var vals map[string]string
@@ -1251,11 +1254,11 @@ func applyRowPresentation(
 // sortRows orders rows by the configured client-column SortField (only
 // "last_name" is implemented today), direction-aware, stable; ties fall back to
 // display name then id.
-func sortRows(rows []types.TableRow, students map[string]student, opts outcome_summary.RowOptions) {
+func sortRows(rows []types.TableRow, clients map[string]client, opts outcome_summary.RowOptions) {
 	desc := opts.Direction() == "desc"
 	field := strings.TrimSpace(opts.SortField)
 	sort.SliceStable(rows, func(i, j int) bool {
-		si, sj := students[rows[i].ID], students[rows[j].ID]
+		si, sj := clients[rows[i].ID], clients[rows[j].ID]
 		var a, b string
 		switch field {
 		case "last_name":
@@ -1377,7 +1380,7 @@ func clientFirstName(c *clientpb.Client) string {
 
 // short returns a stable, collision-resistant slug (the uuidv7 random TAIL,
 // not the shared timestamp prefix — see the list view's short() note). Keeps
-// rc-row / rc-cell testids unique across a section's students and subjects.
+// rc-row / rc-cell testids unique across a group's clients and subjects.
 func short(id string) string {
 	if len(id) > 8 {
 		return id[len(id)-8:]

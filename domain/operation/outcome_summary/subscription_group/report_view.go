@@ -3,7 +3,8 @@ package subscription_group
 import (
 	"context"
 	"log"
-	"sort"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
@@ -41,12 +42,21 @@ func renderReportView(ctx context.Context, viewCtx *view.ViewContext, deps *Deps
 	category := selectReportCategory(options.GetJobCategories(), viewCtx.Request.URL.Query().Get("jc"))
 	tabs, activeTab := reportCategoryTabs(deps, subscriptionGroupID, options.GetJobCategories(), category)
 	if category == nil || !category.GetFinalOutcomeAvailable() {
-		return reportPage(viewCtx, deps, options.GetContext(), nil, tabs, activeTab, deps.Labels.SubscriptionGroup.NotComputedBanner)
+		return reportPage(viewCtx, deps, options.GetContext(), nil, tabs, activeTab, reportCategoryID(category), deps.Labels.SubscriptionGroup.NotComputedBanner)
 	}
 
 	categoryID := strings.TrimSpace(category.GetJobCategoryId())
 	if categoryID == "" {
 		return view.Forbidden("subscription_group_outcome_export:read")
+	}
+	if _, _, bandConfigured, _ := deps.Options.ExportRowBandConfig(); bandConfigured {
+		perms := view.GetUserPermissions(ctx)
+		if !perms.Can("attribute", "list") {
+			return view.Forbidden("attribute:list")
+		}
+		if !perms.Can("client_attribute", "list") {
+			return view.Forbidden("client_attribute:list")
+		}
 	}
 	matrix, err := deps.GetSubscriptionGroupOutcomeExport(ctx, &exportpb.GetSubscriptionGroupOutcomeExportRequest{
 		SubscriptionGroupId: subscriptionGroupID,
@@ -63,16 +73,36 @@ func renderReportView(ctx context.Context, viewCtx *view.ViewContext, deps *Deps
 		return view.Forbidden("subscription_group_outcome_export:read")
 	}
 	table := buildReportTable(deps, normalized, subscriptionGroupID)
-	return reportPage(viewCtx, deps, options.GetContext(), table, tabs, activeTab, "")
+	return reportPage(viewCtx, deps, options.GetContext(), table, tabs, activeTab, reportCategoryID(category), "")
 }
 
 func normalizeReportMatrix(ctx context.Context, deps *Deps, response *exportpb.GetSubscriptionGroupOutcomeExportResponse) (*explicitMatrix, error) {
-	isolated := *deps
-	isolated.Options.Row.GroupByField = ""
-	isolated.Options.Row.GroupValueOrder = nil
-	isolated.Options.Row.SortField = ""
-	isolated.Options.Row.SortDirection = ""
-	return normalizeExplicitMatrix(ctx, &isolated, response)
+	// Keep the configured band and sort projection used by the group exporter.
+	// orderExplicitRows prefixes names for CSV; restore the source names here so
+	// the group grid can apply its own final, continuous row numbering.
+	originalNames := make(map[string]string, len(response.GetClientRows()))
+	for _, row := range response.GetClientRows() {
+		if row != nil {
+			originalNames[row.GetClientId()] = row.GetClientName()
+		}
+	}
+	matrix, err := normalizeExplicitMatrix(ctx, deps, response)
+	if err != nil {
+		return nil, err
+	}
+	for i := range matrix.rows {
+		if !matrix.rows[i].band && !matrix.rows[i].blank {
+			matrix.rows[i].name = originalNames[matrix.rows[i].clientID]
+		}
+	}
+	return matrix, nil
+}
+
+func reportCategoryID(category *exportpb.JobCategoryOption) string {
+	if category == nil {
+		return ""
+	}
+	return strings.TrimSpace(category.GetJobCategoryId())
 }
 
 func selectReportCategory(categories []*exportpb.JobCategoryOption, rawID string) *exportpb.JobCategoryOption {
@@ -140,23 +170,10 @@ func buildReportTable(deps *Deps, matrix *explicitMatrix, subscriptionGroupID st
 		})
 	}
 
-	rows := append([]explicitRow(nil), matrix.rows...)
-	sort.SliceStable(rows, func(i, j int) bool {
-		left, right := rows[i], rows[j]
-		leftLast, rightLast := strings.ToLower(strings.TrimSpace(left.lastName)), strings.ToLower(strings.TrimSpace(right.lastName))
-		if leftLast != rightLast {
-			return leftLast < rightLast
-		}
-		leftFirst, rightFirst := strings.ToLower(strings.TrimSpace(left.firstName)), strings.ToLower(strings.TrimSpace(right.firstName))
-		if leftFirst != rightFirst {
-			return leftFirst < rightFirst
-		}
-		return left.clientID < right.clientID
-	})
-
 	empty := deps.Labels.SubscriptionGroup.RatingEmpty
-	tableRows := make([]types.TableRow, 0, len(rows))
-	for _, row := range rows {
+	tableRows := make([]types.TableRow, 0, len(matrix.rows))
+	bandValues := make(map[string]string)
+	for _, row := range matrix.rows {
 		if row.band || row.blank {
 			continue
 		}
@@ -177,6 +194,7 @@ func buildReportTable(deps *Deps, matrix *explicitMatrix, subscriptionGroupID st
 			DataAttrs: map[string]string{"testid": "rc-row-" + short(row.clientID)},
 			Cells:     cells,
 		})
+		bandValues[row.clientID] = row.group
 	}
 
 	table := &types.TableConfig{
@@ -196,7 +214,16 @@ func buildReportTable(deps *Deps, matrix *explicitMatrix, subscriptionGroupID st
 			Message: deps.Labels.SubscriptionGroup.NotComputedBanner,
 		},
 	}
-	types.ApplyColumnStyles(table.Columns, table.Rows)
+	if _, _, grouped, _ := deps.Options.ExportRowBandConfig(); grouped {
+		table.Groups = types.GroupRowsByValue(tableRows, bandValues, types.GroupRowsByValueOptions{
+			LeadingOrder: deps.Options.Row.GroupValueOrder,
+			GroupID:      func(value string) string { return "rc-band-" + slug(value) },
+		})
+	} else {
+		table.Rows = tableRows
+	}
+	numberRows(table)
+	types.ApplyColumnStyles(table.Columns, allRows(table))
 	return table
 }
 
@@ -207,13 +234,39 @@ func reportClientName(row explicitRow) string {
 		return lastName + ", " + firstName
 	}
 	if name := strings.TrimSpace(row.name); name != "" {
-		return name
+		return stripExporterSequence(name)
 	}
 	return strings.TrimSpace(strings.Join([]string{firstName, lastName}, " "))
 }
 
-func reportPage(viewCtx *view.ViewContext, deps *Deps, exportContext *exportpb.SubscriptionGroupOutcomeExportContext, table *types.TableConfig, tabs []pyeza.TabItem, activeTab, banner string) view.ViewResult {
+func stripExporterSequence(name string) string {
+	if !strings.HasPrefix(name, "[") {
+		return name
+	}
+	close := strings.IndexByte(name, ']')
+	if close < 2 || close+1 >= len(name) || name[close+1] != ' ' {
+		return name
+	}
+	if _, err := strconv.Atoi(name[1:close]); err != nil {
+		return name
+	}
+	return strings.TrimSpace(name[close+2:])
+}
+
+func reportPage(viewCtx *view.ViewContext, deps *Deps, exportContext *exportpb.SubscriptionGroupOutcomeExportContext, table *types.TableConfig, tabs []pyeza.TabItem, activeTab, category, banner string) view.ViewResult {
 	l := deps.Labels
+	drawerURL := ""
+	if category != "" && strings.TrimSpace(deps.Routes.SubscriptionGroupDownloadDrawerURL) != "" {
+		drawerURL = route.ResolveURL(deps.Routes.SubscriptionGroupDownloadDrawerURL, "id", exportContext.GetSubscriptionGroupId()) + "?mode=fixed&job_category_id=" + url.QueryEscape(category)
+	}
+	if table != nil && drawerURL != "" {
+		table.PrimaryAction = &types.PrimaryAction{
+			Label:      l.SubscriptionGroupExport.DownloadAction,
+			SheetTitle: l.SubscriptionGroupExport.DrawerTitle,
+			ActionURL:  drawerURL,
+			TestID:     "rc-subscription-group-download-open",
+		}
+	}
 	pageData := &PageData{
 		PageData: types.PageData{
 			CacheVersion:        viewCtx.CacheVersion,
@@ -227,13 +280,16 @@ func reportPage(viewCtx *view.ViewContext, deps *Deps, exportContext *exportpb.S
 			HeaderIcon:          "icon-award",
 			CommonLabels:        deps.CommonLabels,
 		},
-		ContentTemplate: "outcome-summary-subscription-group-content",
-		Table:           table,
-		NotComputed:     table == nil,
-		Banner:          banner,
-		TabItems:        tabs,
-		ActiveTab:       activeTab,
-		TabsAria:        l.SubscriptionGroup.CategoryTabsAriaLabel,
+		ContentTemplate:   "outcome-summary-subscription-group-content",
+		Table:             table,
+		NotComputed:       table == nil,
+		Banner:            banner,
+		TabItems:          tabs,
+		ActiveTab:         activeTab,
+		TabsAria:          l.SubscriptionGroup.CategoryTabsAriaLabel,
+		DownloadDrawerURL: drawerURL,
+		DownloadButton:    l.SubscriptionGroupExport.DownloadAction,
+		DownloadTitle:     l.SubscriptionGroupExport.DrawerTitle,
 	}
 	return view.OK("outcome-summary-subscription-group", pageData)
 }

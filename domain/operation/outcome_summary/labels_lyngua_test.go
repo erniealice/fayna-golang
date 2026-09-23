@@ -51,8 +51,10 @@ func labelStructLeafPaths(t reflect.Type, prefix string, out map[string]struct{}
 func TestLabelsLynguaContract(t *testing.T) {
 	root := outcomeSummaryRepoRoot(t)
 	commonPath := root + "/packages/lyngua/translations/en/common/outcome_summary.json"
+	generalPath := root + "/packages/lyngua/translations/en/general/outcome_summary.json"
 	educationPath := root + "/packages/lyngua/translations/en/education/outcome_summary.json"
 	common := readOutcomeSummaryTranslation(t, commonPath)
+	general := readOutcomeSummaryTranslation(t, generalPath)
 	education := readOutcomeSummaryTranslation(t, educationPath)
 
 	labelPaths := make(map[string]struct{})
@@ -61,6 +63,12 @@ func TestLabelsLynguaContract(t *testing.T) {
 	for key, value := range common {
 		if err := translationLeafPaths(value, key, commonPaths); err != nil {
 			t.Fatalf("walk common label key %q: %v", key, err)
+		}
+	}
+	generalPaths := make(map[string]struct{})
+	for key, value := range general {
+		if err := translationLeafPaths(value, key, generalPaths); err != nil {
+			t.Fatalf("walk general label key %q: %v", key, err)
 		}
 	}
 	educationPaths := make(map[string]struct{})
@@ -73,6 +81,11 @@ func TestLabelsLynguaContract(t *testing.T) {
 	for path := range commonPaths {
 		if _, ok := labelPaths[path]; !ok {
 			t.Errorf("common translation label path %q has no Labels json tag", path)
+		}
+	}
+	for path := range generalPaths {
+		if _, ok := labelPaths[path]; !ok {
+			t.Errorf("general translation label path %q has no Labels json tag", path)
 		}
 	}
 	for path := range educationPaths {
@@ -90,6 +103,25 @@ func TestLabelsLynguaContract(t *testing.T) {
 	}
 	if len(commonPaths) != len(labelPaths) {
 		t.Fatalf("common label path count = %d, Labels path count = %d", len(commonPaths), len(labelPaths))
+	}
+}
+
+func TestCategoryLabelTierVocabulary(t *testing.T) {
+	root := outcomeSummaryRepoRoot(t)
+	for _, tc := range []struct {
+		tier string
+		want string
+	}{
+		{tier: "general", want: "Job Category"},
+		{tier: "education", want: "Grade Category"},
+	} {
+		t.Run(tc.tier, func(t *testing.T) {
+			labels := readOutcomeSummaryTranslation(t, root+"/packages/lyngua/translations/en/"+tc.tier+"/outcome_summary.json")
+			got, ok := translationValue(labels, "subscription_group_export.category_label")
+			if !ok || got != tc.want {
+				t.Fatalf("%s category_label = %q, present=%t; want %q", tc.tier, got, ok, tc.want)
+			}
+		})
 	}
 }
 

@@ -78,6 +78,7 @@ func TestSubscriptionGroupReportViewUnassignedIsForbidden(t *testing.T) {
 
 func TestSubscriptionGroupReportViewCategoryTabsAndDefault(t *testing.T) {
 	deps := reportViewDeps()
+	deps.Routes.SubscriptionGroupDownloadDrawerURL = "/action/report-cards/group/{id}/download"
 	categories := []*exportpb.JobCategoryOption{
 		reportCategory("cat-empty", "Empty", false),
 		reportCategory("cat-final", "Final", true),
@@ -107,6 +108,15 @@ func TestSubscriptionGroupReportViewCategoryTabsAndDefault(t *testing.T) {
 	if page.TabItems[1].Href != wantHref {
 		t.Fatalf("final tab href = %q, want %q", page.TabItems[1].Href, wantHref)
 	}
+	if !strings.HasSuffix(page.DownloadDrawerURL, "?mode=fixed&job_category_id=cat-final") {
+		t.Fatalf("download drawer URL = %q, want validated active category", page.DownloadDrawerURL)
+	}
+	if page.Table == nil || page.Table.PrimaryAction == nil {
+		t.Fatal("computed report table has no primary download action")
+	}
+	if action := page.Table.PrimaryAction; action.ActionURL != page.DownloadDrawerURL || action.TestID != "rc-subscription-group-download-open" || action.Label != deps.Labels.SubscriptionGroupExport.DownloadAction || action.SheetTitle != deps.Labels.SubscriptionGroupExport.DrawerTitle {
+		t.Fatalf("table primary download action = %+v, want the active category drawer", action)
+	}
 }
 
 func TestSubscriptionGroupReportViewRowsSortedAndLinked(t *testing.T) {
@@ -127,15 +137,16 @@ func TestSubscriptionGroupReportViewRowsSortedAndLinked(t *testing.T) {
 			}), nil
 	}
 
-	page := reportPageData(t, NewView(deps).Handle(reportContext(t, deps.Routes, "sg-1", ""), reportViewContext(t, deps.Routes, "sg-1", "")))
+	ctx := reportContextWithPermissions(t, deps.Routes, "sg-1", "", []string{"job_outcome_summary:list", "subscription_group_outcome_export:read", "attribute:list", "client_attribute:list"})
+	page := reportPageData(t, NewView(deps).Handle(ctx, reportViewContext(t, deps.Routes, "sg-1", "")))
 	if len(page.Table.Rows) != 2 {
 		t.Fatalf("rows = %d, want 2", len(page.Table.Rows))
 	}
-	if got := page.Table.Rows[0].Cells[0].Value; got != "Adams, Ann" {
-		t.Fatalf("row 0 client = %q, want Adams, Ann", got)
+	if got := page.Table.Rows[0].Cells[0].Value; got != "1 Adams, Ann" {
+		t.Fatalf("row 0 client = %q, want 1 Adams, Ann", got)
 	}
-	if got := page.Table.Rows[1].Cells[0].Value; got != "Baker, Bob" {
-		t.Fatalf("row 1 client = %q, want Baker, Bob", got)
+	if got := page.Table.Rows[1].Cells[0].Value; got != "2 Baker, Bob" {
+		t.Fatalf("row 1 client = %q, want 2 Baker, Bob", got)
 	}
 	wantHref := route.ResolveURL(deps.Routes.ClientCardURL, "id", "sg-1", "client_id", "client-a")
 	if page.Table.Rows[0].Cells[0].Href != wantHref {
@@ -155,6 +166,109 @@ func TestSubscriptionGroupReportViewRowsSortedAndLinked(t *testing.T) {
 			if cell.Type == "link" || cell.Href != "" {
 				t.Fatalf("matrix cell has a per-cell link: %+v", cell)
 			}
+		}
+	}
+}
+
+func TestReportViewRequiresBothAttributeReadGrantsBeforeBandReads(t *testing.T) {
+	for _, missing := range []string{"attribute:list", "client_attribute:list"} {
+		t.Run(missing, func(t *testing.T) {
+			deps := reportViewDeps()
+			deps.Options.Row.GroupByField = "client_attributes.gender"
+			deps.Options.SubscriptionGroupExport.GroupByAttributeModule = "client"
+			attributeCalls, matrixCalls := 0, 0
+			deps.ListAttributes = func(context.Context, *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error) {
+				attributeCalls++
+				return nil, nil
+			}
+			deps.ListClientAttributes = func(context.Context, *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error) {
+				attributeCalls++
+				return nil, nil
+			}
+			category := reportCategory("cat-a", "Academic", true)
+			deps.GetSubscriptionGroupOutcomeExport = func(_ context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error) {
+				if req.GetOutcomeSelector() == nil {
+					return reportOptions("sg-1", category), nil
+				}
+				matrixCalls++
+				return reportMatrix("sg-1", category, []*exportpb.JobTemplateColumn{{JobTemplateId: "tmpl-a", DisplayName: "A"}}, nil), nil
+			}
+			permissions := []string{"job_outcome_summary:list", "subscription_group_outcome_export:read", "client_attribute:list"}
+			if missing != "attribute:list" {
+				permissions = append(permissions, "attribute:list")
+			}
+			if missing == "client_attribute:list" {
+				permissions = []string{"job_outcome_summary:list", "subscription_group_outcome_export:read", "attribute:list"}
+			}
+			ctx := reportContextWithPermissions(t, deps.Routes, "sg-1", "", permissions)
+			result := NewView(deps).Handle(ctx, reportViewContext(t, deps.Routes, "sg-1", ""))
+			if result.StatusCode != 403 || result.Template != "forbidden" {
+				t.Fatalf("result = template %q/status %d, want forbidden", result.Template, result.StatusCode)
+			}
+			if attributeCalls != 0 || matrixCalls != 0 {
+				t.Fatalf("attribute/matrix reads = %d/%d, want zero", attributeCalls, matrixCalls)
+			}
+		})
+	}
+}
+
+func TestReportViewUsesConfiguredGenderBandsAndNumbersAfterOrdering(t *testing.T) {
+	deps := reportViewDeps()
+	deps.Options.Row.GroupByField = "client_attributes.gender"
+	deps.Options.Row.GroupValueOrder = []string{"Male", "Female"}
+	deps.Options.Row.SortField = "last_name"
+	deps.Options.SubscriptionGroupExport.GroupByAttributeModule = "client"
+	deps.ListAttributes = func(context.Context, *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error) {
+		return &commonpb.ListAttributesResponse{Success: true, Data: []*commonpb.Attribute{{Id: "gender-id", Code: "gender", Module: "client", Active: true}}}, nil
+	}
+	deps.ListClientAttributes = func(_ context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error) {
+		var rows []*clientattributepb.ClientAttribute
+		for _, filter := range req.GetFilters().GetFilters() {
+			if clients := filter.GetListFilter(); clients != nil {
+				for _, id := range clients.GetValues() {
+					if id == "male-a" || id == "male-z" {
+						rows = append(rows, &clientattributepb.ClientAttribute{ClientId: id, AttributeId: "gender-id", Value: "Male", Active: true})
+					} else if id == "female" {
+						rows = append(rows, &clientattributepb.ClientAttribute{ClientId: id, AttributeId: "gender-id", Value: "Female", Active: true})
+					}
+				}
+			}
+		}
+		return &clientattributepb.ListClientAttributesResponse{Success: true, Data: rows}, nil
+	}
+	category := reportCategory("cat-final", "Academic", true)
+	deps.GetSubscriptionGroupOutcomeExport = func(_ context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error) {
+		if req.GetOutcomeSelector() == nil {
+			return reportOptions("sg-1", category), nil
+		}
+		return reportMatrix("sg-1", category, []*exportpb.JobTemplateColumn{{JobTemplateId: "tmpl-a", DisplayName: "Alpha"}}, []*exportpb.SubscriptionGroupOutcomeClientRow{
+			reportClientRow("male-z", "[12] Zed Display", "", "Zulu", reportCell("tmpl-a", "Z", nil, true, true)),
+			reportClientRow("female", "Beta Display", "Beta", "Beta", reportCell("tmpl-a", "F", nil, true, true)),
+			reportClientRow("missing", "Missing Display", "Missing", "Missing", reportCell("tmpl-a", "M", nil, true, true)),
+			reportClientRow("male-a", "Alpha Display", "Alpha", "Alpha", reportCell("tmpl-a", "A", nil, true, true)),
+		}), nil
+	}
+
+	ctx := reportContextWithPermissions(t, deps.Routes, "sg-1", "", []string{"job_outcome_summary:list", "subscription_group_outcome_export:read", "attribute:list", "client_attribute:list"})
+	page := reportPageData(t, NewView(deps).Handle(ctx, reportViewContext(t, deps.Routes, "sg-1", "")))
+	if len(page.Table.Groups) != 3 {
+		t.Fatalf("groups = %+v, want Male, Female, and missing-value bands", page.Table.Groups)
+	}
+	want := []struct{ id, title, name string }{
+		{"rc-band-male", "Male", "1 Alpha, Alpha"},
+		{"rc-band-female", "Female", "3 Beta, Beta"},
+		{"rc-band-none", "—", "4 Missing, Missing"},
+	}
+	if got := page.Table.Groups[0].Rows[1].Cells[0].Value; got != "2 Zed Display" {
+		t.Fatalf("second Male row = %q, want number 2 after last-name ordering", got)
+	}
+	for i, expected := range want {
+		group := page.Table.Groups[i]
+		if group.ID != expected.id || group.Title != expected.title || len(group.Rows) == 0 {
+			t.Fatalf("group %d = %+v, want id/title %q/%q", i, group, expected.id, expected.title)
+		}
+		if got := group.Rows[0].Cells[0].Value; got != expected.name {
+			t.Fatalf("group %s first row = %q, want %q", group.ID, got, expected.name)
 		}
 	}
 }

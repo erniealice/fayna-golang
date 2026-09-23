@@ -2,6 +2,7 @@ package subscription_group
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -94,6 +95,44 @@ func TestDownloadDrawer_CategoryRefreshBuildsPhaseOptions(t *testing.T) {
 	}
 	if !data.Formats[0].Selected || !data.Formats[1].Disabled {
 		t.Fatalf("unmapped category formats = %+v, want disabled PDF", data.Formats)
+	}
+}
+
+func TestDownloadDrawer_SectionModePinsValidatedCategoryAndOffersPeriods(t *testing.T) {
+	deps, calls := drawerDeps(drawerResponse())
+	request := httptest.NewRequest("GET", "/report-cards/group/group-1/download?mode=fixed&job_category_id=cat-b", nil)
+	request.SetPathValue("id", "group-1")
+	ctx := view.WithUserPermissions(context.Background(), types.NewUserPermissions([]string{"subscription_group_outcome_export:read"}))
+	result := NewDownloadDrawer(deps).Handle(ctx, &view.ViewContext{Request: request})
+	if result.Error != nil || result.StatusCode != 200 {
+		t.Fatalf("result status/error = %d/%v", result.StatusCode, result.Error)
+	}
+	data := result.Data.(*DrawerData)
+	if !data.FixedCategory || data.CategoryID != "cat-b" || data.CategoryName != "Academic" || len(data.Categories) != 0 {
+		t.Fatalf("section category state = %+v, want pinned cat-b and its trusted display name without selector", data)
+	}
+	if len(data.Periods) != 2 || data.Periods[0].Value != "phase:mid" || data.Periods[1].Value != "final" {
+		t.Fatalf("periods = %+v, want available phase and Final", data.Periods)
+	}
+	if len(data.Formats) != 2 || data.Formats[0].Value != "csv" || data.Formats[1].Value != "pdf" {
+		t.Fatalf("formats = %+v, want CSV and PDF", data.Formats)
+	}
+	if *calls != 1 {
+		t.Fatalf("options query calls = %d, want 1", *calls)
+	}
+}
+
+func TestDownloadDrawer_SectionModeRejectsUnscopedCategory(t *testing.T) {
+	deps, calls := drawerDeps(drawerResponse())
+	request := httptest.NewRequest("GET", "/report-cards/group/group-1/download?mode=fixed&job_category_id=foreign", nil)
+	request.SetPathValue("id", "group-1")
+	ctx := view.WithUserPermissions(context.Background(), types.NewUserPermissions([]string{"subscription_group_outcome_export:read"}))
+	result := NewDownloadDrawer(deps).Handle(ctx, &view.ViewContext{Request: request})
+	if result.StatusCode != http.StatusNotFound || result.Error == nil {
+		t.Fatalf("status/error = %d/%v, want fail-closed 404", result.StatusCode, result.Error)
+	}
+	if *calls != 1 {
+		t.Fatalf("options query calls = %d, want scoped validation query", *calls)
 	}
 }
 

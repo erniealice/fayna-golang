@@ -20,6 +20,22 @@
                            "ID" "report-cards-category-tabs" "Label" .TabsAria "Indicator" "#tabContent")}}
     <div id="tabContent" role="tabpanel"{{if .ActiveTab}} aria-labelledby="tab-{{.ActiveTab}}"{{end}}>
     {{end}}
+    {{/* A computed grid uses TableConfig.PrimaryAction inside table-toolbar.
+         Keep the download reachable when a category has no computed table. */}}
+    {{if and .NotComputed .DownloadDrawerURL}}
+    <div class="page-toolbar">
+        <button type="button" class="btn btn-secondary"
+                hx-get="{{.DownloadDrawerURL}}"
+                hx-target="#sheetContent"
+                hx-swap="innerHTML"
+                hx-push-url="false"
+                data-lf-action="sheet-open"
+                data-lf-sheet-title="{{.DownloadTitle}}"
+                title="{{.DownloadTitle}}"
+                aria-haspopup="dialog"
+                data-testid="rc-subscription-group-download-open">{{.DownloadButton}}</button>
+    </div>
+    {{end}}
     {{if .NotComputed}}
     {{template "alert" (dict "State" "info" "Variant" "subtle" "Message" .Banner)}}
     {{else}}

@@ -155,6 +155,11 @@ type PageData struct {
 	TabItems  []pyeza.TabItem
 	ActiveTab string
 	TabsAria  string
+
+	// Report-only group export drawer; empty outside the explicit report view.
+	DownloadDrawerURL string
+	DownloadButton    string
+	DownloadTitle     string
 }
 
 // groupTabInfo carries the resolved ?jc= tabstrip for one render — the shared

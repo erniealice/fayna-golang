@@ -5,6 +5,15 @@
 <form method="get" action="{{.FormAction}}" hx-boost="false" data-testid="rc-subscription-group-download-drawer">
     <div class="sheet-body">
         <div class="form-section">
+            {{if .FixedCategory}}
+            <input type="hidden" name="job_category_id" value="{{.CategoryID}}" data-testid="rc-subscription-group-download-category">
+            <div class="form-row single">
+                <div class="form-group">
+                    <span class="form-label form-label-uppercase">{{.Labels.CategoryLabel}}</span>
+                    <span class="form-label" data-testid="rc-subscription-group-download-category-name">{{.CategoryName}}</span>
+                </div>
+            </div>
+            {{else}}
             <div class="form-row single">
                 <div class="form-group">
                     <label class="form-label" for="rc-subscription-group-download-category">{{.Labels.CategoryLabel}}</label>
@@ -15,6 +24,7 @@
                     </select>
                 </div>
             </div>
+            {{end}}
             <div class="form-row single">
                 <div class="form-group">
                     <label class="form-label" for="rc-subscription-group-download-period">{{.Labels.PeriodLabel}}</label>

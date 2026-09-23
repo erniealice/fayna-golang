@@ -41,6 +41,9 @@ type DrawerDeps struct {
 type DrawerData struct {
 	FormAction    string
 	RefreshAction string
+	FixedCategory bool
+	CategoryID    string
+	CategoryName  string
 	Categories    []types.SelectOption
 	Periods       []types.SelectOption
 	Formats       []types.SelectOption
@@ -94,14 +97,38 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 		}
 
 		requestedCategory := strings.TrimSpace(viewCtx.Request.URL.Query().Get("job_category_id"))
-		category := chooseCategory(resp.GetJobCategories(), requestedCategory, deps.Options.SubscriptionGroupExport.DefaultCategoryCode)
+		fixedCategory := viewCtx.Request.URL.Query().Get("mode") == "fixed"
+		var category *exportpb.JobCategoryOption
+		if fixedCategory {
+			for _, option := range resp.GetJobCategories() {
+				if option != nil && strings.TrimSpace(option.GetJobCategoryId()) == requestedCategory && requestedCategory != "" {
+					category = option
+					break
+				}
+			}
+			if category == nil {
+				return view.ViewResult{Error: fmt.Errorf("group outcome export category not found"), StatusCode: http.StatusNotFound}
+			}
+		} else {
+			category = chooseCategory(resp.GetJobCategories(), requestedCategory, deps.Options.SubscriptionGroupExport.DefaultCategoryCode)
+		}
+		periods := buildPeriodOptions(deps.Labels, category)
+		if fixedCategory && len(periods) == 0 {
+			return view.ViewResult{Error: fmt.Errorf("group outcome export is not computed"), StatusCode: http.StatusNotFound}
+		}
 		data := &DrawerData{
 			FormAction:    route.ResolveURL(deps.Routes.SubscriptionGroupExportURL, "id", groupID),
 			RefreshAction: route.ResolveURL(deps.Routes.SubscriptionGroupDownloadDrawerURL, "id", groupID),
-			Categories:    buildCategoryOptions(deps.Labels, resp.GetJobCategories(), category),
-			Periods:       buildPeriodOptions(deps.Labels, category),
+			FixedCategory: fixedCategory,
+			CategoryID:    categoryValue(category),
+			CategoryName:  categoryLabel(deps.Labels, category),
+			Categories:    nil,
+			Periods:       periods,
 			Formats:       buildFormatOptions(deps.Options, category, deps.Labels),
 			Labels:        deps.Labels.SubscriptionGroupExport,
+		}
+		if !fixedCategory {
+			data.Categories = buildCategoryOptions(deps.Labels, resp.GetJobCategories(), category)
 		}
 		return view.OK("outcome-summary-subscription-group-download-drawer-form", data)
 	})

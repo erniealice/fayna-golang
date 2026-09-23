@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 
 	outcomesummarypkg "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	clientcard "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/client_card"
@@ -12,6 +13,7 @@ import (
 	summarylist "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/list"
 	phasesummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/phase_summary"
 	subscriptiongroupview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/subscription_group"
+	subscriptiongroupdocument "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/subscription_group_document"
 	subscriptiongroupdocumenttemplate "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/subscription_group_document_template_settings"
 	templatesettings "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/template_settings"
 
@@ -35,15 +37,19 @@ import (
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	phasecodepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	subscriptiongroupdocumenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
+	productplanstaffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan_staff"
 	planpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/plan"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	sgppspb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_product_plan_staff"
 	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
@@ -96,11 +102,12 @@ type OutcomeSummaryModuleDeps struct {
 	// download route still registers on GenerateDoc alone (DOCX baseline); a
 	// ?format=pdf request with GeneratePDF nil is a narrower per-format 503.
 	GeneratePDF func(templateData []byte, data map[string]any) ([]byte, error)
-	// ResolveTemplateBytes resolves the operator-uploaded, AY-scoped report-card
+	// ResolveTemplateBytes resolves the operator-uploaded, AY/phase-scoped report-card
 	// template binding for a card's price_schedule (binding resolver ∘ storage
 	// download). Returns (nil, nil) → the document handler falls back to the
 	// embedded template. Optional/nil-safe (no download regression).
-	ResolveTemplateBytes func(ctx context.Context, priceScheduleID string) ([]byte, error)
+	ResolveTemplateBytes            func(ctx context.Context, priceScheduleID, phaseCode string) ([]byte, error)
+	FindApplicableReportCardBinding func(context.Context, *bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
 	// DocumentHeaderName is the generic report-card document header (lyngua-sourced;
 	// blank falls back to the landing title). Generic — no vertical vocabulary in
 	// code (the rendered "school name" wording lives in a lyngua value).
@@ -114,13 +121,25 @@ type OutcomeSummaryModuleDeps struct {
 	// optional/nil-safe: a nil closure degrades the affected surface to its
 	// empty/flat state, never a panic.
 	ListPriceSchedules                  func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
+	ListPhaseCodesByPriceSchedule       func(ctx context.Context, req *phasecodepb.ListPhaseCodesByPriceScheduleRequest) (*phasecodepb.ListPhaseCodesByPriceScheduleResponse, error)
 	ListPlans                           func(ctx context.Context, req *planpb.ListPlansRequest) (*planpb.ListPlansResponse, error)
 	ListSubscriptionGroups              func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListSubscriptionGroupMembers        func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
 	ListSubscriptionGroupWorkspaceUsers func(ctx context.Context, req *subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersRequest) (*subscriptiongroupworkspaceuserpb.ListSubscriptionGroupWorkspaceUsersResponse, error)
-	ListWorkspaceUsers                  func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
-	ListJobs                            func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
-	ListJobPhases                       func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	// Class-edge derivation deps (D5 derive-on-read, fetchClassEdgeTeachers in
+	// document/data.go): the class edge (subscription_group_product_plan_staff)
+	// maps a group's offering to its servicing staff; ListProductPlans resolves
+	// the edge's product_plan_id to the product_id a job carries in
+	// output_product_id. ListProductPlanStaffs gates a linked edge on its
+	// product_plan_staff eligibility row's active flag ("eligibility"). ALL
+	// optional/nil-safe — a missing closure leaves the teacher line on its prior
+	// (assignee-only) behavior, never a panic.
+	ListSubscriptionGroupProductPlanStaffs func(ctx context.Context, req *sgppspb.ListSubscriptionGroupProductPlanStaffsRequest) (*sgppspb.ListSubscriptionGroupProductPlanStaffsResponse, error)
+	ListProductPlans                       func(ctx context.Context, req *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error)
+	ListProductPlanStaffs                  func(ctx context.Context, req *productplanstaffpb.ListProductPlanStaffsRequest) (*productplanstaffpb.ListProductPlanStaffsResponse, error)
+	ListWorkspaceUsers                     func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
+	ListJobs                               func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	ListJobPhases                          func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
 	// GetPhaseApprovalGateRollup — the group-grain render-gate input port
 	// (per-template-phase group rollup with the applied-group echo). Consumed
 	// ONLY when Options.Document.GateGrain selects the subscription-group
@@ -138,6 +157,7 @@ type OutcomeSummaryModuleDeps struct {
 	ListAttributes                           func(ctx context.Context, req *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error)
 	ResolveAttributeIDByCode                 func(ctx context.Context, code string) (string, error)
 	GetSubscriptionGroupOutcomeExport        func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	GetSubscriptionGroupClientReportCard     func(ctx context.Context, req *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
 	ListSubscriptionGroupOutcomeLanding      func(ctx context.Context, req *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
 	ResolveSubscriptionGroupDocumentTemplate func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcomesummarypkg.ResolvedSubscriptionGroupDocumentTemplate, error)
 	ListJobTemplateSummaries                 func(ctx context.Context, req *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error)
@@ -197,6 +217,7 @@ type OutcomeSummaryModule struct {
 	// from subscription-group document template management permissions.
 	SubscriptionGroupDownload view.View
 	ClientCard                view.View
+	ClientDownloadDrawer      view.View
 	JobSummary                view.View
 	PhaseSummary              view.View
 	// SubscriptionGroupExport is the group-grid CSV download (a raw handler — the
@@ -220,6 +241,7 @@ type OutcomeSummaryModule struct {
 
 // NewOutcomeSummaryModule creates a new outcome summary module with all views wired.
 func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModule {
+	clientDocument := newClientDocumentHandler(deps)
 	subscriptionGroupDeps := &subscriptiongroupview.Deps{
 		Routes:                                   deps.Routes,
 		Labels:                                   deps.Labels,
@@ -227,6 +249,7 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		TableLabels:                              deps.TableLabels,
 		Options:                                  deps.Options,
 		ResolvePrincipalKind:                     deps.ResolvePrincipalKind,
+		FindApplicableReportCardBinding:          deps.FindApplicableReportCardBinding,
 		ListSubscriptionGroups:                   deps.ListSubscriptionGroups,
 		ListSubscriptionGroupMembers:             deps.ListSubscriptionGroupMembers,
 		ListJobs:                                 deps.ListJobs,
@@ -244,9 +267,10 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		ListJobCategories:                        deps.ListJobCategories,
 		// Non-enrolled-placeholder evidence walk (blanks untaken-elective floor
 		// cells on the grid + CSV). Already injected for the DOCX handler.
-		ListJobPhases:    deps.ListJobPhases,
-		ListJobTasks:     deps.ListJobTasks,
-		ListTaskOutcomes: deps.ListTaskOutcomes,
+		ListJobPhases:         deps.ListJobPhases,
+		ListJobTasks:          deps.ListJobTasks,
+		ListTaskOutcomes:      deps.ListTaskOutcomes,
+		ClientDocumentMounted: clientDocument != nil && strings.TrimSpace(deps.Routes.ClientDocumentURL) != "",
 	}
 	return &OutcomeSummaryModule{
 		routes:                         deps.Routes,
@@ -280,7 +304,7 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			GetSubscriptionGroupOutcomeExport: deps.GetSubscriptionGroupOutcomeExport,
 		}),
 		SubscriptionGroupExport: subscriptiongroupview.NewExportHandler(subscriptionGroupDeps),
-		ClientDocument:          newClientDocumentHandler(deps),
+		ClientDocument:          clientDocument,
 		ClientCard: clientcard.NewView(&clientcard.Deps{
 			Routes:               deps.Routes,
 			Labels:               deps.Labels,
@@ -295,22 +319,34 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			// H2 academic-only filter FOR BANDING so deportment subjects appear under
 			// their own band (the document/group paths keep H2 — separate fetches).
 			// Both zero (service-admin / unset) → today's flat card, byte-identical.
-			BandByCategory:                    deps.Options.ClientCard.BandByCategory(),
-			IncludeAllCategories:              deps.Options.ClientCard.IncludeAllCategories,
-			ListJobCategories:                 deps.ListJobCategories,
-			GetSubscriptionGroupOutcomeExport: deps.GetSubscriptionGroupOutcomeExport,
-			ListSubscriptionGroups:            deps.ListSubscriptionGroups,
-			ListSubscriptionGroupMembers:      deps.ListSubscriptionGroupMembers,
-			ListJobs:                          deps.ListJobs,
-			ListJobTemplates:                  deps.ListJobTemplates,
-			ListClients:                       deps.ListClients,
-			ListJobOutcomeSummarys:            deps.ListJobOutcomeSummarys,
-			ListPhaseOutcomeSummarysByJob:     deps.ListPhaseOutcomeSummarysByJob,
-			ListJobPhases:                     deps.ListJobPhases,
+			BandByCategory:                       deps.Options.ClientCard.BandByCategory(),
+			IncludeAllCategories:                 deps.Options.ClientCard.IncludeAllCategories,
+			ListJobCategories:                    deps.ListJobCategories,
+			GetSubscriptionGroupOutcomeExport:    deps.GetSubscriptionGroupOutcomeExport,
+			GetSubscriptionGroupClientReportCard: deps.GetSubscriptionGroupClientReportCard,
+			ClientAttributeCodes:                 append([]string(nil), deps.Options.Document.ClientAttributeCodes...),
+			ClientDocumentMounted:                clientDocument != nil && strings.TrimSpace(deps.Routes.ClientDocumentURL) != "",
+			ListSubscriptionGroups:               deps.ListSubscriptionGroups,
+			ListSubscriptionGroupMembers:         deps.ListSubscriptionGroupMembers,
+			ListJobs:                             deps.ListJobs,
+			ListJobTemplates:                     deps.ListJobTemplates,
+			ListClients:                          deps.ListClients,
+			ListJobOutcomeSummarys:               deps.ListJobOutcomeSummarys,
+			ListPhaseOutcomeSummarysByJob:        deps.ListPhaseOutcomeSummarysByJob,
+			ListJobPhases:                        deps.ListJobPhases,
 			// Non-enrolled-placeholder evidence walk (blanks untaken-elective
 			// floor grade cells). Already injected for the DOCX handler.
 			ListJobTasks:     deps.ListJobTasks,
 			ListTaskOutcomes: deps.ListTaskOutcomes,
+		}),
+		ClientDownloadDrawer: clientcard.NewDownloadDrawer(&clientcard.DrawerDeps{
+			Routes:                               deps.Routes,
+			Labels:                               deps.Labels,
+			CommonLabels:                         deps.CommonLabels,
+			Options:                              deps.Options,
+			ResolvePrincipalKind:                 deps.ResolvePrincipalKind,
+			ClientAttributeCodes:                 append([]string(nil), deps.Options.Document.ClientAttributeCodes...),
+			GetSubscriptionGroupClientReportCard: deps.GetSubscriptionGroupClientReportCard,
 		}),
 		TemplateSettings: templatesettings.NewListView(templateSettingsDeps(deps)),
 		TemplateUpload:   templatesettings.NewUploadAction(templateSettingsDeps(deps)),
@@ -336,12 +372,26 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 }
 
 func subscriptionGroupDocumentTemplateSettingsDeps(deps *OutcomeSummaryModuleDeps) *subscriptiongroupdocumenttemplate.Deps {
+	// R2/C3 (DEC-1a): the subscription_group_document_template settings surface no longer offers the client-phase
+	// render profile as an upload choice. No download path resolves a
+	// subscription_group_document_template bound to
+	// RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1 --
+	// individual client-phase downloads resolve job_outcome_summary_document_template
+	// by (price_schedule_id, job_template_phase_code) instead (see
+	// templateSettingsDeps below). The profile, its manifest, and its
+	// validator stay registered in subscription_group_document (the reused
+	// validation contract); only what THIS surface advertises changes. A
+	// local copy of Options is used so the untouched deps.Options -- which
+	// still gates the ClientDownloadDrawer's own "is a whole-report profile
+	// registered" check elsewhere in this module -- is never mutated.
+	options := deps.Options
+	options.SubscriptionGroupExport.WholeReportProfile = subscriptiongroupdocumenttemplatepb.RenderProfile_RENDER_PROFILE_UNSPECIFIED
 	return &subscriptiongroupdocumenttemplate.Deps{
 		Routes:                 deps.Routes,
 		Labels:                 deps.Labels,
 		CommonLabels:           deps.CommonLabels,
 		TableLabels:            deps.TableLabels,
-		Options:                deps.Options,
+		Options:                options,
 		ListPriceSchedules:     deps.ListPriceSchedules,
 		ListPlans:              deps.ListPlans,
 		ListJobCategories:      deps.ListJobCategories,
@@ -358,19 +408,33 @@ func subscriptionGroupDocumentTemplateSettingsDeps(deps *OutcomeSummaryModuleDep
 // deps (TB3). All closures are optional/nil-safe.
 func templateSettingsDeps(deps *OutcomeSummaryModuleDeps) *templatesettings.Deps {
 	return &templatesettings.Deps{
-		Routes:                 deps.Routes,
-		Labels:                 deps.Labels,
-		CommonLabels:           deps.CommonLabels,
-		TableLabels:            deps.TableLabels,
-		ListPriceSchedules:     deps.ListPriceSchedules,
-		UploadTemplate:         deps.UploadTemplate,
-		ListDocumentTemplates:  deps.ListDocumentTemplates,
-		CreateDocumentTemplate: deps.CreateDocumentTemplate,
-		DeleteDocumentTemplate: deps.DeleteDocumentTemplate,
-		ListTemplateBindings:   deps.ListTemplateBindings,
-		CreateTemplateBinding:  deps.CreateTemplateBinding,
-		DeleteTemplateBinding:  deps.DeleteTemplateBinding,
-		PublishTemplateBinding: deps.PublishTemplateBinding,
+		Routes:                        deps.Routes,
+		Labels:                        deps.Labels,
+		CommonLabels:                  deps.CommonLabels,
+		TableLabels:                   deps.TableLabels,
+		ListPriceSchedules:            deps.ListPriceSchedules,
+		ListPhaseCodesByPriceSchedule: deps.ListPhaseCodesByPriceSchedule,
+		UploadTemplate:                deps.UploadTemplate,
+		ListDocumentTemplates:         deps.ListDocumentTemplates,
+		CreateDocumentTemplate:        deps.CreateDocumentTemplate,
+		DeleteDocumentTemplate:        deps.DeleteDocumentTemplate,
+		ListTemplateBindings:          deps.ListTemplateBindings,
+		CreateTemplateBinding:         deps.CreateTemplateBinding,
+		DeleteTemplateBinding:         deps.DeleteTemplateBinding,
+		PublishTemplateBinding:        deps.PublishTemplateBinding,
+		// R2/C3 (DEC-1a): reuse the SAME strict client-phase render-profile
+		// manifest validator the subscription_group_document_template settings upload path applies to
+		// RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1
+		// bindings, so a phase-scoped upload here is held to the identical
+		// token contract. The profile enum is baked in here (module wiring),
+		// not in template_settings, so that view stays ignorant of the
+		// render-profile package.
+		ValidatePhaseTemplate: func(content []byte) error {
+			return subscriptiongroupdocument.ValidateTemplate(
+				subscriptiongroupdocumenttemplatepb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1,
+				content,
+			)
+		},
 	}
 }
 
@@ -383,36 +447,42 @@ func newClientDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc {
 		return nil
 	}
 	return documentview.NewDownloadHandler(&documentview.Deps{
-		Labels:                          deps.Labels,
-		ResolvePrincipalKind:            deps.ResolvePrincipalKind,
-		CommonLabels:                    deps.CommonLabels,
-		DocumentHeaderName:              deps.DocumentHeaderName,
-		CategoryFilter:                  deps.Options.CategoryFilter,
-		DocOptions:                      deps.Options.Document,
-		ListJobCategories:               deps.ListJobCategories,
-		ListOutcomeCriterias:            deps.ListOutcomeCriterias,
-		GetStaffListPageData:            deps.GetStaffListPageData,
-		ListPriceSchedules:              deps.ListPriceSchedules,
-		ListClientAttributes:            deps.ListClientAttributes,
-		ResolveAttributeIDByCode:        deps.ResolveAttributeIDByCode,
-		ListWorkspaceUsers:              deps.ListWorkspaceUsers,
-		GenerateDoc:                     deps.GenerateDoc,
-		GeneratePDF:                     deps.GeneratePDF,
-		ResolveTemplateBytes:            deps.ResolveTemplateBytes,
-		ListSubscriptionGroups:          deps.ListSubscriptionGroups,
-		ListSubscriptionGroupMembers:    deps.ListSubscriptionGroupMembers,
-		ListJobs:                        deps.ListJobs,
-		ListJobTemplates:                deps.ListJobTemplates,
-		ListClients:                     deps.ListClients,
-		ListJobOutcomeSummarys:          deps.ListJobOutcomeSummarys,
-		ListPhaseOutcomeSummarysByJob:   deps.ListPhaseOutcomeSummarysByJob,
-		ListJobPhases:                   deps.ListJobPhases,
-		GetPhaseApprovalGateRollup:      deps.GetPhaseApprovalGateRollup,
-		ListJobTemplatePhasesByTemplate: deps.ListJobTemplatePhasesByTemplate,
-		ListJobOutcomeLines:             deps.ListJobOutcomeLines,
-		ListJobTasks:                    deps.ListJobTasks,
-		ListTaskOutcomes:                deps.ListTaskOutcomes,
-		ListCodedTaskOutcomeValuesByJob: deps.ListCodedTaskOutcomeValuesByJob,
+		Options:                                   deps.Options,
+		Labels:                                    deps.Labels,
+		ResolvePrincipalKind:                      deps.ResolvePrincipalKind,
+		CommonLabels:                              deps.CommonLabels,
+		DocumentHeaderName:                        deps.DocumentHeaderName,
+		CategoryFilter:                            deps.Options.CategoryFilter,
+		DocOptions:                                deps.Options.Document,
+		ListJobCategories:                         deps.ListJobCategories,
+		ListOutcomeCriterias:                      deps.ListOutcomeCriterias,
+		GetStaffListPageData:                      deps.GetStaffListPageData,
+		ListPriceSchedules:                        deps.ListPriceSchedules,
+		ListClientAttributes:                      deps.ListClientAttributes,
+		ResolveAttributeIDByCode:                  deps.ResolveAttributeIDByCode,
+		ListWorkspaceUsers:                        deps.ListWorkspaceUsers,
+		GenerateDoc:                               deps.GenerateDoc,
+		GeneratePDF:                               deps.GeneratePDF,
+		ResolveTemplateBytes:                      deps.ResolveTemplateBytes,
+		GetSubscriptionGroupClientReportCard:      deps.GetSubscriptionGroupClientReportCard,
+		ResolveSubscriptionGroupDocumentTemplate:  deps.ResolveSubscriptionGroupDocumentTemplate,
+		ListSubscriptionGroups:                    deps.ListSubscriptionGroups,
+		ListSubscriptionGroupMembers:              deps.ListSubscriptionGroupMembers,
+		ListSubscriptionGroupProductPlanStaffs:    deps.ListSubscriptionGroupProductPlanStaffs,
+		ListProductPlans:                          deps.ListProductPlans,
+		ListProductPlanStaffs:                     deps.ListProductPlanStaffs,
+		ListJobs:                                  deps.ListJobs,
+		ListJobTemplates:                          deps.ListJobTemplates,
+		ListClients:                               deps.ListClients,
+		ListJobOutcomeSummarys:                    deps.ListJobOutcomeSummarys,
+		ListPhaseOutcomeSummarysByJob:             deps.ListPhaseOutcomeSummarysByJob,
+		ListJobPhases:                             deps.ListJobPhases,
+		GetPhaseApprovalGateRollup:                deps.GetPhaseApprovalGateRollup,
+		ListJobTemplatePhasesByTemplate:           deps.ListJobTemplatePhasesByTemplate,
+		ListJobOutcomeLines:                       deps.ListJobOutcomeLines,
+		ListJobTasks:                              deps.ListJobTasks,
+		ListTaskOutcomes:                          deps.ListTaskOutcomes,
+		ListCodedTaskOutcomeValuesByJob:           deps.ListCodedTaskOutcomeValuesByJob,
 		ListCodedTaskOutcomeValuesByJobHistorical: deps.ListCodedTaskOutcomeValuesByJobHistorical,
 		ListTemplateTaskCriterias:                 deps.ListTemplateTaskCriterias,
 	})
@@ -437,6 +507,10 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 	}
 	if m.ClientCard != nil && m.routes.ClientCardURL != "" {
 		r.GET(m.routes.ClientCardURL, m.ClientCard)
+	}
+	if m.subscriptionGroupExportEnabled && m.ClientDocument != nil && m.routes.ClientDocumentURL != "" &&
+		m.ClientDownloadDrawer != nil && m.routes.ClientDownloadDrawerURL != "" {
+		r.GET(m.routes.ClientDownloadDrawerURL, m.ClientDownloadDrawer)
 	}
 	if m.SubscriptionGroupExport != nil && m.routes.SubscriptionGroupExportURL != "" {
 		// Raw (non-view) route — the registrar's HandleFunc path wraps it with

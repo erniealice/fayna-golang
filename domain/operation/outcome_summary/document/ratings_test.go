@@ -225,9 +225,9 @@ func TestStaffLine(t *testing.T) {
 		1: {"sP": 1},
 		2: {"sP": 1, "sC": 1}, // tie → prefer the non-period-1 assignee
 	}}
-	// classFallbackID "" — a per-task assignee is present, so the class-edge
+	// classFallbackIDs nil — a per-task assignee is present, so the class-edge
 	// fallback is never consulted (the assignee override wins).
-	if got := staffLine(labels, pair, names, ""); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
+	if got := staffLine(labels, pair, names, nil); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
 		t.Fatalf("pair line = %q", got)
 	}
 	threePhase := &transcript{teachers: map[int32]map[string]int{
@@ -235,28 +235,33 @@ func TestStaffLine(t *testing.T) {
 		2: {"sP": 1},
 		3: {"sC": 1},
 	}}
-	if got := staffLine(labels, threePhase, names, ""); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
+	if got := staffLine(labels, threePhase, names, nil); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
 		t.Fatalf("three-phase pair line = %q", got)
 	}
 
 	single := &transcript{teachers: map[int32]map[string]int{
 		1: {"sP": 1}, 2: {"sP": 1},
 	}}
-	if got := staffLine(labels, single, names, ""); got != "Teacher: Alexis Purisima" {
+	if got := staffLine(labels, single, names, nil); got != "Teacher: Alexis Purisima" {
 		t.Fatalf("single line = %q", got)
 	}
 
-	if got := staffLine(labels, nil, names, ""); got != "" {
+	if got := staffLine(labels, nil, names, nil); got != "" {
 		t.Fatalf("nil transcript line = %q", got)
 	}
 
 	// D5 COALESCE: with NO per-task assignee, the servicer is DERIVED from the
-	// class edge (classFallbackID resolved via names).
-	if got := staffLine(labels, nil, names, "sC"); got != "Teacher: Darianne Cabornay" {
+	// class edge (classFallbackIDs resolved via names).
+	if got := staffLine(labels, nil, names, []string{"sC"}); got != "Teacher: Darianne Cabornay" {
 		t.Fatalf("class-edge fallback line = %q", got)
 	}
+	// DP-10: the two primary teachers render in name order, independent of
+	// edge pagination order; transcript lines retain the established two-name cap.
+	if got := staffLine(labels, nil, names, []string{"sC", "sP"}); got != "Teachers: Alexis Purisima / Darianne Cabornay" {
+		t.Fatalf("multi-primary fallback line = %q", got)
+	}
 	// The per-task assignee override still wins over any class-edge fallback.
-	if got := staffLine(labels, single, names, "sC"); got != "Teacher: Alexis Purisima" {
+	if got := staffLine(labels, single, names, []string{"sC"}); got != "Teacher: Alexis Purisima" {
 		t.Fatalf("override-wins line = %q", got)
 	}
 }

@@ -73,11 +73,13 @@ import (
 	templatetaskcriteriaratingdescriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria_rating_description"
 	productpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
+	productplanstaffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan_staff"
 	planpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/plan"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptionpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
+	sgppspb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_product_plan_staff"
 	subscriptiongroupworkspaceuserpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_workspace_user"
 	subscriptionseatpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_seat"
 	activitypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/workflow/activity"
@@ -307,10 +309,11 @@ type JobCategoryUseCases struct {
 // the TB3 template settings page. OPTIONAL / nil-able (NOT in RequireFor): a nil
 // closure degrades the settings surface to "not configured".
 type JobOutcomeSummaryDocumentTemplateUseCases struct {
-	ListJobOutcomeSummaryDocumentTemplates   func(context.Context, *bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest) (*bindingpb.ListJobOutcomeSummaryDocumentTemplatesResponse, error)
-	CreateJobOutcomeSummaryDocumentTemplate  func(context.Context, *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error)
-	DeleteJobOutcomeSummaryDocumentTemplate  func(context.Context, *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error)
-	PublishJobOutcomeSummaryDocumentTemplate func(context.Context, *bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse, error)
+	FindApplicableJobOutcomeSummaryDocumentTemplate func(context.Context, *bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
+	ListJobOutcomeSummaryDocumentTemplates          func(context.Context, *bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest) (*bindingpb.ListJobOutcomeSummaryDocumentTemplatesResponse, error)
+	CreateJobOutcomeSummaryDocumentTemplate         func(context.Context, *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error)
+	DeleteJobOutcomeSummaryDocumentTemplate         func(context.Context, *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error)
+	PublishJobOutcomeSummaryDocumentTemplate        func(context.Context, *bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse, error)
 }
 
 // JobTemplateDocumentTemplateUseCases — sheet-family (grade-sheet) template
@@ -338,11 +341,12 @@ type SubscriptionGroupDocumentTemplateUseCases struct {
 
 // JobTemplatePhaseUseCases — JobTemplatePhase CRUD + ListByJobTemplate.
 type JobTemplatePhaseUseCases struct {
-	CreateJobTemplatePhase func(context.Context, *jobtemplatephasepb.CreateJobTemplatePhaseRequest) (*jobtemplatephasepb.CreateJobTemplatePhaseResponse, error)
-	ReadJobTemplatePhase   func(context.Context, *jobtemplatephasepb.ReadJobTemplatePhaseRequest) (*jobtemplatephasepb.ReadJobTemplatePhaseResponse, error)
-	UpdateJobTemplatePhase func(context.Context, *jobtemplatephasepb.UpdateJobTemplatePhaseRequest) (*jobtemplatephasepb.UpdateJobTemplatePhaseResponse, error)
-	DeleteJobTemplatePhase func(context.Context, *jobtemplatephasepb.DeleteJobTemplatePhaseRequest) (*jobtemplatephasepb.DeleteJobTemplatePhaseResponse, error)
-	ListByJobTemplate      func(context.Context, *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	CreateJobTemplatePhase        func(context.Context, *jobtemplatephasepb.CreateJobTemplatePhaseRequest) (*jobtemplatephasepb.CreateJobTemplatePhaseResponse, error)
+	ReadJobTemplatePhase          func(context.Context, *jobtemplatephasepb.ReadJobTemplatePhaseRequest) (*jobtemplatephasepb.ReadJobTemplatePhaseResponse, error)
+	UpdateJobTemplatePhase        func(context.Context, *jobtemplatephasepb.UpdateJobTemplatePhaseRequest) (*jobtemplatephasepb.UpdateJobTemplatePhaseResponse, error)
+	DeleteJobTemplatePhase        func(context.Context, *jobtemplatephasepb.DeleteJobTemplatePhaseRequest) (*jobtemplatephasepb.DeleteJobTemplatePhaseResponse, error)
+	ListByJobTemplate             func(context.Context, *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListPhaseCodesByPriceSchedule func(context.Context, *jobtemplatephasepb.ListPhaseCodesByPriceScheduleRequest) (*jobtemplatephasepb.ListPhaseCodesByPriceScheduleResponse, error)
 }
 
 // JobTemplateTaskUseCases — JobTemplateTask CRUD + ListByPhase.
@@ -451,8 +455,19 @@ type OutcomeMatrixUseCases struct {
 // SubscriptionGroupOutcomeExportUseCases is the narrow composite read used by
 // the subscription-group download drawer and its explicit CSV/PDF export path.
 type SubscriptionGroupOutcomeExportUseCases struct {
-	GetSubscriptionGroupOutcomeExport   func(context.Context, *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
-	ListSubscriptionGroupOutcomeLanding func(context.Context, *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
+	GetSubscriptionGroupOutcomeExport    func(context.Context, *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	GetSubscriptionGroupClientReportCard func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
+	ListSubscriptionGroupOutcomeLanding  func(context.Context, *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
+	// ResolvePublishedReportCardTemplate is the render-scoped josdt resolver
+	// (R3 / DEC-3): espyna's service/operation/subscription_group_outcome_export.
+	// ResolvePublishedReportCardTemplate, authorized against
+	// subscription_group_outcome_export:read rather than the management-only
+	// job_outcome_summary_document_template:list gate FindApplicableReportCardBinding
+	// (below) uses. OPTIONAL / nil-able: wireOutcomeMatrixDeps / wireOutcomeSummaryDeps
+	// prefer this closure when present and fall back to the old JOSDT
+	// list-gated resolver otherwise, so a STAFF principal keeps a working
+	// report-card header/download even without this seam wired.
+	ResolvePublishedReportCardTemplate func(context.Context, *bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
 }
 
 // JobTemplateSummaryUseCases — the generic resolver-scoped, template-grain
@@ -678,13 +693,23 @@ type FulfillmentUseCases struct {
 // deliverer (staff), group member → delivery group, group → group name +
 // nested schedule (price_schedule) name.
 type SubscriptionUseCases struct {
-	Subscription                   SubscriptionSubscriptionUseCases
-	SubscriptionSeat               SubscriptionSeatUseCases
-	SubscriptionGroup              SubscriptionGroupUseCases
-	SubscriptionGroupMember        SubscriptionGroupMemberUseCases
-	SubscriptionGroupWorkspaceUser SubscriptionGroupWorkspaceUserUseCases
-	PriceSchedule                  PriceScheduleUseCases
-	Plan                           PlanUseCases
+	Subscription                      SubscriptionSubscriptionUseCases
+	SubscriptionSeat                  SubscriptionSeatUseCases
+	SubscriptionGroup                 SubscriptionGroupUseCases
+	SubscriptionGroupMember           SubscriptionGroupMemberUseCases
+	SubscriptionGroupWorkspaceUser    SubscriptionGroupWorkspaceUserUseCases
+	SubscriptionGroupProductPlanStaff SubscriptionGroupProductPlanStaffUseCases
+	PriceSchedule                     PriceScheduleUseCases
+	Plan                              PlanUseCases
+}
+
+// SubscriptionGroupProductPlanStaffUseCases — bare list of the class-edge
+// (subscription_group_product_plan_staff, "who services this cohort's
+// offering") rows. Backs the report-card document's class-edge teacher
+// derivation (D5 derive-on-read, fetchClassEdgeTeachers). Optional/nil-safe:
+// nil → the teacher line falls back to its prior assignee-only behavior.
+type SubscriptionGroupProductPlanStaffUseCases struct {
+	ListSubscriptionGroupProductPlanStaffs func(context.Context, *sgppspb.ListSubscriptionGroupProductPlanStaffsRequest) (*sgppspb.ListSubscriptionGroupProductPlanStaffsResponse, error)
 }
 
 // PlanUseCases provides the optional applicability-axis choices used by the
@@ -742,7 +767,8 @@ type SubscriptionGroupMemberUseCases struct {
 
 // ProductUseCases — cross-domain product reads.
 type ProductUseCases struct {
-	ProductPlan ProductPlanUseCases
+	ProductPlan      ProductPlanUseCases
+	ProductPlanStaff ProductPlanStaffUseCases
 	// ListProducts backs the job_template drawer's Output Product picker
 	// (Q-TPL W1). OPTIONAL / nil-able — no product-search endpoint is
 	// reachable from fayna's wiring today, so the picker is a plain select
@@ -755,6 +781,15 @@ type ProductUseCases struct {
 // complete under the adapter's 100-row default).
 type ProductPlanUseCases struct {
 	ListProductPlans func(context.Context, *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error)
+}
+
+// ProductPlanStaffUseCases — bare list of product_plan_staff eligibility
+// rows (the generic "eligibility" concept). Backs the report-card document's
+// class-edge eligibility gate: a class edge linked to a product_plan_staff
+// row is only honored while that row is active. Optional/nil-safe: nil →
+// the eligibility gate is skipped (today's un-gated behavior).
+type ProductPlanStaffUseCases struct {
+	ListProductPlanStaffs func(context.Context, *productplanstaffpb.ListProductPlanStaffsRequest) (*productplanstaffpb.ListProductPlanStaffsResponse, error)
 }
 
 // EntityUseCases — cross-domain entity reads for the drawer search pickers.

@@ -1,0 +1,32 @@
+{{/* Single-client report download. The resolved route scopes the request to
+     the current group and client; the form only chooses period and format. */}}
+{{define "outcome-summary-client-download-drawer-form"}}
+<form method="get" action="{{.FormURL}}" hx-boost="false" data-lf-download-form data-lf-download-error-fallback="{{.Labels.DownloadErrorFallback}}" data-testid="rc-client-download-drawer">
+    <div class="sheet-body">
+        <div class="alert alert-info alert-subtle" role="status" aria-live="polite" data-lf-download-notice data-testid="rc-client-download-notice" hidden>{{.Labels.DownloadNotice}}</div>
+        <div class="alert alert-error alert-subtle" role="alert" data-lf-download-error data-testid="rc-client-download-error" hidden></div>
+        <div class="form-section">
+            <div class="form-row single">
+                <div class="form-group">
+                    <label class="form-label" for="rc-client-download-period">{{.Labels.PeriodLabel}}</label>
+                    <select id="rc-client-download-period" data-testid="rc-client-download-period" name="period" class="form-select">
+                        {{range .Periods}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row single">
+                <div class="form-group">
+                    <label class="form-label" for="rc-client-download-format">{{.Labels.FormatLabel}}</label>
+                    <select id="rc-client-download-format" data-testid="rc-client-download-format" name="format" class="form-select">
+                        {{range .Formats}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}{{if .Disabled}} disabled aria-disabled="true"{{end}}>{{.Label}}</option>{{end}}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="sheet-footer">
+        <button type="button" class="btn btn-secondary" data-lf-action="sheet-close">{{.CommonLabels.Buttons.Cancel}}</button>
+        <button type="submit" class="btn btn-primary" data-lf-busy-label="{{.Labels.DownloadingAction}}" data-testid="rc-client-download-submit">{{.Labels.DownloadAction}}</button>
+    </div>
+</form>
+{{end}}

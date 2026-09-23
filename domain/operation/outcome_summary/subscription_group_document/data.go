@@ -52,8 +52,8 @@ func BuildData(profileValue bindingpb.RenderProfile, matrix Matrix) (map[string]
 	if !ok {
 		return nil, fmt.Errorf("unsupported render profile")
 	}
-	if profile.RequiresExactCategory && strings.TrimSpace(matrix.JobCategoryID) == "" {
-		return nil, fmt.Errorf("render profile requires an exact job category")
+	if !profile.AcceptsCategoryBinding(matrix.JobCategoryID) {
+		return nil, fmt.Errorf("render profile does not accept the requested job-category binding scope")
 	}
 	if len(matrix.Columns) != profile.JobTemplateSlots {
 		return nil, fmt.Errorf("render profile requires %d job-template columns", profile.JobTemplateSlots)

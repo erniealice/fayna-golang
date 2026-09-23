@@ -19,10 +19,33 @@ import (
 	"github.com/erniealice/pyeza-golang/view"
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
+	documentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
+	cardbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
+
+func TestExplicitPeriodDocumentName(t *testing.T) {
+	labels := outcome_summary.DefaultLabels()
+	category := &exportpb.JobCategoryOption{JobTemplatePhases: []*exportpb.JobTemplatePhaseOption{{Code: "q1", Name: "Term 1"}}}
+	deps := &Deps{Labels: labels, FindApplicableReportCardBinding: func(_ context.Context, req *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error) {
+		if req.GetPriceScheduleId() != "ay-1" || req.GetJobTemplatePhaseCode() != "q1" {
+			t.Fatalf("resolver request = %#v", req)
+		}
+		code := "q1"
+		return &cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse{Success: true, Found: true, Binding: &cardbindingpb.JobOutcomeSummaryDocumentTemplate{JobTemplatePhaseCode: &code, DocumentTemplate: &documentpb.DocumentTemplate{Name: "Progress Report"}}}, nil
+	}}
+	if got := explicitPeriodDocumentName(context.Background(), deps, "ay-1", category, "phase:q1"); got != "Term 1 - Progress Report" {
+		t.Fatalf("bound title = %q", got)
+	}
+	if got := explicitPeriodDocumentName(context.Background(), deps, "", category, "phase:q1"); got != "Term 1" {
+		t.Fatalf("missing schedule fallback = %q", got)
+	}
+	if got := explicitPeriodDocumentName(context.Background(), deps, "ay-1", category, "final"); got != labels.SubscriptionGroupExport.PeriodFinal {
+		t.Fatalf("final title = %q", got)
+	}
+}
 
 func exportCell(id string, label *string, score *float64, hasMarks, positive bool) *exportpb.SubscriptionGroupOutcomeCell {
 	return &exportpb.SubscriptionGroupOutcomeCell{

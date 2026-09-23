@@ -2,7 +2,7 @@ package client_card
 
 import (
 	"context"
-	"strings"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
@@ -154,19 +154,25 @@ func taskOutcomesFn(outcomes ...*taskoutcomepb.TaskOutcome) func(context.Context
 func TestOkPage_DownloadWiredIntoPrimaryAction(t *testing.T) {
 	deps := &Deps{
 		Routes: outcome_summary.Routes{
-			ClientDocumentURL:    "/rc/group/{id}/client/{client_id}/doc",
-			SubscriptionGroupURL: "/rc/group/{id}",
-			ActiveNav:            "reports",
+			ClientDocumentURL:       "/rc/group/{id}/client/{client_id}/document",
+			ClientDownloadDrawerURL: "/rc/group/{id}/client/{client_id}/download",
+			SubscriptionGroupURL:    "/rc/group/{id}",
+			ActiveNav:               "reports",
 		},
+		ClientDocumentMounted: true,
+		ResolvePrincipalKind:  func(context.Context) int32 { return outcome_summary.PrincipalKindStaff },
+		Options:               outcome_summary.Options{SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{Enabled: true}},
 		Labels: outcome_summary.Labels{
 			Client: outcome_summary.PeriodLabels{DownloadAction: "Download report card (PDF)"},
 		},
 	}
 	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "Grade 5 Diamond"}
-	viewCtx := &view.ViewContext{CacheVersion: "v1", CurrentPath: "/rc/group/sec-1/client/c-1"}
+	request := httptest.NewRequest("GET", "/rc/group/sec-1/client/c-1", nil)
+	request = request.WithContext(view.WithUserPermissions(request.Context(), types.NewUserPermissions([]string{"subscription_group_outcome_export:read", "job_outcome_summary:read"})))
+	viewCtx := &view.ViewContext{Request: request, CacheVersion: "v1", CurrentPath: "/rc/group/sec-1/client/c-1"}
 	table := &types.TableConfig{ID: "report-cards-client"}
 
-	res := okPage(viewCtx, deps, group, "c-1", "Ada Lovelace", table)
+	res := okPage(request.Context(), viewCtx, deps, group, "c-1", "Ada Lovelace", table)
 	pd, ok := res.Data.(*PageData)
 	if !ok {
 		t.Fatalf("Data is not *PageData: %T", res.Data)
@@ -178,14 +184,37 @@ func TestOkPage_DownloadWiredIntoPrimaryAction(t *testing.T) {
 	if pa.Label != "Download report card (PDF)" {
 		t.Errorf("Label = %q, want the client.download_action label", pa.Label)
 	}
-	if !pa.Download {
-		t.Error("Download must be true so the body-boosted app does not intercept the download")
+	if pa.Download {
+		t.Error("drawer open action must not be marked as a file download")
 	}
 	if pa.TestID != "rc-download-pdf" {
 		t.Errorf("TestID = %q, want rc-download-pdf (preserved)", pa.TestID)
 	}
-	if !strings.HasSuffix(pa.Href, "?format=pdf") {
-		t.Errorf("Href = %q, want the resolved document URL + ?format=pdf", pa.Href)
+	if pa.ActionURL != "/rc/group/sec-1/client/c-1/download" {
+		t.Errorf("ActionURL = %q, want resolved client download drawer URL", pa.ActionURL)
+	}
+}
+
+func TestOkPage_OperatorFallsBackToPeriodlessDownloadWithoutExplicitRoute(t *testing.T) {
+	deps := &Deps{
+		Routes: outcome_summary.Routes{
+			ClientDocumentURL:    "/rc/group/{id}/client/{client_id}/document",
+			SubscriptionGroupURL: "/rc/group/{id}",
+		},
+		ClientDocumentMounted: true,
+		Labels:                outcome_summary.Labels{Client: outcome_summary.PeriodLabels{DownloadAction: "Download Report Card"}},
+	}
+	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "Grade 5 Diamond"}
+	request := httptest.NewRequest("GET", "/rc/group/sec-1/client/c-1", nil)
+	request = request.WithContext(view.WithUserPermissions(request.Context(), types.NewUserPermissions([]string{
+		"job_outcome_summary:list", "job_outcome_summary:read",
+	})))
+	viewCtx := &view.ViewContext{Request: request, CurrentPath: request.URL.Path}
+	table := &types.TableConfig{ID: "report-cards-client"}
+	res := okPage(request.Context(), viewCtx, deps, group, "c-1", "Ada Lovelace", table)
+	pa := res.Data.(*PageData).Table.PrimaryAction
+	if pa == nil || !pa.Download || pa.ActionURL != "" || pa.Href != "/rc/group/sec-1/client/c-1/document?format=pdf" {
+		t.Fatalf("operator action = %+v, want periodless direct full-card download", pa)
 	}
 }
 
@@ -200,7 +229,7 @@ func TestOkPage_NoDocumentURL_NoPrimaryAction(t *testing.T) {
 	viewCtx := &view.ViewContext{CacheVersion: "v1"}
 	table := &types.TableConfig{ID: "report-cards-client"}
 
-	res := okPage(viewCtx, deps, group, "c-1", "N", table)
+	res := okPage(context.Background(), viewCtx, deps, group, "c-1", "N", table)
 	pd := res.Data.(*PageData)
 	if pd.Table.PrimaryAction != nil {
 		t.Errorf("no document URL → no primary action; got %+v", pd.Table.PrimaryAction)
@@ -217,7 +246,7 @@ func TestOkPage_NilTable_NoPanic(t *testing.T) {
 	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "S"}
 	viewCtx := &view.ViewContext{CacheVersion: "v1"}
 
-	res := okPage(viewCtx, deps, group, "c-1", "N", nil)
+	res := okPage(context.Background(), viewCtx, deps, group, "c-1", "N", nil)
 	pd := res.Data.(*PageData)
 	if pd.Table != nil {
 		t.Errorf("nil table must stay nil; got %+v", pd.Table)

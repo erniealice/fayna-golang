@@ -41,6 +41,18 @@ var ErrGroupNotInTemplate = errors.New("not found")
 type GroupScope struct {
 	GroupID   string
 	GroupName string
+	// PriceScheduleID is the section's price_schedule_id (the AY anchor),
+	// read straight off the SAME JobTemplateSummary row that validated the
+	// (template, section) pair. A STAFF principal can call
+	// ListJobTemplateSummaries (it is how this guard runs for them today);
+	// they cannot list subscription_group / subscription_group_member
+	// directly (management-only, {1,2}-tagged permissions) — so a
+	// section-scoped caller that needs the group's price schedule (e.g. to
+	// enrich a phase's report-card document label) must read it from here
+	// rather than re-deriving it through deliverygroup.ResolveOneDetail.
+	// Empty when unresolved (no group_id, or the summary row carries no
+	// price_schedule_id — a section with no active academic-year schedule).
+	PriceScheduleID string
 }
 
 // Scoped reports whether a section narrowing is in effect.
@@ -86,7 +98,11 @@ func ResolveGroupScope(ctx context.Context, r *http.Request, templateID string, 
 	}
 	for _, s := range resp.GetSummaries() {
 		if s.GetJobTemplateId() == templateID {
-			return GroupScope{GroupID: groupID, GroupName: s.GetSubscriptionGroupName()}, true
+			return GroupScope{
+				GroupID:         groupID,
+				GroupName:       s.GetSubscriptionGroupName(),
+				PriceScheduleID: s.GetPriceScheduleId(),
+			}, true
 		}
 	}
 	return GroupScope{}, false

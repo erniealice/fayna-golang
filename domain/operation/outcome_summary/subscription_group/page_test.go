@@ -168,7 +168,7 @@ func TestBuildRows_PhantomBlank_RealShown(t *testing.T) {
 		"jobR0": {HasMarks: true, HasPositiveMark: true},  // enrolled → keep
 	}
 
-	rows := buildRows(clients, templateIDs, cellJob, labelByJob, evByJob, "sec1", outcome_summary.Routes{}, outcome_summary.Labels{})
+	rows := buildRows(clients, templateIDs, cellJob, labelByJob, evByJob, "sec1", outcome_summary.Routes{}, outcome_summary.Labels{}, false, false)
 	if len(rows) != 1 {
 		t.Fatalf("want 1 row, got %d", len(rows))
 	}
@@ -211,6 +211,78 @@ func TestBuildRows_PhantomBlank_RealShown(t *testing.T) {
 	// No-data cell: the "—" marker (distinct from a phantom's true blank).
 	if csv := types.CellCSV(nodata); csv != "—" {
 		t.Errorf("no-data CSV = %q, want the \"—\" marker", csv)
+	}
+}
+
+func TestBuildRows_ClientDownloadOpensScopedDrawerInSecondColumn(t *testing.T) {
+	rows := buildRows(
+		map[string]client{"student-123456": {clientID: "student-123456", name: "Student"}},
+		nil, nil, nil, nil, "group-123456",
+		outcome_summary.Routes{
+			ClientCardURL:           "/report-cards/section/{id}/student/{client_id}",
+			ClientDocumentURL:       "/report-cards/section/{id}/student/{client_id}/document",
+			ClientDownloadDrawerURL: "/action/report-cards/section/{id}/student/{client_id}/download",
+		},
+		outcome_summary.Labels{
+			Client:                 outcome_summary.PeriodLabels{ViewAction: "View", DownloadAction: "Download"},
+			ClientDocumentDownload: outcome_summary.ClientDocumentDownloadLabels{DrawerTitle: "Download Progress Report"},
+		}, true, true,
+	)
+	if len(rows) != 1 || len(rows[0].Cells) != 2 {
+		t.Fatalf("row/cell count = %d/%d, want 1/2", len(rows), len(rows[0].Cells))
+	}
+	cell := string(rows[0].Cells[1].HTML)
+	for _, want := range []string{
+		"rc-view-t-123456", "rc-download-t-123456",
+		`hx-get="/action/report-cards/section/group-123456/student/student-123456/download"`,
+		`hx-target="#sheetContent"`, `data-lf-action="sheet-open"`,
+		`data-lf-sheet-title="Download Progress Report"`,
+	} {
+		if !strings.Contains(cell, want) {
+			t.Errorf("actions cell missing %q: %s", want, cell)
+		}
+	}
+	if strings.Contains(cell, "/document?") || strings.Contains(cell, " download>") {
+		t.Errorf("row action must open the drawer, not directly download: %s", cell)
+	}
+}
+
+func TestBuildRows_HidesClientDownloadWithoutExplicitExportCapability(t *testing.T) {
+	rows := buildRows(
+		map[string]client{"student-1": {clientID: "student-1", name: "Student"}},
+		nil, nil, nil, nil, "group-1",
+		outcome_summary.Routes{
+			ClientCardURL:           "/report-cards/section/{id}/student/{client_id}",
+			ClientDocumentURL:       "/report-cards/section/{id}/student/{client_id}/document",
+			ClientDownloadDrawerURL: "/action/report-cards/section/{id}/student/{client_id}/download",
+		}, outcome_summary.DefaultLabels(), false, false,
+	)
+	cell := string(rows[0].Cells[1].HTML)
+	if !strings.Contains(cell, "rc-view-") || strings.Contains(cell, "rc-download-") {
+		t.Errorf("legacy-only actions must retain View and omit explicit export Download: %s", cell)
+	}
+}
+
+func TestBuildRows_LegacyOperatorKeepsPeriodlessFullCardDownload(t *testing.T) {
+	rows := buildRows(
+		map[string]client{"student-1": {clientID: "student-1", name: "Student"}},
+		nil, nil, nil, nil, "group-1",
+		outcome_summary.Routes{
+			ClientCardURL:     "/report-cards/section/{id}/student/{client_id}",
+			ClientDocumentURL: "/report-cards/section/{id}/student/{client_id}/document",
+		}, outcome_summary.DefaultLabels(), false, true,
+	)
+	cell := string(rows[0].Cells[1].HTML)
+	for _, want := range []string{
+		"rc-view-", "rc-download-", `href="/report-cards/section/group-1/student/student-1/document?format=pdf"`,
+		`hx-boost="false"`, " download>",
+	} {
+		if !strings.Contains(cell, want) {
+			t.Errorf("legacy operator action missing %q: %s", want, cell)
+		}
+	}
+	if strings.Contains(cell, "period=") || strings.Contains(cell, "data-lf-action=\"sheet-open\"") {
+		t.Errorf("legacy operator action must stay periodless and direct: %s", cell)
 	}
 }
 

@@ -126,6 +126,44 @@ func TestDownload_PDFNotWired_503(t *testing.T) {
 	}
 }
 
+func TestDownload_LegacyUnpublishedSheetRendersBlankPDF(t *testing.T) {
+	var rendered map[string]any
+	deps := fullCardDeps(
+		func([]byte, map[string]any) ([]byte, error) { return stubDocBytes, nil },
+		func(_ []byte, data map[string]any) ([]byte, error) {
+			rendered = data
+			return stubPDFBytes, nil
+		},
+	)
+	deps.ListJobPhases = func(context.Context, *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error) {
+		p := phase("phase-1", jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_FOR_REVIEW, "")
+		p.JobId = "job-1"
+		return &jobphasepb.ListJobPhasesResponse{Data: []*jobphasepb.JobPhase{p}, Success: true}, nil
+	}
+	deps.ListJobTasks = func(context.Context, *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error) {
+		return &jobtaskpb.ListJobTasksResponse{Data: []*jobtaskpb.JobTask{{Id: "task-1", JobPhaseId: "phase-1", Active: true}}, Success: true}, nil
+	}
+	deps.ListTaskOutcomes = func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error) {
+		return &taskoutcomepb.ListTaskOutcomesResponse{Data: []*taskoutcomepb.TaskOutcome{{Id: "outcome-1", JobTaskId: "task-1", Active: true}}, Success: true}, nil
+	}
+	w := httptest.NewRecorder()
+	NewDownloadHandler(deps)(w, reqWithPerms(t, "/doc?format=pdf", "sec-1", "stu-1", true))
+	if w.Code != http.StatusOK || rendered == nil {
+		t.Fatalf("status=%d body=%s, want blank PDF", w.Code, w.Body.String())
+	}
+	if rendered["student_name"] != "Dela Cruz, Juan" {
+		t.Fatalf("student identity = %#v", rendered["student_name"])
+	}
+	subjects := rendered["subjects"].([]any)
+	if len(subjects) != 1 {
+		t.Fatalf("subjects = %#v", subjects)
+	}
+	subject := subjects[0].(map[string]any)
+	if subject["subject_name"] != "Mathematics" || subject["myp_overall"] != "" {
+		t.Fatalf("subject label/outcome = %#v", subject)
+	}
+}
+
 func TestDownload_Forbidden_BothFormats(t *testing.T) {
 	h := NewDownloadHandler(fullCardDeps(
 		func([]byte, map[string]any) ([]byte, error) { return stubDocBytes, nil },

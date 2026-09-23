@@ -2,6 +2,7 @@ package block
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sort"
 	"time"
@@ -25,6 +26,29 @@ import (
 	jobdashpb "github.com/erniealice/esqyma/pkg/schema/v1/service/dashboard/job"
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
+
+// assertSeam type-asserts a pyeza/espyna AppContext `any` seam value to the
+// exact closure type T that a fayna block seam expects. A nil seam stays the
+// established nil-safe/unwired contract (returns T's zero value — a nil
+// closure — so the caller's existing nil check degrades gracefully). A
+// NON-nil value of the wrong concrete type is never silently dropped: that
+// is a real composition-root defect (e.g. a consuming app assigning a
+// closure with a stale/renamed signature, which the plain `v, _ :=
+// v.(T)` idiom would otherwise turn into a silently-nil, "unwired" seam).
+// Panicking loud at boot surfaces the mismatch immediately instead of a
+// feature quietly never firing in production.
+func assertSeam[T any](name string, v any) T {
+	if v == nil {
+		var zero T
+		return zero
+	}
+	t, ok := v.(T)
+	if !ok {
+		var want T
+		panic(fmt.Sprintf("fayna block: AppContext.%s has type %T, want %T", name, v, want))
+	}
+	return t
+}
 
 // EngineOption configures the engine block from the consuming app (the app's
 // view option block). Options are forwarded verbatim to AllUnits.
@@ -157,22 +181,22 @@ func EngineBlock(opts ...EngineOption) consumerapp.AppOption {
 		if db, ok := ctx.DB.(ListSimpler); ok {
 			infra.DB = db
 		}
-		infra.GenerateDoc, _ = ctx.GenerateDoc.(func([]byte, map[string]any) ([]byte, error))
+		infra.GenerateDoc = assertSeam[func([]byte, map[string]any) ([]byte, error)]("GenerateDoc", ctx.GenerateDoc)
 		// Report-card PDF (W5, ?format=pdf). A SECOND injected closure asserted with
 		// the exact bare signature (GenerateDoc precedent) so no fayna→fycha/espyna
 		// dependency is introduced; nil-safe when unwired (the pdf format 503s).
-		infra.GeneratePDF, _ = ctx.GeneratePDF.(func([]byte, map[string]any) ([]byte, error))
+		infra.GeneratePDF = assertSeam[func([]byte, map[string]any) ([]byte, error)]("GeneratePDF", ctx.GeneratePDF)
 		// Inline grade recompute (W2). Asserted as bare signatures (GenerateDoc
 		// precedent) so no espyna dependency; nil-safe when unwired.
-		infra.ComputePhaseOutcome, _ = ctx.ComputePhaseOutcome.(func(context.Context, string) (bool, error))
-		infra.ComputeJobOutcome, _ = ctx.ComputeJobOutcome.(func(context.Context, string) (bool, error))
-		infra.RecomputeEligibility, _ = ctx.RecomputeEligibility.(func(context.Context, string) (bool, map[string]bool, error))
-		infra.ResolveTemplateBytes, _ = ctx.ResolveTemplateBytes.(func(context.Context, string) ([]byte, error))
+		infra.ComputePhaseOutcome = assertSeam[func(context.Context, string) (bool, error)]("ComputePhaseOutcome", ctx.ComputePhaseOutcome)
+		infra.ComputeJobOutcome = assertSeam[func(context.Context, string) (bool, error)]("ComputeJobOutcome", ctx.ComputeJobOutcome)
+		infra.RecomputeEligibility = assertSeam[func(context.Context, string) (bool, map[string]bool, error)]("RecomputeEligibility", ctx.RecomputeEligibility)
+		infra.ResolveTemplateBytes = assertSeam[func(context.Context, string, string) ([]byte, error)]("ResolveTemplateBytes", ctx.ResolveTemplateBytes)
 		// Grade-sheet (outcome-matrix) PDF binding resolver (P5). A THIRD injected
 		// closure asserted with its exact bare signature (two-axis key: category +
 		// schedule) so no fayna→espyna dependency is introduced; nil-safe when
 		// unwired (the pdf export fails loud with a 503, no embedded fallback).
-		infra.ResolveSheetTemplateBytes, _ = ctx.ResolveSheetTemplateBytes.(func(context.Context, string, string) ([]byte, error))
+		infra.ResolveSheetTemplateBytes = assertSeam[func(context.Context, string, string) ([]byte, error)]("ResolveSheetTemplateBytes", ctx.ResolveSheetTemplateBytes)
 		// AppContext is the external composition boundary; the typed fayna seam
 		// above remains canonical.
 		infra.ResolveSubscriptionGroupDocumentTemplate, _ = ctx.ResolveSubscriptionGroupDocumentTemplate.(func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error))
@@ -287,6 +311,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		// nil-safe: a nil aggregate leaves the closures nil → "not configured".
 		if op.JobOutcomeSummaryDocumentTemplate != nil {
 			b := op.JobOutcomeSummaryDocumentTemplate
+			if b.FindApplicableJobOutcomeSummaryDocumentTemplate != nil {
+				result.Operation.JobOutcomeSummaryDocumentTemplate.FindApplicableJobOutcomeSummaryDocumentTemplate = b.FindApplicableJobOutcomeSummaryDocumentTemplate.Execute
+			}
 			result.Operation.JobOutcomeSummaryDocumentTemplate.ListJobOutcomeSummaryDocumentTemplates = b.ListJobOutcomeSummaryDocumentTemplates.Execute
 			result.Operation.JobOutcomeSummaryDocumentTemplate.CreateJobOutcomeSummaryDocumentTemplate = b.CreateJobOutcomeSummaryDocumentTemplate.Execute
 			result.Operation.JobOutcomeSummaryDocumentTemplate.DeleteJobOutcomeSummaryDocumentTemplate = b.DeleteJobOutcomeSummaryDocumentTemplate.Execute
@@ -323,6 +350,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.JobTemplatePhase.UpdateJobTemplatePhase = op.JobTemplatePhase.UpdateJobTemplatePhase.Execute
 			result.Operation.JobTemplatePhase.DeleteJobTemplatePhase = op.JobTemplatePhase.DeleteJobTemplatePhase.Execute
 			result.Operation.JobTemplatePhase.ListByJobTemplate = op.JobTemplatePhase.ListByJobTemplate.Execute
+			if op.JobTemplatePhase.ListPhaseCodesByPriceSchedule != nil {
+				result.Operation.JobTemplatePhase.ListPhaseCodesByPriceSchedule = op.JobTemplatePhase.ListPhaseCodesByPriceSchedule.Execute
+			}
 		}
 
 		if op.JobTemplateTask != nil {
@@ -479,6 +509,11 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		if uc.Subscription.SubscriptionGroupWorkspaceUser != nil {
 			result.Subscription.SubscriptionGroupWorkspaceUser.ListSubscriptionGroupWorkspaceUsers = uc.Subscription.SubscriptionGroupWorkspaceUser.ListSubscriptionGroupWorkspaceUsers.Execute
 		}
+		// Class-edge (subscription_group_product_plan_staff) list — backs the
+		// report-card document's class-edge teacher derivation. Optional/nil-safe.
+		if uc.Subscription.SubscriptionGroupProductPlanStaff != nil {
+			result.Subscription.SubscriptionGroupProductPlanStaff.ListSubscriptionGroupProductPlanStaffs = uc.Subscription.SubscriptionGroupProductPlanStaff.ListSubscriptionGroupProductPlanStaffs.Execute
+		}
 		// PriceSchedule list backs the report-cards view-1 tabstrip (one tab per
 		// price_schedule row, incl. inactive — Q-TAB-1). Optional/nil-safe.
 		if uc.Subscription.PriceSchedule != nil {
@@ -493,6 +528,11 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 	// resolution — optional; nil → deliverer column renders blank) -----------
 	if uc.Product != nil && uc.Product.ProductPlan != nil {
 		result.Product.ProductPlan.ListProductPlans = uc.Product.ProductPlan.ListProductPlans.Execute
+	}
+	// Eligibility (product_plan_staff) list — backs the report-card document's
+	// class-edge eligibility gate. Optional/nil-safe.
+	if uc.Product != nil && uc.Product.ProductPlanStaff != nil {
+		result.Product.ProductPlanStaff.ListProductPlanStaffs = uc.Product.ProductPlanStaff.ListProductPlanStaffs.Execute
 	}
 	if uc.Product != nil && uc.Product.Product != nil {
 		result.Product.ListProducts = uc.Product.Product.ListProducts.Execute
@@ -560,9 +600,25 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupOutcomeExport.Execute
 	}
 	if uc.Service != nil && uc.Service.SubscriptionGroupOutcomeExport != nil &&
+		uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientReportCard != nil {
+		result.Operation.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientReportCard =
+			uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientReportCard.Execute
+	}
+	if uc.Service != nil && uc.Service.SubscriptionGroupOutcomeExport != nil &&
 		uc.Service.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding != nil {
 		result.Operation.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding =
 			uc.Service.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding.Execute
+	}
+	// ResolvePublishedReportCardTemplate (R3 / DEC-3) rides the SAME
+	// SubscriptionGroupOutcomeExport service seam, authorized against
+	// subscription_group_outcome_export:read instead of the management-only
+	// job_outcome_summary_document_template:list gate. Wired independently;
+	// wireOutcomeMatrixDeps / wireOutcomeSummaryDeps prefer it and fall back to
+	// the old JOSDT resolver only when this closure is nil.
+	if uc.Service != nil && uc.Service.SubscriptionGroupOutcomeExport != nil &&
+		uc.Service.SubscriptionGroupOutcomeExport.ResolvePublishedReportCardTemplate != nil {
+		result.Operation.SubscriptionGroupOutcomeExport.ResolvePublishedReportCardTemplate =
+			uc.Service.SubscriptionGroupOutcomeExport.ResolvePublishedReportCardTemplate.Execute
 	}
 	// ResolveStaff maps the session user → active staff_id through the typed staff
 	// list use case (the read-only gate + record-action IDOR guard authority).

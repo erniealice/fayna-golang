@@ -57,8 +57,9 @@ type Options struct {
 }
 
 // SubscriptionGroupExportOptions is the trusted composition contract for the
-// subscription-group one-period CSV/PDF drawer. Category codes and attribute
-// modules are deployment data; render profiles are canonical generated enums.
+// subscription-group export and document-template surfaces. Category codes
+// and attribute modules are deployment data; render profiles are canonical
+// generated enums.
 type SubscriptionGroupExportOptions struct {
 	// Enabled mounts and advertises the group export/drawer/template surface.
 	// It is deliberately independent from List.Entity so grouped presentation
@@ -71,6 +72,13 @@ type SubscriptionGroupExportOptions struct {
 	// ProfileByCategoryCode declares which exact category semantics may use a
 	// PDF render profile. The browser never supplies or selects this value.
 	ProfileByCategoryCode map[string]bindingpb.RenderProfile
+	// WholeReportProfile explicitly enables the one profile this app currently
+	// allows at all-categories binding scope in the template settings surface.
+	// It is trusted composition data, never read from the request. The profile
+	// registry owns its category-scope semantics; a future need for multiple
+	// profiles at this scope should add an explicit profile chooser, not infer a
+	// profile from request data.
+	WholeReportProfile bindingpb.RenderProfile
 	// GroupByAttributeModule pins the trusted attribute-definition module used
 	// with Options.Row.GroupByField. A configured client-attribute band without
 	// a module is invalid and explicit export fails closed.

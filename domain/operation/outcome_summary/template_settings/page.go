@@ -47,6 +47,7 @@ import (
 	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
+	phasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -104,7 +105,8 @@ type Deps struct {
 	TableLabels  types.TableLabels
 
 	// Schedule dropdown source (reuses the report-cards price_schedule list).
-	ListPriceSchedules func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
+	ListPriceSchedules            func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
+	ListPhaseCodesByPriceSchedule func(ctx context.Context, req *phasepb.ListPhaseCodesByPriceScheduleRequest) (*phasepb.ListPhaseCodesByPriceScheduleResponse, error)
 
 	// document_template artifact (bytes in storage + metadata row).
 	UploadTemplate         func(ctx context.Context, bucket, key string, content []byte, contentType string) error
@@ -123,6 +125,21 @@ type Deps struct {
 	CreateTemplateBinding  func(ctx context.Context, req *bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.CreateJobOutcomeSummaryDocumentTemplateResponse, error)
 	DeleteTemplateBinding  func(ctx context.Context, req *bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.DeleteJobOutcomeSummaryDocumentTemplateResponse, error)
 	PublishTemplateBinding func(ctx context.Context, req *bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.PublishJobOutcomeSummaryDocumentTemplateResponse, error)
+
+	// ValidatePhaseTemplate validates an uploaded PHASE-scoped DOCX (a non-empty
+	// job_template_phase_code) against the strict client-phase render-profile
+	// manifest token contract — the SAME validator the the subscription_group_document_template settings upload
+	// path applies to bindings carrying
+	// RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1
+	// (subscription_group_document.ValidateTemplate). It is injected as a plain
+	// func rather than imported directly so this view never depends on the
+	// render-profile enum/package; the caller (outcome_summary_module.go) wires
+	// the closure with the profile baked in. Whole-year uploads (empty phase
+	// code) are the Year Final contract and never call this — only
+	// validateDocxArchive applies to them, unchanged. Nil-safe in the sense of
+	// FAIL-CLOSED: a non-empty phase code with no validator configured rejects
+	// the upload rather than silently skipping the check (R2/C3 DEC-1a).
+	ValidatePhaseTemplate func(content []byte) error
 }
 
 // PageData is the settings-page data.
@@ -146,6 +163,8 @@ type UploadFormData struct {
 	ValidityEnd     string
 	IsEdit          bool
 	ScheduleOptions []types.SelectOption
+	PeriodOptions   []types.SelectOption
+	PeriodURL       string
 	AcceptTypes     string
 }
 
@@ -218,14 +237,28 @@ func NewUploadAction(deps *Deps) view.View {
 			return view.HTMXError(deps.Labels.TemplateSettings.NotConfigured)
 		}
 		l := deps.Labels.TemplateSettings
+		if viewCtx.Request.Method == http.MethodGet && viewCtx.Request.URL.Query().Get("period_options") == "1" {
+			ps := strings.TrimSpace(viewCtx.Request.URL.Query().Get("price_schedule_id"))
+			options, err := periodOptions(ctx, deps, ps, l.PeriodFullYear)
+			if err != nil {
+				return view.HTMXError(l.NotConfigured)
+			}
+			return view.OK("outcome-summary-template-period-options", &UploadFormData{Labels: l, PeriodOptions: options})
+		}
 
 		if viewCtx.Request.Method == http.MethodGet {
+			initialPeriodOptions, err := periodOptions(ctx, deps, "", l.PeriodFullYear)
+			if err != nil {
+				return view.HTMXError(l.NotConfigured)
+			}
 			form := &UploadFormData{
 				FormAction:      deps.Routes.TemplateUploadURL,
 				Labels:          l,
 				CommonLabels:    deps.CommonLabels,
 				FormTitle:       l.UploadTitle,
 				ScheduleOptions: scheduleOptions(ctx, deps, l.ScheduleFallback),
+				PeriodOptions:   initialPeriodOptions,
+				PeriodURL:       deps.Routes.TemplateUploadURL + "?period_options=1",
 				AcceptTypes:     docxExt,
 			}
 			if sourceID := strings.TrimSpace(viewCtx.Request.URL.Query().Get("id")); sourceID != "" {
@@ -240,6 +273,11 @@ func NewUploadAction(deps *Deps) view.View {
 				form.ValidityEnd = formatFormDate(source.GetValidityEnd())
 				form.IsEdit = true
 				form.ScheduleOptions = selectOption(form.ScheduleOptions, source.GetPriceScheduleId())
+				form.PeriodOptions, err = periodOptions(ctx, deps, source.GetPriceScheduleId(), l.PeriodFullYear)
+				if err != nil {
+					return view.HTMXError(l.NotConfigured)
+				}
+				form.PeriodOptions = selectOption(form.PeriodOptions, source.GetJobTemplatePhaseCode())
 			}
 			return view.OK("outcome-summary-template-upload-drawer-form", form)
 		}
@@ -259,6 +297,14 @@ func NewUploadAction(deps *Deps) view.View {
 		sourceID := strings.TrimSpace(viewCtx.Request.FormValue("source_binding_id"))
 		if sourceID != "" {
 			if _, _, ok := replacementSource(ctx, deps, sourceID); !ok {
+				return view.HTMXError(l.UploadFailed)
+			}
+		}
+		phaseCode := strings.TrimSpace(viewCtx.Request.FormValue("job_template_phase_code"))
+		priceScheduleID := strings.TrimSpace(viewCtx.Request.FormValue("price_schedule_id"))
+		if phaseCode != "" {
+			options, err := periodOptions(ctx, deps, priceScheduleID, l.PeriodFullYear)
+			if err != nil || !hasPeriodCode(options, phaseCode) {
 				return view.HTMXError(l.UploadFailed)
 			}
 		}
@@ -293,6 +339,26 @@ func NewUploadAction(deps *Deps) view.View {
 		if err := validateDocxArchive(content); err != nil {
 			log.Printf("report-card template upload: reject archive: %v", err)
 			return view.HTMXError(l.InvalidFile)
+		}
+
+		// R2/C3 (DEC-1a): a phase-scoped upload (job_template_phase_code
+		// non-empty) additionally MUST satisfy the strict client-phase
+		// render-profile manifest token contract -- the same check the
+		// subscription_group_document_template settings upload path runs for
+		// RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1.
+		// Whole-year uploads (phaseCode == "") are the Year Final contract and
+		// skip this entirely; validateDocxArchive above is unchanged for them.
+		// Fail closed when the validator is not wired: a phase-scoped upload
+		// with no configured validator is rejected, never silently accepted.
+		if phaseCode != "" {
+			if deps.ValidatePhaseTemplate == nil {
+				log.Printf("report-card template upload: reject phase upload: phase manifest validator not configured")
+				return view.HTMXError(l.InvalidFile)
+			}
+			if err := deps.ValidatePhaseTemplate(content); err != nil {
+				log.Printf("report-card template upload: reject phase manifest: %v", err)
+				return view.HTMXError(l.InvalidFile)
+			}
 		}
 
 		// Q4 upload-orphan cleanup — ORDERING IS LOAD-BEARING. The storage bytes
@@ -341,8 +407,11 @@ func NewUploadAction(deps *Deps) view.View {
 		if sourceID != "" {
 			binding.SupersedesBindingId = &sourceID
 		}
-		if ps := strings.TrimSpace(viewCtx.Request.FormValue("price_schedule_id")); ps != "" {
-			binding.PriceScheduleId = &ps
+		if priceScheduleID != "" {
+			binding.PriceScheduleId = &priceScheduleID
+		}
+		if phaseCode != "" {
+			binding.JobTemplatePhaseCode = &phaseCode
 		}
 		if ts := parseDate(viewCtx.Request.FormValue("validity_start")); ts != nil {
 			binding.ValidityStart = ts
@@ -544,6 +613,7 @@ func bindingColumns(l outcome_summary.TemplateSettingsLabels) []types.TableColum
 	return []types.TableColumn{
 		{Key: "name", Label: l.NameColumn},
 		{Key: "schedule", Label: l.ScheduleColumn, WidthClass: "col-3xl"},
+		{Key: "period", Label: l.PeriodLabel, WidthClass: "col-2xl"},
 		{Key: "version", Label: l.VersionColumn, WidthClass: "col-lg"},
 		{Key: "status", Label: l.StatusColumn, WidthClass: "col-2xl"},
 		{Key: "validity", Label: l.ValidityColumn, WidthClass: "col-3xl"},
@@ -562,6 +632,7 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 	l := deps.Labels.TemplateSettings
 	docNames := docTemplateNames(ctx, deps)
 	schedNames := scheduleNames(ctx, deps)
+	phaseNames := make(map[string]map[string]string)
 	// Q4: each row action cites the code its use case enforces — replacement
 	// creation gates :create, publish gates :update, and delete gates :delete (a
 	// split role may hold one permission without the others).
@@ -574,6 +645,22 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 		id := b.GetId()
 		name := bindingTemplateName(b, docNames)
 		schedule := bindingScheduleName(b, schedNames, l.ScheduleFallback)
+		period := l.PeriodFullYear
+		if code := b.GetJobTemplatePhaseCode(); code != "" {
+			ps := b.GetPriceScheduleId()
+			if _, ok := phaseNames[ps]; !ok {
+				phaseNames[ps] = make(map[string]string)
+				if options, err := periodOptions(ctx, deps, ps, l.PeriodFullYear); err == nil {
+					for _, option := range options {
+						phaseNames[ps][option.Value] = option.Label
+					}
+				}
+			}
+			period = phaseNames[ps][code]
+			if period == "" {
+				period = code
+			}
+		}
 		version := fmt.Sprintf("v%d", b.GetVersion())
 		statusLabel, statusVariant := statusBadge(b.GetVersionStatus(), l)
 		validity := formatValidity(b, l)
@@ -619,6 +706,7 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 			Cells: []types.TableCell{
 				{Type: "text", Value: name},
 				{Type: "text", Value: schedule},
+				{Type: "text", Value: period},
 				{Type: "text", Value: version},
 				{Type: "badge", Value: statusLabel, Variant: statusVariant},
 				{Type: "text", Value: validity},
@@ -737,6 +825,47 @@ func scheduleOptions(ctx context.Context, deps *Deps, fallback string) []types.S
 		}
 	}
 	return opts
+}
+
+// periodOptions returns the typed, active phase codes available in the selected
+// academic year. A blank year can only use the full-year binding. Lookup errors
+// fail closed so a stale or invented phase cannot be submitted from the drawer.
+func periodOptions(ctx context.Context, deps *Deps, priceScheduleID, fullYear string) ([]types.SelectOption, error) {
+	opts := []types.SelectOption{{Value: "", Label: fullYear}}
+	if priceScheduleID == "" {
+		return opts, nil
+	}
+	if deps.ListPhaseCodesByPriceSchedule == nil {
+		return nil, fmt.Errorf("phase-code lookup is not configured")
+	}
+	resp, err := deps.ListPhaseCodesByPriceSchedule(ctx, &phasepb.ListPhaseCodesByPriceScheduleRequest{PriceScheduleId: priceScheduleID})
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil || !resp.GetSuccess() {
+		return nil, fmt.Errorf("phase-code lookup failed")
+	}
+	for _, option := range resp.GetOptions() {
+		code := strings.TrimSpace(option.GetCode())
+		if code == "" {
+			continue
+		}
+		label := strings.Join(option.GetNames(), " / ")
+		if label == "" {
+			label = code
+		}
+		opts = append(opts, types.SelectOption{Value: code, Label: label})
+	}
+	return opts, nil
+}
+
+func hasPeriodCode(options []types.SelectOption, code string) bool {
+	for _, option := range options {
+		if option.Value == code {
+			return true
+		}
+	}
+	return false
 }
 
 // replacementSource resolves an immutable history row and its artifact for the

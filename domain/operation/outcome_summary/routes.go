@@ -91,6 +91,7 @@ type Routes struct {
 	SubscriptionGroupDownloadDrawerURL string `json:"subscription_group_download_drawer_url"`
 	ClientCardURL                      string `json:"client_url"`
 	ClientDocumentURL                  string `json:"client_document_url"`
+	ClientDownloadDrawerURL            string `json:"client_download_drawer_url"`
 	GroupDetailURL                     string `json:"group_detail_url"`
 	PhaseSummaryURL                    string `json:"phase_summary_url"`
 
@@ -157,6 +158,9 @@ func (r Routes) RouteMap() map[string]string {
 	// an unmounted surface.
 	if r.SubscriptionGroupDownloadDrawerURL != "" {
 		routes["outcome_summary.subscription_group_download_drawer"] = r.SubscriptionGroupDownloadDrawerURL
+	}
+	if r.ClientDownloadDrawerURL != "" {
+		routes["outcome_summary.client_download_drawer"] = r.ClientDownloadDrawerURL
 	}
 	if r.SubscriptionGroupDocumentTemplateSettingsURL != "" {
 		routes["outcome_summary.subscription_group_document_template_settings"] = r.SubscriptionGroupDocumentTemplateSettingsURL

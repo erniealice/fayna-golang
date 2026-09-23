@@ -3,390 +3,423 @@ package client_card
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"net/http"
 	"sort"
 	"strings"
 
+	espynaports "github.com/erniealice/espyna-golang/ports"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
+	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
+	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
-
-const maxNarrowMatrixCalls = 12
 
 func narrowReportViewEnabled(ctx context.Context, deps *Deps, perms *types.UserPermissions) bool {
 	return !outcome_summary.CanLegacyDetail(perms) &&
 		outcome_summary.CanExplicitExport(perms, ctx, deps.ResolvePrincipalKind) &&
 		deps.Options.List.SubscriptionGroups() &&
 		deps.Options.SubscriptionGroupExportEnabled() &&
-		deps.GetSubscriptionGroupOutcomeExport != nil
-}
-
-type reportMatrixReader struct {
-	ctx       context.Context
-	deps      *Deps
-	callCount int
-	capLogged bool
-}
-
-var errNarrowMatrixCallCap = errors.New("narrow matrix call cap reached")
-
-func (r *reportMatrixReader) logCap() {
-	if r.capLogged {
-		return
-	}
-	r.capLogged = true
-	log.Printf("client report view: matrix call cap reached; truncating remaining reads")
-}
-
-func (r *reportMatrixReader) read(request *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error) {
-	if r.callCount >= maxNarrowMatrixCalls {
-		r.logCap()
-		return nil, errNarrowMatrixCallCap
-	}
-	r.callCount++
-	response, err := r.deps.GetSubscriptionGroupOutcomeExport(r.ctx, request)
-	if err != nil {
-		log.Printf("client report view: matrix read failed: %v", err)
-		return nil, err
-	}
-	return response, nil
-}
-
-func clientReportMatrixValid(response *exportpb.GetSubscriptionGroupOutcomeExportResponse, subscriptionGroupID string) bool {
-	return response != nil && response.GetSuccess() && response.GetContext() != nil && response.GetContext().GetSubscriptionGroupId() == subscriptionGroupID
+		deps.GetSubscriptionGroupClientReportCard != nil
 }
 
 func renderReportView(ctx context.Context, viewCtx *view.ViewContext, deps *Deps, subscriptionGroupID, clientID string) view.ViewResult {
-	if deps.GetSubscriptionGroupOutcomeExport == nil {
+	if deps.GetSubscriptionGroupClientReportCard == nil {
 		return view.Forbidden("subscription_group_outcome_export:read")
 	}
-	options, err := deps.GetSubscriptionGroupOutcomeExport(ctx, &exportpb.GetSubscriptionGroupOutcomeExportRequest{
-		SubscriptionGroupId: subscriptionGroupID,
+	if strings.TrimSpace(subscriptionGroupID) == "" || strings.TrimSpace(clientID) == "" {
+		return view.Forbidden("subscription_group_outcome_export:read")
+	}
+
+	response, err := deps.GetSubscriptionGroupClientReportCard(ctx, &exportpb.GetSubscriptionGroupClientReportCardRequest{
+		SubscriptionGroupId:  subscriptionGroupID,
+		ClientId:             clientID,
+		ClientAttributeCodes: append([]string(nil), deps.ClientAttributeCodes...),
 	})
-	if err != nil || !clientReportMatrixValid(options, subscriptionGroupID) {
-		return view.Forbidden("subscription_group_outcome_export:read")
-	}
-
-	reader := &reportMatrixReader{ctx: ctx, deps: deps}
-	categories := options.GetJobCategories()
-	rawCategoryID := strings.TrimSpace(viewCtx.Request.URL.Query().Get("jc"))
-	selected := reportCategoryByID(categories, rawCategoryID)
-	finalByCategory := make(map[string]*exportpb.GetSubscriptionGroupOutcomeExportResponse)
-	finalAttempted := make(map[string]bool)
-	var finalResponse *exportpb.GetSubscriptionGroupOutcomeExportResponse
-	if selected != nil {
-		if selected.GetFinalOutcomeAvailable() {
-			categoryID := selected.GetJobCategoryId()
-			var readErr error
-			finalResponse, readErr = reader.read(clientFinalRequest(subscriptionGroupID, categoryID))
-			if readErr != nil || !clientReportMatrixValid(finalResponse, subscriptionGroupID) {
-				return view.Forbidden("subscription_group_outcome_export:read")
-			}
-			finalByCategory[categoryID] = finalResponse
-			finalAttempted[categoryID] = true
+	if err != nil {
+		log.Printf("client report view: scoped projection read failed: %v", err)
+		if errors.Is(err, espynaports.ErrClientReportNotFound) {
+			return view.ViewResult{Error: fmt.Errorf("client report not found"), StatusCode: http.StatusNotFound}
 		}
-	} else {
-		for _, category := range categories {
-			if category == nil || !category.GetFinalOutcomeAvailable() || strings.TrimSpace(category.GetJobCategoryId()) == "" {
-				continue
-			}
-			categoryID := category.GetJobCategoryId()
-			response, readErr := reader.read(clientFinalRequest(subscriptionGroupID, categoryID))
-			if errors.Is(readErr, errNarrowMatrixCallCap) {
-				break
-			}
-			if readErr != nil || !clientReportMatrixValid(response, subscriptionGroupID) {
-				return view.Forbidden("subscription_group_outcome_export:read")
-			}
-			finalByCategory[categoryID] = response
-			finalAttempted[categoryID] = true
-			if clientRowFromResponse(response, clientID) != nil {
-				selected = category
-				finalResponse = response
-				break
-			}
-		}
+		return view.ViewResult{Error: fmt.Errorf("client report projection is unavailable"), StatusCode: http.StatusServiceUnavailable}
 	}
-	if selected == nil {
-		selected = firstReportCategory(categories)
-	}
-	if selected == nil {
-		return view.Forbidden("subscription_group_outcome_export:read")
-	}
-	categoryID := selected.GetJobCategoryId()
-	if finalResponse == nil {
-		finalResponse = finalByCategory[categoryID]
-	}
-	if !finalAttempted[categoryID] && selected.GetFinalOutcomeAvailable() {
-		var readErr error
-		finalResponse, readErr = reader.read(clientFinalRequest(subscriptionGroupID, categoryID))
-		if readErr != nil || !clientReportMatrixValid(finalResponse, subscriptionGroupID) {
-			return view.Forbidden("subscription_group_outcome_export:read")
-		}
-		finalByCategory[categoryID] = finalResponse
-		finalAttempted[categoryID] = true
-	}
-
-	phases := reportPhases(selected)
-	remaining := maxNarrowMatrixCalls - reader.callCount
-	if remaining < len(phases) {
-		reader.logCap()
-		if remaining < 0 {
-			remaining = 0
-		}
-		phases = phases[:remaining]
-	}
-	phaseResponses := make([]clientPhaseResponse, 0, len(phases))
-	for _, phase := range phases {
-		response, readErr := reader.read(clientPhaseRequest(subscriptionGroupID, categoryID, phase.GetCode()))
-		if readErr != nil || !clientReportMatrixValid(response, subscriptionGroupID) {
-			return view.Forbidden("subscription_group_outcome_export:read")
-		}
-		phaseResponses = append(phaseResponses, clientPhaseResponse{phase: phase, response: response})
-	}
-
-	finalRow := clientRowFromResponse(finalResponse, clientID)
-	phaseRows := make([]clientPhaseResponse, 0, len(phaseResponses))
-	for _, phaseResponse := range phaseResponses {
-		if clientRowFromResponse(phaseResponse.response, clientID) != nil {
-			phaseRows = append(phaseRows, phaseResponse)
-		}
-	}
-	if finalRow == nil && len(phaseRows) == 0 {
-		return view.Forbidden("subscription_group_outcome_export:read")
-	}
-
-	subjectColumns := reportColumns(finalResponse, phaseResponses)
-	if len(subjectColumns) == 0 {
-		return view.Forbidden("subscription_group_outcome_export:read")
-	}
-	clientName := clientReportName(finalRow)
-	if clientName == "" {
-		for _, phaseResponse := range phaseRows {
-			if row := clientRowFromResponse(phaseResponse.response, clientID); row != nil {
-				clientName = clientReportName(row)
-				break
-			}
-		}
-	}
-	if clientName == "" {
-		clientName = clientID
-	}
-	table := buildClientReportTable(deps, subjectColumns, phases, finalResponse, phaseResponses, clientID)
-	return clientReportPage(viewCtx, deps, options.GetContext(), clientName, table)
-}
-
-type clientPhaseResponse struct {
-	phase    *exportpb.JobTemplatePhaseOption
-	response *exportpb.GetSubscriptionGroupOutcomeExportResponse
-}
-
-func clientFinalRequest(subscriptionGroupID, categoryID string) *exportpb.GetSubscriptionGroupOutcomeExportRequest {
-	return &exportpb.GetSubscriptionGroupOutcomeExportRequest{
-		SubscriptionGroupId: subscriptionGroupID,
-		JobCategoryId:       stringPointer(categoryID),
-		OutcomeSelector:     &exportpb.GetSubscriptionGroupOutcomeExportRequest_FinalOutcome{FinalOutcome: true},
-	}
-}
-
-func clientPhaseRequest(subscriptionGroupID, categoryID, phaseCode string) *exportpb.GetSubscriptionGroupOutcomeExportRequest {
-	return &exportpb.GetSubscriptionGroupOutcomeExportRequest{
-		SubscriptionGroupId: subscriptionGroupID,
-		JobCategoryId:       stringPointer(categoryID),
-		OutcomeSelector:     &exportpb.GetSubscriptionGroupOutcomeExportRequest_JobTemplatePhaseCode{JobTemplatePhaseCode: phaseCode},
-	}
-}
-
-func reportCategoryByID(categories []*exportpb.JobCategoryOption, id string) *exportpb.JobCategoryOption {
-	if id == "" {
-		return nil
-	}
-	for _, category := range categories {
-		if category != nil && category.GetJobCategoryId() == id {
-			return category
-		}
-	}
-	return nil
-}
-
-func firstReportCategory(categories []*exportpb.JobCategoryOption) *exportpb.JobCategoryOption {
-	for _, category := range categories {
-		if category != nil {
-			return category
-		}
-	}
-	return nil
-}
-
-func reportPhases(category *exportpb.JobCategoryOption) []*exportpb.JobTemplatePhaseOption {
-	if category == nil {
-		return nil
-	}
-	phases := make([]*exportpb.JobTemplatePhaseOption, 0, len(category.GetJobTemplatePhases()))
-	for _, phase := range category.GetJobTemplatePhases() {
-		if phase != nil && !phase.GetAmbiguous() && strings.TrimSpace(phase.GetCode()) != "" {
-			phases = append(phases, phase)
-		}
-	}
-	sort.SliceStable(phases, func(i, j int) bool {
-		if phases[i].GetSequenceOrder() != phases[j].GetSequenceOrder() {
-			return phases[i].GetSequenceOrder() < phases[j].GetSequenceOrder()
-		}
-		return phases[i].GetCode() < phases[j].GetCode()
-	})
-	return phases
-}
-
-func clientRowFromResponse(response *exportpb.GetSubscriptionGroupOutcomeExportResponse, clientID string) *exportpb.SubscriptionGroupOutcomeClientRow {
 	if response == nil || !response.GetSuccess() {
+		log.Printf("client report view: scoped projection returned an incomplete response")
+		return view.ViewResult{Error: fmt.Errorf("client report projection is unavailable"), StatusCode: http.StatusServiceUnavailable}
+	}
+	projection := response.GetReportCard()
+	if !clientProjectionValid(projection, subscriptionGroupID, clientID) {
+		return view.ViewResult{Error: fmt.Errorf("client report not found"), StatusCode: http.StatusNotFound}
+	}
+
+	table := buildProjectedClientTable(deps, projection, deps.Options.ClientCard.BandByCategory())
+	clientName := projectedClientName(projection.GetClient())
+	return clientProjectionPage(ctx, viewCtx, deps, projection, clientName, table)
+}
+
+func clientProjectionValid(projection *exportpb.ClientReportCardProjection, groupID, clientID string) bool {
+	return projection != nil &&
+		projection.GetContext() != nil && projection.GetContext().GetSubscriptionGroupId() == groupID &&
+		projection.GetClient() != nil && projection.GetClient().GetClientId() == clientID &&
+		len(projection.GetClientSubscriptionIds()) > 0
+}
+
+type phaseColumn struct {
+	code     string
+	label    string
+	sequence int32
+}
+
+func buildProjectedClientTable(deps *Deps, projection *exportpb.ClientReportCardProjection, bandByCategory bool) *types.TableConfig {
+	if projection == nil || len(projection.GetJobs()) == 0 {
 		return nil
 	}
-	for _, row := range response.GetClientRows() {
-		if row != nil && row.GetClientId() == clientID {
-			return row
+
+	jobs := append([]*jobpb.Job(nil), projection.GetJobs()...)
+	jobTemplateByID := make(map[string]*jobtemplatepb.JobTemplate, len(projection.GetJobTemplates()))
+	for _, template := range projection.GetJobTemplates() {
+		if template != nil && strings.TrimSpace(template.GetId()) != "" {
+			jobTemplateByID[template.GetId()] = template
 		}
 	}
-	return nil
-}
-
-func reportColumns(finalResponse *exportpb.GetSubscriptionGroupOutcomeExportResponse, phaseResponses []clientPhaseResponse) []*exportpb.JobTemplateColumn {
-	if finalResponse != nil && len(finalResponse.GetJobTemplateColumns()) > 0 {
-		return finalResponse.GetJobTemplateColumns()
-	}
-	for _, phaseResponse := range phaseResponses {
-		if phaseResponse.response != nil && len(phaseResponse.response.GetJobTemplateColumns()) > 0 {
-			return phaseResponse.response.GetJobTemplateColumns()
+	categoryByID := make(map[string]*jobcategorypb.JobCategory, len(projection.GetJobCategories()))
+	for _, category := range projection.GetJobCategories() {
+		if category != nil && strings.TrimSpace(category.GetId()) != "" {
+			categoryByID[category.GetId()] = category
 		}
 	}
-	return nil
-}
-
-func buildClientReportTable(deps *Deps, subjectColumns []*exportpb.JobTemplateColumn, phases []*exportpb.JobTemplatePhaseOption, finalResponse *exportpb.GetSubscriptionGroupOutcomeExportResponse, phaseResponses []clientPhaseResponse, clientID string) *types.TableConfig {
-	l := deps.Labels
-	columns := make([]types.TableColumn, 0, len(phases)+2)
-	columns = append(columns, types.TableColumn{Key: "subject", Label: l.Client.SubjectColumn, MinWidth: "14rem", NoSort: true})
-	for _, phase := range phases {
+	templatePhaseByID := make(map[string]*jobtemplatephasepb.JobTemplatePhase, len(projection.GetJobTemplatePhases()))
+	phaseColumnsByCode := make(map[string]phaseColumn)
+	for _, phase := range projection.GetJobTemplatePhases() {
+		if phase == nil {
+			continue
+		}
+		templatePhaseByID[phase.GetId()] = phase
+		code := strings.TrimSpace(phase.GetCode())
+		if code == "" {
+			code = phase.GetId()
+		}
+		if code == "" {
+			continue
+		}
 		label := strings.TrimSpace(phase.GetName())
 		if label == "" {
-			label = phase.GetCode()
+			label = code
 		}
-		columns = append(columns, types.TableColumn{Key: "phase-" + phase.GetCode(), Label: label, Align: "center", MinWidth: "5rem", NoSort: true})
+		current, exists := phaseColumnsByCode[code]
+		candidate := phaseColumn{code: code, label: label, sequence: phase.GetPhaseOrder()}
+		if !exists || candidate.sequence < current.sequence || current.sequence == 0 {
+			phaseColumnsByCode[code] = candidate
+		}
 	}
-	finalLabel := strings.TrimSpace(l.Client.YearColumn)
-	if finalText := strings.TrimSpace(l.Client.FinalColumn); finalText != "" {
+	phaseColumns := make([]phaseColumn, 0, len(phaseColumnsByCode))
+	for _, phase := range phaseColumnsByCode {
+		phaseColumns = append(phaseColumns, phase)
+	}
+	sort.SliceStable(phaseColumns, func(i, j int) bool {
+		if phaseColumns[i].sequence != phaseColumns[j].sequence {
+			return phaseColumns[i].sequence < phaseColumns[j].sequence
+		}
+		if phaseColumns[i].label != phaseColumns[j].label {
+			return phaseColumns[i].label < phaseColumns[j].label
+		}
+		return phaseColumns[i].code < phaseColumns[j].code
+	})
+
+	jobByID := make(map[string]*jobpb.Job, len(jobs))
+	for _, job := range jobs {
+		if job != nil {
+			jobByID[job.GetId()] = job
+		}
+	}
+	phasesByJob := make(map[string]map[string]*jobphasepb.JobPhase)
+	for _, phase := range projection.GetJobPhases() {
+		if phase == nil || phase.GetJobId() == "" || jobByID[phase.GetJobId()] == nil {
+			continue
+		}
+		templatePhase := templatePhaseByID[phase.GetTemplatePhaseId()]
+		code := ""
+		if templatePhase != nil {
+			code = strings.TrimSpace(templatePhase.GetCode())
+		}
+		if code == "" {
+			code = strings.TrimSpace(phase.GetName())
+		}
+		if code == "" {
+			code = phase.GetId()
+		}
+		if phasesByJob[phase.GetJobId()] == nil {
+			phasesByJob[phase.GetJobId()] = make(map[string]*jobphasepb.JobPhase)
+		}
+		phasesByJob[phase.GetJobId()][code] = phase
+	}
+	phaseSummaryByID := make(map[string]*phasesumpb.PhaseOutcomeSummary, len(projection.GetPhaseOutcomeSummaries()))
+	for _, summary := range projection.GetPhaseOutcomeSummaries() {
+		if summary != nil && summary.GetActive() && summary.GetJobPhaseId() != "" {
+			phaseSummaryByID[summary.GetJobPhaseId()] = summary
+		}
+	}
+	yearSummaryByJob := make(map[string]*jobsumpb.JobOutcomeSummary, len(projection.GetJobOutcomeSummaries()))
+	for _, summary := range projection.GetJobOutcomeSummaries() {
+		if summary != nil && summary.GetActive() && summary.GetJobId() != "" {
+			yearSummaryByJob[summary.GetJobId()] = summary
+		}
+	}
+
+	sort.SliceStable(jobs, func(i, j int) bool {
+		left := subjectName(jobTemplateByID[jobs[i].GetJobTemplateId()], jobs[i].GetId())
+		right := subjectName(jobTemplateByID[jobs[j].GetJobTemplateId()], jobs[j].GetId())
+		if left != right {
+			return left < right
+		}
+		return jobs[i].GetId() < jobs[j].GetId()
+	})
+
+	labels := deps.Labels
+	columns := make([]types.TableColumn, 0, len(phaseColumns)+2)
+	columns = append(columns, types.TableColumn{Key: "subject", Label: labels.Client.SubjectColumn, MinWidth: "14rem", NoSort: true})
+	for _, phase := range phaseColumns {
+		columns = append(columns, types.TableColumn{Key: "phase-" + phase.code, Label: phase.label, Align: "center", MinWidth: "5rem", NoSort: true})
+	}
+	finalLabel := strings.TrimSpace(labels.Client.YearColumn)
+	if text := strings.TrimSpace(labels.Client.FinalColumn); text != "" {
 		if finalLabel != "" {
 			finalLabel += " "
 		}
-		finalLabel += finalText
+		finalLabel += text
 	}
 	columns = append(columns, types.TableColumn{Key: "year-final", Label: finalLabel, Align: "center", MinWidth: "5rem", NoSort: true})
 
-	finalRow := clientRowFromResponse(finalResponse, clientID)
-	rows := make([]types.TableRow, 0, len(subjectColumns))
-	for _, column := range subjectColumns {
-		cells := []types.TableCell{{Value: explicitColumnLabel(column)}}
-		for _, phaseResponse := range phaseResponses {
-			phaseRow := clientRowFromResponse(phaseResponse.response, clientID)
-			value := reportValueForTemplate(phaseRow, column.GetJobTemplateId(), l.SubscriptionGroup.RatingEmpty)
-			cells = append(cells, types.TableCell{Type: "text", Value: value, CSVValue: value})
+	rows := make([]types.TableRow, 0, len(jobs))
+	rowsByCategory := make(map[string][]types.TableRow)
+	for _, job := range jobs {
+		if job == nil || strings.TrimSpace(job.GetId()) == "" {
+			continue
 		}
-		value := reportValueForTemplate(finalRow, column.GetJobTemplateId(), l.SubscriptionGroup.RatingEmpty)
-		cells = append(cells, types.TableCell{Type: "text", Value: value, CSVValue: value})
-		rows = append(rows, types.TableRow{
-			ID:        column.GetJobTemplateId(),
-			DataAttrs: map[string]string{"testid": "rc-subject-" + short(column.GetJobTemplateId())},
+		template := jobTemplateByID[job.GetJobTemplateId()]
+		cells := []types.TableCell{{Type: "text", Value: subjectName(template, job.GetId()), CSVValue: subjectName(template, job.GetId())}}
+		phaseRows := phasesByJob[job.GetId()]
+		for _, phaseColumn := range phaseColumns {
+			phase := phaseRows[phaseColumn.code]
+			grade := ""
+			if phase != nil {
+				grade = phaseOutcomeValue(phaseSummaryByID[phase.GetId()], deps.Labels.SubscriptionGroup.RatingEmpty)
+			}
+			cells = append(cells, types.TableCell{Type: "text", Value: grade, CSVValue: grade})
+		}
+		year := deps.Labels.SubscriptionGroup.RatingEmpty
+		if year == "" {
+			year = "—"
+		}
+		if summary := yearSummaryByJob[job.GetId()]; summary != nil {
+			year = outcomeValue(summary.ScaledLabel, summary.ScaledScore, summary.SummaryScore, summary.Narrative, deps.Labels.SubscriptionGroup.RatingEmpty)
+		}
+		cells = append(cells, types.TableCell{Type: "text", Value: year, CSVValue: year})
+		categoryID := ""
+		if template != nil {
+			categoryID = template.GetJobCategoryId()
+		}
+		categoryCode := "uncategorized"
+		if category := categoryByID[categoryID]; category != nil {
+			categoryCode = strings.TrimSpace(category.GetCode())
+			if categoryCode == "" {
+				categoryCode = category.GetId()
+			}
+		}
+		row := types.TableRow{
+			ID:        job.GetId(),
+			DataAttrs: map[string]string{"testid": "rc-subject-" + short(job.GetId()), "job-category": categoryCode},
 			Cells:     cells,
-		})
+		}
+		rows = append(rows, row)
+		rowsByCategory[categoryID] = append(rowsByCategory[categoryID], row)
 	}
-	types.ApplyColumnStyles(columns, rows)
-	return &types.TableConfig{
+
+	table := &types.TableConfig{
 		ID:          "report-cards-client",
 		Columns:     columns,
 		Rows:        rows,
-		ShowSearch:  true,
+		ShowSearch:  false,
 		ShowColumns: true,
 		ShowDensity: true,
 		ShowExport:  true,
 		ShowEntries: true,
 		Labels:      deps.TableLabels,
-		Caption:     l.Client.Title,
-		EmptyState: types.TableEmptyState{
-			Title:   l.Empty.Title,
-			Message: l.SubscriptionGroup.NotComputedBanner,
-		},
+		Caption:     labels.Client.Title,
+		EmptyState:  types.TableEmptyState{Title: labels.Empty.Title, Message: labels.SubscriptionGroup.NotComputedBanner},
 	}
+	if bandByCategory {
+		table.Rows = nil
+		table.Groups = buildProjectionGroups(projection.GetJobCategories(), rowsByCategory, categoryByID, labels.Client.UncategorizedBand)
+		for index := range table.Groups {
+			types.ApplyColumnStyles(table.Columns, table.Groups[index].Rows)
+		}
+	} else {
+		types.ApplyColumnStyles(table.Columns, table.Rows)
+	}
+	return table
 }
 
-func reportValueForTemplate(row *exportpb.SubscriptionGroupOutcomeClientRow, templateID, empty string) string {
-	if row == nil {
+func buildProjectionGroups(categories []*jobcategorypb.JobCategory, rowsByCategory map[string][]types.TableRow, categoryByID map[string]*jobcategorypb.JobCategory, uncategorizedTitle string) []types.TableRowGroup {
+	groups := make([]types.TableRowGroup, 0, len(rowsByCategory))
+	ordered := append([]*jobcategorypb.JobCategory(nil), categories...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		left, right := ordered[i], ordered[j]
+		if left.GetSortOrder() != right.GetSortOrder() {
+			return left.GetSortOrder() < right.GetSortOrder()
+		}
+		if left.GetName() != right.GetName() {
+			return left.GetName() < right.GetName()
+		}
+		return left.GetId() < right.GetId()
+	})
+	seen := make(map[string]bool)
+	for _, category := range ordered {
+		if category == nil || len(rowsByCategory[category.GetId()]) == 0 {
+			continue
+		}
+		code := strings.TrimSpace(category.GetCode())
+		if code == "" {
+			code = category.GetId()
+		}
+		groups = append(groups, types.TableRowGroup{
+			ID:        "rc-band-" + safeKey(code),
+			Title:     category.GetName(),
+			Rows:      rowsByCategory[category.GetId()],
+			DataAttrs: map[string]string{"testid": "rc-band-" + safeKey(code)},
+		})
+		seen[category.GetId()] = true
+	}
+	uncategorized := make([]types.TableRow, 0)
+	for categoryID, rows := range rowsByCategory {
+		if categoryID == "" || !seen[categoryID] || categoryByID[categoryID] == nil {
+			uncategorized = append(uncategorized, rows...)
+		}
+	}
+	if len(uncategorized) > 0 {
+		sort.SliceStable(uncategorized, func(i, j int) bool { return uncategorized[i].ID < uncategorized[j].ID })
+		if strings.TrimSpace(uncategorizedTitle) == "" {
+			uncategorizedTitle = "Uncategorized"
+		}
+		groups = append(groups, types.TableRowGroup{ID: "rc-band-uncategorized", Title: uncategorizedTitle, Rows: uncategorized, DataAttrs: map[string]string{"testid": "rc-band-uncategorized"}})
+	}
+	return groups
+}
+
+func phaseOutcomeValue(summary *phasesumpb.PhaseOutcomeSummary, empty string) string {
+	if summary == nil {
 		return empty
 	}
-	for _, cell := range row.GetCells() {
-		if cell != nil && cell.GetJobTemplateId() == templateID {
-			return outcome_summary.ExportCellValue(cell, empty)
-		}
+	return outcomeValue(summary.ScaledLabel, summary.ScaledScore, summary.SummaryScore, summary.Narrative, empty)
+}
+
+func outcomeValue(label *string, scaled, summary *float64, narrative *string, empty string) string {
+	if label != nil && strings.TrimSpace(*label) != "" {
+		return strings.TrimSpace(*label)
+	}
+	if scaled != nil {
+		return fmt.Sprintf("%g", *scaled)
+	}
+	if summary != nil {
+		return fmt.Sprintf("%g", *summary)
+	}
+	if narrative != nil && strings.TrimSpace(*narrative) != "" {
+		return strings.TrimSpace(*narrative)
 	}
 	return empty
 }
 
-func explicitColumnLabel(column *exportpb.JobTemplateColumn) string {
-	if column == nil {
-		return ""
+func subjectName(template *jobtemplatepb.JobTemplate, fallback string) string {
+	if template != nil {
+		if name := strings.TrimSpace(template.GetName()); name != "" {
+			return name
+		}
 	}
-	if label := strings.TrimSpace(column.GetDisplayName()); label != "" {
-		return label
-	}
-	return column.GetJobTemplateId()
+	return fallback
 }
 
-func clientReportName(row *exportpb.SubscriptionGroupOutcomeClientRow) string {
-	if row == nil {
+func projectedClientName(client *exportpb.ClientReportCardClient) string {
+	if client == nil {
 		return ""
 	}
-	lastName := strings.TrimSpace(row.GetClientLastName())
-	firstName := strings.TrimSpace(row.GetClientFirstName())
-	if lastName != "" && firstName != "" {
-		return lastName + ", " + firstName
-	}
-	if name := strings.TrimSpace(row.GetClientName()); name != "" {
+	if name := strings.TrimSpace(client.GetName()); name != "" {
 		return name
 	}
-	return strings.TrimSpace(strings.Join([]string{firstName, lastName}, " "))
+	first, last := strings.TrimSpace(client.GetFirstName()), strings.TrimSpace(client.GetLastName())
+	if first != "" && last != "" {
+		return last + ", " + first
+	}
+	return strings.TrimSpace(strings.Join([]string{first, last}, " "))
 }
 
-func clientReportPage(viewCtx *view.ViewContext, deps *Deps, exportContext *exportpb.SubscriptionGroupOutcomeExportContext, clientName string, table *types.TableConfig) view.ViewResult {
-	l := deps.Labels
-	headerTitle := clientName
-	if groupName := strings.TrimSpace(exportContext.GetSubscriptionGroupName()); groupName != "" {
-		if headerTitle != "" {
-			headerTitle += " — "
+func safeKey(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else if b.Len() > 0 {
+			b.WriteByte('-')
 		}
-		headerTitle += groupName
+	}
+	if key := strings.Trim(b.String(), "-"); key != "" {
+		return key
+	}
+	return "uncategorized"
+}
+
+func clientProjectionPage(ctx context.Context, viewCtx *view.ViewContext, deps *Deps, projection *exportpb.ClientReportCardProjection, clientName string, table *types.TableConfig) view.ViewResult {
+	labels := deps.Labels
+	context := projection.GetContext()
+	groupName := strings.TrimSpace(context.GetSubscriptionGroupName())
+	headerTitle := clientName
+	if groupName != "" {
+		headerTitle += " — " + groupName
+	}
+	if table != nil {
+		configureClientToolbar(ctx, table, deps, context.GetSubscriptionGroupId(), projection.GetClient().GetClientId())
 	}
 	pageData := &PageData{
 		PageData: types.PageData{
 			CacheVersion:        viewCtx.CacheVersion,
-			Title:               l.Client.Title,
+			Title:               labels.Client.Title,
 			CurrentPath:         viewCtx.CurrentPath,
 			ActiveNav:           deps.Routes.ActiveNav,
 			ActiveSubNav:        "report-cards",
-			HeaderBreadcrumb:    l.SubscriptionGroup.Title,
-			HeaderBreadcrumbURL: route.ResolveURL(deps.Routes.SubscriptionGroupURL, "id", exportContext.GetSubscriptionGroupId()),
+			HeaderBreadcrumb:    labels.SubscriptionGroup.Title,
+			HeaderBreadcrumbURL: route.ResolveURL(deps.Routes.SubscriptionGroupURL, "id", context.GetSubscriptionGroupId()),
 			HeaderTitle:         headerTitle,
-			HeaderSubtitle:      l.Client.Subtitle,
+			HeaderSubtitle:      labels.Client.Subtitle,
 			HeaderIcon:          "icon-award",
 			CommonLabels:        deps.CommonLabels,
 		},
 		ContentTemplate: "outcome-summary-client-content",
 		Table:           table,
 		NotComputed:     table == nil,
-		Banner:          l.SubscriptionGroup.NotComputedBanner,
+		Banner:          labels.SubscriptionGroup.NotComputedBanner,
 	}
 	return view.OK("outcome-summary-client", pageData)
 }
 
-func stringPointer(value string) *string { return &value }
+func configureClientToolbar(ctx context.Context, table *types.TableConfig, deps *Deps, groupID, clientID string) {
+	if table == nil {
+		return
+	}
+	labels := deps.Labels
+	if deps.ClientDocumentMounted && deps.Options.SubscriptionGroupExportEnabled() &&
+		deps.Routes.ClientDocumentURL != "" && deps.Routes.ClientDownloadDrawerURL != "" &&
+		outcome_summary.CanExplicitExport(view.GetUserPermissions(ctx), ctx, deps.ResolvePrincipalKind) {
+		actionURL := route.ResolveURL(deps.Routes.ClientDownloadDrawerURL, "id", groupID, "client_id", clientID)
+		table.PrimaryAction = &types.PrimaryAction{Label: labels.Client.DownloadAction, ActionURL: actionURL, SheetTitle: labels.Client.DownloadAction, TestID: "rc-download-pdf"}
+	}
+}

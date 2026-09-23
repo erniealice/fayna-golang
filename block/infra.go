@@ -67,7 +67,7 @@ type Infra struct {
 	// Returns (nil, nil) when no binding is configured or the object is
 	// unavailable → the document unit falls back to its embedded template (no
 	// download regression). Nil when the app did not wire the resolver.
-	ResolveTemplateBytes func(ctx context.Context, priceScheduleID string) ([]byte, error)
+	ResolveTemplateBytes func(ctx context.Context, priceScheduleID, phaseCode string) ([]byte, error)
 
 	// ResolveSheetTemplateBytes resolves the applicable PUBLISHED grade-sheet
 	// (outcome-matrix) template binding on (job_category_id, price_schedule_id,

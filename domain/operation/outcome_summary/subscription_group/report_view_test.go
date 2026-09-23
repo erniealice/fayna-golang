@@ -152,21 +152,166 @@ func TestSubscriptionGroupReportViewRowsSortedAndLinked(t *testing.T) {
 	if page.Table.Rows[0].Cells[0].Href != wantHref {
 		t.Fatalf("client href = %q, want %q", page.Table.Rows[0].Cells[0].Href, wantHref)
 	}
-	if got := page.Table.Rows[0].Cells[1].Value; got != deps.Labels.SubscriptionGroup.RatingEmpty {
+	if got := page.Table.Rows[0].Cells[2].Value; got != deps.Labels.SubscriptionGroup.RatingEmpty {
 		t.Fatalf("suppressed value = %q, want rating-empty label %q", got, deps.Labels.SubscriptionGroup.RatingEmpty)
 	}
-	if got := page.Table.Rows[1].Cells[1].Value; got != "8.5" {
+	if got := page.Table.Rows[1].Cells[2].Value; got != "8.5" {
 		t.Fatalf("score fallback = %q, want 8.5", got)
 	}
 	if page.Table.Rows[0].Cells[0].Type != "link" {
 		t.Fatalf("client cell type = %q, want link", page.Table.Rows[0].Cells[0].Type)
 	}
+	// Cells[1] is the frozen per-row actions cell (view + download); it is
+	// deliberately excluded from the "no per-cell link" matrix assertion below.
 	for _, row := range page.Table.Rows {
-		for _, cell := range row.Cells[1:] {
+		for _, cell := range row.Cells[2:] {
 			if cell.Type == "link" || cell.Href != "" {
 				t.Fatalf("matrix cell has a per-cell link: %+v", cell)
 			}
 		}
+	}
+}
+
+// reportSingleRowMatrix builds a minimal explicitMatrix (one template column,
+// one client row) for direct buildReportTable unit tests below — mirroring
+// how page_test.go's buildRows tests call the static builder directly,
+// bypassing the ctx/permission plumbing that decides WHICH gating booleans
+// buildReportTable is called with (that decision is exercised end-to-end by
+// the reportViewDeps()-based tests above/below).
+func reportSingleRowMatrix(clientID, firstName, lastName string) *explicitMatrix {
+	return &explicitMatrix{
+		columns: []*exportpb.JobTemplateColumn{{JobTemplateId: "tmpl-a", DisplayName: "Alpha"}},
+		rows: []explicitRow{{
+			clientID:  clientID,
+			firstName: firstName,
+			lastName:  lastName,
+			cells: map[string]*exportpb.SubscriptionGroupOutcomeCell{
+				"tmpl-a": reportCell("tmpl-a", "A", nil, true, true),
+			},
+		}},
+	}
+}
+
+// TestBuildReportTable_ColumnOrderClientActionsTemplates pins AC-ROW-01's
+// column order (client -> frozen actions -> template columns) and the
+// freeze2 width/class contract the tabbed grid must match to align with the
+// static grid's CSS (page.go buildColumns/buildGroupTable).
+func TestBuildReportTable_ColumnOrderClientActionsTemplates(t *testing.T) {
+	deps := reportViewDeps()
+	deps.Routes.ClientDownloadDrawerURL = "/action/report-cards/section/{id}/student/{client_id}/download"
+	matrix := reportSingleRowMatrix("client-1", "Ann", "Adams")
+
+	table := buildReportTable(deps, matrix, "group-1", true, false)
+
+	if len(table.Columns) != 3 {
+		t.Fatalf("columns = %d, want client + actions + one template column", len(table.Columns))
+	}
+	if table.Columns[0].Key != "client" || table.Columns[0].Width != "14rem" {
+		t.Fatalf("column 0 = %+v, want client column at 14rem", table.Columns[0])
+	}
+	if table.Columns[1].Key != actionsColumnKey || table.Columns[1].Label != "" || table.Columns[1].Width != "5rem" {
+		t.Fatalf("column 1 = %+v, want blank frozen %q column at 5rem", table.Columns[1], actionsColumnKey)
+	}
+	if table.Columns[2].Key != "tmpl-tmpl-a" {
+		t.Fatalf("column 2 = %+v, want the template column last", table.Columns[2])
+	}
+	if table.TableClass != "data-table-freeze2" {
+		t.Fatalf("table class = %q, want data-table-freeze2", table.TableClass)
+	}
+	if table.ShowActions {
+		t.Fatal("ShowActions must stay false: the actions cell is the frozen second column, not a trailing built-in actions column")
+	}
+	if len(table.Rows) != 1 || len(table.Rows[0].Cells) != 3 {
+		t.Fatalf("row cells = %+v, want client + actions + one template cell", table.Rows)
+	}
+	if table.Rows[0].Cells[1].Type != "html" {
+		t.Fatalf("actions cell type = %q, want html", table.Rows[0].Cells[1].Type)
+	}
+
+	// Cross-function contract with export.go: the actions column (and only
+	// that column) is skipped by key, never by position.
+	skip := exportSkipColumns(table.Columns)
+	if skip[0] || skip[2] {
+		t.Fatalf("exportSkipColumns skipped a data column: %+v", skip)
+	}
+	if !skip[1] {
+		t.Fatalf("exportSkipColumns must skip the actions column: %+v", skip)
+	}
+}
+
+// TestBuildReportTable_ExplicitExportOpensSameDrawerAsClientCard covers
+// AC-ROW-01: the tabbed grid's per-row action must sit right after the
+// client-name column and open the SAME Period/Format drawer as the
+// client-card header, using the shared rowActionsCell helper (byte-identical
+// to the static grid's buildRows output for the same inputs).
+func TestBuildReportTable_ExplicitExportOpensSameDrawerAsClientCard(t *testing.T) {
+	deps := reportViewDeps()
+	deps.Routes.ClientDownloadDrawerURL = "/action/report-cards/section/{id}/student/{client_id}/download"
+	deps.Labels.Client = outcome_summary.PeriodLabels{ViewAction: "View", DownloadAction: "Download"}
+	deps.Labels.ClientDocumentDownload = outcome_summary.ClientDocumentDownloadLabels{DrawerTitle: "Download Progress Report"}
+	matrix := reportSingleRowMatrix("client-1", "Ann", "Adams")
+
+	table := buildReportTable(deps, matrix, "group-1", true, false)
+
+	cell := string(table.Rows[0].Cells[1].HTML)
+	wantDrawerURL := route.ResolveURL(deps.Routes.ClientDownloadDrawerURL, "id", "group-1", "client_id", "client-1")
+	for _, want := range []string{
+		"rc-view-client-1", "rc-download-client-1",
+		`hx-get="` + wantDrawerURL + `"`,
+		`hx-target="#sheetContent"`, `data-lf-action="sheet-open"`,
+		`data-lf-sheet-title="Download Progress Report"`,
+	} {
+		if !strings.Contains(cell, want) {
+			t.Errorf("actions cell missing %q: %s", want, cell)
+		}
+	}
+	if strings.Contains(cell, "/document?") || strings.Contains(cell, " download>") {
+		t.Errorf("explicit-export row action must open the drawer, not directly download: %s", cell)
+	}
+}
+
+// TestBuildReportTable_LegacyFallbackKeepsPeriodlessFullCardDownload covers
+// the legacy-detail-only branch of the shared rowActionsCell helper (reached
+// in production only via the static grid, since narrowReportViewEnabled
+// requires !CanLegacyDetail before routing here — exercised directly so the
+// tabbed builder's wiring of the SAME helper/branch is pinned too).
+func TestBuildReportTable_LegacyFallbackKeepsPeriodlessFullCardDownload(t *testing.T) {
+	deps := reportViewDeps()
+	matrix := reportSingleRowMatrix("client-1", "Ann", "Adams")
+
+	table := buildReportTable(deps, matrix, "group-1", false, true)
+
+	cell := string(table.Rows[0].Cells[1].HTML)
+	wantDocumentURL := route.ResolveURL(deps.Routes.ClientDocumentURL, "id", "group-1", "client_id", "client-1") + "?format=pdf"
+	for _, want := range []string{
+		"rc-view-client-1", "rc-download-client-1",
+		`href="` + wantDocumentURL + `"`,
+		`hx-boost="false"`, " download>",
+	} {
+		if !strings.Contains(cell, want) {
+			t.Errorf("legacy fallback action missing %q: %s", want, cell)
+		}
+	}
+	if strings.Contains(cell, "data-lf-action=\"sheet-open\"") {
+		t.Errorf("legacy fallback action must stay direct, not drawer-based: %s", cell)
+	}
+}
+
+// TestBuildReportTable_NoDownloadPermissionKeepsViewOnly covers the neither
+// branch: the view-client-card action always renders, but no download
+// control appears without either capability.
+func TestBuildReportTable_NoDownloadPermissionKeepsViewOnly(t *testing.T) {
+	deps := reportViewDeps()
+	matrix := reportSingleRowMatrix("client-1", "Ann", "Adams")
+
+	table := buildReportTable(deps, matrix, "group-1", false, false)
+
+	cell := string(table.Rows[0].Cells[1].HTML)
+	if !strings.Contains(cell, "rc-view-client-1") {
+		t.Fatalf("view action missing without download capability: %s", cell)
+	}
+	if strings.Contains(cell, "rc-download-") {
+		t.Fatalf("no download capability must omit the download control entirely: %s", cell)
 	}
 }
 

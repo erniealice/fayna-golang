@@ -39,6 +39,7 @@ import (
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
+	cardbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
@@ -50,7 +51,7 @@ import (
 )
 
 // actionsColumnKey is the column Key of the frozen per-row action cell (view
-// client card + CSV download). It is a UI control, not report data, so the CSV
+// client card + report document drawer). It is a UI control, not report data, so the CSV
 // export skips it (header + each row's cell). Declared once here (T8) and shared
 // by buildColumns + the export handler so a rename can never desync the two —
 // a mismatch would leak raw HTML action anchors into every CSV row.
@@ -75,7 +76,7 @@ const pageLimit = 100
 // misbehaving adapter ignored OFFSET and returned a full page forever.
 const maxPages = 100
 
-// downloadIcon is the inline SVG for the per-row CSV download button. The
+// downloadIcon is the inline SVG for the per-row document download button. The
 // group grid renders the download as the frozen SECOND column (an HTML cell),
 // not a trailing actions cell, so it needs the icon markup inline (mirrors
 // pyeza's icon-download) rather than via a {{template}} call.
@@ -118,11 +119,15 @@ type Deps struct {
 	// official export requires exactly one active code+module definition.
 	ListAttributes                    func(ctx context.Context, req *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error)
 	GetSubscriptionGroupOutcomeExport func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	// Optional phase-scoped report-card binding lookup for the class PDF title.
+	FindApplicableReportCardBinding func(context.Context, *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
 	// ResolveSubscriptionGroupDocumentTemplate composes the report-scoped Espyna resolver with
 	// app storage and returns no locator. GeneratePDF is Fycha's injected
 	// template+data -> PDF closure. Both are optional and PDF fails loud if nil.
 	ResolveSubscriptionGroupDocumentTemplate func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error)
 	GeneratePDF                              func(templateData []byte, data map[string]any) ([]byte, error)
+	// ClientDocumentMounted mirrors the module's actual raw-handler route mount.
+	ClientDocumentMounted bool
 
 	// Non-enrolled-placeholder evidence walk (job_phase → job_task →
 	// task_outcome). Optional/nil-safe: when any is nil (a tier that never wired
@@ -414,7 +419,12 @@ func buildGroupTable(ctx context.Context, deps *Deps, groupID, rawJC string) (*s
 		},
 	}
 
-	rows := buildRows(clients, orderedColumnIDs(columns), cellJob, labelByJob, evByJob, groupID, deps.Routes, l)
+	perms := view.GetUserPermissions(ctx)
+	clientDocumentMounted := deps.ClientDocumentMounted && deps.Routes.ClientDocumentURL != ""
+	canDownloadClientDocument := clientDocumentMounted && deps.Options.SubscriptionGroupExportEnabled() &&
+		deps.Routes.ClientDownloadDrawerURL != "" && outcome_summary.CanExplicitExport(perms, ctx, deps.ResolvePrincipalKind)
+	canDownloadLegacyDocument := clientDocumentMounted && outcome_summary.CanLegacyDetail(perms)
+	rows := buildRows(clients, orderedColumnIDs(columns), cellJob, labelByJob, evByJob, groupID, deps.Routes, l, canDownloadClientDocument, canDownloadLegacyDocument)
 	applyRowPresentation(table, rows, clients, attrValues, deps.Options)
 	numberRows(table)
 	types.ApplyColumnStyles(table.Columns, allRows(table))
@@ -1160,10 +1170,32 @@ func orderedColumnIDs(cols []types.TableColumn) []string {
 	return ids
 }
 
+// rowActionsCell builds the frozen per-row actions cell: VIEW this client's
+// report card (boosted nav), then open the same Period/Format drawer as the
+// client-card header — or the legacy PDF anchor fallback when only legacy
+// detail is permitted, or the view-only cell when neither download path is
+// permitted. Shared by BOTH grid builders (the static buildRows path here and
+// the tabbed report_view.go buildReportTable path) so they emit
+// byte-identical HTML/testids for the same client id — never copy-pasted.
+func rowActionsCell(groupID, clientID string, routes outcome_summary.Routes, l outcome_summary.Labels, canDownloadClientDocument, canDownloadLegacyDocument bool) types.TableCell {
+	clientURL := route.ResolveURL(routes.ClientCardURL, "id", groupID, "client_id", clientID)
+	viewAnchor := `<a href="` + html.EscapeString(clientURL) + `" class="action-btn view" title="` + html.EscapeString(l.Client.ViewAction) + `" aria-label="` + html.EscapeString(l.Client.ViewAction) + `" data-testid="rc-view-` + short(clientID) + `" hx-push-url="true">` + viewIcon + `</a>`
+	actions := viewAnchor
+	if canDownloadClientDocument && routes.ClientDownloadDrawerURL != "" && routes.ClientDocumentURL != "" {
+		drawerURL := route.ResolveURL(routes.ClientDownloadDrawerURL, "id", groupID, "client_id", clientID)
+		dlButton := `<button type="button" class="action-btn download" title="` + html.EscapeString(l.Client.DownloadAction) + `" aria-label="` + html.EscapeString(l.Client.DownloadAction) + `" data-testid="rc-download-` + short(clientID) + `" hx-get="` + html.EscapeString(drawerURL) + `" hx-target="#sheetContent" hx-swap="innerHTML" hx-push-url="false" data-lf-action="sheet-open" data-lf-sheet-title="` + html.EscapeString(l.ClientDocumentDownload.DrawerTitle) + `" aria-haspopup="dialog">` + downloadIcon + `</button>`
+		actions += dlButton
+	} else if canDownloadLegacyDocument && routes.ClientDocumentURL != "" {
+		documentURL := route.ResolveURL(routes.ClientDocumentURL, "id", groupID, "client_id", clientID) + "?format=pdf"
+		dlAnchor := `<a href="` + html.EscapeString(documentURL) + `" class="action-btn download" title="` + html.EscapeString(l.Client.DownloadAction) + `" aria-label="` + html.EscapeString(l.Client.DownloadAction) + `" data-testid="rc-download-` + short(clientID) + `" hx-boost="false" download>` + downloadIcon + `</a>`
+		actions += dlAnchor
+	}
+	return types.TableCell{Type: "html", HTML: texttemplate.HTML(`<div class="action-buttons">` + actions + `</div>`)}
+}
+
 // buildRows builds one row per client: client-name cell + a rating cell per
 // subject column (linking to the per-job summary; "—" when no summary) + a
-// per-row report-card PDF download action (the per-client document endpoint,
-// ?format=pdf). CSVValue carries the raw rating so the client-side table
+// per-row report-card drawer action. CSVValue carries the raw rating so the client-side table
 // export and the group CSV endpoint emit clean text.
 func buildRows(
 	clients map[string]client,
@@ -1173,6 +1205,8 @@ func buildRows(
 	groupID string,
 	routes outcome_summary.Routes,
 	l outcome_summary.Labels,
+	canDownloadClientDocument bool,
+	canDownloadLegacyDocument bool,
 ) []types.TableRow {
 	empty := l.SubscriptionGroup.RatingEmpty
 	if empty == "" {
@@ -1183,16 +1217,10 @@ func buildRows(
 		cells := make([]types.TableCell, 0, len(templateIDs)+2)
 		cells = append(cells, types.TableCell{Value: st.listName()})
 		// Frozen 2nd column: per-row actions — VIEW this client's report card
-		// (boosted nav → view-3), then DOWNLOAD the rendered card as a PDF (the
-		// per-client document endpoint, ?format=pdf — same idiom as the client
-		// card's header button). The view link is a normal boosted anchor
-		// (hx-push-url); the download is hx-boost="false" + download so the
-		// boosted body doesn't AJAX-swap the attachment response.
-		clientURL := route.ResolveURL(routes.ClientCardURL, "id", groupID, "client_id", clientID)
-		docURL := route.ResolveURL(routes.ClientDocumentURL, "id", groupID, "client_id", clientID) + "?format=pdf"
-		viewAnchor := `<a href="` + html.EscapeString(clientURL) + `" class="action-btn view" title="` + html.EscapeString(l.Client.ViewAction) + `" aria-label="` + html.EscapeString(l.Client.ViewAction) + `" data-testid="rc-view-` + short(clientID) + `" hx-push-url="true">` + viewIcon + `</a>`
-		dlAnchor := `<a href="` + html.EscapeString(docURL) + `" class="action-btn download" title="` + html.EscapeString(l.Client.DownloadAction) + `" aria-label="` + html.EscapeString(l.Client.DownloadAction) + `" data-testid="rc-download-` + short(clientID) + `" hx-boost="false" download>` + downloadIcon + `</a>`
-		cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(`<div class="action-buttons">` + viewAnchor + dlAnchor + `</div>`)})
+		// (boosted nav → view-3), then open the same Period/Format drawer as the
+		// client-card header. The drawer and header both submit the resolved
+		// group/client document endpoint, keeping output selection identical.
+		cells = append(cells, rowActionsCell(groupID, clientID, routes, l, canDownloadClientDocument, canDownloadLegacyDocument))
 		for _, tid := range templateIDs {
 			testid := html.EscapeString("rc-cell-" + short(clientID) + "-" + short(tid))
 			jobID := cellJob[clientID+"\x00"+tid]

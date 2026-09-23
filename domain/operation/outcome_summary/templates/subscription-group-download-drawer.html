@@ -1,9 +1,11 @@
 {{/* Report-only group outcome export drawer. Loaded into #sheetContent by
-     HTMX; the actual CSV/PDF request is a native GET so the browser receives
-     the attachment response. */}}
+     HTMX; pyeza's fetch download form sends the GET, saves an attachment
+     response, and keeps a plain-text error in the drawer. */}}
 {{define "outcome-summary-subscription-group-download-drawer-form"}}
-<form method="get" action="{{.FormAction}}" hx-boost="false" data-testid="rc-subscription-group-download-drawer">
+<form method="get" action="{{.FormURL}}" hx-boost="false" data-lf-download-form data-lf-download-error-fallback="{{.Labels.DownloadErrorFallback}}" data-testid="rc-subscription-group-download-drawer">
     <div class="sheet-body">
+        <div class="alert alert-info alert-subtle" role="status" aria-live="polite" data-lf-download-notice data-testid="rc-subscription-group-download-notice" hidden>{{.Labels.DownloadNotice}}</div>
+        <div class="alert alert-error alert-subtle" role="alert" data-lf-download-error data-testid="rc-subscription-group-download-error" hidden></div>
         <div class="form-section">
             {{if .FixedCategory}}
             <input type="hidden" name="job_category_id" value="{{.CategoryID}}" data-testid="rc-subscription-group-download-category">
@@ -45,7 +47,7 @@
     </div>
     <div class="sheet-footer">
         <button type="button" class="btn btn-secondary" data-lf-action="sheet-close">{{.CommonLabels.Buttons.Cancel}}</button>
-        <button type="submit" class="btn btn-primary" data-testid="rc-subscription-group-download-submit">{{.Labels.DownloadAction}}</button>
+        <button type="submit" class="btn btn-primary" data-lf-busy-label="{{.Labels.DownloadingAction}}" data-testid="rc-subscription-group-download-submit">{{.Labels.DownloadAction}}</button>
     </div>
 </form>
 {{end}}

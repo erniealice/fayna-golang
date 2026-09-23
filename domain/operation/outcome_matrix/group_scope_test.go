@@ -19,6 +19,7 @@ func lister(templateIDs ...string) SummaryLister {
 				JobTemplateId:         id,
 				SubscriptionGroupId:   req.GetSubscriptionGroupId(),
 				SubscriptionGroupName: "Grade 10 Tantalum (AY 2026-27)",
+				PriceScheduleId:       "sched-ay2627",
 			})
 		}
 		return out, nil
@@ -122,6 +123,14 @@ func TestResolveGroupScope(t *testing.T) {
 				}
 				if got.GroupName == "" {
 					t.Error("GroupName is empty — the page title and header caption depend on it")
+				}
+				// PriceScheduleID must come off the SAME validated summary row —
+				// it is the only STAFF-reachable source of the section's price
+				// schedule (subscription_group / subscription_group_member
+				// listing is management-only). See list/page.go's
+				// resolvePhaseDocumentScheduleID.
+				if got.PriceScheduleID != "sched-ay2627" {
+					t.Errorf("PriceScheduleID = %q, want %q", got.PriceScheduleID, "sched-ay2627")
 				}
 			}
 		})

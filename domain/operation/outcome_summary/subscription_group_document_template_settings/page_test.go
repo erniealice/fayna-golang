@@ -39,8 +39,8 @@ func canonicalSettingsDOCX(t *testing.T) []byte {
 }
 
 func settingsCategory() *jobcategorypb.JobCategory {
-	code, order := "academic", int32(1)
-	return &jobcategorypb.JobCategory{Id: "cat-academic", Name: "Academic", Active: true, Code: &code, SortOrder: &order}
+	code, order := "category_a", int32(1)
+	return &jobcategorypb.JobCategory{Id: "cat-a", Name: "Category A", Active: true, Code: &code, SortOrder: &order}
 }
 
 type settingsRecorder struct {
@@ -64,7 +64,7 @@ func (r *settingsRecorder) deps(t *testing.T) *Deps {
 	return &Deps{
 		Routes:  outcome_summary.Routes{SubscriptionGroupDocumentTemplateSettingsURL: "/section-templates", SubscriptionGroupDocumentTemplateUploadURL: "/section-templates/upload", SubscriptionGroupDocumentTemplatePublishURL: "/section-templates/publish", SubscriptionGroupDocumentTemplateDeleteURL: "/section-templates/delete"},
 		Labels:  labels,
-		Options: outcome_summary.Options{SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{ProfileByCategoryCode: map[string]bindingpb.RenderProfile{"academic": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1}}},
+		Options: outcome_summary.Options{SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{ProfileByCategoryCode: map[string]bindingpb.RenderProfile{"category_a": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1}}},
 		ListJobCategories: func(context.Context, *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error) {
 			return &jobcategorypb.ListJobCategoriesResponse{Success: true, Data: []*jobcategorypb.JobCategory{settingsCategory()}}, nil
 		},
@@ -144,7 +144,7 @@ func TestSubscriptionGroupDocumentTemplateSettings_PermissionAndLifecycleActions
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := &settingsRecorder{}
-			res := NewUploadAction(rec.deps(t)).Handle(settingsPerms(tc.perms...), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-academic", "profile": "forged", "storage_key": "forged", "storage_container": "forged"}))
+			res := NewUploadAction(rec.deps(t)).Handle(settingsPerms(tc.perms...), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-a", "profile": "forged", "storage_key": "forged", "storage_container": "forged"}))
 			if (res.StatusCode == http.StatusOK) != tc.wantOK {
 				t.Fatalf("status=%d wantOK=%v", res.StatusCode, tc.wantOK)
 			}
@@ -158,7 +158,7 @@ func TestSubscriptionGroupDocumentTemplateSettings_PermissionAndLifecycleActions
 				if rec.artifact.GetStorageContainer() != "physical-templates" || rec.artifact.GetStorageKey() != rec.storedKey || !strings.HasPrefix(rec.storedKey, storagePrefix+"/") {
 					t.Fatalf("artifact locator=%q/%q", rec.artifact.GetStorageContainer(), rec.artifact.GetStorageKey())
 				}
-				if rec.binding.GetJobCategoryId() != "cat-academic" || rec.binding.GetRenderProfile() != bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1 {
+				if rec.binding.GetJobCategoryId() != "cat-a" || rec.binding.GetRenderProfile() != bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1 {
 					t.Fatalf("binding category/profile=%q/%v", rec.binding.GetJobCategoryId(), rec.binding.GetRenderProfile())
 				}
 			}
@@ -166,13 +166,13 @@ func TestSubscriptionGroupDocumentTemplateSettings_PermissionAndLifecycleActions
 	}
 
 	rec := &settingsRecorder{pairErr: errors.New("pair failed")}
-	res := NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-academic"}))
+	res := NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-a"}))
 	if res.StatusCode == http.StatusOK || fmt.Sprint(rec.order) != "[store pair delete-object]" || rec.deleteContainer != "physical-templates" || rec.deleteKey != rec.storedKey {
 		t.Fatalf("pair failure status/order/locator=%d/%v/%q/%q", res.StatusCode, rec.order, rec.deleteContainer, rec.deleteKey)
 	}
 
 	rec = &settingsRecorder{pairErr: errors.New("pair failed"), deleteObjectErr: errors.New("cleanup failed")}
-	res = NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-academic"}))
+	res = NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-a"}))
 	if got := res.Headers["HX-Error-Message"]; got != rec.deps(t).Labels.SubscriptionGroupDocumentTemplateSettings.CleanupFailed {
 		t.Fatalf("cleanup failure message=%q", got)
 	}
@@ -180,7 +180,7 @@ func TestSubscriptionGroupDocumentTemplateSettings_PermissionAndLifecycleActions
 
 func TestSubscriptionGroupDocumentTemplateSettings_ProfileAwareWildcardScopes(t *testing.T) {
 	rec := &settingsRecorder{}
-	res := NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-academic"}))
+	res := NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-a"}))
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("wildcard upload status=%d", res.StatusCode)
 	}
@@ -196,7 +196,7 @@ func TestSubscriptionGroupDocumentTemplateSettings_ProfileAwareWildcardScopes(t 
 	deps.ListPlans = func(context.Context, *planpb.ListPlansRequest) (*planpb.ListPlansResponse, error) {
 		return &planpb.ListPlansResponse{Success: true, Data: []*planpb.Plan{{Id: strptr("plan-1"), Name: "Standard"}}}, nil
 	}
-	res = NewUploadAction(deps).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-academic", "price_schedule_id": "schedule-1", "plan_id": "plan-1"}))
+	res = NewUploadAction(deps).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, canonicalSettingsDOCX(t), map[string]string{"job_category_id": "cat-a", "price_schedule_id": "schedule-1", "plan_id": "plan-1"}))
 	if res.StatusCode != http.StatusOK || rec.binding.GetPriceScheduleId() != "schedule-1" || rec.binding.GetPlanId() != "plan-1" {
 		t.Fatalf("specific axes status/binding=%d/%q/%q", res.StatusCode, rec.binding.GetPriceScheduleId(), rec.binding.GetPlanId())
 	}
@@ -208,9 +208,48 @@ func TestSubscriptionGroupDocumentTemplateSettings_ProfileAwareWildcardScopes(t 
 	}
 }
 
+func TestSubscriptionGroupDocumentTemplateSettings_WholeReportCategoryScopeIsTrustedAndExplicit(t *testing.T) {
+	phaseProfile := bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1
+	options := outcome_summary.SubscriptionGroupExportOptions{
+		ProfileByCategoryCode: map[string]bindingpb.RenderProfile{
+			"category_a": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1,
+		},
+		WholeReportProfile: phaseProfile,
+	}
+	categories := []*jobcategorypb.JobCategory{settingsCategory()}
+
+	category, profile, ok := selectedCategory(categories, wholeReportCategoryValue, options)
+	if !ok || category != nil || profile != phaseProfile {
+		t.Fatalf("whole-report scope resolved to category/profile/ok=%v/%v/%v", category, profile, ok)
+	}
+	for _, raw := range []string{"", "forged", "unknown-category-id"} {
+		if _, _, ok := selectedCategory(categories, raw, options); ok {
+			t.Fatalf("unrecognized category scope %q was accepted", raw)
+		}
+	}
+	category, profile, ok = selectedCategory(categories, "cat-a", options)
+	if !ok || category == nil || category.GetId() != "cat-a" || profile != bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1 {
+		t.Fatalf("exact category scope resolved to category/profile/ok=%v/%v/%v", category, profile, ok)
+	}
+	options.ProfileByCategoryCode["category_a"] = phaseProfile
+	if _, _, ok := selectedCategory(categories, "cat-a", options); ok {
+		t.Fatal("all-category phase profile was allowed in an exact-category binding")
+	}
+	options.ProfileByCategoryCode["category_a"] = bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
+
+	selectOptions := categoryOptions(categories, "Select a category scope", "Whole report", wholeReportProfile(options))
+	if len(selectOptions) != 3 || selectOptions[1].Value != wholeReportCategoryValue || selectOptions[1].Label != "Whole report" {
+		t.Fatalf("category options do not expose localized explicit whole-report scope: %+v", selectOptions)
+	}
+	options.WholeReportProfile = bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
+	if _, _, ok := selectedCategory(categories, wholeReportCategoryValue, options); ok {
+		t.Fatal("matrix profile was allowed to use whole-report category scope")
+	}
+}
+
 func TestSubscriptionGroupDocumentTemplateSettings_RejectsManifestMismatch(t *testing.T) {
 	rec := &settingsRecorder{}
-	res := NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, []byte("not a DOCX"), map[string]string{"job_category_id": "cat-academic"}))
+	res := NewUploadAction(rec.deps(t)).Handle(settingsPerms("document_template:create", "subscription_group_document_template:create"), settingsUploadPost(t, []byte("not a DOCX"), map[string]string{"job_category_id": "cat-a"}))
 	if res.StatusCode == http.StatusOK || len(rec.order) != 0 {
 		t.Fatalf("invalid manifest reached persistence: status=%d order=%v", res.StatusCode, rec.order)
 	}
@@ -232,8 +271,8 @@ func TestSubscriptionGroupDocumentTemplateSettings_PublishDeleteAndListActionSta
 		t.Fatalf("binding update publish=%d/%q", res.StatusCode, published)
 	}
 
-	artifact := &documenttemplatepb.DocumentTemplate{Id: "doc-1", Name: "Academic Template"}
-	binding := &bindingpb.SubscriptionGroupDocumentTemplate{Id: "b-1", DocumentTemplateId: "doc-1", DocumentTemplate: artifact, RenderProfile: bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1, Version: 3, VersionStatus: enums.VersionStatus_VERSION_STATUS_DRAFT, PriceScheduleId: strptr("schedule-1"), PlanId: strptr("plan-1"), JobCategoryId: strptr("cat-academic"), JobCategory: settingsCategory()}
+	artifact := &documenttemplatepb.DocumentTemplate{Id: "doc-1", Name: "Category A Template"}
+	binding := &bindingpb.SubscriptionGroupDocumentTemplate{Id: "b-1", DocumentTemplateId: "doc-1", DocumentTemplate: artifact, RenderProfile: bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1, Version: 3, VersionStatus: enums.VersionStatus_VERSION_STATUS_DRAFT, PriceScheduleId: strptr("schedule-1"), PlanId: strptr("plan-1"), JobCategoryId: strptr("cat-a"), JobCategory: settingsCategory()}
 	deps.ListTemplateBindings = func(context.Context, *bindingpb.ListSubscriptionGroupDocumentTemplatesRequest) (*bindingpb.ListSubscriptionGroupDocumentTemplatesResponse, error) {
 		return &bindingpb.ListSubscriptionGroupDocumentTemplatesResponse{Success: true, Data: []*bindingpb.SubscriptionGroupDocumentTemplate{binding}}, nil
 	}
@@ -242,14 +281,14 @@ func TestSubscriptionGroupDocumentTemplateSettings_PublishDeleteAndListActionSta
 		t.Fatalf("list status=%d", page.StatusCode)
 	}
 	data := page.Data.(*PageData)
-	if len(data.Table.Rows) != 1 || len(data.Table.Rows[0].Actions) != 2 || data.Table.Rows[0].Cells[4].Value == "—" || !strings.Contains(data.Table.Rows[0].Cells[0].Value, "Academic") {
+	if len(data.Table.Rows) != 1 || len(data.Table.Rows[0].Actions) != 2 || data.Table.Rows[0].Cells[4].Value == "—" || !strings.Contains(data.Table.Rows[0].Cells[0].Value, "Category A") {
 		t.Fatalf("list row=%+v", data.Table.Rows[0])
 	}
 	if !data.Table.Rows[0].Actions[0].Disabled || !data.Table.Rows[0].Actions[1].Disabled {
 		t.Fatalf("missing action permissions should disable both: %+v", data.Table.Rows[0].Actions)
 	}
 	attrs := data.Table.Rows[0].DataAttrs
-	if attrs["renderprofile"] != "subscription_group_outcome_matrix_single_period_11_v1" || attrs["category"] != "academic" || attrs["categoryscope"] != "exact" || attrs["schedulescope"] != "exact" || attrs["planscope"] != "exact" || attrs["status"] != "draft" {
+	if attrs["renderprofile"] != "subscription_group_outcome_matrix_single_period_11_v1" || attrs["category"] != "category_a" || attrs["categoryscope"] != "exact" || attrs["schedulescope"] != "exact" || attrs["planscope"] != "exact" || attrs["status"] != "draft" {
 		t.Fatalf("list row contract attributes=%v", attrs)
 	}
 	var renderedAttrs bytes.Buffer

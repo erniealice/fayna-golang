@@ -72,7 +72,15 @@ func renderReportView(ctx context.Context, viewCtx *view.ViewContext, deps *Deps
 		log.Printf("subscription group report view: normalize matrix: %v", err)
 		return view.Forbidden("subscription_group_outcome_export:read")
 	}
-	table := buildReportTable(deps, normalized, subscriptionGroupID)
+	// Same per-row action gating as the static grid (page.go buildGroupTable):
+	// the explicit drawer download takes priority over the legacy PDF anchor,
+	// and neither requires the view-client-card action, which is always shown.
+	perms := view.GetUserPermissions(ctx)
+	clientDocumentMounted := deps.ClientDocumentMounted && deps.Routes.ClientDocumentURL != ""
+	canDownloadClientDocument := clientDocumentMounted && deps.Options.SubscriptionGroupExportEnabled() &&
+		deps.Routes.ClientDownloadDrawerURL != "" && outcome_summary.CanExplicitExport(perms, ctx, deps.ResolvePrincipalKind)
+	canDownloadLegacyDocument := clientDocumentMounted && outcome_summary.CanLegacyDetail(perms)
+	table := buildReportTable(deps, normalized, subscriptionGroupID, canDownloadClientDocument, canDownloadLegacyDocument)
 	return reportPage(viewCtx, deps, options.GetContext(), table, tabs, activeTab, reportCategoryID(category), "")
 }
 
@@ -152,14 +160,23 @@ func reportCategoryTabs(deps *Deps, subscriptionGroupID string, categories []*ex
 	return items, active
 }
 
-func buildReportTable(deps *Deps, matrix *explicitMatrix, subscriptionGroupID string) *types.TableConfig {
-	columns := make([]types.TableColumn, 0, len(matrix.columns)+1)
+func buildReportTable(deps *Deps, matrix *explicitMatrix, subscriptionGroupID string, canDownloadClientDocument, canDownloadLegacyDocument bool) *types.TableConfig {
+	columns := make([]types.TableColumn, 0, len(matrix.columns)+2)
+	// Client column is the first FROZEN column (TableClass
+	// "data-table-freeze2", set below). Width must equal the CSS --freeze2-c1
+	// default (14rem) so the second frozen column's sticky left offset lines
+	// up — same contract as the static grid (page.go buildColumns).
 	columns = append(columns, types.TableColumn{
 		Key:      "client",
 		Label:    deps.Labels.SubscriptionGroup.ClientColumn,
+		Width:    "14rem",
 		MinWidth: "14rem",
 		NoSort:   true,
 	})
+	// Second frozen column: the per-row actions (view client card + download
+	// drawer / legacy PDF). Blank header mirrors the static grid's action
+	// column. Excluded from CSV/Excel export by key (actionsColumnKey).
+	columns = append(columns, types.TableColumn{Key: actionsColumnKey, Label: "", Width: "5rem", MinWidth: "5rem", Align: "center", NoSort: true})
 	for _, column := range matrix.columns {
 		columns = append(columns, types.TableColumn{
 			Key:      "tmpl-" + column.GetJobTemplateId(),
@@ -185,6 +202,7 @@ func buildReportTable(deps *Deps, matrix *explicitMatrix, subscriptionGroupID st
 			TestID:   "rc-client-" + short(row.clientID),
 			CSVValue: name,
 		}}
+		cells = append(cells, rowActionsCell(subscriptionGroupID, row.clientID, deps.Routes, deps.Labels, canDownloadClientDocument, canDownloadLegacyDocument))
 		for index := range matrix.columns {
 			value := outcome_summary.ExportCellValue(row.cells[matrix.columns[index].GetJobTemplateId()], empty)
 			cells = append(cells, types.TableCell{Type: "text", Value: value, CSVValue: value})
@@ -206,9 +224,14 @@ func buildReportTable(deps *Deps, matrix *explicitMatrix, subscriptionGroupID st
 		ShowDensity: true,
 		ShowExport:  true,
 		ShowEntries: true,
+		// The per-row download is the frozen SECOND column, not a trailing
+		// actions cell — so no trailing actions column (matches page.go).
 		ShowActions: false,
-		Labels:      deps.TableLabels,
-		Caption:     deps.Labels.SubscriptionGroup.Title,
+		// Freeze the first two columns (client + actions) while the subject
+		// columns scroll horizontally — same contract as the static grid.
+		TableClass: "data-table-freeze2",
+		Labels:     deps.TableLabels,
+		Caption:    deps.Labels.SubscriptionGroup.Title,
 		EmptyState: types.TableEmptyState{
 			Title:   deps.Labels.Empty.Title,
 			Message: deps.Labels.SubscriptionGroup.NotComputedBanner,

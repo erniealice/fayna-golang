@@ -27,6 +27,7 @@ import (
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
+	cardbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
@@ -228,7 +229,7 @@ func writeExplicitPDF(ctx context.Context, w http.ResponseWriter, deps *Deps, ma
 		return
 	}
 
-	data, err := subscriptiongroupdoc.BuildData(profile, explicitDocumentMatrix(deps, matrix, category, period))
+	data, err := subscriptiongroupdoc.BuildData(profile, explicitDocumentMatrix(ctx, deps, matrix, category, period))
 	if err != nil {
 		logExplicitExportFailure("profile", "manifest_incompatible", len(matrix.columns), len(matrix.rows), canonicalOrder)
 		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusServiceUnavailable)
@@ -305,13 +306,13 @@ func explicitColumnName(column *exportpb.JobTemplateColumn) string {
 	return column.GetJobTemplateId()
 }
 
-func explicitDocumentMatrix(deps *Deps, matrix *explicitMatrix, category *exportpb.JobCategoryOption, period string) subscriptiongroupdoc.Matrix {
+func explicitDocumentMatrix(ctx context.Context, deps *Deps, matrix *explicitMatrix, category *exportpb.JobCategoryOption, period string) subscriptiongroupdoc.Matrix {
 	result := subscriptiongroupdoc.Matrix{
 		JobCategoryID:         category.GetJobCategoryId(),
 		SheetTitle:            categoryLabel(deps.Labels, category),
 		SubscriptionGroupName: matrix.context.GetSubscriptionGroupName(),
 		PriceScheduleName:     matrix.context.GetPriceScheduleName(),
-		JobTemplatePhaseName:  explicitPeriodName(deps.Labels, category, period),
+		JobTemplatePhaseName:  explicitPeriodDocumentName(ctx, deps, matrix.context.GetPriceScheduleId(), category, period),
 		ClientNameLabel:       deps.Labels.SubscriptionGroup.ClientColumn,
 	}
 	for _, column := range matrix.columns {
@@ -332,6 +333,27 @@ func explicitDocumentMatrix(deps *Deps, matrix *explicitMatrix, category *export
 		result.Rows = append(result.Rows, documentRow)
 	}
 	return result
+}
+
+func explicitPeriodDocumentName(ctx context.Context, deps *Deps, scheduleID string, category *exportpb.JobCategoryOption, period string) string {
+	fallback := explicitPeriodName(deps.Labels, category, period)
+	code, phasePeriod := strings.CutPrefix(period, "phase:")
+	if !phasePeriod || code == "" || scheduleID == "" || deps.FindApplicableReportCardBinding == nil {
+		return fallback
+	}
+	resp, err := deps.FindApplicableReportCardBinding(ctx, &cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest{PriceScheduleId: &scheduleID, JobTemplatePhaseCode: &code})
+	if err != nil || (resp != nil && !resp.GetSuccess()) {
+		log.Printf("group explicit PDF: phase document binding lookup failed: %v", err)
+		return fallback
+	}
+	if resp == nil || !resp.GetFound() || resp.GetBinding() == nil || resp.GetBinding().GetJobTemplatePhaseCode() != code {
+		return fallback
+	}
+	name := strings.TrimSpace(resp.GetBinding().GetDocumentTemplate().GetName())
+	if name == "" {
+		return fallback
+	}
+	return fallback + " - " + name
 }
 
 func explicitPeriodName(labels outcome_summary.Labels, category *exportpb.JobCategoryOption, period string) string {

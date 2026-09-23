@@ -19,6 +19,7 @@ import (
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
+	cardbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	sheetbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_document_template"
@@ -72,10 +73,11 @@ type OutcomeMatrixModuleDeps struct {
 	// its storage bytes (fail-loud on any miss — Q1, no embedded fallback). All
 	// four are threaded onto the list PageViewDeps for the format=pdf export
 	// branch. Optional/nil-safe: a nil closure fails the pdf export loud/closed.
-	ReadJobTemplate           func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)
-	GenerateDoc               func(templateData []byte, data map[string]any) ([]byte, error)
-	GeneratePDF               func(templateData []byte, data map[string]any) ([]byte, error)
-	ResolveSheetTemplateBytes func(ctx context.Context, jobCategoryID, priceScheduleID string) ([]byte, error)
+	ReadJobTemplate                 func(ctx context.Context, req *jobtemplatepb.ReadJobTemplateRequest) (*jobtemplatepb.ReadJobTemplateResponse, error)
+	GenerateDoc                     func(templateData []byte, data map[string]any) ([]byte, error)
+	GeneratePDF                     func(templateData []byte, data map[string]any) ([]byte, error)
+	ResolveSheetTemplateBytes       func(ctx context.Context, jobCategoryID, priceScheduleID string) ([]byte, error)
+	FindApplicableReportCardBinding func(context.Context, *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
 
 	// Per-phase approval transition use cases (plan §4.2). Back the approval-bar
 	// POST forms; each carries only the trusted sheet identity (actor + workspace
@@ -200,19 +202,20 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		GetOutcomeSummaryRoster:  deps.GetOutcomeSummaryRoster,
 		ResolveStaff:             deps.ResolveStaff,
 		// Grade-sheet PDF render context (P5).
-		ReadJobTemplate:              deps.ReadJobTemplate,
-		GenerateDoc:                  deps.GenerateDoc,
-		GeneratePDF:                  deps.GeneratePDF,
-		ResolveSheetTemplateBytes:    deps.ResolveSheetTemplateBytes,
-		ListClients:                  deps.ListClients,
-		ListJobs:                     deps.ListJobs,
-		ListSubscriptionGroupMembers: deps.ListSubscriptionGroupMembers,
-		ListSubscriptionGroups:       deps.ListSubscriptionGroups,
-		Options:                      deps.Options,
-		ListClientAttributes:         deps.ListClientAttributes,
-		ResolveAttributeIDByCode:     deps.ResolveAttributeIDByCode,
-		JobListURL:                   deps.JobListURL,
-		JobListLabel:                 deps.JobListLabel,
+		ReadJobTemplate:                 deps.ReadJobTemplate,
+		GenerateDoc:                     deps.GenerateDoc,
+		GeneratePDF:                     deps.GeneratePDF,
+		ResolveSheetTemplateBytes:       deps.ResolveSheetTemplateBytes,
+		FindApplicableReportCardBinding: deps.FindApplicableReportCardBinding,
+		ListClients:                     deps.ListClients,
+		ListJobs:                        deps.ListJobs,
+		ListSubscriptionGroupMembers:    deps.ListSubscriptionGroupMembers,
+		ListSubscriptionGroups:          deps.ListSubscriptionGroups,
+		Options:                         deps.Options,
+		ListClientAttributes:            deps.ListClientAttributes,
+		ResolveAttributeIDByCode:        deps.ResolveAttributeIDByCode,
+		JobListURL:                      deps.JobListURL,
+		JobListLabel:                    deps.JobListLabel,
 	}
 	matrixView := outcomematrixlist.NewView(pageDeps)
 

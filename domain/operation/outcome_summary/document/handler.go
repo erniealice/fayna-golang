@@ -40,11 +40,13 @@ import (
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
+	productplanstaffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan_staff"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	sgppspb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_product_plan_staff"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
+	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
 const docxContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -54,6 +56,7 @@ const pdfContentType = "application/pdf"
 // is workspace-bound at the espyna adapter (mirroring view-3). GenerateDoc is
 // the injected fycha doctemplate closure (nil → the route fails closed with 503).
 type Deps struct {
+	Options              outcome_summary.Options
 	Labels               outcome_summary.Labels
 	CommonLabels         pyeza.CommonLabels
 	ResolvePrincipalKind func(context.Context) int32
@@ -97,12 +100,10 @@ type Deps struct {
 	// → 500.
 	GeneratePDF func(templateData []byte, data map[string]any) ([]byte, error)
 
-	// ResolveTemplateBytes resolves the applicable published report-card template
-	// binding for this card's price_schedule and returns the bound template's
-	// storage bytes (binding resolver ∘ storage download). Returns (nil, nil) on
-	// no-binding / unavailable-object → the handler keeps the embedded Template()
-	// fallback. Optional/nil-safe — no download regression when unwired.
-	ResolveTemplateBytes func(ctx context.Context, priceScheduleID string) ([]byte, error)
+	// ResolveTemplateBytes resolves the published report-card binding by schedule
+	// and optional phase code. An empty code selects the whole-year binding and
+	// retains the embedded fallback; an explicit phase requires a bound template.
+	ResolveTemplateBytes func(ctx context.Context, priceScheduleID, phaseCode string) ([]byte, error)
 
 	ListSubscriptionGroups       func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
 	ListSubscriptionGroupMembers func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
@@ -110,11 +111,16 @@ type Deps struct {
 	// COALESCE(job_task.assigned_to override, class-edge servicer). The class edge
 	// (subscription_group_product_plan_staff) is the UI-maintained "who services
 	// this cohort's offering" source of truth; ListProductPlans maps its
-	// product_plan_id to the product_id a job carries in output_product_id. BOTH
+	// product_plan_id to the product_id a job carries in output_product_id.
+	// ListProductPlanStaffs gates a linked edge on its product_plan_staff
+	// eligibility row's active flag (the generic "eligibility" concept) —
+	// fetchClassEdgeTeachers keeps a linked edge only while that row is active,
+	// and fails closed (drops linked edges) on a list error. ALL THREE
 	// optional/nil-safe — a missing closure leaves the teacher line on its prior
 	// (assignee-only) behavior, never a panic.
 	ListSubscriptionGroupProductPlanStaffs func(ctx context.Context, req *sgppspb.ListSubscriptionGroupProductPlanStaffsRequest) (*sgppspb.ListSubscriptionGroupProductPlanStaffsResponse, error)
 	ListProductPlans                       func(ctx context.Context, req *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error)
+	ListProductPlanStaffs                  func(ctx context.Context, req *productplanstaffpb.ListProductPlanStaffsRequest) (*productplanstaffpb.ListProductPlanStaffsResponse, error)
 	ListJobs                               func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
 	ListJobTemplates                       func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
 	ListClients                            func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
@@ -161,12 +167,25 @@ type Deps struct {
 	// leaves a past card's coded cells blank exactly as before.
 	ListCodedTaskOutcomeValuesByJobHistorical func(ctx context.Context, req *taskoutcomepb.ListCodedTaskOutcomeValuesByJobRequest) (*taskoutcomepb.ListCodedTaskOutcomeValuesByJobResponse, error)
 	ListTemplateTaskCriterias                 func(ctx context.Context, req *ttcpb.ListTemplateTaskCriteriasRequest) (*ttcpb.ListTemplateTaskCriteriasResponse, error)
+	// Staff client documents use one client-scoped projection, then a trusted
+	// profile resolver for phase-specific output. Both are typed application
+	// ports; storage locators and raw SQL stay outside Fayna.
+	GetSubscriptionGroupClientReportCard     func(ctx context.Context, req *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
+	ResolveSubscriptionGroupDocumentTemplate func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error)
 }
 
 // NewDownloadHandler returns the per-client report-card .docx download handler.
 func NewDownloadHandler(d *Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if d == nil {
+			http.Error(w, "report card rendering is not configured", http.StatusServiceUnavailable)
+			return
+		}
 		ctx := r.Context()
+		if _, explicitClientPeriod := r.URL.Query()["period"]; explicitClientPeriod {
+			handleExplicitClientDocument(w, r, d)
+			return
+		}
 
 		perms := view.GetUserPermissions(ctx)
 		if !outcome_summary.CanLegacyDetail(perms) {
@@ -251,11 +270,8 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			http.Error(w, "report card cannot be generated right now — please retry", http.StatusServiceUnavailable)
 			return
 		}
-		if blocked {
-			msg := firstNonEmpty(d.Labels.Errors.RenderGate, "This report card cannot be generated yet — its grades have not been published.")
-			http.Error(w, msg, http.StatusConflict)
-			return
-		}
+		// A proven unpublished sheet can use the complete document layout with
+		// its recorded outcomes blank. The gate error above still fails closed.
 
 		if rc.DocumentHeaderName == "" {
 			rc.DocumentHeaderName = firstNonEmpty(d.Labels.Landing.Title, "Report Card")
@@ -278,7 +294,7 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			tpl = TemplateBlock()
 		}
 		if d.ResolveTemplateBytes != nil {
-			if b, rerr := d.ResolveTemplateBytes(ctx, rc.PriceScheduleID); rerr == nil && len(b) > 0 {
+			if b, rerr := d.ResolveTemplateBytes(ctx, rc.PriceScheduleID, ""); rerr == nil && len(b) > 0 {
 				tpl = b
 			}
 		}
@@ -286,6 +302,9 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 		// The SAME data map feeds both formats — PDF conversion happens AFTER the
 		// identical DOCX assembly (fycha renders the DOCX then LibreOffice converts).
 		data := buildReportCardData(*rc)
+		if blocked {
+			blankDocumentOutcomeValues(data)
+		}
 
 		var (
 			outBytes    []byte

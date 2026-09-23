@@ -17,7 +17,8 @@ import (
 	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 )
 
-const manifestFilename = "subscription-group-outcome-matrix-single-period-11-v1.manifest.json"
+const matrixManifestFilename = "subscription-group-outcome-matrix-single-period-11-v1.manifest.json"
+const clientPhaseManifestFilename = "subscription-group-client-phase-outcome-report-v1.manifest.json"
 
 const wordprocessingMLNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -28,7 +29,7 @@ const (
 	maxTemplateAggregateBytes int64 = 256 << 20
 )
 
-//go:embed subscription-group-outcome-matrix-single-period-11-v1.manifest.json
+//go:embed subscription-group-outcome-matrix-single-period-11-v1.manifest.json subscription-group-client-phase-outcome-report-v1.manifest.json
 var manifestFiles embed.FS
 
 var completeTemplateToken = regexp.MustCompile(`\{\{[^{}]*\}\}`)
@@ -77,10 +78,19 @@ func contractError(format string, args ...any) error {
 // manifest. It intentionally contains no docs-only evidence/category metadata.
 func ManifestBytes(profileValue bindingpb.RenderProfile) ([]byte, error) {
 	profile, ok := LookupProfile(profileValue)
-	if !ok || profile.Key != SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key {
+	if !ok {
 		return nil, contractError("unsupported render profile")
 	}
-	raw, err := manifestFiles.ReadFile(manifestFilename)
+	filename := ""
+	switch profile.Key {
+	case SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key:
+		filename = matrixManifestFilename
+	case SubscriptionGroupClientPhaseOutcomeReportV1Key:
+		filename = clientPhaseManifestFilename
+	default:
+		return nil, contractError("unsupported render profile")
+	}
+	raw, err := manifestFiles.ReadFile(filename)
 	if err != nil {
 		return nil, contractError("read embedded manifest: %v", err)
 	}
@@ -100,10 +110,23 @@ func loadManifest(profileValue bindingpb.RenderProfile) (Profile, renderManifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return Profile{}, renderManifest{}, contractError("decode embedded manifest: %v", err)
 	}
-	if manifest.Profile.Key != profile.Key || manifest.Profile.JobTemplateSlots != profile.JobTemplateSlots ||
-		manifest.Profile.BindingJobCategoryScope != "exact_required" || manifest.Profile.PeriodCardinality != 1 ||
-		manifest.Profile.RowLoop != "rows" {
+	if manifest.Profile.Key != profile.Key || manifest.Profile.JobTemplateSlots != profile.JobTemplateSlots {
 		return Profile{}, renderManifest{}, contractError("embedded manifest does not match the registered profile")
+	}
+	switch profile.Key {
+	case SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key:
+		if manifest.Profile.BindingJobCategoryScope != "exact_required" || manifest.Profile.PeriodCardinality != 1 || manifest.Profile.RowLoop != "rows" {
+			return Profile{}, renderManifest{}, contractError("embedded matrix manifest does not match the registered profile")
+		}
+	case SubscriptionGroupClientPhaseOutcomeReportV1Key:
+		if manifest.Profile.BindingJobCategoryScope != "null_required" || manifest.Profile.PeriodCardinality != 0 || manifest.Profile.RowLoop != "jobs" {
+			return Profile{}, renderManifest{}, contractError("embedded client phase manifest does not match the registered profile")
+		}
+		if err := validateClientPhaseManifestShape(manifest); err != nil {
+			return Profile{}, renderManifest{}, err
+		}
+	default:
+		return Profile{}, renderManifest{}, contractError("unsupported render profile")
 	}
 	return profile, manifest, nil
 }
@@ -232,6 +255,7 @@ type tokenOccurrence struct {
 	element, attribute xml.Name
 	table, row         int
 	tableDepth         int
+	order, paragraph   int
 	ancestry           []xml.Name
 }
 
@@ -257,13 +281,23 @@ type partScanner struct {
 	stack         []xml.Name
 	tableStack    []tableScanContext
 	rowStack      []rowScanContext
+	paragraphs    []int
 	nextTable     int
+	nextParagraph int
 	rowText       map[rowPosition]*strings.Builder
+	paragraphText map[int]*strings.Builder
 	occurrences   []tokenOccurrence
 	completeCount int
 }
 
 func validateManifestTokens(parts map[string][]byte, manifest renderManifest) error {
+	if manifest.Profile.Key == SubscriptionGroupClientPhaseOutcomeReportV1Key {
+		return validateClientPhaseManifestTokens(parts, manifest)
+	}
+	return validateMatrixManifestTokens(parts, manifest)
+}
+
+func validateMatrixManifestTokens(parts map[string][]byte, manifest renderManifest) error {
 	var occurrences []tokenOccurrence
 	rowTexts := make(map[rowLocation]string)
 	completeCount := 0
@@ -272,6 +306,7 @@ func validateManifestTokens(parts map[string][]byte, manifest renderManifest) er
 			part:          part,
 			completeCount: len(completeTemplateToken.FindAll(body, -1)),
 			rowText:       make(map[rowPosition]*strings.Builder),
+			paragraphText: make(map[int]*strings.Builder),
 		}
 		if err := scanner.scan(body); err != nil {
 			return err
@@ -356,6 +391,292 @@ func validateManifestTokens(parts map[string][]byte, manifest renderManifest) er
 		}
 	}
 	return nil
+}
+
+type manifestLoopScope struct {
+	name   string
+	parent string
+	node   manifestNode
+}
+
+type manifestScalarScope struct {
+	loop string
+}
+
+var clientPhaseRootScalars = []string{
+	"school_name", "academic_year", "student_name", "grade_level", "section_name",
+	"client_reference", "adviser", "printed_by", "printed_at", "phase_name",
+}
+
+var clientPhaseJobScalars = []string{
+	"job_name", "job_category_name", "teacher_name", "phase_grade", "phase_comment",
+	"phase_total", "phase_maximum", "progress_to_date_total", "progress_to_date_maximum",
+}
+
+var clientPhaseAssessmentScalars = []string{
+	"assessment_name", "achievement_level", "comment",
+}
+
+var clientPhaseRatingDescriptionScalars = []string{
+	"rating_label", "minimum", "maximum", "output_value", "description",
+}
+
+var clientPhaseOutcomeSectionScalars = []string{"section_code"}
+var clientPhaseOutcomeRowScalars = []string{"row_name", "total"}
+var clientPhaseOutcomeCellScalars = []string{"period_name", "task_name", "value"}
+
+func validateClientPhaseManifestShape(manifest renderManifest) error {
+	jobs, jobsOK := manifest.Loops["jobs"]
+	sections, sectionsOK := manifest.Loops["outcome_sections"]
+	assessments, assessmentsOK := jobs.Loops["assessments"]
+	descriptions, descriptionsOK := assessments.Loops["rating_descriptions"]
+	rows, rowsOK := sections.Loops["rows"]
+	cells, cellsOK := rows.Loops["cells"]
+	if !jobsOK || !sectionsOK || !assessmentsOK || !descriptionsOK || !rowsOK || !cellsOK || len(manifest.Loops) != 2 ||
+		len(jobs.Loops) != 1 || len(assessments.Loops) != 1 || len(descriptions.Loops) != 0 ||
+		len(sections.Loops) != 1 || len(rows.Loops) != 1 || len(cells.Loops) != 0 ||
+		!sameStrings(manifest.Scalars, clientPhaseRootScalars) || !sameStrings(jobs.Scalars, clientPhaseJobScalars) ||
+		!sameStrings(assessments.Scalars, clientPhaseAssessmentScalars) || !sameStrings(descriptions.Scalars, clientPhaseRatingDescriptionScalars) ||
+		!sameStrings(sections.Scalars, clientPhaseOutcomeSectionScalars) || !sameStrings(rows.Scalars, clientPhaseOutcomeRowScalars) ||
+		!sameStrings(cells.Scalars, clientPhaseOutcomeCellScalars) {
+		return contractError("embedded client phase manifest does not match the registered repeated-table contract")
+	}
+	return nil
+}
+
+func sameStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	counts := make(map[string]int, len(got))
+	for _, value := range got {
+		counts[value]++
+	}
+	for _, value := range want {
+		counts[value]--
+	}
+	for _, count := range counts {
+		if count != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func validateClientPhaseManifestTokens(parts map[string][]byte, manifest renderManifest) error {
+	loops := make(map[string]manifestLoopScope)
+	if err := flattenManifestLoops(manifest.Loops, "", loops); err != nil {
+		return err
+	}
+	scalarScopes := make(map[string]manifestScalarScope)
+	for _, key := range manifest.Scalars {
+		if strings.TrimSpace(key) == "" {
+			return contractError("manifest contains an empty scalar key")
+		}
+		if _, duplicate := scalarScopes[key]; duplicate {
+			return contractError("manifest scalar %q is declared more than once", key)
+		}
+		scalarScopes[key] = manifestScalarScope{}
+	}
+	for _, scope := range loops {
+		for _, key := range scope.node.Scalars {
+			if strings.TrimSpace(key) == "" {
+				return contractError("manifest contains an empty scalar key")
+			}
+			if _, duplicate := scalarScopes[key]; duplicate {
+				return contractError("manifest scalar %q is declared more than once", key)
+			}
+			scalarScopes[key] = manifestScalarScope{loop: scope.name}
+		}
+	}
+
+	byKey := make(map[string][]tokenOccurrence)
+	rowTexts := make(map[rowLocation]string)
+	paragraphTexts := make(map[string]map[int]string)
+	completeCount := 0
+	for part, body := range parts {
+		scanner := &partScanner{
+			part: part, completeCount: len(completeTemplateToken.FindAll(body, -1)),
+			rowText: make(map[rowPosition]*strings.Builder), paragraphText: make(map[int]*strings.Builder),
+		}
+		if err := scanner.scan(body); err != nil {
+			return err
+		}
+		completeCount += scanner.completeCount
+		for _, occurrence := range scanner.occurrences {
+			if occurrence.part != "word/document.xml" {
+				return contractError("template token %q is outside word/document.xml", occurrence.key)
+			}
+			byKey[occurrence.key] = append(byKey[occurrence.key], occurrence)
+		}
+		for position, value := range scanner.rowText {
+			rowTexts[rowLocation{part: part, table: position.table, row: position.row}] = value.String()
+		}
+		texts := make(map[int]string, len(scanner.paragraphText))
+		for id, value := range scanner.paragraphText {
+			texts[id] = value.String()
+		}
+		paragraphTexts[part] = texts
+	}
+	occurrenceCount := 0
+	for _, values := range byKey {
+		occurrenceCount += len(values)
+	}
+	if occurrenceCount != completeCount {
+		return contractError("template token is split, partial, or outside a supported XML node")
+	}
+
+	for name := range loops {
+		for _, marker := range []string{"#" + name, "/" + name} {
+			if _, duplicate := scalarScopes[marker]; duplicate {
+				return contractError("manifest scalar conflicts with loop marker %q", marker)
+			}
+		}
+	}
+	for key, values := range byKey {
+		if len(values) != 1 {
+			return contractError("template token %q must occur exactly once", key)
+		}
+		if isClientPhaseFixedScalar(key) {
+			scalarScopes[key] = manifestScalarScope{}
+			continue
+		}
+		if _, ok := scalarScopes[key]; ok {
+			continue
+		}
+		if _, isLoopMarker := loops[strings.TrimPrefix(strings.TrimPrefix(key, "#"), "/")]; isLoopMarker && (strings.HasPrefix(key, "#") || strings.HasPrefix(key, "/")) {
+			continue
+		}
+		return contractError("unexpected template token %q", key)
+	}
+	for key := range scalarScopes {
+		if len(byKey[key]) != 1 {
+			return contractError("template scalar %q is missing", key)
+		}
+	}
+
+	loopBounds := make(map[string][2]tokenOccurrence, len(loops))
+	loopKinds := make(map[string]string, len(loops))
+	for name := range loops {
+		starts, ends := byKey["#"+name], byKey["/"+name]
+		if len(starts) != 1 || len(ends) != 1 {
+			return contractError("loop %q must have one start and one end marker", name)
+		}
+		start, end := starts[0], ends[0]
+		if start.part != end.part || start.order >= end.order {
+			return contractError("loop %q markers have invalid order or parts", name)
+		}
+		kind, err := validateClientPhaseLoopMarkers(start, end, rowTexts, paragraphTexts)
+		if err != nil {
+			return contractError("loop %q: %v", name, err)
+		}
+		loopBounds[name] = [2]tokenOccurrence{start, end}
+		loopKinds[name] = kind
+	}
+	// The flat map traversal above is unordered, so perform parent containment
+	// after collecting every loop's bounds.
+	for name, scope := range loops {
+		if scope.parent == "" {
+			continue
+		}
+		child, parent := loopBounds[name], loopBounds[scope.parent]
+		if child[0].order <= parent[0].order || child[1].order >= parent[1].order {
+			return contractError("nested loop %q is outside parent loop %q", name, scope.parent)
+		}
+	}
+
+	for key, scalarScope := range scalarScopes {
+		value := byKey[key][0]
+		if scalarScope.loop == "" {
+			if err := validateRootTokenPlacement(value); err != nil {
+				return err
+			}
+			for name, bounds := range loopBounds {
+				if value.order > bounds[0].order && value.order < bounds[1].order {
+					return contractError("root token %q is inside loop %q", key, name)
+				}
+			}
+			continue
+		}
+		bounds := loopBounds[scalarScope.loop]
+		if value.order <= bounds[0].order || value.order >= bounds[1].order {
+			return contractError("loop token %q is outside loop %q", key, scalarScope.loop)
+		}
+		if loopKinds[scalarScope.loop] == "rows" {
+			if err := validateRowTokenPlacement(value); err != nil {
+				return err
+			}
+			if value.table != bounds[0].table || value.row != bounds[0].row+1 || value.tableDepth != bounds[0].tableDepth {
+				return contractError("row token %q is outside the template row for loop %q", key, scalarScope.loop)
+			}
+		} else if err := validateRootTokenPlacement(value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Coded outcome paths are selected by each template from the typed projection.
+// Their category/template/criterion codes are data, so the shared profile must
+// validate the path shape without naming any vertical or academic year.
+func isClientPhaseFixedScalar(key string) bool {
+	parts := strings.Split(key, ".")
+	validCell := len(parts) == 7 && parts[0] == "outcome_cells" && parts[6] == "numeric_value"
+	validTotal := len(parts) == 5 && parts[0] == "outcome_totals" && parts[4] == "numeric_value"
+	if !validCell && !validTotal {
+		return false
+	}
+	for _, part := range parts[1 : len(parts)-1] {
+		if strings.TrimSpace(part) == "" || strings.ContainsAny(part, "{} \t\r\n") {
+			return false
+		}
+	}
+	return true
+}
+
+func flattenManifestLoops(nodes map[string]manifestNode, parent string, out map[string]manifestLoopScope) error {
+	for name, node := range nodes {
+		if strings.TrimSpace(name) == "" || strings.ContainsAny(name, "#/{}") {
+			return contractError("manifest contains an invalid loop name")
+		}
+		if _, duplicate := out[name]; duplicate {
+			return contractError("manifest loop %q is declared more than once", name)
+		}
+		out[name] = manifestLoopScope{name: name, parent: parent, node: node}
+		if err := flattenManifestLoops(node.Loops, name, out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateClientPhaseLoopMarkers(start, end tokenOccurrence, rowTexts map[rowLocation]string, paragraphTexts map[string]map[int]string) (string, error) {
+	if start.kind != "text" || end.kind != "text" || !isWordprocessingMLName(start.element, "t") || !isWordprocessingMLName(end.element, "t") {
+		return "", contractError("loop markers must be text")
+	}
+	if start.table == 0 && end.table == 0 {
+		if !matchesWordprocessingMLPath(start.ancestry, "document", "body", "p", "r", "t") ||
+			!matchesWordprocessingMLPath(end.ancestry, "document", "body", "p", "r", "t") || start.paragraph == 0 || end.paragraph == 0 {
+			return "", contractError("body loop markers must be standalone body paragraphs")
+		}
+		texts := paragraphTexts[start.part]
+		if strings.TrimSpace(texts[start.paragraph]) != "{{#"+strings.TrimPrefix(start.key, "#")+"}}" ||
+			strings.TrimSpace(texts[end.paragraph]) != "{{/"+strings.TrimPrefix(end.key, "/")+"}}" {
+			return "", contractError("body loop marker paragraphs must contain only their marker")
+		}
+		return "body", nil
+	}
+	if start.table <= 0 || start.table != end.table || start.tableDepth != 1 || end.tableDepth != 1 ||
+		start.row <= 0 || end.row != start.row+2 ||
+		!matchesWordprocessingMLPath(start.ancestry, "document", "body", "tbl", "tr", "tc", "p", "r", "t") ||
+		!matchesWordprocessingMLPath(end.ancestry, "document", "body", "tbl", "tr", "tc", "p", "r", "t") {
+		return "", contractError("table loop must use one start row, one template row, and one end row")
+	}
+	if strings.TrimSpace(rowTexts[occurrenceRowLocation(start)]) != "{{#"+strings.TrimPrefix(start.key, "#")+"}}" ||
+		strings.TrimSpace(rowTexts[occurrenceRowLocation(end)]) != "{{/"+strings.TrimPrefix(end.key, "/")+"}}" {
+		return "", contractError("table loop marker rows must contain only their marker text")
+	}
+	return "rows", nil
 }
 
 func occurrenceRowLocation(value tokenOccurrence) rowLocation {
@@ -443,6 +764,10 @@ func (s *partScanner) scan(body []byte) error {
 				s.nextTable++
 				s.tableStack = append(s.tableStack, tableScanContext{id: s.nextTable, depth: len(s.tableStack) + 1})
 			}
+			if isWordprocessingMLName(value.Name, "p") {
+				s.nextParagraph++
+				s.paragraphs = append(s.paragraphs, s.nextParagraph)
+			}
 			if isWordprocessingMLName(value.Name, "tr") {
 				row := rowScanContext{}
 				if isWordprocessingMLName(parent, "tbl") && len(s.tableStack) != 0 {
@@ -468,6 +793,13 @@ func (s *partScanner) scan(body []byte) error {
 				element = s.stack[len(s.stack)-1]
 			}
 			if isWordprocessingMLName(element, "t") {
+				if len(s.paragraphs) != 0 {
+					paragraph := s.paragraphs[len(s.paragraphs)-1]
+					if s.paragraphText[paragraph] == nil {
+						s.paragraphText[paragraph] = &strings.Builder{}
+					}
+					s.paragraphText[paragraph].Write(value)
+				}
 				for _, row := range s.rowStack {
 					if row.table > 0 && row.row > 0 {
 						s.rowText[rowPosition{table: row.table, row: row.row}].Write(value)
@@ -478,6 +810,11 @@ func (s *partScanner) scan(body []byte) error {
 				return err
 			}
 		case xml.EndElement:
+			if isWordprocessingMLName(value.Name, "p") {
+				if len(s.paragraphs) != 0 {
+					s.paragraphs = s.paragraphs[:len(s.paragraphs)-1]
+				}
+			}
 			if isWordprocessingMLName(value.Name, "tr") {
 				if len(s.rowStack) != 0 {
 					s.rowStack = s.rowStack[:len(s.rowStack)-1]
@@ -515,9 +852,14 @@ func (s *partScanner) record(raw, kind string, element, attribute xml.Name) erro
 	if len(s.rowStack) != 0 {
 		row = s.rowStack[len(s.rowStack)-1]
 	}
+	paragraph := 0
+	if len(s.paragraphs) != 0 {
+		paragraph = s.paragraphs[len(s.paragraphs)-1]
+	}
 	s.occurrences = append(s.occurrences, tokenOccurrence{
 		key: inner, part: s.part, kind: kind, element: element, attribute: attribute,
 		table: row.table, row: row.row, tableDepth: row.tableDepth,
+		order: len(s.occurrences) + 1, paragraph: paragraph,
 		ancestry: append([]xml.Name(nil), s.stack...),
 	})
 	return nil

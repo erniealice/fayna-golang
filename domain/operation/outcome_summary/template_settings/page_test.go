@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -18,6 +19,10 @@ import (
 	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
+	phasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	subscriptiongroupdocumentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
+
+	subscriptiongroupdocument "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/subscription_group_document"
 )
 
 // makeZip builds an in-memory ZIP from name→content entries. Entry order is not
@@ -55,6 +60,53 @@ func minimalDocx(t *testing.T) []byte {
 func TestValidateDocxArchive_Valid(t *testing.T) {
 	if err := validateDocxArchive(minimalDocx(t)); err != nil {
 		t.Fatalf("expected a well-formed docx to pass, got: %v", err)
+	}
+}
+
+func TestPeriodOptions_ByAcademicYearAndFailClosed(t *testing.T) {
+	deps := &Deps{ListPhaseCodesByPriceSchedule: func(_ context.Context, req *phasepb.ListPhaseCodesByPriceScheduleRequest) (*phasepb.ListPhaseCodesByPriceScheduleResponse, error) {
+		if req.GetPriceScheduleId() != "ay-1" {
+			t.Fatalf("schedule = %q", req.GetPriceScheduleId())
+		}
+		return &phasepb.ListPhaseCodesByPriceScheduleResponse{Success: true, Options: []*phasepb.PhaseCodeOption{{Code: "s1", Names: []string{"Term 1"}}}}, nil
+	}}
+	opts, err := periodOptions(context.Background(), deps, "ay-1", "Full year")
+	if err != nil || len(opts) != 2 || opts[0].Value != "" || opts[0].Label != "Full year" || opts[1].Value != "s1" || opts[1].Label != "Term 1" {
+		t.Fatalf("options = %#v, err = %v", opts, err)
+	}
+	if !hasPeriodCode(opts, "s1") || hasPeriodCode(opts, "forged") {
+		t.Fatal("phase membership check failed")
+	}
+	if _, err := periodOptions(context.Background(), &Deps{}, "ay-1", "Full year"); err == nil {
+		t.Fatal("missing lookup should fail closed")
+	}
+}
+
+func TestUploadAction_RejectsPhaseOutsideAcademicYearBeforeArtifact(t *testing.T) {
+	rec := &uploadRecorder{}
+	deps := rec.deps()
+	deps.ListPhaseCodesByPriceSchedule = func(_ context.Context, _ *phasepb.ListPhaseCodesByPriceScheduleRequest) (*phasepb.ListPhaseCodesByPriceScheduleResponse, error) {
+		return &phasepb.ListPhaseCodesByPriceScheduleResponse{Success: true, Options: []*phasepb.PhaseCodeOption{{Code: "s1", Names: []string{"Term 1"}}}}, nil
+	}
+	res := NewUploadAction(deps).Handle(permsCtx(bindingPermissionEntity+":create"), uploadPostWithFields(t, minimalDocx(t), map[string]string{"price_schedule_id": "ay-1", "job_template_phase_code": "forged"}))
+	if res.StatusCode == http.StatusOK || len(rec.order) != 0 {
+		t.Fatalf("invalid phase reached artifact create: status=%d, calls=%v", res.StatusCode, rec.order)
+	}
+}
+
+func TestUploadAction_PeriodOptionsFragment(t *testing.T) {
+	deps := &Deps{ListPhaseCodesByPriceSchedule: func(_ context.Context, _ *phasepb.ListPhaseCodesByPriceScheduleRequest) (*phasepb.ListPhaseCodesByPriceScheduleResponse, error) {
+		return &phasepb.ListPhaseCodesByPriceScheduleResponse{Success: true, Options: []*phasepb.PhaseCodeOption{{Code: "s2", Names: []string{"Term 2"}}}}, nil
+	}}
+	deps.Labels.TemplateSettings.PeriodFullYear = "Full year"
+	request := httptest.NewRequest(http.MethodGet, "/templates/upload?period_options=1&price_schedule_id=ay-1", nil)
+	res := NewUploadAction(deps).Handle(permsCtx(bindingPermissionEntity+":create"), &view.ViewContext{Request: request})
+	if res.StatusCode != http.StatusOK || res.Template != "outcome-summary-template-period-options" {
+		t.Fatalf("fragment result: status=%d template=%q", res.StatusCode, res.Template)
+	}
+	form, ok := res.Data.(*UploadFormData)
+	if !ok || len(form.PeriodOptions) != 2 || form.PeriodOptions[1].Value != "s2" {
+		t.Fatalf("fragment options: %#v", res.Data)
 	}
 }
 
@@ -497,5 +549,131 @@ func TestDeleteAction_ReapsUnreferencedArtifact(t *testing.T) {
 	rec = &uploadRecorder{bindings: []*bindingpb.JobOutcomeSummaryDocumentTemplate{{Id: "b-1", DocumentTemplateId: "dt-1"}}}
 	if res := NewDeleteAction(rec.deps()).Handle(permsCtx("job_outcome_summary:update"), vc); res.StatusCode == http.StatusOK || rec.deletedBindingID != "" {
 		t.Errorf("parent-entity-only role must not delete (deleted %q)", rec.deletedBindingID)
+	}
+}
+
+// ── R2/C3 (DEC-1a): phase uploads reuse the subscription_group_document_template manifest validator ──
+
+// clientPhaseValidator wires the SAME exported validator the Section
+// Templates upload path (subscription_group_document_template_settings)
+// applies to RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1
+// bindings, mirroring how outcome_summary_module.go wires it in production.
+func clientPhaseValidator() func([]byte) error {
+	return func(content []byte) error {
+		return subscriptiongroupdocument.ValidateTemplate(
+			subscriptiongroupdocumentpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1,
+			content,
+		)
+	}
+}
+
+// jhsClientPhaseCandidate reads the SAME committed candidate DOCX the
+// subscription_group_document package's own manifest test validates
+// (TestJHSClientPhaseAuthoringTemplateMatchesManifest) — a real,
+// manifest-conforming client-phase report card — rather than hand-authoring a
+// second copy of the token contract in this package.
+func jhsClientPhaseCandidate(t *testing.T) []byte {
+	t.Helper()
+	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template.docx")
+	if err != nil {
+		t.Fatalf("read candidate docx: %v", err)
+	}
+	return docx
+}
+
+func phaseUploadFields(priceScheduleID, phaseCode string) map[string]string {
+	fields := map[string]string{}
+	if priceScheduleID != "" {
+		fields["price_schedule_id"] = priceScheduleID
+	}
+	if phaseCode != "" {
+		fields["job_template_phase_code"] = phaseCode
+	}
+	return fields
+}
+
+func withPhaseCodeOption(deps *Deps, phaseCode string) {
+	deps.ListPhaseCodesByPriceSchedule = func(_ context.Context, _ *phasepb.ListPhaseCodesByPriceScheduleRequest) (*phasepb.ListPhaseCodesByPriceScheduleResponse, error) {
+		return &phasepb.ListPhaseCodesByPriceScheduleResponse{Success: true, Options: []*phasepb.PhaseCodeOption{{Code: phaseCode, Names: []string{"Term 1"}}}}, nil
+	}
+}
+
+// TestUploadAction_PhaseUpload_ValidCandidatePasses: a phase-scoped upload
+// (job_template_phase_code non-empty) whose DOCX satisfies the client-phase
+// manifest contract succeeds.
+func TestUploadAction_PhaseUpload_ValidCandidatePasses(t *testing.T) {
+	rec := &uploadRecorder{}
+	deps := rec.deps()
+	deps.ValidatePhaseTemplate = clientPhaseValidator()
+	withPhaseCodeOption(deps, "term1")
+
+	res := NewUploadAction(deps).Handle(
+		permsCtx(bindingPermissionEntity+":create"),
+		uploadPostWithFields(t, jhsClientPhaseCandidate(t), phaseUploadFields("ay-1", "term1")),
+	)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("valid phase-scoped candidate must pass, got status %d", res.StatusCode)
+	}
+	if rec.createdDocID == "" || rec.uploadedKey == "" {
+		t.Errorf("valid phase upload must reach artifact create + storage write (doc %q, key %q)", rec.createdDocID, rec.uploadedKey)
+	}
+}
+
+// TestUploadAction_PhaseUpload_NonConformingDocxRejected: a phase-scoped
+// upload whose DOCX passes the generic OOXML archive check but has NONE of
+// the client-phase manifest's required tokens is rejected before any create.
+func TestUploadAction_PhaseUpload_NonConformingDocxRejected(t *testing.T) {
+	rec := &uploadRecorder{}
+	deps := rec.deps()
+	deps.ValidatePhaseTemplate = clientPhaseValidator()
+	withPhaseCodeOption(deps, "term1")
+
+	res := NewUploadAction(deps).Handle(
+		permsCtx(bindingPermissionEntity+":create"),
+		uploadPostWithFields(t, minimalDocx(t), phaseUploadFields("ay-1", "term1")),
+	)
+	if res.StatusCode == http.StatusOK {
+		t.Fatal("a phase-scoped upload missing the manifest's required tokens must be rejected")
+	}
+	if len(rec.order) != 0 {
+		t.Errorf("a rejected phase manifest must never reach artifact create, calls = %v", rec.order)
+	}
+}
+
+// TestUploadAction_WholeYearUpload_SameNonConformingDocxStillPasses: the SAME
+// non-conforming bytes that fail the phase check above pass unchanged for a
+// whole-year upload (empty phase code) — the Year Final contract is
+// validateDocxArchive only, exactly as before this change.
+func TestUploadAction_WholeYearUpload_SameNonConformingDocxStillPasses(t *testing.T) {
+	rec := &uploadRecorder{}
+	deps := rec.deps()
+	deps.ValidatePhaseTemplate = clientPhaseValidator()
+
+	res := NewUploadAction(deps).Handle(
+		permsCtx(bindingPermissionEntity+":create"),
+		uploadPostWithFields(t, minimalDocx(t), phaseUploadFields("ay-1", "")),
+	)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("a whole-year upload must keep today's behavior (validateDocxArchive only), got status %d", res.StatusCode)
+	}
+}
+
+// TestUploadAction_PhaseUpload_NilValidatorFailsClosed: a phase-scoped upload
+// with no ValidatePhaseTemplate closure configured is rejected rather than
+// silently skipping the manifest check.
+func TestUploadAction_PhaseUpload_NilValidatorFailsClosed(t *testing.T) {
+	rec := &uploadRecorder{}
+	deps := rec.deps() // ValidatePhaseTemplate left nil
+	withPhaseCodeOption(deps, "term1")
+
+	res := NewUploadAction(deps).Handle(
+		permsCtx(bindingPermissionEntity+":create"),
+		uploadPostWithFields(t, jhsClientPhaseCandidate(t), phaseUploadFields("ay-1", "term1")),
+	)
+	if res.StatusCode == http.StatusOK {
+		t.Fatal("a phase-scoped upload with no configured validator must fail closed")
+	}
+	if len(rec.order) != 0 {
+		t.Errorf("a fail-closed nil-validator rejection must never reach artifact create, calls = %v", rec.order)
 	}
 }

@@ -79,18 +79,24 @@ type Deps struct {
 	// separate fetches). Both zero (service-admin / unset) → today's flat card,
 	// byte-identical (module contract). The lift and the band-title read together
 	// issue EXACTLY ONE job_category read (statement count unchanged).
-	BandByCategory       bool
-	IncludeAllCategories bool
+	BandByCategory        bool
+	IncludeAllCategories  bool
+	AlwaysGroupByCategory bool
+	// ClientDocumentMounted mirrors the module's actual raw-handler route mount.
+	// A configured route value alone is insufficient when rendering is unwired.
+	ClientDocumentMounted bool
 
-	ListSubscriptionGroups            func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
-	ListSubscriptionGroupMembers      func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
-	ListJobs                          func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
-	ListJobTemplates                  func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
-	ListClients                       func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
-	ListJobOutcomeSummarys            func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
-	ListPhaseOutcomeSummarysByJob     func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
-	ListJobPhases                     func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
-	GetSubscriptionGroupOutcomeExport func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	ListSubscriptionGroups               func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
+	ListSubscriptionGroupMembers         func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+	ListJobs                             func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	ListJobTemplates                     func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+	ListClients                          func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+	ListJobOutcomeSummarys               func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
+	ListPhaseOutcomeSummarysByJob        func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
+	ListJobPhases                        func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	GetSubscriptionGroupOutcomeExport    func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	GetSubscriptionGroupClientReportCard func(ctx context.Context, req *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
+	ClientAttributeCodes                 []string
 
 	// Non-enrolled-placeholder evidence walk (job_phase → job_task →
 	// task_outcome). ListJobPhases (above) is reused. Optional/nil-safe: when
@@ -140,8 +146,20 @@ func NewView(deps *Deps) view.View {
 		}
 
 		name := clientName(ctx, deps, clientID)
-		table := buildTable(ctx, deps, subID, historical)
-		return okPage(viewCtx, deps, group, clientID, name, table)
+		// Category grouping and all-category inclusion come from trusted app
+		// composition, including the presentation mode.
+		viewDeps := *deps
+		viewDeps.BandByCategory = deps.Options.ClientCard.BandByCategory()
+		viewDeps.IncludeAllCategories = deps.Options.ClientCard.IncludeAllCategories
+		viewDeps.AlwaysGroupByCategory = viewDeps.BandByCategory
+		if viewDeps.IncludeAllCategories {
+			viewDeps.CategoryFilter = ""
+		}
+		table := buildTable(ctx, &viewDeps, subID, historical)
+		if table != nil {
+			configureClientToolbar(ctx, table, deps, groupID, clientID)
+		}
+		return okPage(ctx, viewCtx, deps, group, clientID, name, table)
 	})
 }
 
@@ -338,7 +356,7 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 		ID:              "report-cards-client",
 		ColumnGroups:    buildColumnGroups(l),
 		NameColumnLabel: l.Client.SubjectColumn,
-		ShowSearch:      true,
+		ShowSearch:      false,
 		ShowColumns:     true,
 		ShowDensity:     true,
 		ShowExport:      true,
@@ -356,7 +374,13 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 	// above, so the degrade path (<2 categories) and the unbanded path stay
 	// byte-equal to today. No BulkActions is set, so the band-header bulk-select
 	// controls render inert (CSS-hidden — table.css:3427/3456).
-	if groups := bandSubjectRows(l, rows, jobTemplate, tmplCategory, bandCats); groups != nil {
+	var groups []types.TableRowGroup
+	if deps.AlwaysGroupByCategory {
+		groups = bandSubjectRowsIncludingSingle(l, rows, jobTemplate, tmplCategory, bandCats)
+	} else {
+		groups = bandSubjectRows(l, rows, jobTemplate, tmplCategory, bandCats)
+	}
+	if groups != nil {
 		cfg.Groups = groups
 	} else {
 		cfg.Rows = rows
@@ -548,6 +572,14 @@ func bandOrderOf(c *jobcategorypb.JobCategory) (int32, bool) {
 // within a band is preserved (subject-name ASC, as built by the caller); band
 // order = the pre-sorted `cats` contract, Uncategorized last.
 func bandSubjectRows(l outcome_summary.Labels, rows []types.TableRow, jobTemplate, tmplCategory map[string]string, cats []*jobcategorypb.JobCategory) []types.TableRowGroup {
+	return buildBandSubjectRows(l, rows, jobTemplate, tmplCategory, cats, false)
+}
+
+func bandSubjectRowsIncludingSingle(l outcome_summary.Labels, rows []types.TableRow, jobTemplate, tmplCategory map[string]string, cats []*jobcategorypb.JobCategory) []types.TableRowGroup {
+	return buildBandSubjectRows(l, rows, jobTemplate, tmplCategory, cats, true)
+}
+
+func buildBandSubjectRows(l outcome_summary.Labels, rows []types.TableRow, jobTemplate, tmplCategory map[string]string, cats []*jobcategorypb.JobCategory, includeSingle bool) []types.TableRowGroup {
 	if len(cats) == 0 || len(rows) == 0 {
 		return nil
 	}
@@ -589,8 +621,8 @@ func bandSubjectRows(l outcome_summary.Labels, rows []types.TableRow, jobTemplat
 			DataAttrs: map[string]string{"testid": "rc-band-uncategorized"},
 		})
 	}
-	if len(groups) < 2 {
-		return nil // degrade: <2 distinct bands → flat rows
+	if len(groups) == 0 || (len(groups) < 2 && !includeSingle) {
+		return nil // preserve the configured legacy degrade path; explicit UI selection can show one band
 	}
 	return groups
 }
@@ -743,34 +775,24 @@ func clientName(ctx context.Context, deps *Deps, clientID string) string {
 // okPage assembles the PageData. Header: breadcrumb = the group name (links
 // back to the group grid), title = the client name, caption = the client
 // subtitle label. Mirrors the group view's okPage header shape.
-func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, clientID, name string, table *types.TableConfig) view.ViewResult {
+func okPage(ctx context.Context, viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, clientID, name string, table *types.TableConfig) view.ViewResult {
 	l := deps.Labels
-	// PDF download affordance — only when there are computed grades (a blank card
-	// would 404 at the endpoint). ClientDocumentURL resolved for this group +
-	// client, "?format=pdf" (string-concat query, the SubscriptionGroupExportURL idiom). The
-	// template renders it as a plain download anchor (Content-Disposition handles
-	// the save — no fetch/blob JS).
-	var downloadURL string
-	if table != nil && deps.Routes.ClientDocumentURL != "" {
-		downloadURL = route.ResolveURL(deps.Routes.ClientDocumentURL, "id", group.GetId(), "client_id", clientID) + "?format=pdf"
-	}
 	downloadLabel := l.Client.DownloadAction
 	if strings.TrimSpace(downloadLabel) == "" {
 		downloadLabel = "Download PDF"
 	}
-	// Download-PDF lives in the table's toolbar primary-action slot (Q-R9-9),
-	// reclaiming the standalone band's row + margin. Download=true makes the
-	// toolbar anchor emit download + hx-boost="false" so the body-boosted app
-	// does not intercept the file download as an HTMX navigation (mirrors the old
-	// band's attributes). Only attached when a URL exists (no URL → no primary
-	// action), preserving the former {{if .DocumentDownloadURL}} gate; a blank
-	// card (table == nil ⇒ downloadURL == "") shows no action.
-	if downloadURL != "" {
+	// Prefer the typed period/format export when its profile and routes are
+	// configured. It preserves activities/tasks while leaving unpublished
+	// outcome values blank.
+	if table != nil && deps.ClientDocumentMounted && deps.Options.SubscriptionGroupExportEnabled() && deps.Routes.ClientDocumentURL != "" && deps.Routes.ClientDownloadDrawerURL != "" && outcome_summary.CanExplicitExport(view.GetUserPermissions(ctx), ctx, deps.ResolvePrincipalKind) {
+		drawerURL := route.ResolveURL(deps.Routes.ClientDownloadDrawerURL, "id", group.GetId(), "client_id", clientID)
 		table.PrimaryAction = &types.PrimaryAction{
-			Label:    downloadLabel,
-			Href:     downloadURL,
-			Download: true,
-			TestID:   "rc-download-pdf",
+			Label: downloadLabel, ActionURL: drawerURL, SheetTitle: downloadLabel, TestID: "rc-download-pdf",
+		}
+	} else if table != nil && deps.ClientDocumentMounted && deps.Routes.ClientDocumentURL != "" && outcome_summary.CanLegacyDetail(view.GetUserPermissions(ctx)) {
+		downloadURL := route.ResolveURL(deps.Routes.ClientDocumentURL, "id", group.GetId(), "client_id", clientID) + "?format=pdf"
+		table.PrimaryAction = &types.PrimaryAction{
+			Label: downloadLabel, Href: downloadURL, Download: true, TestID: "rc-download-pdf",
 		}
 	}
 	pd := &PageData{

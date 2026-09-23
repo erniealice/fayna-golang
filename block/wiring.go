@@ -287,6 +287,13 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	om := &u.Operation.OutcomeMatrix
 	deps.GetOutcomeMatrix = om.GetOutcomeMatrix
 	deps.GetOutcomeSummaryRoster = om.GetOutcomeSummaryRoster
+	// R3 / DEC-3: prefer the render-scoped resolver (subscription_group_outcome_
+	// export:read) over the old JOSDT list-gated one; fall back only when it is
+	// unwired (nil), so a STAFF principal keeps a working header/download.
+	deps.FindApplicableReportCardBinding = u.Operation.JobOutcomeSummaryDocumentTemplate.FindApplicableJobOutcomeSummaryDocumentTemplate
+	if resolver := u.Operation.SubscriptionGroupOutcomeExport.ResolvePublishedReportCardTemplate; resolver != nil {
+		deps.FindApplicableReportCardBinding = resolver
+	}
 	deps.ResolveStaff = om.ResolveStaff
 
 	// (template, group) pair guard for the Group* routes — the SAME delivery
@@ -367,6 +374,13 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	jos := &u.Operation.JobOutcomeSummary
 	deps.GetJobOutcomeSummaryByJob = jos.GetByJob
 	deps.ListJobOutcomeSummarys = jos.ListJobOutcomeSummaries
+	// R3 / DEC-3: prefer the render-scoped resolver (subscription_group_outcome_
+	// export:read) over the old JOSDT list-gated one; fall back only when it is
+	// unwired (nil), so a STAFF principal keeps a working header/download.
+	deps.FindApplicableReportCardBinding = u.Operation.JobOutcomeSummaryDocumentTemplate.FindApplicableJobOutcomeSummaryDocumentTemplate
+	if resolver := u.Operation.SubscriptionGroupOutcomeExport.ResolvePublishedReportCardTemplate; resolver != nil {
+		deps.FindApplicableReportCardBinding = resolver
+	}
 
 	pos := &u.Operation.PhaseOutcomeSummary
 	deps.GetPhaseOutcomeSummaryByJobPhase = pos.GetByJobPhase
@@ -377,8 +391,15 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	// new espyna surface. Nil-safe end to end (a nil closure degrades the
 	// affected surface to empty/flat, never panics).
 	deps.ListPriceSchedules = u.Subscription.PriceSchedule.ListPriceSchedules
+	deps.ListPhaseCodesByPriceSchedule = u.Operation.JobTemplatePhase.ListPhaseCodesByPriceSchedule
 	deps.ListPlans = u.Subscription.Plan.ListPlans
 	deps.ListSubscriptionGroups = u.Subscription.SubscriptionGroup.ListSubscriptionGroups
+	// Class-edge derivation deps (D5 derive-on-read, fetchClassEdgeTeachers):
+	// the class edge list + the product_plan → product_id resolver + the
+	// product_plan_staff eligibility gate. All optional/nil-safe.
+	deps.ListSubscriptionGroupProductPlanStaffs = u.Subscription.SubscriptionGroupProductPlanStaff.ListSubscriptionGroupProductPlanStaffs
+	deps.ListProductPlans = u.Product.ProductPlan.ListProductPlans
+	deps.ListProductPlanStaffs = u.Product.ProductPlanStaff.ListProductPlanStaffs
 	// H2 category filter: resolve Options.CategoryFilter (a job_category code,
 	// e.g. "academic") to its id once per request so the three grade surfaces
 	// drop same-origin deportment jobs. Reuses the same closure the "/classes"
@@ -405,6 +426,7 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListAttributes = u.Entity.ClientAttribute.ListAttributes
 	deps.ResolveAttributeIDByCode = u.Entity.ClientAttribute.ResolveAttributeIDByCode
 	deps.GetSubscriptionGroupOutcomeExport = u.Operation.SubscriptionGroupOutcomeExport.GetSubscriptionGroupOutcomeExport
+	deps.GetSubscriptionGroupClientReportCard = u.Operation.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientReportCard
 	deps.ListSubscriptionGroupOutcomeLanding = u.Operation.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding
 	deps.ListJobTemplateSummaries = u.Operation.JobTemplateSummary.ListJobTemplateSummaries
 	// Landing dynamic category columns (R9 W-A2): the SAME single-statement

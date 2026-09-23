@@ -1,0 +1,85 @@
+{
+  "profile": {
+    "key": "subscription_group_client_phase_outcome_report_v1",
+    "binding_job_category_scope": "null_required",
+    "job_template_slots": 0,
+    "period_cardinality": 0,
+    "row_loop": "jobs",
+    "subject_order": "job_category_sort_order_then_template_name_then_job_id",
+    "subject_order_owner": "go_post_query_normalization",
+    "column_mismatch": "not_applicable_dynamic_jobs",
+    "profile_mismatch": "fail_loud_503",
+    "missing_outcome_display": "blank"
+  },
+  "scalars": [
+    "school_name",
+    "academic_year",
+    "student_name",
+    "grade_level",
+    "section_name",
+    "client_reference",
+    "adviser",
+    "printed_by",
+    "printed_at",
+    "phase_name"
+  ],
+  "loops": {
+    "jobs": {
+      "scalars": [
+        "job_name",
+        "job_category_name",
+        "teacher_name",
+        "phase_grade",
+        "phase_comment",
+        "phase_total",
+        "phase_maximum",
+        "progress_to_date_total",
+        "progress_to_date_maximum"
+      ],
+      "loops": {
+        "assessments": {
+          "scalars": [
+            "assessment_name",
+            "achievement_level",
+            "comment"
+          ],
+          "loops": {
+            "rating_descriptions": {
+              "scalars": [
+                "rating_label",
+                "minimum",
+                "maximum",
+                "output_value",
+                "description"
+              ],
+              "loops": {}
+            }
+          }
+        }
+      }
+    },
+    "outcome_sections": {
+      "scalars": [
+        "section_code"
+      ],
+      "loops": {
+        "rows": {
+          "scalars": [
+            "row_name",
+            "total"
+          ],
+          "loops": {
+            "cells": {
+              "scalars": [
+                "period_name",
+                "task_name",
+                "value"
+              ],
+              "loops": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

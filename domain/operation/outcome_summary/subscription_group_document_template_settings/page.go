@@ -45,6 +45,7 @@ const (
 	dateLayout                     = "2006-01-02"
 	templateBindingPageLimit       = 100
 	templateBindingMaxPages        = 100
+	wholeReportCategoryValue       = "__whole_report__"
 )
 
 type Deps struct {
@@ -148,10 +149,10 @@ func NewUploadAction(deps *Deps) view.View {
 			return view.OK("subscription-group-document-template-upload-drawer-form", &UploadFormData{
 				FormAction: deps.Routes.SubscriptionGroupDocumentTemplateUploadURL, Labels: l,
 				CommonLabels:    deps.CommonLabels,
-				ProfileLabel:    profileLabel(bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1, l),
+				ProfileLabel:    templateProfileSummary(wholeReportProfile(deps.Options.SubscriptionGroupExport), l),
 				ScheduleOptions: scheduleOptions(ctx, deps, l.ScheduleFallback),
 				PlanOptions:     planOptions(ctx, deps, l.PlanFallback),
-				CategoryOptions: categoryOptions(categories, l.CategoryFallback),
+				CategoryOptions: categoryOptions(categories, l.CategoryLabel, l.CategoryWholeReport, wholeReportProfile(deps.Options.SubscriptionGroupExport)),
 				AcceptTypes:     docxExt,
 			})
 		}
@@ -233,8 +234,11 @@ func NewUploadAction(deps *Deps) view.View {
 		}
 		binding := &bindingpb.SubscriptionGroupDocumentTemplate{
 			Id: bindingID, DocumentTemplateId: documentID, RenderProfile: profile,
-			JobCategoryId: &category.Id, ValidityStart: validityStart,
-			ValidityEnd: validityEnd, Active: true,
+			ValidityStart: validityStart,
+			ValidityEnd:   validityEnd, Active: true,
+		}
+		if category != nil {
+			binding.JobCategoryId = &category.Id
 		}
 		if priceScheduleID != "" {
 			binding.PriceScheduleId = &priceScheduleID
@@ -457,19 +461,38 @@ func mappedCategories(ctx context.Context, deps *Deps) ([]*jobcategorypb.JobCate
 
 func selectedCategory(categories []*jobcategorypb.JobCategory, id string, options outcome_summary.SubscriptionGroupExportOptions) (*jobcategorypb.JobCategory, bindingpb.RenderProfile, bool) {
 	id = strings.TrimSpace(id)
+	if id == wholeReportCategoryValue {
+		profile := wholeReportProfile(options)
+		return nil, profile, profile != bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED
+	}
+	if id == "" {
+		return nil, bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED, false
+	}
 	for _, category := range categories {
 		if category.GetId() != id {
 			continue
 		}
 		profile, ok := options.ProfileForCategoryCode(category.GetCode())
-		_, registered := subscriptiongroupdocument.LookupProfile(profile)
-		return category, profile, ok && registered
+		contract, registered := subscriptiongroupdocument.LookupProfile(profile)
+		return category, profile, ok && registered && contract.CategoryBindingScope == subscriptiongroupdocument.CategoryBindingScopeExactCategory
 	}
 	return nil, bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED, false
 }
 
-func categoryOptions(categories []*jobcategorypb.JobCategory, fallback string) []types.SelectOption {
+func wholeReportProfile(options outcome_summary.SubscriptionGroupExportOptions) bindingpb.RenderProfile {
+	profile := options.WholeReportProfile
+	contract, registered := subscriptiongroupdocument.LookupProfile(profile)
+	if !registered || contract.CategoryBindingScope != subscriptiongroupdocument.CategoryBindingScopeAllCategories {
+		return bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED
+	}
+	return profile
+}
+
+func categoryOptions(categories []*jobcategorypb.JobCategory, fallback, wholeReportLabel string, wholeReport bindingpb.RenderProfile) []types.SelectOption {
 	options := []types.SelectOption{{Value: "", Label: fallback}}
+	if wholeReport != bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED {
+		options = append(options, types.SelectOption{Value: wholeReportCategoryValue, Label: wholeReportLabel})
+	}
 	for _, category := range categories {
 		options = append(options, types.SelectOption{Value: category.GetId(), Label: category.GetName()})
 	}
@@ -590,7 +613,17 @@ func profileLabel(profile bindingpb.RenderProfile, l outcome_summary.Subscriptio
 	if profile == bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1 {
 		return l.ProfileSubscriptionGroupOutcomeMatrixSinglePeriod11V1
 	}
+	if profile == bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1 {
+		return l.ProfileSubscriptionGroupClientPhaseOutcomeReportV1
+	}
 	return "—"
+}
+
+func templateProfileSummary(wholeReport bindingpb.RenderProfile, l outcome_summary.SubscriptionGroupDocumentTemplateSettingsLabels) string {
+	if wholeReport != bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED {
+		return l.ProfileSubscriptionGroupOutcomeMatrixSinglePeriod11V1 + " / " + profileLabel(wholeReport, l)
+	}
+	return profileLabel(bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1, l)
 }
 
 func nestedScheduleName(binding *bindingpb.SubscriptionGroupDocumentTemplate, fallback string) string {

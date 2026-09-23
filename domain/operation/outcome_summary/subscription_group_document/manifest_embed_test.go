@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 )
 
 var testProfile = bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
+var testClientPhaseProfile = bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1
 
 type testZipPart struct {
 	name, body string
@@ -91,6 +94,146 @@ func TestGeneratedAuthoringTemplateMatchesManifest(t *testing.T) {
 	}
 	if err := ValidateTemplate(testProfile, docx); err != nil {
 		t.Fatalf("generated operator authoring asset: %v", err)
+	}
+}
+
+func TestJHSClientPhaseAuthoringTemplateMatchesManifest(t *testing.T) {
+	docx, err := os.ReadFile("../../../../../../tmp/JHS Progress Report - MMIS Template.docx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateTemplate(testClientPhaseProfile, docx); err != nil {
+		t.Fatalf("JHS client phase authoring asset: %v", err)
+	}
+	archive, err := zip.NewReader(bytes.NewReader(docx), int64(len(docx)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var xml []byte
+	for _, part := range archive.File {
+		if part.Name == "word/document.xml" {
+			reader, openErr := part.Open()
+			if openErr != nil {
+				t.Fatal(openErr)
+			}
+			xml, err = io.ReadAll(reader)
+			reader.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	if len(xml) == 0 {
+		t.Fatal("missing word/document.xml")
+	}
+	matcher := regexp.MustCompile(`\{\{(outcome_(?:cells|totals)\.[^{}]+)\}\}`)
+	counts := map[string]int{}
+	for _, match := range matcher.FindAllSubmatch(xml, -1) {
+		counts[string(match[1])]++
+	}
+	const templateCode = "EDU-AY2627-HOMEROOM-ATTENDANCE-G10"
+	for _, criterion := range []string{"school_days", "days_present", "times_tardy"} {
+		for month := 7; month <= 17; month++ {
+			phase, taskMonth := "s1", month
+			if month > 12 {
+				phase, taskMonth = "s2", month-12
+			}
+			key := fmt.Sprintf("outcome_cells.homeroom_attendance.%s.%s.%s.m%02d.numeric_value", templateCode, criterion, phase, taskMonth)
+			if counts[key] != 1 {
+				t.Errorf("fixed cell %q occurs %d times, want one", key, counts[key])
+			}
+			delete(counts, key)
+		}
+		key := fmt.Sprintf("outcome_totals.homeroom_attendance.%s.%s.numeric_value", templateCode, criterion)
+		if counts[key] != 1 {
+			t.Errorf("fixed total %q occurs %d times, want one", key, counts[key])
+		}
+		delete(counts, key)
+	}
+	for key, count := range counts {
+		t.Errorf("unexpected fixed token %q occurs %d times", key, count)
+	}
+}
+
+// TestJHSClientPhaseAuthoringTemplateV2MatchesManifest validates the v2
+// candidate (T-TPL2), which is the original school DOCX layout with its
+// variable values replaced by manifest tokens in place, rather than a
+// rebuilt layout. It must pass the same strict profile validator and carry
+// the same 36 fixed homeroom-attendance cell/total paths as the tracked v1
+// candidate.
+func TestJHSClientPhaseAuthoringTemplateV2MatchesManifest(t *testing.T) {
+	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v2.docx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateTemplate(testClientPhaseProfile, docx); err != nil {
+		t.Fatalf("JHS client phase v2 authoring asset: %v", err)
+	}
+	archive, err := zip.NewReader(bytes.NewReader(docx), int64(len(docx)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var xml []byte
+	for _, part := range archive.File {
+		if part.Name == "word/document.xml" {
+			reader, openErr := part.Open()
+			if openErr != nil {
+				t.Fatal(openErr)
+			}
+			xml, err = io.ReadAll(reader)
+			reader.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	if len(xml) == 0 {
+		t.Fatal("missing word/document.xml")
+	}
+	matcher := regexp.MustCompile(`\{\{(outcome_(?:cells|totals)\.[^{}]+)\}\}`)
+	counts := map[string]int{}
+	for _, match := range matcher.FindAllSubmatch(xml, -1) {
+		counts[string(match[1])]++
+	}
+	const templateCode = "EDU-AY2627-HOMEROOM-ATTENDANCE-G10"
+	for _, criterion := range []string{"school_days", "days_present", "times_tardy"} {
+		for month := 7; month <= 17; month++ {
+			phase, taskMonth := "s1", month
+			if month > 12 {
+				phase, taskMonth = "s2", month-12
+			}
+			key := fmt.Sprintf("outcome_cells.homeroom_attendance.%s.%s.%s.m%02d.numeric_value", templateCode, criterion, phase, taskMonth)
+			if counts[key] != 1 {
+				t.Errorf("fixed cell %q occurs %d times, want one", key, counts[key])
+			}
+			delete(counts, key)
+		}
+		key := fmt.Sprintf("outcome_totals.homeroom_attendance.%s.%s.numeric_value", templateCode, criterion)
+		if counts[key] != 1 {
+			t.Errorf("fixed total %q occurs %d times, want one", key, counts[key])
+		}
+		delete(counts, key)
+	}
+	for key, count := range counts {
+		t.Errorf("unexpected fixed token %q occurs %d times", key, count)
+	}
+}
+
+func TestClientPhaseFixedScalarPathIsGeneric(t *testing.T) {
+	for _, key := range []string{
+		"outcome_cells.other_category.other-template.metric.s1.m07.numeric_value",
+		"outcome_totals.other_category.other-template.metric.numeric_value",
+	} {
+		if !isClientPhaseFixedScalar(key) {
+			t.Errorf("valid generic path rejected: %s", key)
+		}
+	}
+	for _, key := range []string{"outcome_cells.x.y.z.s1.numeric_value", "outcome_totals.x.y.z.unknown", "outcome_cells.x..z.s1.m07.numeric_value"} {
+		if isClientPhaseFixedScalar(key) {
+			t.Errorf("invalid generic path accepted: %s", key)
+		}
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 func TestRenderProfile_ManifestKeyMapping(t *testing.T) {
 	want := bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
 	profile, ok := LookupProfile(want)
-	if !ok || profile.Enum != want || profile.Key != SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key || profile.JobTemplateSlots != 11 || !profile.RequiresExactCategory {
+	if !ok || profile.Enum != want || profile.Key != SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key || profile.JobTemplateSlots != 11 || profile.CategoryBindingScope != CategoryBindingScopeExactCategory || !profile.AcceptsCategoryBinding("category-1") || profile.AcceptsCategoryBinding("") {
 		t.Fatalf("profile = %+v, %v", profile, ok)
 	}
 	byKey, ok := LookupProfileKey(profile.Key)
@@ -26,5 +26,15 @@ func TestRenderProfile_ManifestKeyMapping(t *testing.T) {
 	}
 	if _, ok := LookupProfileKey("academic"); ok {
 		t.Fatal("vertical category vocabulary must not resolve as a render profile")
+	}
+}
+
+func TestProfileCategoryBindingScopes(t *testing.T) {
+	phase, ok := LookupProfile(bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1)
+	if !ok || phase.CategoryBindingScope != CategoryBindingScopeAllCategories || !phase.AcceptsCategoryBinding("") || phase.AcceptsCategoryBinding("category-1") {
+		t.Fatalf("phase profile has unexpected category-binding contract: %+v, registered=%v", phase, ok)
+	}
+	if (Profile{}).AcceptsCategoryBinding("") || (Profile{}).AcceptsCategoryBinding("category-1") {
+		t.Fatal("unspecified category-binding scope must fail closed")
 	}
 }

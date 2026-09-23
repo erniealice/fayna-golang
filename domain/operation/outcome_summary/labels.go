@@ -19,6 +19,7 @@ type Labels struct {
 	// SubscriptionGroupExport holds the consolidated subscription-group drawer/export
 	// vocabulary. Canonical tags stay generic; vertical wording is a Lyngua value.
 	SubscriptionGroupExport SubscriptionGroupExportLabels `json:"subscription_group_export"`
+	ClientDocumentDownload  ClientDocumentDownloadLabels  `json:"client_document_download"`
 	// TemplateSettings holds the TB3 report-card template management surface
 	// strings. Same snake_case-json-tag rule as LandingLabels — a missing tag
 	// silently falls back to the compiled default.
@@ -39,6 +40,9 @@ type SubscriptionGroupExportLabels struct {
 	FormatCSV                 string `json:"format_csv"`
 	FormatPDF                 string `json:"format_pdf"`
 	DownloadAction            string `json:"download_action"`
+	DownloadingAction         string `json:"downloading_action"`
+	DownloadNotice            string `json:"download_notice"`
+	DownloadErrorFallback     string `json:"download_error_fallback"`
 	NoTemplateError           string `json:"no_template_error"`
 	NoProfileError            string `json:"no_profile_error"`
 	IncompatibleTemplateError string `json:"incompatible_template_error"`
@@ -60,6 +64,7 @@ type SubscriptionGroupDocumentTemplateSettingsLabels struct {
 	CategoryColumn                                        string `json:"category_column"`
 	ProfileColumn                                         string `json:"profile_column"`
 	ProfileSubscriptionGroupOutcomeMatrixSinglePeriod11V1 string `json:"profile_subscription_group_outcome_matrix_single_period_11_v1"`
+	ProfileSubscriptionGroupClientPhaseOutcomeReportV1    string `json:"profile_subscription_group_client_phase_outcome_report_v1"`
 	VersionColumn                                         string `json:"version_column"`
 	StatusColumn                                          string `json:"status_column"`
 	ValidityColumn                                        string `json:"validity_column"`
@@ -76,7 +81,9 @@ type SubscriptionGroupDocumentTemplateSettingsLabels struct {
 	PlanFallback                                          string `json:"plan_fallback"`
 	CategoryLabel                                         string `json:"category_label"`
 	CategoryFallback                                      string `json:"category_fallback"`
+	CategoryWholeReport                                   string `json:"category_whole_report"`
 	CategoryRequiredForProfile                            string `json:"category_required_for_profile"`
+	CategoryForbiddenForProfile                           string `json:"category_forbidden_for_profile"`
 	ValidityStartLabel                                    string `json:"validity_start_label"`
 	ValidityEndLabel                                      string `json:"validity_end_label"`
 	FileLabel                                             string `json:"file_label"`
@@ -99,6 +106,8 @@ type SubscriptionGroupDocumentTemplateSettingsLabels struct {
 type TemplateSettingsLabels struct {
 	Title          string `json:"title"`
 	Subtitle       string `json:"subtitle"`
+	PeriodLabel    string `json:"period_label"`
+	PeriodFullYear string `json:"period_full_year"`
 	NameColumn     string `json:"name_column"`
 	ScheduleColumn string `json:"schedule_column"`
 	VersionColumn  string `json:"version_column"`
@@ -161,6 +170,24 @@ type PeriodLabels struct {
 	// duplicated. Generic identifier; the wording lives in the lyngua value. On
 	// education1 (zero NULL-category jobs) this band is a defensive path.
 	UncategorizedBand string `json:"uncategorized_band"`
+	GroupBy           string `json:"group_by"`
+	GroupNone         string `json:"group_none"`
+	GroupJobCategory  string `json:"group_job_category"`
+}
+
+// ClientDocumentDownloadLabels holds the single-client Period/Format drawer
+// vocabulary. The drawer submits to the existing client document route.
+type ClientDocumentDownloadLabels struct {
+	DrawerTitle           string `json:"drawer_title"`
+	PeriodLabel           string `json:"period_label"`
+	PeriodYearFinal       string `json:"period_year_final"`
+	FormatLabel           string `json:"format_label"`
+	FormatDocx            string `json:"format_docx"`
+	FormatPdf             string `json:"format_pdf"`
+	DownloadAction        string `json:"download_action"`
+	DownloadingAction     string `json:"downloading_action"`
+	DownloadNotice        string `json:"download_notice"`
+	DownloadErrorFallback string `json:"download_error_fallback"`
 }
 
 // LandingLabels holds the view-1 (report-cards landing) strings. Every field
@@ -372,6 +399,9 @@ func DefaultLabels() Labels {
 			FormatCSV:                 "CSV",
 			FormatPDF:                 "PDF",
 			DownloadAction:            "Download",
+			DownloadingAction:         "Downloading…",
+			DownloadNotice:            "Preparing your file. Please do not close this window or refresh the page until the download completes.",
+			DownloadErrorFallback:     "The download could not be completed. Please try again.",
 			NoTemplateError:           "No group template is configured for this selection.",
 			NoProfileError:            "PDF is not configured for this category. CSV is still available.",
 			IncompatibleTemplateError: "The group template does not match this outcome layout.",
@@ -394,10 +424,27 @@ func DefaultLabels() Labels {
 			StaffLabel:        "Staff:",
 			StaffPluralLabel:  "Staff:",
 			UncategorizedBand: "Uncategorized",
+			GroupBy:           "Group by",
+			GroupNone:         "No grouping",
+			GroupJobCategory:  "Job category",
+		},
+		ClientDocumentDownload: ClientDocumentDownloadLabels{
+			DrawerTitle:           "Download Report Card",
+			PeriodLabel:           "Period",
+			PeriodYearFinal:       "Year Final",
+			FormatLabel:           "Format",
+			FormatDocx:            "DOCX",
+			FormatPdf:             "PDF",
+			DownloadAction:        "Download",
+			DownloadingAction:     "Downloading…",
+			DownloadNotice:        "Preparing your file. Please do not close this window or refresh the page until the download completes.",
+			DownloadErrorFallback: "The download could not be completed. Please try again.",
 		},
 		TemplateSettings: TemplateSettingsLabels{
 			Title:              "Outcome Report Templates",
 			Subtitle:           "Upload and publish the document template used to render outcome reports per schedule",
+			PeriodLabel:        "Period",
+			PeriodFullYear:     "Full year",
 			NameColumn:         "Template",
 			ScheduleColumn:     "Schedule",
 			VersionColumn:      "Version",
@@ -434,6 +481,7 @@ func DefaultLabels() Labels {
 			CategoryColumn: "Category",
 			ProfileColumn:  "Layout Profile",
 			ProfileSubscriptionGroupOutcomeMatrixSinglePeriod11V1: "One period, 11 columns",
+			ProfileSubscriptionGroupClientPhaseOutcomeReportV1:    "Client phase report — repeated tables",
 			VersionColumn:              "Version",
 			StatusColumn:               "Status",
 			ValidityColumn:             "Validity",
@@ -450,6 +498,7 @@ func DefaultLabels() Labels {
 			PlanFallback:               "All plans",
 			CategoryLabel:              "Category",
 			CategoryFallback:           "All categories",
+			CategoryWholeReport:        "All job categories — individual report",
 			CategoryRequiredForProfile: "This layout profile requires a specific category.",
 			ValidityStartLabel:         "Valid From",
 			ValidityEndLabel:           "Valid Until",

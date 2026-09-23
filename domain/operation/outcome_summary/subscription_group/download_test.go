@@ -1,9 +1,13 @@
 package subscription_group
 
 import (
+	"bytes"
 	"context"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
@@ -13,6 +17,40 @@ import (
 	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
+
+func TestDownloadDrawerTemplate_RendersFetchDownloadFeedback(t *testing.T) {
+	labels := outcome_summary.DefaultLabels().SubscriptionGroupExport
+	data := &DrawerData{
+		FormURL: "/report-cards/section/group-1/export",
+		Labels:  labels,
+		CommonLabels: map[string]any{
+			"Buttons": map[string]string{"Cancel": "Cancel"},
+		},
+	}
+	tmpl, err := template.ParseFiles("../templates/subscription-group-download-drawer.html")
+	if err != nil {
+		t.Fatalf("parse section download drawer template: %v", err)
+	}
+	var rendered bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&rendered, "outcome-summary-subscription-group-download-drawer-form", data); err != nil {
+		t.Fatalf("render section download drawer template: %v", err)
+	}
+
+	for _, want := range []string{
+		`data-lf-download-form`,
+		`data-lf-download-error-fallback="` + labels.DownloadErrorFallback + `"`,
+		`data-lf-busy-label="` + labels.DownloadingAction + `"`,
+		`data-testid="rc-subscription-group-download-notice" hidden>`,
+		`role="status" aria-live="polite"`,
+		labels.DownloadNotice,
+		`data-testid="rc-subscription-group-download-error" hidden></div>`,
+		`role="alert"`,
+	} {
+		if !strings.Contains(rendered.String(), want) {
+			t.Errorf("rendered section download drawer is missing %q:\n%s", want, rendered.String())
+		}
+	}
+}
 
 func drawerResponse() *exportpb.GetSubscriptionGroupOutcomeExportResponse {
 	return &exportpb.GetSubscriptionGroupOutcomeExportResponse{
@@ -79,8 +117,8 @@ func TestDownloadDrawer_CategoryRefreshBuildsPhaseOptions(t *testing.T) {
 	if !data.Formats[0].Selected || data.Formats[1].Disabled {
 		t.Fatalf("formats = %+v, want selected/enabled CSV and mapped PDF", data.Formats)
 	}
-	if data.RefreshAction != "/report-cards/group/group-1/download" || data.FormAction != "/report-cards/group/group-1/export" {
-		t.Fatalf("actions = %q / %q", data.RefreshAction, data.FormAction)
+	if data.RefreshAction != "/report-cards/group/group-1/download" || data.FormURL != "/report-cards/group/group-1/export" {
+		t.Fatalf("actions = %q / %q", data.RefreshAction, data.FormURL)
 	}
 
 	// Invalid request category falls back to the trusted configured code, while
@@ -95,6 +133,13 @@ func TestDownloadDrawer_CategoryRefreshBuildsPhaseOptions(t *testing.T) {
 	}
 	if !data.Formats[0].Selected || !data.Formats[1].Disabled {
 		t.Fatalf("unmapped category formats = %+v, want disabled PDF", data.Formats)
+	}
+}
+
+func TestDrawerData_FormURLUsesWorkspaceRewriteSuffix(t *testing.T) {
+	field, ok := reflect.TypeOf(DrawerData{}).FieldByName("FormURL")
+	if !ok || !strings.HasSuffix(field.Name, "URL") {
+		t.Fatalf("download form field must end in URL for workspace rewriting")
 	}
 }
 

@@ -39,7 +39,7 @@ type DrawerDeps struct {
 // CommonLabels and Nonce are intentionally generic/injected by the app view
 // adapter, matching the other Fayna drawer contracts.
 type DrawerData struct {
-	FormAction    string
+	FormURL       string
 	RefreshAction string
 	FixedCategory bool
 	CategoryID    string
@@ -117,7 +117,7 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 			return view.ViewResult{Error: fmt.Errorf("group outcome export is not computed"), StatusCode: http.StatusNotFound}
 		}
 		data := &DrawerData{
-			FormAction:    route.ResolveURL(deps.Routes.SubscriptionGroupExportURL, "id", groupID),
+			FormURL:       route.ResolveURL(deps.Routes.SubscriptionGroupExportURL, "id", groupID),
 			RefreshAction: route.ResolveURL(deps.Routes.SubscriptionGroupDownloadDrawerURL, "id", groupID),
 			FixedCategory: fixedCategory,
 			CategoryID:    categoryValue(category),

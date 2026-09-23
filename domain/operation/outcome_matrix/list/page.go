@@ -22,6 +22,7 @@ import (
 	clientattributepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/client_attribute"
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
+	cardbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
@@ -55,6 +56,9 @@ type PageViewDeps struct {
 	// GetOutcomeMatrix — the new espyna use case (typed against the generated
 	// esqyma request/response). Wired via the module Deps, never raw SQL.
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
+	// FindApplicableReportCardBinding resolves a published document for one AY
+	// and phase code. Optional: the existing phase label remains when absent.
+	FindApplicableReportCardBinding func(context.Context, *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
 
 	// ListJobTemplateSummaries backs the (template, section) pair guard on the
 	// Group* routes. See outcome_matrix/section_scope.go for why the section
@@ -289,6 +293,13 @@ func NewView(deps *PageViewDeps) view.View {
 				resp = nil
 			}
 		}
+		if resp != nil {
+			if scheduleID, reason := resolvePhaseDocumentScheduleID(ctx, deps, section, templateID); reason != "" {
+				log.Printf("outcome matrix: phase document labels skipped for template %s (section scoped=%v): %s", templateID, section.Scoped(), reason)
+			} else {
+				composePhaseDocumentLabels(ctx, deps.FindApplicableReportCardBinding, scheduleID, resp.GetPhases())
+			}
+		}
 
 		// ?hide= — comma-separated L1 phase ids and/or leaf ColumnKeys. Resolved
 		// against the response tree (unknown tokens dropped, all-hidden fails
@@ -514,6 +525,93 @@ func sampleOriginSubscription(ctx context.Context, deps *PageViewDeps, templateI
 		}
 	}
 	return ""
+}
+
+// resolvePhaseDocumentScheduleID picks the price_schedule_id used to enrich
+// phase labels with the published report-card document name.
+//
+// A section-scoped page (section.Scoped()) already carries its
+// price_schedule_id on GroupScope — read straight off the SAME
+// ListJobTemplateSummaries row that validated the (template, section) pair
+// (outcome_matrix.ResolveGroupScope, called above). That call is the ONE
+// STAFF-reachable read here: a STAFF principal cannot list
+// subscription_group or subscription_group_member directly
+// (management-only, {1,2}-tagged permissions — a teacher session never
+// carries kind 7 in either tag), so the sampled-job -> origin subscription
+// -> deliverygroup.ResolveOneDetail path silently resolves to "" for them
+// (AUTHZ-denied list calls return zero rows, not an error). Using the
+// already-validated section scope avoids that path entirely for the common
+// case. The unscoped (all-sections) page has no single group_id to anchor
+// on, so it keeps the sampled-job fallback unchanged.
+//
+// Returns ("", reason) when nothing resolved; reason names the missing
+// input (never blank together with a non-empty error condition) so the
+// caller can log ONE line per request instead of the previous silent
+// early-return.
+func resolvePhaseDocumentScheduleID(ctx context.Context, deps *PageViewDeps, section outcome_matrix.GroupScope, templateID string) (scheduleID, reason string) {
+	if deps.FindApplicableReportCardBinding == nil {
+		return "", "resolver nil"
+	}
+	if section.Scoped() {
+		if section.PriceScheduleID == "" {
+			return "", "schedule unresolved"
+		}
+		return section.PriceScheduleID, ""
+	}
+	originID := sampleOriginSubscription(ctx, deps, templateID)
+	if originID == "" {
+		return "", "no origin"
+	}
+	scheduleID = deliverygroup.ResolveOneDetail(ctx, deps.ListSubscriptionGroupMembers, deps.ListSubscriptionGroups, originID).PriceScheduleID
+	if scheduleID == "" {
+		return "", "schedule unresolved"
+	}
+	return scheduleID, ""
+}
+
+// composePhaseDocumentLabels enriches only phases with an exact published
+// binding. A resolver failure is presentation-only and leaves the source label.
+// The code memo bounds resolver traffic to one lookup per distinct phase code.
+func composePhaseDocumentLabels(ctx context.Context, resolve func(context.Context, *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error), scheduleID string, phases []*matrixpb.PhaseColumn) {
+	if resolve == nil || scheduleID == "" {
+		return
+	}
+	resolved := map[string]string{}
+	logged := false
+	for _, phase := range phases {
+		if phase == nil {
+			continue
+		}
+		code := strings.TrimSpace(phase.GetCode())
+		if code == "" {
+			continue
+		}
+		name, seen := resolved[code]
+		if !seen {
+			resp, err := resolve(ctx, &cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest{PriceScheduleId: &scheduleID, JobTemplatePhaseCode: &code})
+			if err != nil || (resp != nil && !resp.GetSuccess()) {
+				if !logged {
+					log.Printf("outcome matrix: phase document binding lookup failed: %v", err)
+					logged = true
+				}
+			} else if resp != nil && resp.GetFound() && resp.GetBinding() != nil && resp.GetBinding().GetJobTemplatePhaseCode() == code {
+				name = strings.TrimSpace(resp.GetBinding().GetDocumentTemplate().GetName())
+			}
+			resolved[code] = name
+		}
+		if name == "" {
+			continue
+		}
+		phaseName := strings.TrimSpace(phase.GetPhaseName())
+		if phaseName == "" {
+			continue
+		}
+		label := phaseName + " - " + name
+		if variant := strings.TrimSpace(phase.GetVariantLabel()); variant != "" {
+			label += " (" + variant + ")"
+		}
+		phase.Label = label
+	}
 }
 
 // buildGrid converts the proto response into a *types.CellGridConfig. The acting
@@ -1203,14 +1301,14 @@ func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string,
 				readOnly = true
 			}
 			gc := types.CellGridCell{
-				OutcomeID:           cell.GetOutcomeId(),
-				JobTaskID:           cell.GetJobTaskId(),
-				CriteriaID:          criteriaIDFromColumnKey(colKey),
-				Value:               cellValue(cell),
-				Editable:            editable,
-				ReadOnly:            readOnly,
-				ReadOnlyTooltip:     readOnlyTooltip,
-				TestID:              cellTestID(clientID, colKey, readOnly),
+				OutcomeID:       cell.GetOutcomeId(),
+				JobTaskID:       cell.GetJobTaskId(),
+				CriteriaID:      criteriaIDFromColumnKey(colKey),
+				Value:           cellValue(cell),
+				Editable:        editable,
+				ReadOnly:        readOnly,
+				ReadOnlyTooltip: readOnlyTooltip,
+				TestID:          cellTestID(clientID, colKey, readOnly),
 			}
 			// Narrative icon. A recorded cell (an outcome exists) carries the live
 			// drawer URL. An editable cell also carries the drawer BASE URL; with no

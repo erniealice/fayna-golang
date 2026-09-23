@@ -12,12 +12,24 @@
     {{if .NotComputed}}
     {{template "alert" (dict "State" "info" "Variant" "subtle" "Message" .Banner)}}
     {{else}}
-    {{/* Download-PDF now lives in the table toolbar primary-action slot
-         (.Table.PrimaryAction, Download=true), reclaiming the old standalone
-         band's row + margin. Attached in okPage only when a URL exists, so the
-         no-URL → no-action semantics of the former {{if .DocumentDownloadURL}}
-         gate is preserved. */}}
+    {{/* The table toolbar carries the operator's periodless full-card download
+         or the explicit-export period/format drawer, according to the principal
+         and mounted route. */}}
     {{template "table-card" .Table}}
     {{end}}
+</div>
+{{end}}
+
+{{/* Per-client outcome grouping control. The selected mode only affects row
+     presentation; the view supplies the full grade table for either option. */}}
+{{define "outcome-summary-client-group-by-toolbar-prefix"}}
+<div class="form-group">
+    <label class="form-label" for="rc-group-by">{{.GroupByLabel}}</label>
+    <select id="rc-group-by" data-testid="rc-group-by" name="group_by" class="form-select"
+            hx-get="{{.ActionURL}}" hx-trigger="change" hx-target="#main-content"
+            hx-swap="innerHTML" hx-push-url="true" hx-include="this">
+        <option value="none"{{if eq .Current "none"}} selected{{end}}>{{.NoneLabel}}</option>
+        <option value="job_category"{{if eq .Current "job_category"}} selected{{end}}>{{.JobCategoryLabel}}</option>
+    </select>
 </div>
 {{end}}

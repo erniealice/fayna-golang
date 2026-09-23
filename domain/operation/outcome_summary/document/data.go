@@ -25,6 +25,7 @@ import (
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
+	productplanstaffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan_staff"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
@@ -1404,9 +1405,9 @@ func topAssignee(tally map[string]int, avoid string) string {
 // D5 COALESCE(job_task.assigned_to override, class-edge teacher): a per-task
 // assignee is the override and wins whenever ANY period carries one; with NO
 // assignee on either period the servicer is DERIVED from the class edge
-// (classFallbackID, resolved to a name in `names`). classFallbackID "" leaves the
-// line blank exactly as before.
-func staffLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[string]string, classFallbackID string) string {
+// (classFallbackIDs, resolved to names in `names`). An empty fallback leaves
+// the line blank exactly as before.
+func staffLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[string]string, classFallbackIDs []string) string {
 	ordered := []string{}
 	seen := map[string]bool{}
 	if tr != nil {
@@ -1442,7 +1443,20 @@ func staffLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[st
 	}
 	if s1 == "" && s2 == "" {
 		// No per-task override on either period → derive from the class edge.
-		s1 = strings.TrimSpace(classFallbackID)
+		fallback := append([]string(nil), classFallbackIDs...)
+		sort.Slice(fallback, func(i, j int) bool {
+			ni, nj := strings.TrimSpace(names[fallback[i]]), strings.TrimSpace(names[fallback[j]])
+			if ni != nj {
+				return ni < nj
+			}
+			return fallback[i] < fallback[j]
+		})
+		if len(fallback) > 0 {
+			s1 = fallback[0]
+		}
+		if len(fallback) > 1 {
+			s2 = fallback[1]
+		}
 	}
 	n1, n2 := strings.TrimSpace(names[s1]), strings.TrimSpace(names[s2])
 	if n1 == n2 {
@@ -1464,8 +1478,8 @@ func staffLine(labels outcome_summary.PeriodLabels, tr *transcript, names map[st
 // groupLeadName resolves the group-category job's modal assignee (across every
 // period) to a display name — the document's "Adviser" line. D5 COALESCE: the
 // per-task assignee is the override and wins; with none, the lead is DERIVED from
-// the class edge (classFallbackID). classFallbackID "" keeps the prior blank.
-func groupLeadName(tr *transcript, names map[string]string, classFallbackID string) string {
+// the class edge (classFallbackIDs). An empty fallback keeps the prior blank.
+func groupLeadName(tr *transcript, names map[string]string, classFallbackIDs []string) string {
 	merged := map[string]int{}
 	if tr != nil {
 		for _, tally := range tr.teachers {
@@ -1476,28 +1490,34 @@ func groupLeadName(tr *transcript, names map[string]string, classFallbackID stri
 	}
 	top := topAssignee(merged, "")
 	if top == "" {
-		top = strings.TrimSpace(classFallbackID)
+		for _, sid := range classFallbackIDs {
+			if names[sid] != "" && (top == "" || names[sid] < names[top]) {
+				top = sid
+			}
+		}
 	}
 	return strings.TrimSpace(names[top])
 }
 
-// classStaffIDs returns the DISTINCT class-edge servicer ids in a jobID→staffID
+// classStaffIDs returns the DISTINCT class-edge servicer IDs in a jobID→staffIDs
 // map — the extra id set fetchStaffNames must resolve so the COALESCE fallback
 // renders a name (a class-edge servicer never appears in a task-assignee tally).
-func classStaffIDs(byJob map[string]string) []string {
+func classStaffIDs(byJob map[string][]string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(byJob))
-	for _, sid := range byJob {
-		if sid != "" && !seen[sid] {
-			seen[sid] = true
-			out = append(out, sid)
+	for _, ids := range byJob {
+		for _, sid := range ids {
+			if sid != "" && !seen[sid] {
+				seen[sid] = true
+				out = append(out, sid)
+			}
 		}
 	}
 	return out
 }
 
-// fetchClassEdgeTeachers derives the class-edge servicer for each of the card's
-// jobs, keyed by job id — the read half of the D5 derive-on-read model. The class
+// fetchClassEdgeTeachers derives every active primary class-edge servicer for
+// each of the card's jobs, keyed by job id — the read half of the D5 derive-on-read model. The class
 // edge (subscription_group_product_plan_staff, "sgpps") is the UI-maintained "who
 // services this cohort's offering" source of truth. Resolution (GENERIC, no
 // vertical nouns):
@@ -1507,38 +1527,47 @@ func classStaffIDs(byJob map[string]string) []string {
 //   - a job matches its subject on job.output_product_id == product_plan.product_id
 //     (NO job_template hop — spawn copies output_product_id onto the job).
 //
-// Fully nil-safe: a missing closure (or an empty group / job set) yields an empty
-// map and the teacher line falls back to blank exactly as before. Only ACTIVE
-// edges for THIS group are honored (defense-in-depth against an adapter that
-// ignores the filter — a stale or foreign-cohort edge must never attribute a
-// teacher).
-func fetchClassEdgeTeachers(ctx context.Context, d *Deps, groupID string, jobs []*jobpb.Job) map[string]string {
-	out := map[string]string{}
+// Eligibility gate (mirrors espyna's classEdgeEligibilityLivePredicate,
+// contrib/postgres/internal/adapter/operation/job_template_summary_query.go:
+// "AND (e.product_plan_staff_id IS NULL OR pps.active)"): an edge that links a
+// product_plan_staff row (e.GetProductPlanStaffId() non-empty, the generic
+// "eligibility" concept) is honored only while that row is active — a revoked
+// eligibility drops just that edge, not the whole class. An edge with no link
+// is unaffected and always kept. The gate reads d.ListProductPlanStaffs,
+// chunked by id (the same listIn/pageLimit pattern this function already uses
+// for product plans below). d.ListProductPlanStaffs is OPTIONAL/nil-safe on
+// its own: nil skips the gate entirely, keeping every edge the filters above
+// admitted (today's un-gated behavior). A list ERROR, by contrast, fails
+// CLOSED: every LINKED edge is dropped rather than attribute a teacher whose
+// eligibility could not be confirmed.
+//
+// Fully nil-safe otherwise: a missing closure (or an empty group / job set)
+// yields an empty map and the teacher line falls back to blank exactly as
+// before. Only ACTIVE edges for THIS group are honored (defense-in-depth
+// against an adapter that ignores the filter — a stale or foreign-cohort edge
+// must never attribute a teacher).
+func fetchClassEdgeTeachers(ctx context.Context, d *Deps, groupID string, jobs []*jobpb.Job) map[string][]string {
+	out := map[string][]string{}
 	if d.ListSubscriptionGroupProductPlanStaffs == nil || d.ListProductPlans == nil || groupID == "" || len(jobs) == 0 {
 		return out
 	}
 
-	// Active class edges for this group: product_plan_id → staff_id.
-	//
-	// CF-3: the sgpps unique is (group, product_plan, staff), so >1 active edge can
-	// service one product_plan. A plain last-write-wins map assignment would flip the
-	// derived teacher with pagination order — pick ONE deterministically instead
-	// (newest date_created, id breaks ties), the SAME rule the courses-list dd
-	// branch uses (ORDER BY date_created DESC, id DESC LIMIT 1) so both surfaces agree.
-	type edgePick struct {
-		created int64
-		id      string
+	// Pass 1: collect every kept edge (active, this group, primary role) as a
+	// (product_plan_id, staff_id, product_plan_staff_id) tuple. The eligibility
+	// gate below needs the link id before an edge is folded into planStaff.
+	type keptEdge struct {
+		planID  string
+		staffID string
+		ppsID   string
 	}
-	planStaff := map[string]string{}
-	bestEdge := map[string]edgePick{} // product_plan_id → winning edge
-	planIDs := []string{}
-	seenPlan := map[string]bool{}
+	var kept []keptEdge
+	ppsIDSeen := map[string]bool{}
+	ppsIDs := []string{}
 	for page := int32(1); page <= maxPages; page++ {
 		resp, err := d.ListSubscriptionGroupProductPlanStaffs(ctx, &sgppspb.ListSubscriptionGroupProductPlanStaffsRequest{
 			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("subscription_group_id", groupID)}},
 			Pagination: &commonpb.PaginationRequest{
-				Limit:  int32(pageLimit),
-				Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
+				Limit: int32(pageLimit), Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
 			},
 		})
 		if err != nil {
@@ -1547,34 +1576,86 @@ func fetchClassEdgeTeachers(ctx context.Context, d *Deps, groupID string, jobs [
 		}
 		data := resp.GetData()
 		for _, e := range data {
-			if !e.GetActive() || e.GetSubscriptionGroupId() != groupID {
+			if !e.GetActive() || e.GetSubscriptionGroupId() != groupID || !strings.EqualFold(strings.TrimSpace(e.GetRole()), "primary") {
 				continue
 			}
-			pp := strings.TrimSpace(e.GetProductPlanId())
-			sid := strings.TrimSpace(e.GetStaffId())
+			pp, sid := strings.TrimSpace(e.GetProductPlanId()), strings.TrimSpace(e.GetStaffId())
 			if pp == "" || sid == "" {
 				continue
 			}
-			// Deterministic pick: keep the edge with the greatest (date_created, id).
-			cand := edgePick{created: e.GetDateCreated(), id: e.GetId()}
-			if cur, ok := bestEdge[pp]; ok {
-				if cand.created < cur.created || (cand.created == cur.created && cand.id <= cur.id) {
-					continue // the existing pick wins (newer, or the id tie-break)
-				}
-			}
-			bestEdge[pp] = cand
-			planStaff[pp] = sid
-			if !seenPlan[pp] {
-				seenPlan[pp] = true
-				planIDs = append(planIDs, pp)
+			ppsID := strings.TrimSpace(e.GetProductPlanStaffId())
+			kept = append(kept, keptEdge{planID: pp, staffID: sid, ppsID: ppsID})
+			if ppsID != "" && !ppsIDSeen[ppsID] {
+				ppsIDSeen[ppsID] = true
+				ppsIDs = append(ppsIDs, ppsID)
 			}
 		}
 		if len(data) < pageLimit {
 			break
 		}
 	}
-	if len(planIDs) == 0 {
+	if len(kept) == 0 {
 		return out
+	}
+
+	// Eligibility gate: only LINKED edges (ppsID != "") are affected. A nil
+	// d.ListProductPlanStaffs skips the gate (every kept edge stays — no dep
+	// wired yet). A list error fails CLOSED for every linked edge.
+	eligibleIDs := map[string]bool{}
+	eligibilityFailed := false
+	if d.ListProductPlanStaffs != nil {
+		for start := 0; start < len(ppsIDs); start += pageLimit {
+			end := start + pageLimit
+			if end > len(ppsIDs) {
+				end = len(ppsIDs)
+			}
+			chunk := ppsIDs[start:end]
+			resp, err := d.ListProductPlanStaffs(ctx, &productplanstaffpb.ListProductPlanStaffsRequest{
+				Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("id", chunk)}},
+			})
+			if err != nil {
+				log.Printf("report card doc: list product plan staff eligibility: %v", err)
+				eligibilityFailed = true
+				break
+			}
+			want := map[string]bool{}
+			for _, id := range chunk {
+				want[id] = true
+			}
+			for _, row := range resp.GetData() {
+				id := row.GetId()
+				// Keep only rows we asked for (defense-in-depth vs an ignored id
+				// filter), and only when active.
+				if id == "" || !want[id] || !row.GetActive() {
+					continue
+				}
+				eligibleIDs[id] = true
+			}
+		}
+	}
+
+	// Fold surviving edges into planStaff: an unlinked edge is always kept; a
+	// linked edge is kept only when the gate didn't run (nil dep, prior
+	// behavior) or ran and the row it named came back active. A gate that
+	// FAILED drops every linked edge.
+	planStaff := map[string]map[string]bool{}
+	for _, e := range kept {
+		if e.ppsID != "" && d.ListProductPlanStaffs != nil {
+			if eligibilityFailed || !eligibleIDs[e.ppsID] {
+				continue
+			}
+		}
+		if planStaff[e.planID] == nil {
+			planStaff[e.planID] = map[string]bool{}
+		}
+		planStaff[e.planID][e.staffID] = true
+	}
+	if len(planStaff) == 0 {
+		return out
+	}
+	planIDs := make([]string, 0, len(planStaff))
+	for pid := range planStaff {
+		planIDs = append(planIDs, pid)
 	}
 
 	// The referenced product_plans → product_plan_id → product_id.
@@ -1608,27 +1689,27 @@ func fetchClassEdgeTeachers(ctx context.Context, d *Deps, groupID string, jobs [
 		}
 	}
 
-	// product_id → staff_id (the class servicer for that subject/offering).
-	staffByProduct := map[string]string{}
-	for planID, sid := range planStaff {
+	// Product plans can share a product: union their primary teacher sets.
+	staffByProduct := map[string]map[string]bool{}
+	for planID, staffIDs := range planStaff {
 		if prod := productByPlan[planID]; prod != "" {
-			staffByProduct[prod] = sid
+			if staffByProduct[prod] == nil {
+				staffByProduct[prod] = map[string]bool{}
+			}
+			for sid := range staffIDs {
+				staffByProduct[prod][sid] = true
+			}
 		}
 	}
-	if len(staffByProduct) == 0 {
-		return out
-	}
-
-	// Each job → its class servicer via job.output_product_id.
 	for _, j := range jobs {
-		jid := j.GetId()
-		prod := strings.TrimSpace(j.GetOutputProductId())
+		jid, prod := j.GetId(), strings.TrimSpace(j.GetOutputProductId())
 		if jid == "" || prod == "" {
 			continue
 		}
-		if sid := staffByProduct[prod]; sid != "" {
-			out[jid] = sid
+		for sid := range staffByProduct[prod] {
+			out[jid] = append(out[jid], sid)
 		}
+		sort.Strings(out[jid]) // stable before names are resolved; staffLine sorts by name.
 	}
 	return out
 }

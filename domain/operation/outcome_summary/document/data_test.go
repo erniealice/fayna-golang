@@ -2,7 +2,9 @@ package document
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
@@ -16,6 +18,7 @@ import (
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
+	productplanstaffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan_staff"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	sgppspb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_product_plan_staff"
@@ -276,16 +279,12 @@ func TestIsNonEnrolledPlaceholder(t *testing.T) {
 	}
 }
 
-// CF-3: two active class edges can service one product_plan (the sgpps unique is
-// (group, product_plan, staff)). fetchClassEdgeTeachers must attribute a STABLE
-// teacher — newest date_created, id breaking ties — independent of the order the
-// adapter paginates the edges in (a plain last-write-wins map flipped the teacher).
-func TestFetchClassEdgeTeachers_DeterministicPickOnDuplicatePrimaries(t *testing.T) {
-	edge := func(id, staffID string, created int64) *sgppspb.SubscriptionGroupProductPlanStaff {
-		c := created
+// DP-10/11: every active primary teacher appears in the fallback; secondary,
+// inactive and foreign-group edges cannot leak into the document.
+func TestFetchClassEdgeTeachers_AllPrimariesOnly(t *testing.T) {
+	edge := func(id, staffID, role, group string, active bool) *sgppspb.SubscriptionGroupProductPlanStaff {
 		return &sgppspb.SubscriptionGroupProductPlanStaff{
-			Id: id, StaffId: staffID, ProductPlanId: "pp-1", SubscriptionGroupId: "sec-1",
-			Active: true, DateCreated: &c,
+			Id: id, StaffId: staffID, Role: role, ProductPlanId: "pp-1", SubscriptionGroupId: group, Active: active,
 		}
 	}
 	depsFor := func(edges []*sgppspb.SubscriptionGroupProductPlanStaff) *Deps {
@@ -300,22 +299,115 @@ func TestFetchClassEdgeTeachers_DeterministicPickOnDuplicatePrimaries(t *testing
 	}
 	prod := "prod-1"
 	job := &jobpb.Job{Id: "job-1", OutputProductId: &prod}
-
-	// (a) different date_created: the newer edge (staff-B) wins in EITHER list order.
-	older, newer := edge("e-old", "staff-A", 100), edge("e-new", "staff-B", 200)
-	for i, edges := range [][]*sgppspb.SubscriptionGroupProductPlanStaff{{older, newer}, {newer, older}} {
-		got := fetchClassEdgeTeachers(context.Background(), depsFor(edges), "sec-1", []*jobpb.Job{job})
-		if got["job-1"] != "staff-B" {
-			t.Fatalf("case a order %d: want newest-edge staff-B, got %q", i, got["job-1"])
+	edges := []*sgppspb.SubscriptionGroupProductPlanStaff{
+		edge("e-b", "staff-B", "primary", "sec-1", true),
+		edge("e-a", "staff-A", "primary", "sec-1", true),
+		edge("e-a-duplicate", "staff-A", "primary", "sec-1", true),
+		edge("e-secondary", "staff-Tejas", "secondary", "sec-1", true),
+		edge("e-inactive", "staff-X", "primary", "sec-1", false),
+		edge("e-foreign", "staff-Y", "primary", "sec-2", true),
+	}
+	for i, ordered := range [][]*sgppspb.SubscriptionGroupProductPlanStaff{edges, {edges[5], edges[4], edges[3], edges[2], edges[1], edges[0]}} {
+		got := fetchClassEdgeTeachers(context.Background(), depsFor(ordered), "sec-1", []*jobpb.Job{job})
+		if !reflect.DeepEqual([]string{"staff-A", "staff-B"}, got["job-1"]) {
+			t.Fatalf("order %d: primary teachers = %v", i, got["job-1"])
 		}
 	}
+}
 
-	// (b) equal date_created: the higher id (staff-Y on e-2) breaks the tie, stably.
-	e1, e2 := edge("e-1", "staff-X", 500), edge("e-2", "staff-Y", 500)
-	for i, edges := range [][]*sgppspb.SubscriptionGroupProductPlanStaff{{e1, e2}, {e2, e1}} {
-		got := fetchClassEdgeTeachers(context.Background(), depsFor(edges), "sec-1", []*jobpb.Job{job})
-		if got["job-1"] != "staff-Y" {
-			t.Fatalf("case b order %d: want id-tiebreak staff-Y, got %q", i, got["job-1"])
-		}
+// T-A6: the class-edge eligibility gate mirrors espyna's
+// classEdgeEligibilityLivePredicate (job_template_summary_query.go:
+// "AND (e.product_plan_staff_id IS NULL OR pps.active)") — a linked edge
+// (product_plan_staff_id set) is honored only while that row is active; an
+// unlinked edge is unaffected; a missing row or a list error drops linked
+// edges (fail closed); a nil ListProductPlanStaffs dep skips the gate
+// entirely (today's un-gated behavior, preserved for callers that haven't
+// wired the dep yet).
+func TestFetchClassEdgeTeachers_EligibilityGate(t *testing.T) {
+	prod := "prod-1"
+	job := &jobpb.Job{Id: "job-1", OutputProductId: &prod}
+
+	plans := func(context.Context, *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error) {
+		return &productplanpb.ListProductPlansResponse{Data: []*productplanpb.ProductPlan{{Id: "pp-1", ProductId: "prod-1"}}}, nil
 	}
+	// staff-A's edge carries no product_plan_staff_id (unlinked — never gated).
+	// staff-B's edge links to "pps-B" (gated on that row's active flag).
+	edgesFn := func(context.Context, *sgppspb.ListSubscriptionGroupProductPlanStaffsRequest) (*sgppspb.ListSubscriptionGroupProductPlanStaffsResponse, error) {
+		return &sgppspb.ListSubscriptionGroupProductPlanStaffsResponse{Data: []*sgppspb.SubscriptionGroupProductPlanStaff{
+			{Id: "e-unlinked", StaffId: "staff-A", Role: "primary", ProductPlanId: "pp-1", SubscriptionGroupId: "sec-1", Active: true},
+			{Id: "e-linked", StaffId: "staff-B", Role: "primary", ProductPlanId: "pp-1", SubscriptionGroupId: "sec-1", Active: true, ProductPlanStaffId: strp("pps-B")},
+		}}, nil
+	}
+
+	t.Run("revoked eligibility drops only the linked teacher; the unlinked primary stays", func(t *testing.T) {
+		d := &Deps{
+			ListSubscriptionGroupProductPlanStaffs: edgesFn,
+			ListProductPlans:                       plans,
+			ListProductPlanStaffs: func(context.Context, *productplanstaffpb.ListProductPlanStaffsRequest) (*productplanstaffpb.ListProductPlanStaffsResponse, error) {
+				return &productplanstaffpb.ListProductPlanStaffsResponse{Data: []*productplanstaffpb.ProductPlanStaff{
+					{Id: "pps-B", Active: false},
+				}}, nil
+			},
+		}
+		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		if !reflect.DeepEqual([]string{"staff-A"}, got["job-1"]) {
+			t.Fatalf("teachers = %v, want [staff-A] (staff-B's revoked eligibility must drop only staff-B)", got["job-1"])
+		}
+	})
+
+	t.Run("active eligibility keeps the linked teacher alongside the unlinked one", func(t *testing.T) {
+		d := &Deps{
+			ListSubscriptionGroupProductPlanStaffs: edgesFn,
+			ListProductPlans:                       plans,
+			ListProductPlanStaffs: func(context.Context, *productplanstaffpb.ListProductPlanStaffsRequest) (*productplanstaffpb.ListProductPlanStaffsResponse, error) {
+				return &productplanstaffpb.ListProductPlanStaffsResponse{Data: []*productplanstaffpb.ProductPlanStaff{
+					{Id: "pps-B", Active: true},
+				}}, nil
+			},
+		}
+		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		if !reflect.DeepEqual([]string{"staff-A", "staff-B"}, got["job-1"]) {
+			t.Fatalf("teachers = %v, want [staff-A staff-B]", got["job-1"])
+		}
+	})
+
+	t.Run("missing eligibility row drops the linked teacher", func(t *testing.T) {
+		d := &Deps{
+			ListSubscriptionGroupProductPlanStaffs: edgesFn,
+			ListProductPlans:                       plans,
+			ListProductPlanStaffs: func(context.Context, *productplanstaffpb.ListProductPlanStaffsRequest) (*productplanstaffpb.ListProductPlanStaffsResponse, error) {
+				return &productplanstaffpb.ListProductPlanStaffsResponse{}, nil // "pps-B" never comes back
+			},
+		}
+		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		if !reflect.DeepEqual([]string{"staff-A"}, got["job-1"]) {
+			t.Fatalf("teachers = %v, want [staff-A] (a missing eligibility row must drop the linked teacher)", got["job-1"])
+		}
+	})
+
+	t.Run("list error fails closed and drops every linked teacher", func(t *testing.T) {
+		d := &Deps{
+			ListSubscriptionGroupProductPlanStaffs: edgesFn,
+			ListProductPlans:                       plans,
+			ListProductPlanStaffs: func(context.Context, *productplanstaffpb.ListProductPlanStaffsRequest) (*productplanstaffpb.ListProductPlanStaffsResponse, error) {
+				return nil, errors.New("boom")
+			},
+		}
+		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		if !reflect.DeepEqual([]string{"staff-A"}, got["job-1"]) {
+			t.Fatalf("teachers = %v, want [staff-A] (a list error must fail closed and drop staff-B)", got["job-1"])
+		}
+	})
+
+	t.Run("nil ListProductPlanStaffs dep skips the gate (today's un-gated behavior)", func(t *testing.T) {
+		d := &Deps{
+			ListSubscriptionGroupProductPlanStaffs: edgesFn,
+			ListProductPlans:                       plans,
+			// ListProductPlanStaffs intentionally left nil.
+		}
+		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		if !reflect.DeepEqual([]string{"staff-A", "staff-B"}, got["job-1"]) {
+			t.Fatalf("teachers = %v, want [staff-A staff-B] (nil dep must not gate)", got["job-1"])
+		}
+	})
 }

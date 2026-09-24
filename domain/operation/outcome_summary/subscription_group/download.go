@@ -31,6 +31,9 @@ type DrawerDeps struct {
 	Labels               outcome_summary.Labels
 	Options              outcome_summary.Options
 	ResolvePrincipalKind func(context.Context) int32
+	// PDFAvailable reports that the app wired template resolution and PDF
+	// rendering; PDF is then offered for every category (D11).
+	PDFAvailable bool
 
 	GetSubscriptionGroupOutcomeExport func(context.Context, *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
 }
@@ -124,7 +127,7 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 			CategoryName:  categoryLabel(deps.Labels, category),
 			Categories:    nil,
 			Periods:       periods,
-			Formats:       buildFormatOptions(deps.Options, category, deps.Labels),
+			Formats:       buildFormatOptions(deps.PDFAvailable, deps.Labels),
 			Labels:        deps.Labels.SubscriptionGroupExport,
 		}
 		if !fixedCategory {
@@ -240,12 +243,10 @@ func buildPeriodOptions(labels outcome_summary.Labels, category *exportpb.JobCat
 	return options
 }
 
-func buildFormatOptions(options outcome_summary.Options, category *exportpb.JobCategoryOption, labels outcome_summary.Labels) []types.SelectOption {
-	categoryCode := ""
-	if category != nil {
-		categoryCode = category.GetCode()
-	}
-	_, pdfAvailable := options.SubscriptionGroupExport.ProfileForCategoryCode(categoryCode)
+// buildFormatOptions offers PDF for every category (D11) when the app wires
+// template resolution and rendering; whether a template is published for the
+// chosen category is answered at download ("no template configured").
+func buildFormatOptions(pdfAvailable bool, labels outcome_summary.Labels) []types.SelectOption {
 	return []types.SelectOption{
 		{Value: "csv", Label: labels.SubscriptionGroupExport.FormatCSV, Selected: true},
 		{Value: "pdf", Label: labels.SubscriptionGroupExport.FormatPDF, Disabled: !pdfAvailable},

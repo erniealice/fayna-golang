@@ -111,10 +111,9 @@ func TestClientPhaseFixedScalarPathIsGeneric(t *testing.T) {
 	}
 }
 
-func TestRenderManifestValidator_RequiresExactTextAndStyleManifest(t *testing.T) {
+func TestRenderManifestValidator_RequiresKnownTextAndStyleTokens(t *testing.T) {
 	validXML := validManifestDocumentXML()
 	tests := map[string]string{
-		"missing root":     strings.Replace(validXML, "{{sheet_title}}", "Static title", 1),
 		"extra token":      strings.Replace(validXML, "</w:body>", `<w:p><w:r><w:t>{{unexpected}}</w:t></w:r></w:p></w:body>`, 1),
 		"misplaced style":  strings.Replace(validXML, `w:fill="{{job_template1_fill_hex}}"`, `w:fill="FFFFFF"/><w:t>{{job_template1_fill_hex}}</w:t><w:shd w:fill="FFFFFF"`, 1),
 		"partial token":    strings.Replace(validXML, "{{sheet_title}}", "prefix {{sheet_title}}", 1),
@@ -133,6 +132,14 @@ func TestRenderManifestValidator_RequiresExactTextAndStyleManifest(t *testing.T)
 	}
 	if err := ValidateTemplate(testProfile, makeTestDOCX(t)); err != nil {
 		t.Fatalf("valid exact manifest rejected: %v", err)
+	}
+	// D6: a supported token may be omitted (the template picks what it uses).
+	omitted := makeTestDOCX(t,
+		testZipPart{name: "[Content_Types].xml", body: `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>`},
+		testZipPart{name: "word/document.xml", body: strings.Replace(validXML, "{{sheet_title}}", "Static title", 1)},
+	)
+	if err := ValidateTemplate(testProfile, omitted); err != nil {
+		t.Fatalf("omitted supported token rejected: %v", err)
 	}
 }
 

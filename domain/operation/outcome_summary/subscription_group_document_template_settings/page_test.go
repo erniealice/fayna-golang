@@ -1,6 +1,8 @@
 package subscription_group_document_template_settings
 
 import (
+	subscriptiongroupdocument "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/subscription_group_document"
+
 	"bytes"
 	"context"
 	"errors"
@@ -64,7 +66,7 @@ func (r *settingsRecorder) deps(t *testing.T) *Deps {
 	return &Deps{
 		Routes:  outcome_summary.Routes{SubscriptionGroupDocumentTemplateSettingsURL: "/section-templates", SubscriptionGroupDocumentTemplateUploadURL: "/section-templates/upload", SubscriptionGroupDocumentTemplatePublishURL: "/section-templates/publish", SubscriptionGroupDocumentTemplateDeleteURL: "/section-templates/delete"},
 		Labels:  labels,
-		Options: outcome_summary.Options{SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{ProfileByCategoryCode: map[string]bindingpb.RenderProfile{"category_a": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1}}},
+		Options: outcome_summary.Options{SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{}},
 		ListJobCategories: func(context.Context, *jobcategorypb.ListJobCategoriesRequest) (*jobcategorypb.ListJobCategoriesResponse, error) {
 			return &jobcategorypb.ListJobCategoriesResponse{Success: true, Data: []*jobcategorypb.JobCategory{settingsCategory()}}, nil
 		},
@@ -211,9 +213,6 @@ func TestSubscriptionGroupDocumentTemplateSettings_ProfileAwareWildcardScopes(t 
 func TestSubscriptionGroupDocumentTemplateSettings_WholeReportCategoryScopeIsTrustedAndExplicit(t *testing.T) {
 	phaseProfile := bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1
 	options := outcome_summary.SubscriptionGroupExportOptions{
-		ProfileByCategoryCode: map[string]bindingpb.RenderProfile{
-			"category_a": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1,
-		},
 		WholeReportProfile: phaseProfile,
 	}
 	categories := []*jobcategorypb.JobCategory{settingsCategory()}
@@ -231,11 +230,12 @@ func TestSubscriptionGroupDocumentTemplateSettings_WholeReportCategoryScopeIsTru
 	if !ok || category == nil || category.GetId() != "cat-a" || profile != bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1 {
 		t.Fatalf("exact category scope resolved to category/profile/ok=%v/%v/%v", category, profile, ok)
 	}
-	options.ProfileByCategoryCode["category_a"] = phaseProfile
-	if _, _, ok := selectedCategory(categories, "cat-a", options); ok {
-		t.Fatal("all-category phase profile was allowed in an exact-category binding")
+	// A-CAT-1 / D11: any job category is an exact-category group-matrix binding.
+	other := &jobcategorypb.JobCategory{Id: "cat-z", Name: "Other"}
+	category, profile, ok = selectedCategory(append(categories, other), "cat-z", options)
+	if !ok || category.GetId() != "cat-z" || profile != subscriptiongroupdocument.GroupMatrixRenderProfile {
+		t.Fatalf("any category scope resolved to category/profile/ok=%v/%v/%v", category, profile, ok)
 	}
-	options.ProfileByCategoryCode["category_a"] = bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
 
 	selectOptions := categoryOptions(categories, "Select a category scope", "Whole report", wholeReportProfile(options))
 	if len(selectOptions) != 3 || selectOptions[1].Value != wholeReportCategoryValue || selectOptions[1].Label != "Whole report" {

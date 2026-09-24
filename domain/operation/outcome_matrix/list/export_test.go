@@ -562,3 +562,39 @@ func TestWriteFinalCompositeCSV_GroupNarrowing(t *testing.T) {
 		t.Fatalf("all-foreign narrowing: status = %d, want 404", rec2.Code)
 	}
 }
+
+// Two sections of one subject, or two periods of one section, must not
+// download under the same name.
+func TestExportFilename_SectionAndPeriodQualified(t *testing.T) {
+	labels := outcome_matrix.DefaultLabels()
+	labels.Page.Title = "Grade Sheet"
+	phases := []*matrixpb.PhaseColumn{
+		{Code: "s1", Label: "Term 2 (Computer)", PhaseName: "Term 2"},
+		{Code: "s1", Label: "Term 2 (Graphics)", PhaseName: "Term 2"},
+		{Code: "s2", Label: "Term 3"},
+	}
+	section := outcome_matrix.GroupScope{GroupID: "g-1", GroupName: "Grade 10 Palladium"}
+	cases := []struct {
+		name    string
+		section outcome_matrix.GroupScope
+		period  string
+		want    string
+	}{
+		{"template scope keeps legacy name", outcome_matrix.GroupScope{}, "", "grade-sheet-design"},
+		{"section all periods", section, "", "grade-sheet-design-grade-10-palladium"},
+		{"section phase uses raw phase name", section, "s1", "grade-sheet-design-grade-10-palladium-term-2"},
+		{"label fallback", section, "s2", "grade-sheet-design-grade-10-palladium-term-3"},
+	}
+	for _, tc := range cases {
+		got := exportFilename(labels, sectionSubjectName("Design", tc.section), "tmpl-1")
+		if label := periodFilenameLabel(tc.period, phases); label != "" {
+			got += "-" + slug(label)
+		}
+		if got != tc.want {
+			t.Errorf("%s: got %q want %q", tc.name, got, tc.want)
+		}
+	}
+	if got := periodFilenameLabel("final", phases); got != "" {
+		t.Errorf("final period label = %q, want empty (the final writer adds -final)", got)
+	}
+}

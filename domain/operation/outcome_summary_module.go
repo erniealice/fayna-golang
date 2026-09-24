@@ -304,6 +304,7 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 			Labels:                            deps.Labels,
 			Options:                           deps.Options,
 			ResolvePrincipalKind:              deps.ResolvePrincipalKind,
+			PDFAvailable:                      subscriptionGroupDeps.ResolveSubscriptionGroupDocumentTemplate != nil && subscriptionGroupDeps.GeneratePDF != nil,
 			GetSubscriptionGroupOutcomeExport: deps.GetSubscriptionGroupOutcomeExport,
 		}),
 		SubscriptionGroupExport: subscriptiongroupview.NewExportHandler(subscriptionGroupDeps),

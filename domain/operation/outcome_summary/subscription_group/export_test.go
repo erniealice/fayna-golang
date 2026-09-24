@@ -278,7 +278,8 @@ func TestSubscriptionGroupExport_PermutedIDsAndEnrollmentRules(t *testing.T) {
 	}
 	// job-a is first despite its cell being second in the source row. The
 	// positive-evidence zero remains a real grade; the all-zero placeholder is blank.
-	if got, want := rows[1], []string{"[1] Alpha", "0", ""}; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+	// Student labels read "Last, First", the rule the section pages use.
+	if got, want := rows[1], []string{"[1] One, Alpha", "0", ""}; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("ID-keyed/evidence row=%#v want %#v", got, want)
 	}
 }
@@ -443,9 +444,10 @@ func TestSubscriptionGroupExport_DeterministicBandsSortAndFormulaNeutralization(
 		for _, f := range req.GetFilters().GetFilters() {
 			if in := f.GetListFilter(); in != nil {
 				for _, id := range in.GetValues() {
-					group := "A"
+					// Raw lowercase values: the CSV prints band headings in capitals (D14).
+					group := "a"
 					if id == "c2" {
-						group = "B"
+						group = "b"
 					}
 					out = append(out, &clientattributepb.ClientAttribute{ClientId: id, AttributeId: "attr", Value: group, Active: true})
 				}
@@ -458,7 +460,7 @@ func TestSubscriptionGroupExport_DeterministicBandsSortAndFormulaNeutralization(
 		t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
 	}
 	rows := readCSV(t, w.Body.String())
-	if len(rows) != 7 || rows[1][0] != "A" || rows[2][0] != "[1] Amy" || rows[3][0] != "" || rows[4][0] != "B" || rows[5][0] != "[2] Zed" || rows[6][0] != "" {
+	if len(rows) != 7 || rows[1][0] != "A" || rows[2][0] != "[1] A, Amy" || rows[3][0] != "" || rows[4][0] != "B" || rows[5][0] != "[2] Z, Zed" || rows[6][0] != "" {
 		t.Fatalf("deterministic rows=%#v", rows)
 	}
 	if !strings.HasPrefix(rows[2][1], "\t") || !strings.HasPrefix(rows[5][1], "\t") {
@@ -468,9 +470,6 @@ func TestSubscriptionGroupExport_DeterministicBandsSortAndFormulaNeutralization(
 
 func TestSubscriptionGroupExport_PDFFailLoud(t *testing.T) {
 	deps, calls := exportDeps(fullPDFFixture())
-	deps.Options.SubscriptionGroupExport.ProfileByCategoryCode = map[string]bindingpb.RenderProfile{
-		"academic": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1,
-	}
 	w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 	if w.Code != 503 || strings.Contains(w.Header().Get("Content-Type"), "text/csv") || *calls != 1 {
 		t.Fatalf("pdf status/header/calls=%d/%v/%d", w.Code, w.Header(), *calls)
@@ -494,18 +493,22 @@ func TestSubscriptionGroupExport_NoBandRequiresNoAttributeCalls(t *testing.T) {
 }
 
 func fullPDFFixture() *exportpb.GetSubscriptionGroupOutcomeExportResponse {
+	return pdfFixtureWithColumns(11)
+}
+
+func pdfFixtureWithColumns(n int) *exportpb.GetSubscriptionGroupOutcomeExportResponse {
 	resp := exportFixture()
 	resp.Context.PriceScheduleId = exportString("schedule-1")
 	resp.Context.PriceScheduleName = "Term 1"
 	resp.Context.PlanId = exportString("plan-1")
 	resp.Context.PlanName = "Standard"
-	resp.JobTemplateColumns = make([]*exportpb.JobTemplateColumn, 11)
-	cells := make([]*exportpb.SubscriptionGroupOutcomeCell, 11)
-	for i := 0; i < 11; i++ {
+	resp.JobTemplateColumns = make([]*exportpb.JobTemplateColumn, n)
+	cells := make([]*exportpb.SubscriptionGroupOutcomeCell, n)
+	for i := 0; i < n; i++ {
 		id := fmt.Sprintf("job-%02d", i+1)
 		resp.JobTemplateColumns[i] = &exportpb.JobTemplateColumn{JobTemplateId: id, DisplayName: fmt.Sprintf("Subject %02d", i+1)}
 		label := fmt.Sprintf("%d", (i%7)+1)
-		cells[10-i] = exportCell(id, &label, nil, false, false)
+		cells[n-1-i] = exportCell(id, &label, nil, false, false)
 	}
 	resp.ClientRows = []*exportpb.SubscriptionGroupOutcomeClientRow{{ClientId: "client-1", ClientName: "Alpha", Cells: cells}}
 	return resp
@@ -540,7 +543,7 @@ func stalePDFDocx(t *testing.T, docx []byte) []byte {
 			t.Fatalf("read DOCX part: %v", readErr)
 		}
 		if file.Name == "word/document.xml" {
-			body = bytes.Replace(body, []byte("{{sheet_title}}"), []byte("stale"), 1)
+			body = bytes.Replace(body, []byte("{{sheet_title}}"), []byte("{{retired_token}}"), 1)
 		}
 		header := file.FileHeader
 		entry, createErr := writer.CreateHeader(&header)
@@ -560,9 +563,6 @@ func stalePDFDocx(t *testing.T, docx []byte) []byte {
 func configurePDFDeps(t *testing.T, resp *exportpb.GetSubscriptionGroupOutcomeExportResponse) (*Deps, *int, *int, **exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) {
 	t.Helper()
 	deps, _ := exportDeps(resp)
-	deps.Options.SubscriptionGroupExport.ProfileByCategoryCode = map[string]bindingpb.RenderProfile{
-		"academic": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1,
-	}
 	resolverCalls, engineCalls := 0, 0
 	seen := new(*exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest)
 	deps.ResolveSubscriptionGroupDocumentTemplate = func(_ context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error) {
@@ -591,7 +591,7 @@ func TestSubscriptionGroupExport_PDFContentAndPeriod(t *testing.T) {
 	if got := w.Header().Get("Content-Type"); got != "application/pdf" {
 		t.Fatalf("content type=%q", got)
 	}
-	if !strings.Contains(w.Header().Get("Content-Disposition"), "report-cards-term-1-final.pdf") {
+	if !strings.Contains(w.Header().Get("Content-Disposition"), "report-cards-term-1-academic-final.pdf") {
 		t.Fatalf("content disposition=%q", w.Header().Get("Content-Disposition"))
 	}
 	if *resolverCalls != 1 || *engineCalls != 1 || seen == nil || *seen == nil {
@@ -620,28 +620,25 @@ func TestSubscriptionGroupExport_PDFResolverFailureStopsBeforeEngine(t *testing.
 	}
 }
 
-func TestSubscriptionGroupExport_PDFRejectsProfileCapacityCategoryAndManifestBeforeEngine(t *testing.T) {
+func TestSubscriptionGroupExport_PDFRejectsShapeAndManifestBeforeEngine(t *testing.T) {
 	cases := []struct {
 		name   string
 		mutate func(*exportpb.GetSubscriptionGroupOutcomeExportResponse, *Deps)
 	}{
-		{"capacity mismatch", func(resp *exportpb.GetSubscriptionGroupOutcomeExportResponse, _ *Deps) {
+		{"ragged matrix", func(resp *exportpb.GetSubscriptionGroupOutcomeExportResponse, _ *Deps) {
 			resp.JobTemplateColumns = resp.JobTemplateColumns[:10]
 		}},
 		{"noncanonical column order", func(resp *exportpb.GetSubscriptionGroupOutcomeExportResponse, _ *Deps) {
 			resp.JobTemplateColumns[0].DisplayName, resp.JobTemplateColumns[10].DisplayName = resp.JobTemplateColumns[10].DisplayName, resp.JobTemplateColumns[0].DisplayName
 		}},
-		{"unmapped category", func(resp *exportpb.GetSubscriptionGroupOutcomeExportResponse, _ *Deps) {
-			resp.JobCategories[0].Code = "other"
-		}},
-		{"stale manifest", func(*exportpb.GetSubscriptionGroupOutcomeExportResponse, *Deps) {}},
+		{"unknown template token", func(*exportpb.GetSubscriptionGroupOutcomeExportResponse, *Deps) {}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := fullPDFFixture()
 			deps, resolverCalls, engineCalls, _ := configurePDFDeps(t, resp)
 			tc.mutate(resp, deps)
-			if tc.name == "stale manifest" {
+			if tc.name == "unknown template token" {
 				deps.ResolveSubscriptionGroupDocumentTemplate = func(context.Context, *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error) {
 					*resolverCalls++
 					return &outcome_summary.ResolvedSubscriptionGroupDocumentTemplate{Bytes: stalePDFDocx(t, canonicalPDFDocx(t)), RenderProfile: bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1, JobCategoryID: "cat-a"}, nil
@@ -649,38 +646,82 @@ func TestSubscriptionGroupExport_PDFRejectsProfileCapacityCategoryAndManifestBef
 			}
 			w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 			want := 400
-			if tc.name == "stale manifest" {
+			if tc.name == "unknown template token" {
 				want = 503
 			}
 			if w.Code != want || strings.Contains(w.Header().Get("Content-Type"), "application/pdf") || w.Body.Len() == 0 {
 				t.Fatalf("status/header/body=%d/%v/%q", w.Code, w.Header(), w.Body.String())
 			}
-			if tc.name == "capacity mismatch" || tc.name == "noncanonical column order" || tc.name == "unmapped category" {
+			if tc.name != "unknown template token" {
 				if *resolverCalls != 0 || *engineCalls != 0 {
 					t.Fatalf("calls=%d/%d, want zero", *resolverCalls, *engineCalls)
 				}
 			} else if *resolverCalls != 1 || *engineCalls != 0 {
-				t.Fatalf("stale manifest calls=%d/%d, want 1/0", *resolverCalls, *engineCalls)
+				t.Fatalf("unknown token calls=%d/%d, want 1/0", *resolverCalls, *engineCalls)
 			}
 		})
 	}
 }
 
-func TestSubscriptionGroupExport_ProfileFailureLogsStructuredReason(t *testing.T) {
-	resp := exportFixture()
-	resp.JobCategories[0].Code = "other"
-	deps, _ := exportDeps(resp)
-	logs := captureSubscriptionGroupExportLogs(t, func() {
+// A-CAT-1 / D11: a category with any code renders through its published
+// binding; no app category map decides.
+func TestSubscriptionGroupExport_PDFAnyCategory(t *testing.T) {
+	resp := fullPDFFixture()
+	resp.JobCategories[0].Code = "any_other_code"
+	deps, resolverCalls, engineCalls, seen := configurePDFDeps(t, resp)
+	w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
+	if w.Code != 200 || *resolverCalls != 1 || *engineCalls != 1 || (*seen).GetJobCategoryId() != "cat-a" {
+		t.Fatalf("status/resolver/engine=%d/%d/%d body=%q", w.Code, *resolverCalls, *engineCalls, w.Body.String())
+	}
+}
+
+// A-CAP-1 / D9: an 11-slot template refuses 13 columns with both counts and
+// renders 10 columns with the eleventh slot blank.
+func TestSubscriptionGroupExport_PDFNumberedTemplateCapacity(t *testing.T) {
+	deps, resolverCalls, engineCalls, _ := configurePDFDeps(t, pdfFixtureWithColumns(13))
+	var logs string
+	logs = captureSubscriptionGroupExportLogs(t, func() {
 		w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
-		if w.Code != 400 || strings.Contains(w.Header().Get("Content-Type"), "text/csv") {
-			t.Fatalf("status/header=%d/%v", w.Code, w.Header())
+		if w.Code != 503 || !strings.Contains(w.Body.String(), "11") || !strings.Contains(w.Body.String(), "13") {
+			t.Fatalf("status/body=%d/%q", w.Code, w.Body.String())
 		}
 	})
-	if !strings.Contains(logs, "stage=profile") {
-		t.Fatalf("profile failure log missing: %q", logs)
+	if *resolverCalls != 1 || *engineCalls != 0 || !strings.Contains(logs, "reason=template_column_capacity") {
+		t.Fatalf("resolver/engine=%d/%d logs=%q", *resolverCalls, *engineCalls, logs)
 	}
-	if !strings.Contains(logs, "reason=missing_profile") {
-		t.Fatalf("profile reason missing: %q", logs)
+
+	deps, _, engineCalls, _ = configurePDFDeps(t, pdfFixtureWithColumns(10))
+	var slot11 any = "unset"
+	deps.GeneratePDF = func(_ []byte, data map[string]any) ([]byte, error) {
+		*engineCalls++
+		slot11 = data["job_template11_name_display"]
+		return []byte("%PDF-1.7\nsynthetic"), nil
+	}
+	w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
+	if w.Code != 200 || *engineCalls != 1 || slot11 != "" {
+		t.Fatalf("10 columns: status/engine/slot11=%d/%d/%v body=%q", w.Code, *engineCalls, slot11, w.Body.String())
+	}
+}
+
+type sectionColumnLoopMarker struct{}
+
+func (sectionColumnLoopMarker) Error() string                 { return "column loop" }
+func (sectionColumnLoopMarker) ColumnLoopContractError() bool { return true }
+
+// A-ERR-1: a column-loop contract error from the engine is a template problem.
+func TestSubscriptionGroupExport_PDFColumnLoopContractIsTemplateProblem(t *testing.T) {
+	deps, _, _, _ := configurePDFDeps(t, fullPDFFixture())
+	deps.GeneratePDF = func([]byte, map[string]any) ([]byte, error) {
+		return nil, fmt.Errorf("render: %w", sectionColumnLoopMarker{})
+	}
+	logs := captureSubscriptionGroupExportLogs(t, func() {
+		w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
+		if w.Code != 503 || !strings.Contains(w.Body.String(), deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError) {
+			t.Fatalf("status/body=%d/%q", w.Code, w.Body.String())
+		}
+	})
+	if !strings.Contains(logs, "reason=column_loop_contract") || strings.Contains(logs, "reason=unexpected") {
+		t.Fatalf("logs=%q", logs)
 	}
 }
 
@@ -722,5 +763,25 @@ func TestSubscriptionGroupExport_PDFGeneratorErrorsFailLoud(t *testing.T) {
 	w := runExport(deps, "/export?format=pdf&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 	if w.Code != 500 || strings.Contains(w.Header().Get("Content-Type"), "application/pdf") || *resolverCalls != 1 || *engineCalls != 1 {
 		t.Fatalf("malformed PDF status/header/calls=%d/%v/%d/%d", w.Code, w.Header(), *resolverCalls, *engineCalls)
+	}
+}
+
+// Every category of a group offers the same period tokens, so the CSV name must
+// carry the category and the period's display label (never the raw
+// "phase:<code>" token) or two different downloads save under one name.
+func TestSubscriptionGroupExport_CSVFilenameNamesCategoryAndPeriodLabel(t *testing.T) {
+	cases := []struct{ period, want string }{
+		{"phase:q1", `filename="report-cards-term-1-academic-quarter-1.csv"`},
+		{"final", `filename="report-cards-term-1-academic-final.csv"`},
+	}
+	for _, tc := range cases {
+		deps, _ := exportDeps(exportFixture())
+		w := runExport(deps, "/export?format=csv&job_category_id=cat-a&period="+tc.period, "job_outcome_summary:list")
+		if w.Code != 200 {
+			t.Fatalf("%s: status=%d body=%q", tc.period, w.Code, w.Body.String())
+		}
+		if got := w.Header().Get("Content-Disposition"); !strings.Contains(got, tc.want) {
+			t.Fatalf("%s: content disposition=%q want %s", tc.period, got, tc.want)
+		}
 	}
 }

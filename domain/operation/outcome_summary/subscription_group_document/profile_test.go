@@ -9,7 +9,7 @@ import (
 func TestRenderProfile_ManifestKeyMapping(t *testing.T) {
 	want := bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
 	profile, ok := LookupProfile(want)
-	if !ok || profile.Enum != want || profile.Key != SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key || profile.JobTemplateSlots != 11 || profile.CategoryBindingScope != CategoryBindingScopeExactCategory || !profile.AcceptsCategoryBinding("category-1") || profile.AcceptsCategoryBinding("") {
+	if !ok || profile.Enum != want || profile.Key != SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key || profile.CategoryBindingScope != CategoryBindingScopeExactCategory || !profile.AcceptsCategoryBinding("category-1") || profile.AcceptsCategoryBinding("") {
 		t.Fatalf("profile = %+v, %v", profile, ok)
 	}
 	byKey, ok := LookupProfileKey(profile.Key)

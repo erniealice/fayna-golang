@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -164,7 +165,7 @@ func NewExportHandler(deps *Deps) http.HandlerFunc {
 			writeExplicitPDF(ctx, w, deps, matrix, categoryID, period)
 			return
 		}
-		writeExplicitCSV(w, deps, matrix, period)
+		writeExplicitCSV(w, deps, matrix, categoryID, period)
 	}
 }
 
@@ -177,20 +178,11 @@ func writeExplicitPDF(ctx context.Context, w http.ResponseWriter, deps *Deps, ma
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	profile, mapped := deps.Options.SubscriptionGroupExport.ProfileForCategoryCode(category.GetCode())
-	if !mapped {
-		logExplicitExportFailure("profile", "missing_profile", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SubscriptionGroupExport.NoProfileError, http.StatusBadRequest)
-		return
-	}
-	registered, supported := subscriptiongroupdoc.LookupProfile(profile)
-	if !supported {
-		logExplicitExportFailure("profile", "profile_unavailable", len(matrix.columns), len(matrix.rows), canonicalOrder)
-		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusBadRequest)
-		return
-	}
-	if registered.JobTemplateSlots != len(matrix.columns) || !canonicalOrder {
-		logExplicitExportFailure("profile", "slot_count_or_order_mismatch", len(matrix.columns), len(matrix.rows), canonicalOrder)
+	// D11: every category the group query offers uses the one group-matrix
+	// data source; whether a PDF exists is decided by its published binding.
+	profile := subscriptiongroupdoc.GroupMatrixRenderProfile
+	if len(matrix.columns) > subscriptiongroupdoc.MaxColumns || !canonicalOrder {
+		logExplicitExportFailure("profile", "column_limit_or_order_mismatch", len(matrix.columns), len(matrix.rows), canonicalOrder)
 		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusBadRequest)
 		return
 	}
@@ -209,6 +201,9 @@ func writeExplicitPDF(ctx context.Context, w http.ResponseWriter, deps *Deps, ma
 	}
 	resolved, err := deps.ResolveSubscriptionGroupDocumentTemplate(ctx, request)
 	if err != nil {
+		// The cause (e.g. a binding whose stored DOCX object is missing) is
+		// otherwise invisible behind the generic data-unavailable reply.
+		log.Printf("group explicit PDF: resolve template: %v", err)
 		logExplicitExportFailure("profile", "template_resolve_failed", len(matrix.columns), len(matrix.rows), canonicalOrder)
 		http.Error(w, deps.Labels.SubscriptionGroupExport.DataUnavailableError, http.StatusServiceUnavailable)
 		return
@@ -223,13 +218,23 @@ func writeExplicitPDF(ctx context.Context, w http.ResponseWriter, deps *Deps, ma
 		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusBadRequest)
 		return
 	}
-	if err := subscriptiongroupdoc.ValidateTemplate(profile, resolved.Bytes); err != nil {
+	layout, err := subscriptiongroupdoc.CheckColumnCapacity(resolved.Bytes, len(matrix.columns))
+	if err != nil {
+		var capacity *subscriptiongroupdoc.ColumnCapacityError
+		if errors.As(err, &capacity) {
+			logExplicitExportFailure("profile", "template_column_capacity", len(matrix.columns), len(matrix.rows), canonicalOrder)
+			http.Error(w, columnCapacityMessage(deps.Labels, capacity), http.StatusServiceUnavailable)
+			return
+		}
+		log.Printf("group explicit PDF: template contract: %v", err)
 		logExplicitExportFailure("profile", "invalid_template_manifest", len(matrix.columns), len(matrix.rows), canonicalOrder)
 		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusServiceUnavailable)
 		return
 	}
 
-	data, err := subscriptiongroupdoc.BuildData(profile, explicitDocumentMatrix(ctx, deps, matrix, category, period))
+	documentMatrix := explicitDocumentMatrix(ctx, deps, matrix, category, period)
+	documentMatrix.NumberedSlots = layout.NumberedSlots
+	data, err := subscriptiongroupdoc.BuildData(profile, documentMatrix)
 	if err != nil {
 		logExplicitExportFailure("profile", "manifest_incompatible", len(matrix.columns), len(matrix.rows), canonicalOrder)
 		http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusServiceUnavailable)
@@ -242,6 +247,13 @@ func writeExplicitPDF(ctx context.Context, w http.ResponseWriter, deps *Deps, ma
 		case isSubscriptionGroupStyleContractError(err):
 			logExplicitExportFailure("render", "style_contract", len(matrix.columns), len(matrix.rows), canonicalOrder)
 			status = http.StatusServiceUnavailable
+		case isSubscriptionGroupColumnLoopContractError(err):
+			// A template problem (e.g. a column-loop cell the engine cannot
+			// widen), not an unexpected failure.
+			log.Printf("group explicit PDF: column loop contract: %v", err)
+			logExplicitExportFailure("render", "column_loop_contract", len(matrix.columns), len(matrix.rows), canonicalOrder)
+			http.Error(w, deps.Labels.SubscriptionGroupExport.IncompatibleTemplateError, http.StatusServiceUnavailable)
+			return
 		case isSubscriptionGroupLibreOfficeUnavailable(err):
 			logExplicitExportFailure("render", "libreoffice_unavailable", len(matrix.columns), len(matrix.rows), canonicalOrder)
 			status = http.StatusServiceUnavailable
@@ -257,7 +269,7 @@ func writeExplicitPDF(ctx context.Context, w http.ResponseWriter, deps *Deps, ma
 		return
 	}
 
-	filename := slug(deps.Labels.SubscriptionGroup.Title) + "-" + slug(matrix.context.GetSubscriptionGroupName()) + "-" + slug(period) + ".pdf"
+	filename := explicitExportFilename(deps, matrix, category, period) + ".pdf"
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
@@ -313,6 +325,7 @@ func explicitDocumentMatrix(ctx context.Context, deps *Deps, matrix *explicitMat
 		SubscriptionGroupName: matrix.context.GetSubscriptionGroupName(),
 		PriceScheduleName:     matrix.context.GetPriceScheduleName(),
 		JobTemplatePhaseName:  explicitPeriodDocumentName(ctx, deps, matrix.context.GetPriceScheduleId(), category, period),
+		PeriodName:            explicitPeriodName(deps.Labels, category, period),
 		ClientNameLabel:       deps.Labels.SubscriptionGroup.ClientColumn,
 	}
 	for _, column := range matrix.columns {
@@ -386,6 +399,22 @@ type sectionLibreOfficeUnavailable interface{ LibreOfficeUnavailable() bool }
 func isSubscriptionGroupStyleContractError(err error) bool {
 	var marker sectionStyleContractError
 	return errors.As(err, &marker) && marker.StyleContractError()
+}
+
+type sectionColumnLoopContractError interface{ ColumnLoopContractError() bool }
+
+func isSubscriptionGroupColumnLoopContractError(err error) bool {
+	var marker sectionColumnLoopContractError
+	return errors.As(err, &marker) && marker.ColumnLoopContractError()
+}
+
+// columnCapacityMessage tells the operator both counts (D9) instead of
+// printing a document that silently drops columns.
+func columnCapacityMessage(labels outcome_summary.Labels, capacity *subscriptiongroupdoc.ColumnCapacityError) string {
+	return strings.NewReplacer(
+		"{template_columns}", strconv.Itoa(capacity.TemplateColumns),
+		"{data_columns}", strconv.Itoa(capacity.DataColumns),
+	).Replace(labels.SubscriptionGroupExport.ColumnCapacityError)
 }
 
 func isSubscriptionGroupLibreOfficeUnavailable(err error) bool {
@@ -777,11 +806,13 @@ func orderExplicitRows(rows []explicitRow, options outcome_summary.Options) []ex
 	sequence := 0
 	for _, key := range groupKeys {
 		if banded {
+			// Band values stay raw attribute data ("male"): documents get the
+			// raw value (a template formats it); the CSV writer prints capitals.
 			out = append(out, explicitRow{name: key, band: true})
 		}
 		for _, row := range groups[key] {
 			sequence++
-			row.name = fmt.Sprintf("[%d] %s", sequence, row.name)
+			row.name = fmt.Sprintf("[%d] %s", sequence, reportClientName(row))
 			out = append(out, row)
 		}
 		if banded {
@@ -805,12 +836,27 @@ func explicitSortValue(row explicitRow, field string) string {
 	}
 }
 
-func writeExplicitCSV(w http.ResponseWriter, deps *Deps, matrix *explicitMatrix, period string) {
+// explicitExportFilename names one explicit (category, period) download. The
+// category and the period's display label are both part of the name: every
+// category of a group offers the same period tokens, so a name without the
+// category made (say) the academic and deportment files for one term collide,
+// and slugging the raw "phase:<code>" token leaked the internal phase code
+// instead of the label the drawer showed.
+func explicitExportFilename(deps *Deps, matrix *explicitMatrix, category *exportpb.JobCategoryOption, period string) string {
 	prefix := slug(deps.Labels.SubscriptionGroup.Title)
 	if prefix == "none" {
 		prefix = "outcomes"
 	}
-	filename := prefix + "-" + slug(matrix.context.GetSubscriptionGroupName()) + "-" + slug(period)
+	parts := []string{prefix, slug(matrix.context.GetSubscriptionGroupName())}
+	if category != nil {
+		parts = append(parts, slug(categoryLabel(deps.Labels, category)))
+	}
+	parts = append(parts, slug(explicitPeriodName(deps.Labels, category, period)))
+	return strings.Join(parts, "-")
+}
+
+func writeExplicitCSV(w http.ResponseWriter, deps *Deps, matrix *explicitMatrix, categoryID, period string) {
+	filename := explicitExportFilename(deps, matrix, selectedExplicitCategory(matrix, categoryID), period)
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`.csv"`)
 	cw := csv.NewWriter(w)
@@ -830,6 +876,10 @@ func writeExplicitCSV(w http.ResponseWriter, deps *Deps, matrix *explicitMatrix,
 	for _, row := range matrix.rows {
 		record := make([]string, len(matrix.columns)+1)
 		record[0] = csvSafe(row.name)
+		if row.band {
+			// D14: the CSV prints band headings in capitals; documents get the raw value.
+			record[0] = csvSafe(strings.ToUpper(row.name))
+		}
 		if !row.band && !row.blank {
 			for i, value := range row.values {
 				record[i+1] = csvSafe(value)

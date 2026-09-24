@@ -138,7 +138,7 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 			// Thread the ALREADY-RESOLVED scope (the same MINE/ALL the grid + the
 			// GetOutcomeMatrix call above use) into the roster read — MINE stays MINE
 			// so a non-admin never receives the full-workspace year-final roster.
-			writeFinalCompositeCSV(ctx, w, deps, resp.GetJobTemplateName(), templateID, scope, onlyClients)
+			writeFinalCompositeCSV(ctx, w, deps, sectionSubjectName(resp.GetJobTemplateName(), section), templateID, scope, onlyClients)
 			return
 		}
 
@@ -164,7 +164,10 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 			return
 		}
 
-		filename := exportFilename(deps.Labels, resp.GetJobTemplateName(), templateID)
+		filename := exportFilename(deps.Labels, sectionSubjectName(resp.GetJobTemplateName(), section), templateID)
+		if label := periodFilenameLabel(period, resp.GetPhases()); label != "" {
+			filename += "-" + slug(label)
+		}
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`.csv"`)
@@ -579,7 +582,7 @@ func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageVi
 	// + AY (RFC-5987 dual-encoded so a non-ASCII subject/AY downloads correctly).
 	// Seeded template names embed the AY as a suffix ("Arts — AY 2025-2026"), so
 	// only append the AY slug when the subject slug does not already carry it.
-	filename := exportFilename(deps.Labels, subjectName, templateID)
+	filename := exportFilename(deps.Labels, sectionSubjectName(subjectName, section), templateID)
 	if ay := slug(academicYear); ay != "" && ay != "none" && !strings.HasSuffix(filename, ay) {
 		filename += "-" + ay
 	}
@@ -684,6 +687,38 @@ func rosterLabel(row *matrixpb.OutcomeSummaryRosterRow, names map[string]clientN
 		return n
 	}
 	return short(row.GetClientId())
+}
+
+// sectionSubjectName qualifies the subject with the section on a
+// section-scoped export. Every section of one subject exports the same job
+// template, so without it two sections' sheets download under one name.
+func sectionSubjectName(subjectName string, section outcome_matrix.GroupScope) string {
+	if !section.Scoped() || strings.TrimSpace(section.GroupName) == "" {
+		return subjectName
+	}
+	return subjectName + " " + section.GroupName
+}
+
+// periodFilenameLabel names a single-phase grid export after the phase the
+// drawer offered ("" for the all-periods export). The raw phase name is used
+// rather than the variant-composed label: strand variants of one phase share a
+// code, and the export keeps all of them.
+func periodFilenameLabel(period string, phases []*matrixpb.PhaseColumn) string {
+	if period == "" || period == "final" {
+		return ""
+	}
+	for _, phase := range phases {
+		if phase.GetCode() != period {
+			continue
+		}
+		if name := strings.TrimSpace(phase.GetPhaseName()); name != "" {
+			return name
+		}
+		if label := strings.TrimSpace(phase.GetLabel()); label != "" {
+			return label
+		}
+	}
+	return period
 }
 
 // exportFilename derives "{page-title}-{subject}" from lyngua'd labels

@@ -444,10 +444,8 @@ func mappedCategories(ctx context.Context, deps *Deps) ([]*jobcategorypb.JobCate
 		if category == nil || category.GetId() == "" {
 			continue
 		}
-		profile, ok := deps.Options.SubscriptionGroupExport.ProfileForCategoryCode(category.GetCode())
-		if _, registered := subscriptiongroupdocument.LookupProfile(profile); ok && registered {
-			result = append(result, category)
-		}
+		// D11: every job category may carry a group-matrix template.
+		result = append(result, category)
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].GetSortOrder() != result[j].GetSortOrder() {
@@ -475,9 +473,7 @@ func selectedCategory(categories []*jobcategorypb.JobCategory, id string, option
 		if category.GetId() != id {
 			continue
 		}
-		profile, ok := options.ProfileForCategoryCode(category.GetCode())
-		contract, registered := subscriptiongroupdocument.LookupProfile(profile)
-		return category, profile, ok && registered && contract.CategoryBindingScope == subscriptiongroupdocument.CategoryBindingScopeExactCategory
+		return category, subscriptiongroupdocument.GroupMatrixRenderProfile, true
 	}
 	return nil, bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED, false
 }

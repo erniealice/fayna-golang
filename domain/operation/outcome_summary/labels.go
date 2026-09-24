@@ -48,10 +48,13 @@ type SubscriptionGroupExportLabels struct {
 	NoTemplateError           string `json:"no_template_error"`
 	NoProfileError            string `json:"no_profile_error"`
 	IncompatibleTemplateError string `json:"incompatible_template_error"`
-	AmbiguousPhaseError       string `json:"ambiguous_phase_error"`
-	NotComputedError          string `json:"not_computed_error"`
-	GroupingConfigError       string `json:"grouping_config_error"`
-	DataUnavailableError      string `json:"data_unavailable_error"`
+	// ColumnCapacityError names both counts via {template_columns} and
+	// {data_columns} when a numbered-slot template is too narrow (D9).
+	ColumnCapacityError  string `json:"column_capacity_error"`
+	AmbiguousPhaseError  string `json:"ambiguous_phase_error"`
+	NotComputedError     string `json:"not_computed_error"`
+	GroupingConfigError  string `json:"grouping_config_error"`
+	DataUnavailableError string `json:"data_unavailable_error"`
 }
 
 // SubscriptionGroupDocumentTemplateSettingsLabels holds the distinct subscription-group template
@@ -418,6 +421,7 @@ func DefaultLabels() Labels {
 			NoTemplateError:           "No group template is configured for this selection.",
 			NoProfileError:            "PDF is not configured for this category. CSV is still available.",
 			IncompatibleTemplateError: "The group template does not match this outcome layout.",
+			ColumnCapacityError:       "This template has {template_columns} columns but this selection has {data_columns}. Upload a template with more columns or a column loop.",
 			AmbiguousPhaseError:       "This period is configured inconsistently across items.",
 			NotComputedError:          "No outcomes are available for this selection.",
 			GroupingConfigError:       "Outcome export grouping is not configured correctly.",

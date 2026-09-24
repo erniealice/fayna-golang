@@ -3,7 +3,6 @@ package outcome_summary
 import (
 	"testing"
 
-	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 )
 
 // TestGroupValueRank pins the owner-locked band-order grammar: listed values
@@ -104,22 +103,12 @@ func TestSubscriptionGroupExportEnabledIndependentFromGroupedPresentation(t *tes
 	}
 }
 
-func TestSubscriptionGroupExportProfileAndRowBandConfiguration(t *testing.T) {
-	const profile = bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
+func TestSubscriptionGroupExportRowBandConfiguration(t *testing.T) {
 	opts := Options{
 		Row: RowOptions{GroupByField: "client_attributes.gender"},
 		SubscriptionGroupExport: SubscriptionGroupExportOptions{
-			ProfileByCategoryCode:  map[string]bindingpb.RenderProfile{"academic": profile, "bad": 99},
 			GroupByAttributeModule: " entity ",
 		},
-	}
-	if got, ok := opts.SubscriptionGroupExport.ProfileForCategoryCode("academic"); !ok || got != profile {
-		t.Fatalf("trusted profile lookup = (%v,%v), want (%v,true)", got, ok, profile)
-	}
-	for _, code := range []string{"missing", "bad"} {
-		if got, ok := opts.SubscriptionGroupExport.ProfileForCategoryCode(code); ok || got != bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED {
-			t.Fatalf("profile lookup %q = (%v,%v), want fail-closed UNSPECIFIED", code, got, ok)
-		}
 	}
 	code, module, configured, err := opts.ExportRowBandConfig()
 	if err != nil || !configured || code != "gender" || module != "entity" {

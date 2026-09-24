@@ -69,9 +69,6 @@ type SubscriptionGroupExportOptions struct {
 	// DefaultCategoryCode is selected after a valid request category and before
 	// the first sorted response category. Empty or absent falls back to first.
 	DefaultCategoryCode string
-	// ProfileByCategoryCode declares which exact category semantics may use a
-	// PDF render profile. The browser never supplies or selects this value.
-	ProfileByCategoryCode map[string]bindingpb.RenderProfile
 	// WholeReportProfile explicitly enables the one profile this app currently
 	// allows at all-categories binding scope in the template settings surface.
 	// It is trusted composition data, never read from the request. The profile
@@ -98,19 +95,6 @@ type ResolvedSubscriptionGroupDocumentTemplate struct {
 // zero value preserves existing consumers and never advertises or mounts the
 // SubscriptionGroup Template path.
 func (o Options) SubscriptionGroupExportEnabled() bool { return o.SubscriptionGroupExport.Enabled }
-
-// ProfileForCategoryCode returns a recognized non-UNSPECIFIED generated render
-// profile for the exact trusted category code. Unknown enum values fail closed.
-func (o SubscriptionGroupExportOptions) ProfileForCategoryCode(code string) (bindingpb.RenderProfile, bool) {
-	profile, ok := o.ProfileByCategoryCode[strings.TrimSpace(code)]
-	if !ok || profile == bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED {
-		return bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED, false
-	}
-	if _, known := bindingpb.RenderProfile_name[int32(profile)]; !known {
-		return bindingpb.RenderProfile_RENDER_PROFILE_UNSPECIFIED, false
-	}
-	return profile, true
-}
 
 // ExportRowBandConfig validates the presentation-only row-band reference. An
 // empty reference deliberately disables banding; any non-empty unsupported

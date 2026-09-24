@@ -10,6 +10,16 @@ import bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/su
 const SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key = "subscription_group_outcome_matrix_single_period_11_v1"
 const SubscriptionGroupClientPhaseOutcomeReportV1Key = "subscription_group_client_phase_outcome_report_v1"
 
+// GroupMatrixRenderProfile is the one group-matrix data source: one
+// authorized subscription group × one job category × one period. Its stored
+// "…_SINGLE_PERIOD_11_V1" name is kept only for compatibility with existing
+// bindings; the column count is chosen by each uploaded template, never here.
+const GroupMatrixRenderProfile = bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1
+
+// MaxColumns bounds a group matrix; it matches the DOCX engine's table
+// column-loop limit (Word's own 63-column table limit).
+const MaxColumns = 63
+
 // CategoryBindingScope describes which job-category binding identity a
 // template profile accepts. This is part of the profile contract rather than
 // an app-specific switch, so settings and render paths can validate scope in
@@ -26,21 +36,18 @@ const (
 type Profile struct {
 	Enum                 bindingpb.RenderProfile
 	Key                  string
-	JobTemplateSlots     int
 	CategoryBindingScope CategoryBindingScope
 }
 
 var subscriptionGroupOutcomeMatrixSinglePeriod11V1 = Profile{
 	Enum:                 bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1,
 	Key:                  SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key,
-	JobTemplateSlots:     11,
 	CategoryBindingScope: CategoryBindingScopeExactCategory,
 }
 
 var subscriptionGroupClientPhaseOutcomeReportV1 = Profile{
 	Enum:                 bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1,
 	Key:                  SubscriptionGroupClientPhaseOutcomeReportV1Key,
-	JobTemplateSlots:     0,
 	CategoryBindingScope: CategoryBindingScopeAllCategories,
 }
 

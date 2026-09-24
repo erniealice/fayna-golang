@@ -2,73 +2,47 @@
   "profile": {
     "key": "subscription_group_outcome_matrix_single_period_11_v1",
     "binding_job_category_scope": "exact_required",
-    "job_template_slots": 11,
     "period_cardinality": 1,
     "row_loop": "rows",
+    "column_loop": "job_templates",
+    "row_column_loop": "cells",
+    "max_columns": 63,
+    "numbered_slot_pattern": "job_template{n}_",
     "subject_order": "trimmed_display_name_unicode_lower_then_id_asc",
     "subject_order_owner": "go_post_query_normalization",
+    "column_capacity": "numbered_slots_used_by_template_else_unbounded",
     "column_mismatch": "fail_loud_503",
     "profile_mismatch": "fail_loud_503",
-    "missing_outcome_display": "blank"
+    "missing_outcome_display": "blank",
+    "occurrence_rule": "any_supported_token_may_be_omitted_or_repeated"
   },
-  "scalars": [
-    "sheet_title",
-    "subscription_group_name_display",
-    "price_schedule_name_display",
-    "job_template_phase_name_display",
-    "client_name_label",
-    "job_template1_name_display",
-    "job_template2_name_display",
-    "job_template3_name_display",
-    "job_template4_name_display",
-    "job_template5_name_display",
-    "job_template6_name_display",
-    "job_template7_name_display",
-    "job_template8_name_display",
-    "job_template9_name_display",
-    "job_template10_name_display",
-    "job_template11_name_display"
-  ],
-  "loops": {
-    "rows": {
-      "scalars": [
-        "row_label_display",
-        "row_bold",
-        "job_template1_scaled_label",
-        "job_template1_fill_hex",
-        "job_template1_text_hex",
-        "job_template2_scaled_label",
-        "job_template2_fill_hex",
-        "job_template2_text_hex",
-        "job_template3_scaled_label",
-        "job_template3_fill_hex",
-        "job_template3_text_hex",
-        "job_template4_scaled_label",
-        "job_template4_fill_hex",
-        "job_template4_text_hex",
-        "job_template5_scaled_label",
-        "job_template5_fill_hex",
-        "job_template5_text_hex",
-        "job_template6_scaled_label",
-        "job_template6_fill_hex",
-        "job_template6_text_hex",
-        "job_template7_scaled_label",
-        "job_template7_fill_hex",
-        "job_template7_text_hex",
-        "job_template8_scaled_label",
-        "job_template8_fill_hex",
-        "job_template8_text_hex",
-        "job_template9_scaled_label",
-        "job_template9_fill_hex",
-        "job_template9_text_hex",
-        "job_template10_scaled_label",
-        "job_template10_fill_hex",
-        "job_template10_text_hex",
-        "job_template11_scaled_label",
-        "job_template11_fill_hex",
-        "job_template11_text_hex"
+  "scopes": {
+    "root": {
+      "text": [
+        "sheet_title",
+        "subscription_group_name_display",
+        "price_schedule_name_display",
+        "job_template_phase_name_display",
+        "period_name_display",
+        "client_name_label",
+        "job_template_count"
       ],
-      "loops": {}
+      "numbered_text": ["name_display"],
+      "style": {}
+    },
+    "job_templates": {
+      "text": ["job_template_name_display", "job_template_number"],
+      "style": {}
+    },
+    "rows": {
+      "text": ["row_label_display", "row_band_label", "row_client_label"],
+      "numbered_text": ["scaled_label"],
+      "style": {"row_bold": "bold"},
+      "numbered_style": {"fill_hex": "fill", "text_hex": "color"}
+    },
+    "cells": {
+      "text": ["cell_scaled_label"],
+      "style": {"cell_fill_hex": "fill", "cell_text_hex": "color"}
     }
   },
   "style_values": {

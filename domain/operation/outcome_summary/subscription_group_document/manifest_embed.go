@@ -49,7 +49,6 @@ type renderManifest struct {
 	Profile struct {
 		Key                     string `json:"key"`
 		BindingJobCategoryScope string `json:"binding_job_category_scope"`
-		JobTemplateSlots        int    `json:"job_template_slots"`
 		PeriodCardinality       int    `json:"period_cardinality"`
 		RowLoop                 string `json:"row_loop"`
 		SubjectOrder            string `json:"subject_order"`
@@ -118,14 +117,10 @@ func loadManifest(profileValue bindingpb.RenderProfile) (Profile, renderManifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return Profile{}, renderManifest{}, contractError("decode embedded manifest: %v", err)
 	}
-	if manifest.Profile.Key != profile.Key || manifest.Profile.JobTemplateSlots != profile.JobTemplateSlots {
+	if manifest.Profile.Key != profile.Key {
 		return Profile{}, renderManifest{}, contractError("embedded manifest does not match the registered profile")
 	}
 	switch profile.Key {
-	case SubscriptionGroupOutcomeMatrixSinglePeriod11V1Key:
-		if manifest.Profile.BindingJobCategoryScope != "exact_required" || manifest.Profile.PeriodCardinality != 1 || manifest.Profile.RowLoop != "rows" {
-			return Profile{}, renderManifest{}, contractError("embedded matrix manifest does not match the registered profile")
-		}
 	case SubscriptionGroupClientPhaseOutcomeReportV1Key:
 		if manifest.Profile.BindingJobCategoryScope != "null_required" || manifest.Profile.PeriodCardinality != 0 || manifest.Profile.RowLoop != "jobs" {
 			return Profile{}, renderManifest{}, contractError("embedded client phase manifest does not match the registered profile")
@@ -156,19 +151,37 @@ func ValidateTemplate(profileValue bindingpb.RenderProfile, docx []byte) error {
 }
 
 func validateTemplateWithLimits(profileValue bindingpb.RenderProfile, docx []byte, limits validationLimits) error {
+	profile, ok := LookupProfile(profileValue)
+	if !ok {
+		return contractError("unsupported render profile")
+	}
+	if profile.Enum == GroupMatrixRenderProfile {
+		_, err := validateGroupMatrixTemplate(docx, limits)
+		return err
+	}
 	_, manifest, err := loadManifest(profileValue)
 	if err != nil {
 		return err
 	}
+	parts, err := readTemplateParts(docx, limits)
+	if err != nil {
+		return err
+	}
+	return validateClientPhaseManifestTokens(parts, manifest)
+}
+
+// readTemplateParts enforces compressed and actual expansion bounds, archive
+// path safety and identity, and returns the XML parts of a DOCX.
+func readTemplateParts(docx []byte, limits validationLimits) (map[string][]byte, error) {
 	if int64(len(docx)) > limits.input {
-		return contractError("compressed input exceeds %d bytes", limits.input)
+		return nil, contractError("compressed input exceeds %d bytes", limits.input)
 	}
 	reader, err := zip.NewReader(bytes.NewReader(docx), int64(len(docx)))
 	if err != nil {
-		return contractError("open DOCX archive: %v", err)
+		return nil, contractError("open DOCX archive: %v", err)
 	}
 	if len(reader.File) > limits.entries {
-		return contractError("archive contains more than %d entries", limits.entries)
+		return nil, contractError("archive contains more than %d entries", limits.entries)
 	}
 
 	seen := make(map[string]struct{}, len(reader.File))
@@ -176,21 +189,21 @@ func validateTemplateWithLimits(profileValue bindingpb.RenderProfile, docx []byt
 	var aggregate int64
 	for _, file := range reader.File {
 		if file.NonUTF8 {
-			return contractError("archive entry name is not UTF-8")
+			return nil, contractError("archive entry name is not UTF-8")
 		}
 		canonical, err := canonicalArchiveName(file.Name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		folded := strings.ToLower(canonical)
 		if _, duplicate := seen[folded]; duplicate {
-			return contractError("duplicate archive part %q", canonical)
+			return nil, contractError("duplicate archive part %q", canonical)
 		}
 		seen[folded] = struct{}{}
 
 		rc, err := file.Open()
 		if err != nil {
-			return contractError("open archive part %q: %v", canonical, err)
+			return nil, contractError("open archive part %q: %v", canonical, err)
 		}
 		var sink io.Writer = io.Discard
 		var content bytes.Buffer
@@ -200,32 +213,32 @@ func validateTemplateWithLimits(profileValue bindingpb.RenderProfile, docx []byt
 		actual, copyErr := io.Copy(sink, io.LimitReader(rc, limits.entry+1))
 		closeErr := rc.Close()
 		if copyErr != nil {
-			return contractError("read archive part %q: %v", canonical, copyErr)
+			return nil, contractError("read archive part %q: %v", canonical, copyErr)
 		}
 		if closeErr != nil {
-			return contractError("close archive part %q: %v", canonical, closeErr)
+			return nil, contractError("close archive part %q: %v", canonical, closeErr)
 		}
 		if actual > limits.entry {
-			return contractError("archive part %q exceeds %d actual bytes", canonical, limits.entry)
+			return nil, contractError("archive part %q exceeds %d actual bytes", canonical, limits.entry)
 		}
 		if uint64(actual) != file.UncompressedSize64 {
-			return contractError("archive part %q actual size does not match its directory entry", canonical)
+			return nil, contractError("archive part %q actual size does not match its directory entry", canonical)
 		}
 		aggregate += actual
 		if aggregate > limits.aggregate {
-			return contractError("archive actual expansion exceeds %d bytes", limits.aggregate)
+			return nil, contractError("archive actual expansion exceeds %d bytes", limits.aggregate)
 		}
 		if isXMLPart(canonical) {
 			parts[canonical] = append([]byte(nil), content.Bytes()...)
 		}
 	}
 	if _, ok := parts["[Content_Types].xml"]; !ok {
-		return contractError("DOCX is missing [Content_Types].xml")
+		return nil, contractError("DOCX is missing [Content_Types].xml")
 	}
 	if _, ok := parts["word/document.xml"]; !ok {
-		return contractError("DOCX is missing word/document.xml")
+		return nil, contractError("DOCX is missing word/document.xml")
 	}
-	return validateManifestTokens(parts, manifest)
+	return parts, nil
 }
 
 func canonicalArchiveName(name string) (string, error) {
@@ -264,7 +277,14 @@ type tokenOccurrence struct {
 	table, row         int
 	tableDepth         int
 	order, paragraph   int
-	ancestry           []xml.Name
+	// cell is the enclosing depth-1-or-deeper table cell's scan id and column
+	// its 1-based position among its row's cells (both 0 outside a cell).
+	cell, column int
+	ancestry     []xml.Name
+}
+
+type cellScanContext struct {
+	id, column int
 }
 
 type tableScanContext struct {
@@ -273,6 +293,7 @@ type tableScanContext struct {
 
 type rowScanContext struct {
 	table, row, tableDepth int
+	cells                  int
 }
 
 type rowPosition struct {
@@ -289,6 +310,8 @@ type partScanner struct {
 	stack         []xml.Name
 	tableStack    []tableScanContext
 	rowStack      []rowScanContext
+	cellStack     []cellScanContext
+	nextCell      int
 	paragraphs    []int
 	nextTable     int
 	nextParagraph int
@@ -296,109 +319,6 @@ type partScanner struct {
 	paragraphText map[int]*strings.Builder
 	occurrences   []tokenOccurrence
 	completeCount int
-}
-
-func validateManifestTokens(parts map[string][]byte, manifest renderManifest) error {
-	if manifest.Profile.Key == SubscriptionGroupClientPhaseOutcomeReportV1Key {
-		return validateClientPhaseManifestTokens(parts, manifest)
-	}
-	return validateMatrixManifestTokens(parts, manifest)
-}
-
-func validateMatrixManifestTokens(parts map[string][]byte, manifest renderManifest) error {
-	var occurrences []tokenOccurrence
-	rowTexts := make(map[rowLocation]string)
-	completeCount := 0
-	for part, body := range parts {
-		scanner := &partScanner{
-			part:          part,
-			completeCount: len(completeTemplateToken.FindAll(body, -1)),
-			rowText:       make(map[rowPosition]*strings.Builder),
-			paragraphText: make(map[int]*strings.Builder),
-		}
-		if err := scanner.scan(body); err != nil {
-			return err
-		}
-		completeCount += scanner.completeCount
-		occurrences = append(occurrences, scanner.occurrences...)
-		for position, value := range scanner.rowText {
-			rowTexts[rowLocation{part: part, table: position.table, row: position.row}] = value.String()
-		}
-	}
-	if completeCount != len(occurrences) {
-		return contractError("template token is split, partial, or outside a supported XML node")
-	}
-
-	rootKeys := make(map[string]struct{}, len(manifest.Scalars))
-	for _, key := range manifest.Scalars {
-		rootKeys[key] = struct{}{}
-	}
-	rowNode, ok := manifest.Loops[manifest.Profile.RowLoop]
-	if !ok || len(rowNode.Loops) != 0 {
-		return contractError("manifest row loop is missing or nested")
-	}
-	rowKeys := make(map[string]struct{}, len(rowNode.Scalars))
-	for _, key := range rowNode.Scalars {
-		rowKeys[key] = struct{}{}
-	}
-
-	byKey := make(map[string][]tokenOccurrence)
-	for _, occurrence := range occurrences {
-		key := occurrence.key
-		if occurrence.part != "word/document.xml" {
-			return contractError("template token %q is outside word/document.xml", key)
-		}
-		if key == "#"+manifest.Profile.RowLoop || key == "/"+manifest.Profile.RowLoop {
-			if err := validateMarkerPlacement(occurrence); err != nil {
-				return contractError("row loop token %q is misplaced", key)
-			}
-			byKey[key] = append(byKey[key], occurrence)
-			continue
-		}
-		if _, root := rootKeys[key]; root {
-			if err := validateRootTokenPlacement(occurrence); err != nil {
-				return err
-			}
-		} else if _, row := rowKeys[key]; row {
-			if err := validateRowTokenPlacement(occurrence); err != nil {
-				return err
-			}
-		} else {
-			return contractError("unexpected template token %q", key)
-		}
-		byKey[key] = append(byKey[key], occurrence)
-	}
-
-	start := byKey["#"+manifest.Profile.RowLoop]
-	end := byKey["/"+manifest.Profile.RowLoop]
-	if len(start) != 1 || len(end) != 1 || start[0].kind != "text" || end[0].kind != "text" ||
-		start[0].part != end[0].part || start[0].table <= 0 || start[0].tableDepth != 1 ||
-		start[0].table != end[0].table || end[0].tableDepth != 1 || start[0].row <= 0 ||
-		end[0].row != start[0].row+2 {
-		return contractError("row loop must have one start row, one template row, and one end row")
-	}
-	startLocation := occurrenceRowLocation(start[0])
-	endLocation := occurrenceRowLocation(end[0])
-	if strings.TrimSpace(rowTexts[startLocation]) != "{{#"+manifest.Profile.RowLoop+"}}" ||
-		strings.TrimSpace(rowTexts[endLocation]) != "{{/"+manifest.Profile.RowLoop+"}}" {
-		return contractError("row loop marker rows must contain only their marker text")
-	}
-	templatePart, templateTable, templateRow := start[0].part, start[0].table, start[0].row+1
-	for key := range rootKeys {
-		values := byKey[key]
-		if len(values) != 1 || values[0].kind != "text" ||
-			(values[0].part == templatePart && values[0].table == templateTable && values[0].row == templateRow) {
-			return contractError("root token %q is missing, duplicated, or misplaced", key)
-		}
-	}
-	for key := range rowKeys {
-		values := byKey[key]
-		if len(values) != 1 || values[0].part != templatePart || values[0].table != templateTable ||
-			values[0].row != templateRow || values[0].tableDepth != 1 {
-			return contractError("row token %q is missing, duplicated, or outside the template row", key)
-		}
-	}
-	return nil
 }
 
 type manifestLoopScope struct {
@@ -883,6 +803,12 @@ func (s *partScanner) scan(body []byte) error {
 				}
 				s.rowStack = append(s.rowStack, row)
 			}
+			if isWordprocessingMLName(value.Name, "tc") && isWordprocessingMLName(parent, "tr") && len(s.rowStack) != 0 {
+				row := &s.rowStack[len(s.rowStack)-1]
+				row.cells++
+				s.nextCell++
+				s.cellStack = append(s.cellStack, cellScanContext{id: s.nextCell, column: row.cells})
+			}
 			s.stack = append(s.stack, value.Name)
 			for _, attribute := range value.Attr {
 				if err := s.record(attribute.Value, "attribute", value.Name, attribute.Name); err != nil {
@@ -915,6 +841,11 @@ func (s *partScanner) scan(body []byte) error {
 			if isWordprocessingMLName(value.Name, "p") {
 				if len(s.paragraphs) != 0 {
 					s.paragraphs = s.paragraphs[:len(s.paragraphs)-1]
+				}
+			}
+			if isWordprocessingMLName(value.Name, "tc") && len(s.stack) >= 2 && isWordprocessingMLName(s.stack[len(s.stack)-2], "tr") {
+				if len(s.cellStack) != 0 {
+					s.cellStack = s.cellStack[:len(s.cellStack)-1]
 				}
 			}
 			if isWordprocessingMLName(value.Name, "tr") {
@@ -958,10 +889,15 @@ func (s *partScanner) record(raw, kind string, element, attribute xml.Name) erro
 	if len(s.paragraphs) != 0 {
 		paragraph = s.paragraphs[len(s.paragraphs)-1]
 	}
+	var cell cellScanContext
+	if len(s.cellStack) != 0 {
+		cell = s.cellStack[len(s.cellStack)-1]
+	}
 	s.occurrences = append(s.occurrences, tokenOccurrence{
 		key: inner, part: s.part, kind: kind, element: element, attribute: attribute,
 		table: row.table, row: row.row, tableDepth: row.tableDepth,
 		order: len(s.occurrences) + 1, paragraph: paragraph,
+		cell: cell.id, column: cell.column,
 		ancestry: append([]xml.Name(nil), s.stack...),
 	})
 	return nil

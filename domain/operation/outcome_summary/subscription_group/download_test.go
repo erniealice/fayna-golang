@@ -14,7 +14,6 @@ import (
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
-	bindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/subscription_group_document_template"
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
@@ -77,10 +76,8 @@ func drawerDeps(resp *exportpb.GetSubscriptionGroupOutcomeExportResponse) (*Draw
 		Options: outcome_summary.Options{List: outcome_summary.ListOptions{Entity: outcome_summary.ListEntitySubscriptionGroup}, SubscriptionGroupExport: outcome_summary.SubscriptionGroupExportOptions{
 			Enabled:             true,
 			DefaultCategoryCode: "academic",
-			ProfileByCategoryCode: map[string]bindingpb.RenderProfile{
-				"academic": bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_OUTCOME_MATRIX_SINGLE_PERIOD_11_V1,
-			},
 		}},
+		PDFAvailable: true,
 		GetSubscriptionGroupOutcomeExport: func(_ context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error) {
 			calls++
 			if req.GetSubscriptionGroupId() != "group-1" || req.GetJobCategoryId() != "" || req.GetOutcomeSelector() != nil {
@@ -115,7 +112,7 @@ func TestDownloadDrawer_CategoryRefreshBuildsPhaseOptions(t *testing.T) {
 		t.Fatalf("academic periods = %+v", data.Periods)
 	}
 	if !data.Formats[0].Selected || data.Formats[1].Disabled {
-		t.Fatalf("formats = %+v, want selected/enabled CSV and mapped PDF", data.Formats)
+		t.Fatalf("formats = %+v, want selected/enabled CSV and PDF", data.Formats)
 	}
 	if data.RefreshAction != "/report-cards/group/group-1/download" || data.FormURL != "/report-cards/group/group-1/export" {
 		t.Fatalf("actions = %q / %q", data.RefreshAction, data.FormURL)
@@ -131,8 +128,17 @@ func TestDownloadDrawer_CategoryRefreshBuildsPhaseOptions(t *testing.T) {
 	if len(data.Periods) != 1 || data.Periods[0].Value != "phase:q1" {
 		t.Fatalf("first-category fallback periods = %+v", data.Periods)
 	}
-	if !data.Formats[0].Selected || !data.Formats[1].Disabled {
-		t.Fatalf("unmapped category formats = %+v, want disabled PDF", data.Formats)
+	// A-CAT-1 / D11: PDF is offered for every category; the published binding
+	// answers at download time.
+	if !data.Formats[0].Selected || data.Formats[1].Disabled {
+		t.Fatalf("fallback category formats = %+v, want enabled PDF", data.Formats)
+	}
+	// Without template resolution/rendering wired, PDF stays disabled.
+	deps.PDFAvailable = false
+	result = viewUnderTest.Handle(ctx, &view.ViewContext{Request: request})
+	data = result.Data.(*DrawerData)
+	if !data.Formats[1].Disabled {
+		t.Fatalf("unwired PDF formats = %+v, want disabled PDF", data.Formats)
 	}
 }
 

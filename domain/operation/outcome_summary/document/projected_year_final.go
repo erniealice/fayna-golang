@@ -337,7 +337,7 @@ func buildProjectedJobCategories(card *exportpb.ClientReportCardProjection, grou
 		for _, criterionID := range criteriaOrder {
 			criteriaList = append(criteriaList, criteriaRows[criterionID])
 		}
-		assignmentNames := strings.Split(projectedJobTeacherNames(card, item.jobID, jobPhases), " / ")
+		assignmentNames := strings.Split(projectedJobStaffNames(card, item.jobID, jobPhases), " / ")
 		if len(assignmentNames) == 1 && assignmentNames[0] == "" {
 			assignmentNames = nil
 		}
@@ -586,8 +586,8 @@ func buildProjectedLegacyCardRows(d *Deps, card *exportpb.ClientReportCardProjec
 			row.Criteria, row.OrderTotals = tr.criterionRowsByOrder(criterionNames)
 			row.Sem1Total, row.Sem2Total = row.OrderTotals[1], row.OrderTotals[2]
 			row.ItemTitle = row.Name
-			teacherNames := projectedJobTeacherNames(card, job.GetId(), phasesByJob[job.GetId()])
-			row.StaffLine = teacherNames
+			staffLine := projectedJobStaffNames(card, job.GetId(), phasesByJob[job.GetId()])
+			row.StaffLine = staffLine
 			subjects = append(subjects, row)
 		}
 		if academicCode != "" && !strings.EqualFold(strings.TrimSpace(category.GetCode()), academicCode) {
@@ -646,7 +646,7 @@ func appendFormationRow(groups []formationGroup, category *jobcategorypb.JobCate
 	return append(groups, formationGroup{Title: strings.TrimSpace(category.GetName()), Rows: []formationRow{{Subject: cleanSubject(name), Average: average}}})
 }
 
-func projectedJobTeacherNames(card *exportpb.ClientReportCardProjection, jobID string, phases []*jobphasepb.JobPhase) string {
+func projectedJobStaffNames(card *exportpb.ClientReportCardProjection, jobID string, phases []*jobphasepb.JobPhase) string {
 	phaseIDs := map[string]struct{}{}
 	for _, phase := range phases {
 		phaseIDs[phase.GetId()] = struct{}{}

@@ -35,7 +35,7 @@
     "jobs": {
       "scalars": [
         "job_name",
-        "teacher_name",
+        "staff_name",
         "phase_grade",
         "phase_comment",
         "phase_total",

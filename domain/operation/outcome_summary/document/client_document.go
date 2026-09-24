@@ -131,7 +131,11 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 			http.Error(w, "report period template is unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		data, err = buildClientPhaseReportData(d, redactBlockedClientPhaseScores(card, gate), period, printedByDisplay, printedAt)
+		projection := card
+		if !d.DocOptions.ShowUnpublishedValues {
+			projection = redactBlockedClientPhaseScores(card, gate)
+		}
+		data, err = buildClientPhaseReportData(d, projection, period, printedByDisplay, printedAt)
 		if err != nil {
 			log.Printf("client phase report data: %v", err)
 			http.Error(w, "report period data is unavailable", http.StatusServiceUnavailable)

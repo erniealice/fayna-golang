@@ -330,10 +330,11 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 			}
 		}
 	}
-	criterionPrefix, notAssessed := "", ""
+	criterionPrefix, notAssessed, maxStaffNames := "", "", 0
 	if d != nil {
 		criterionPrefix = d.Labels.ClientDocument.CriterionPrefix
 		notAssessed = strings.TrimSpace(d.Labels.ClientDocument.NotAssessed)
+		maxStaffNames = d.DocOptions.MaxStaffNames
 	}
 	loopCategories := map[string]bool{}
 	if d != nil {
@@ -346,7 +347,7 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 	groupLeads := make([]string, 0)
 	for _, entry := range selected {
 		if groupCategoryCode != "" && strings.EqualFold(strings.TrimSpace(entry.category.GetCode()), groupCategoryCode) {
-			groupLeads = append(groupLeads, strings.Split(teacherNames(card, entry.job.GetId(), entry.phase.GetId()), ", ")...)
+			groupLeads = append(groupLeads, strings.Split(staffNames(card, entry.job.GetId(), entry.phase.GetId()), ", ")...)
 		}
 		if len(loopCategories) > 0 && !loopCategories[strings.ToLower(strings.TrimSpace(entry.category.GetCode()))] {
 			continue
@@ -434,7 +435,7 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 		jobs = append(jobs, map[string]any{
 			"job_name":                 jobName,
 			"job_category_name":        strings.TrimSpace(entry.category.GetName()),
-			"teacher_name":             teacherNames(card, entry.job.GetId(), phase.GetId()),
+			"staff_name":               capNames(staffNames(card, entry.job.GetId(), phase.GetId()), maxStaffNames),
 			"phase_grade":              phaseGrade,
 			"phase_comment":            phaseComment,
 			"phase_total":              "",
@@ -1160,7 +1161,7 @@ func taskOutcomeMark(outcome *exportpb.ClientReportCardTaskOutcome) string {
 	return ""
 }
 
-func teacherNames(card *exportpb.ClientReportCardProjection, jobID, jobPhaseID string) string {
+func staffNames(card *exportpb.ClientReportCardProjection, jobID, jobPhaseID string) string {
 	jobID = strings.TrimSpace(jobID)
 	jobPhaseID = strings.TrimSpace(jobPhaseID)
 	byID := make(map[string]string, len(card.Staff))
@@ -1193,6 +1194,18 @@ func teacherNames(card *exportpb.ClientReportCardProjection, jobID, jobPhaseID s
 	}
 	sort.Strings(names)
 	return strings.Join(names, ", ")
+}
+
+// capNames keeps the first max names of a ", "-joined list (max <= 0 = all).
+func capNames(joined string, max int) string {
+	if max <= 0 || joined == "" {
+		return joined
+	}
+	names := strings.Split(joined, ", ")
+	if len(names) <= max {
+		return joined
+	}
+	return strings.Join(names[:max], ", ")
 }
 
 func formatClientReportMaximum(value float64) string {

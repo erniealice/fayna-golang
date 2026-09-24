@@ -418,7 +418,7 @@ var clientPhaseRootScalars = []string{
 }
 
 var clientPhaseJobScalars = []string{
-	"job_name", "teacher_name", "phase_grade", "phase_comment",
+	"job_name", "staff_name", "phase_grade", "phase_comment",
 	"phase_total", "phase_maximum", "progress_to_date_total", "progress_to_date_maximum",
 }
 

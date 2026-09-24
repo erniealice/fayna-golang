@@ -414,15 +414,15 @@ func TestBuildClientPhaseReportDataSelectsAnyActiveClientPhaseCode(t *testing.T)
 	}
 }
 
-func TestTeacherNamesUsesTheSelectedJobPhase(t *testing.T) {
+func TestStaffNamesUsesTheSelectedJobPhase(t *testing.T) {
 	card := clientPhaseProjectionFixture()
 	card.TeacherAssignments = []*exportpb.ClientReportCardTeacherAssignment{
 		{JobId: "job-art", JobPhaseId: "phase-art", DisplayName: "Selected Teacher"},
 		{JobId: "job-art", JobPhaseId: "phase-art-2", DisplayName: "Other Phase Teacher"},
 		{JobId: "job-bio", JobPhaseId: "phase-art", DisplayName: "Mismatched Job Teacher"},
 	}
-	if got := teacherNames(card, "job-art", "phase-art"); got != "Selected Teacher" {
-		t.Fatalf("teacherNames() = %q, want selected phase teacher only", got)
+	if got := staffNames(card, "job-art", "phase-art"); got != "Selected Teacher" {
+		t.Fatalf("staffNames() = %q, want selected phase teacher only", got)
 	}
 }
 

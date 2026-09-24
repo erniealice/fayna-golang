@@ -155,6 +155,13 @@ type DocumentOptions struct {
 	// period) plus summary_average_period_N / summary_transmuted_period_N
 	// (its phase summary score / scaled label). Empty = none.
 	PeriodSummaryTaskCategoryCode string
+	// ShowUnpublishedValues prints recorded values from sheets that are not yet
+	// published on PERIOD (phase) documents. false = today's rule: a proven
+	// unpublished sheet renders with its scores blank. Year Final is unchanged.
+	ShowUnpublishedValues bool
+	// MaxStaffNames caps the per-job staff name line on client documents to the
+	// first N names (alphabetical). 0 = no cap. The group lead line is not capped.
+	MaxStaffNames int
 	// PlanLabelAttributeCode is the plan attribute CODE (plan_attribute on the
 	// group's plan, e.g. "program_year") whose value prints as each job page's
 	// plan label ({{page_plan_label}}). Empty = blank label.

@@ -64,9 +64,9 @@ func TestClientPhaseValidator_OptionalScalarsAndLoops(t *testing.T) {
 		{"all optional tokens present", clientPhaseDocXML(clientPhaseJobOptionalScalars, clientPhaseAssessmentOptionalScalars, nil, true, true), ""},
 		{"optional scalar duplicated", clientPhaseDocXML([]string{"job_category_name", "job_category_name"}, nil, nil, false, false), "must occur exactly once"},
 		{"root scalar repeated outside loops", clientPhaseDocXML(nil, nil, []string{"{{student_name}}", "{{adviser}}"}, false, false), ""},
-		{"root scalar inside a loop", strings.Replace(clientPhaseDocXML(nil, nil, nil, false, false), "{{teacher_name}}", "{{teacher_name}}</w:t></w:r></w:p><w:p><w:r><w:t>{{student_name}}", 1), "inside loop"},
+		{"root scalar inside a loop", strings.Replace(clientPhaseDocXML(nil, nil, nil, false, false), "{{staff_name}}", "{{staff_name}}</w:t></w:r></w:p><w:p><w:r><w:t>{{student_name}}", 1), "inside loop"},
 		{"omitted loop's token used outside it", clientPhaseDocXML(nil, []string{"{{description}}"}[:0], []string{"{{description}}"}, false, false), "outside loop"},
-		{"required job scalar missing", strings.Replace(clientPhaseDocXML(nil, nil, nil, false, false), "{{teacher_name}}", "teacher", 1), `"teacher_name" is missing`},
+		{"required job scalar missing", strings.Replace(clientPhaseDocXML(nil, nil, nil, false, false), "{{staff_name}}", "teacher", 1), `"staff_name" is missing`},
 		{"required loop omitted", strings.NewReplacer("{{#assessments}}", "", "{{/assessments}}", "", "{{assessment_name}}", "", "{{achievement_level}}", "", "{{comment}}", "").Replace(clientPhaseDocXML(nil, nil, nil, false, false)), "missing"},
 		{"optional loop with one marker only", strings.Replace(clientPhaseDocXML(nil, nil, nil, true, false), "{{/rating_descriptions}}", "", 1), "rating_descriptions"},
 	}
@@ -89,27 +89,22 @@ func TestClientPhaseValidator_OptionalScalarsAndLoops(t *testing.T) {
 // TestJHSClientPhaseAuthoringTemplateV3MatchesManifest validates the v3 layout
 // (owner 2026-09-24): per-page identity, two-column subject heading, criteria
 // as a table-row loop, no category label and no rating-band lines.
-func TestJHSClientPhaseAuthoringTemplateV3MatchesManifest(t *testing.T) {
-	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v3.docx")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ValidateTemplate(testClientPhaseProfile, docx); err != nil {
-		t.Fatalf("JHS client phase v3 authoring asset: %v", err)
-	}
-}
 
 // TestJHSClientPhaseAuthoringTemplateV4MatchesManifest validates the v4 layout
 // (owner 2026-09-24, output-fidelity addendum R1–R5, R7, R8, R11–R13): cover
 // academic year in the cover header, printed-by only in the footer, sample
 // identity grid, teacher line on its own row, and the required-but-unprinted
 // job tokens kept in hidden runs.
-func TestJHSClientPhaseAuthoringTemplateV4MatchesManifest(t *testing.T) {
-	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v4.docx")
+
+// TestJHSClientPhaseAuthoringTemplateV5MatchesManifest validates the v5 layout
+// (owner 2026-09-24): v4 with the subject name and the year/teacher line
+// sharing one heading row (subject left, teacher line right), as the sample.
+func TestJHSClientPhaseAuthoringTemplateV5MatchesManifest(t *testing.T) {
+	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v5.docx")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := ValidateTemplate(testClientPhaseProfile, docx); err != nil {
-		t.Fatalf("JHS client phase v4 authoring asset: %v", err)
+		t.Fatalf("JHS client phase v5 authoring asset: %v", err)
 	}
 }

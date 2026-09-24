@@ -22,6 +22,7 @@ import (
 	deliverygroup "github.com/erniealice/fayna-golang/domain/operation/deliverygroup"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	sheetdoc "github.com/erniealice/fayna-golang/domain/operation/outcome_matrix/document"
+	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
@@ -157,7 +158,7 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 		// nil bar: the CSV export needs the column TREE only. Header action
 		// controls are a rendered-page concern and have no CSV representation.
 		grid := buildGrid(ctx, deps, perms, resp, effectiveAll, templateID, hidden,
-			&view.ViewContext{Request: r}, nil)
+			&view.ViewContext{Request: r}, nil, criterionDisplay{prefix: resolveCriterionPrefix(deps, resp)})
 		if grid.LeafColumnCount() == 0 {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -173,14 +174,7 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 		// One flattened header row: "L1 — L2 — L3" per leaf (the same
 		// flattening idiom table-export.js uses for its one grouping level,
 		// extended to the grid's two). First column = the roster label.
-		header := []string{csvSafe(deps.Labels.Grid.ClientColumn)}
-		for _, l1 := range grid.Columns {
-			for _, l2 := range l1.Level2 {
-				for _, l3 := range l2.Level3 {
-					header = append(header, csvSafe(l1.Label+" — "+l2.Label+" — "+l3.Label))
-				}
-			}
-		}
+		header := gridCSVHeader(grid, deps.Labels.Grid.ClientColumn)
 		if err := cw.Write(header); err != nil {
 			log.Printf("outcome matrix export: write header: %v", err)
 			return
@@ -220,6 +214,18 @@ func NewExportHandler(deps *PageViewDeps) http.HandlerFunc {
 		}
 		cw.Flush()
 	}
+}
+
+func gridCSVHeader(grid *types.CellGridConfig, clientColumn string) []string {
+	header := []string{csvSafe(clientColumn)}
+	for _, l1 := range grid.Columns {
+		for _, l2 := range l1.Level2 {
+			for _, l3 := range l2.Level3 {
+				header = append(header, csvSafe(l1.Label+" — "+l2.Label+" — "+l3.Label))
+			}
+		}
+	}
+	return header
 }
 
 // periodKnown reports whether the period token is recognized: "" (all periods),

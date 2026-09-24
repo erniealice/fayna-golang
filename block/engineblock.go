@@ -554,6 +554,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		if uc.Entity.WorkspaceUser != nil {
 			result.Entity.WorkspaceUser.ListWorkspaceUsers = uc.Entity.WorkspaceUser.ListWorkspaceUsers.Execute
 		}
+		if uc.Entity.User != nil && uc.Entity.User.ReadSelfDisplay != nil {
+			result.Entity.User.ReadSelfDisplayName = uc.Entity.User.ReadSelfDisplay.Execute
+		}
 	}
 
 	// The attribute code→id resolver behind the outcome-matrix row options

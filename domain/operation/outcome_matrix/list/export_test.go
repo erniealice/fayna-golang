@@ -12,10 +12,28 @@ import (
 	"strings"
 	"testing"
 
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	"github.com/erniealice/pyeza-golang/types"
 
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
+
+func TestExportHeadersPrefixWithoutBreak(t *testing.T) {
+	phases := []*matrixpb.PhaseColumn{{Label: "Term 1", Tasks: []*matrixpb.TaskColumn{{Label: "Activity", Criteria: []*matrixpb.CriterionColumn{{ColumnKey: "one", Criteria: &criteriapb.OutcomeCriteria{Name: "Investigating"}}}}}}}
+	screen := buildColumns(phases, nil, nil, criterionDisplay{prefix: "Objective {letter}: ", breakAfter: ":"})
+	if !strings.Contains(screen[0].Level2[0].Level3[0].Label, "\n") {
+		t.Fatal("screen fixture did not enable the break")
+	}
+	columns := buildColumns(phases, nil, nil, criterionDisplay{prefix: "Objective {letter}: "})
+	header := gridCSVHeader(&types.CellGridConfig{Columns: columns}, "Student")
+	if len(header) != 2 || header[1] != "Term 1 — Activity — Objective A: Investigating" {
+		t.Fatalf("CSV header = %q", header)
+	}
+	if strings.Contains(header[1], "\n") {
+		t.Fatalf("CSV header contains display break: %q", header[1])
+	}
+}
 
 // codedPhases builds a 2-phase response (s1/s2) with codes populated.
 func codedPhases() []*matrixpb.PhaseColumn {

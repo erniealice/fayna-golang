@@ -20,6 +20,8 @@ type Labels struct {
 	// vocabulary. Canonical tags stay generic; vertical wording is a Lyngua value.
 	SubscriptionGroupExport SubscriptionGroupExportLabels `json:"subscription_group_export"`
 	ClientDocumentDownload  ClientDocumentDownloadLabels  `json:"client_document_download"`
+	// ClientDocument holds wording printed INSIDE client documents (not UI).
+	ClientDocument ClientDocumentLabels `json:"client_document"`
 	// TemplateSettings holds the TB3 report-card template management surface
 	// strings. Same snake_case-json-tag rule as LandingLabels — a missing tag
 	// silently falls back to the compiled default.
@@ -188,6 +190,17 @@ type ClientDocumentDownloadLabels struct {
 	DownloadingAction     string `json:"downloading_action"`
 	DownloadNotice        string `json:"download_notice"`
 	DownloadErrorFallback string `json:"download_error_fallback"`
+}
+
+// ClientDocumentLabels is vocabulary printed inside client documents. Both
+// default to "" (off); a vertical tier supplies its wording.
+type ClientDocumentLabels struct {
+	// CriterionPrefix is prepended to each criterion name; "{letter}" becomes
+	// A, B, C… by the criterion's position in its activity.
+	CriterionPrefix string `json:"criterion_prefix"`
+	// NotAssessed is printed as the comment of a criterion with no recorded
+	// mark and no note.
+	NotAssessed string `json:"not_assessed"`
 }
 
 // LandingLabels holds the view-1 (report-cards landing) strings. Every field

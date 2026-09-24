@@ -138,8 +138,11 @@ type OutcomeSummaryModuleDeps struct {
 	ListProductPlans                       func(ctx context.Context, req *productplanpb.ListProductPlansRequest) (*productplanpb.ListProductPlansResponse, error)
 	ListProductPlanStaffs                  func(ctx context.Context, req *productplanstaffpb.ListProductPlanStaffsRequest) (*productplanstaffpb.ListProductPlanStaffsResponse, error)
 	ListWorkspaceUsers                     func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
-	ListJobs                               func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
-	ListJobPhases                          func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	// ReadSelfDisplayName — the caller's own first/last name for "Printed by"
+	// (session user only). Optional/nil-safe.
+	ReadSelfDisplayName func(ctx context.Context) (firstName, lastName string, err error)
+	ListJobs            func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	ListJobPhases       func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
 	// GetPhaseApprovalGateRollup — the group-grain render-gate input port
 	// (per-template-phase group rollup with the applied-group echo). Consumed
 	// ONLY when Options.Document.GateGrain selects the subscription-group
@@ -461,6 +464,7 @@ func newClientDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc {
 		ListClientAttributes:                      deps.ListClientAttributes,
 		ResolveAttributeIDByCode:                  deps.ResolveAttributeIDByCode,
 		ListWorkspaceUsers:                        deps.ListWorkspaceUsers,
+		ReadSelfDisplayName:                       deps.ReadSelfDisplayName,
 		GenerateDoc:                               deps.GenerateDoc,
 		GeneratePDF:                               deps.GeneratePDF,
 		ResolveTemplateBytes:                      deps.ResolveTemplateBytes,

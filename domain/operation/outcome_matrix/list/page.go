@@ -11,6 +11,7 @@ import (
 
 	deliverygroup "github.com/erniealice/fayna-golang/domain/operation/deliverygroup"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix/criterionlabel"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
@@ -313,7 +314,11 @@ func NewView(deps *PageViewDeps) view.View {
 		// table scrolls away vertically; the header does not).
 		bar := buildApprovalBar(deps, perms, resp, templateID, section.GroupID)
 
-		grid := buildGrid(ctx, deps, perms, resp, effectiveAll, templateID, hidden, viewCtx, bar)
+		prefix := ""
+		if resp != nil {
+			prefix = resolveCriterionPrefix(deps, resp)
+		}
+		grid := buildGrid(ctx, deps, perms, resp, effectiveAll, templateID, hidden, viewCtx, bar, criterionDisplay{prefix: prefix, breakAfter: deps.Options.CriterionNameBreakAfter})
 
 		subjectName := ""
 		if resp != nil {
@@ -446,7 +451,7 @@ func NewView(deps *PageViewDeps) view.View {
 		pageData.ShowApprovalBar = len(bar) > 0
 
 		if resp != nil {
-			fullCols := buildColumns(resp.GetPhases(), nil, nil)
+			fullCols := buildColumns(resp.GetPhases(), nil, nil, criterionDisplay{prefix: prefix})
 			phases := resp.GetPhases()
 			cols, hiddenLeaves := buildColsSelector(fullCols, hidden, func(h map[string]bool) string {
 				return withParams(matrixBase, scopeActive, hiddenCSV(h, phases))
@@ -627,8 +632,15 @@ func buildGrid(
 	hidden map[string]bool,
 	viewCtx *view.ViewContext,
 	bar []ApprovalPhase,
+	displays ...criterionDisplay,
 ) *types.CellGridConfig {
 	l := deps.Labels
+	var display criterionDisplay
+	if len(displays) > 0 {
+		display = displays[0]
+	} else {
+		display = criterionDisplay{prefix: resolveCriterionPrefix(deps, resp), breakAfter: deps.Options.CriterionNameBreakAfter}
+	}
 
 	scopeStr := "mine"
 	if effectiveAll {
@@ -656,6 +668,8 @@ func buildGrid(
 		// on empty, so this is a clean removal, not a hidden feature loss.
 		FreezeFirstCol:   true,
 		FreezeHeaderRows: 3,
+		CriteriaWidth:    deps.Options.CriterionColumnWidth,
+		HeadPreLine:      deps.Options.CriterionNameBreakAfter != "",
 		// Left-align the two GROUPING header rows (phase, assessment). The leaf
 		// criterion row stays centred over its numeric columns. Opt-in through
 		// pyeza's existing CardClass rather than a new config flag — alignment
@@ -705,7 +719,7 @@ func buildGrid(
 	// keyboard coords all derive from cfg.Columns, so removing subtrees here
 	// keeps every downstream computation correct by construction. `hidden` has
 	// already been resolved fail-safe (resolveHidden) — never empties the grid.
-	cfg.Columns = pruneColumns(buildColumns(resp.GetPhases(), phaseChips(l.Approval, resp), phaseActions(bar, l, cfg.WorkspaceID)), hidden)
+	cfg.Columns = pruneColumns(buildColumns(resp.GetPhases(), phaseChips(l.Approval, resp), phaseActions(bar, l, cfg.WorkspaceID), display), hidden)
 	// Per-cell narrative affordance: resolve the drawer route once ({id} filled)
 	// and index the leaf-column labels by colKey so buildRows can compose each
 	// icon's accessible name / dialog title. An unconfigured NarrativeURL leaves
@@ -714,7 +728,7 @@ func buildGrid(
 	if deps.Routes.NarrativeURL != "" {
 		narrativeBase = route.ResolveURL(deps.Routes.NarrativeURL, "id", templateID)
 	}
-	criterionLabels := criterionLabelsByColKey(resp.GetPhases())
+	criterionLabels := criterionLabelsByColKey(resp.GetPhases(), display.prefix)
 	cfg.Rows = buildRows(resp.GetRows(), actingStaff, l.Grid.ReadOnlyTooltip, clientNames, phaseEditableFunc(resp), narrativeBase, criterionLabels, l.Narrative)
 	applyRowOptions(cfg, deps.Options, attrValues, clientNames)
 	if cfg.AutoSave {
@@ -1203,7 +1217,30 @@ func subReason(tmpl, reason string) string {
 }
 
 // buildColumns maps the proto phase→task→criterion tree into CellGridLevel1/2/3.
-func buildColumns(phases []*matrixpb.PhaseColumn, chips map[string]phaseChip, actions map[string]any) []types.CellGridLevel1 {
+type criterionDisplay struct {
+	prefix     string
+	breakAfter string
+}
+
+// resolveCriterionPrefix returns the vertical's criterion prefix pattern when
+// the sheet's job category (carried on the already-authorized matrix response,
+// so no separately permission-gated category read is needed) is one the app
+// opted in. Anything else keeps the labels bare.
+func resolveCriterionPrefix(deps *PageViewDeps, resp *matrixpb.GetOutcomeMatrixResponse) string {
+	if deps.Labels.Grid.CriterionPrefix == "" || len(deps.Options.CriterionPrefixJobCategoryCodes) == 0 {
+		return ""
+	}
+	if slices.Contains(deps.Options.CriterionPrefixJobCategoryCodes, strings.TrimSpace(resp.GetJobCategoryCode())) {
+		return deps.Labels.Grid.CriterionPrefix
+	}
+	return ""
+}
+
+func buildColumns(phases []*matrixpb.PhaseColumn, chips map[string]phaseChip, actions map[string]any, displays ...criterionDisplay) []types.CellGridLevel1 {
+	var display criterionDisplay
+	if len(displays) > 0 {
+		display = displays[0]
+	}
 	columns := make([]types.CellGridLevel1, 0, len(phases))
 	for _, ph := range phases {
 		l1 := types.CellGridLevel1{
@@ -1223,10 +1260,10 @@ func buildColumns(phases []*matrixpb.PhaseColumn, chips map[string]phaseChip, ac
 				Key:   tk.GetJobTemplateTaskId(),
 				Label: tk.GetLabel(),
 			}
-			for _, cr := range tk.GetCriteria() {
+			for index, cr := range tk.GetCriteria() {
 				l2.Level3 = append(l2.Level3, types.CellGridLevel3{
 					ColumnKey: cr.GetColumnKey(),
-					Label:     criterionLabel(cr),
+					Label:     criterionLabel(cr, index, display.prefix, display.breakAfter),
 					CellInput: buildCellInput(cr),
 				})
 			}
@@ -1370,12 +1407,16 @@ func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string,
 // their colKey ("{job_template_task_id}:{outcome_criteria_id}") so buildRows can
 // name each cell's column in the narrative icon's accessible name / dialog title
 // without threading the full column tree down.
-func criterionLabelsByColKey(phases []*matrixpb.PhaseColumn) map[string]string {
+func criterionLabelsByColKey(phases []*matrixpb.PhaseColumn, prefixes ...string) map[string]string {
+	prefix := ""
+	if len(prefixes) > 0 {
+		prefix = prefixes[0]
+	}
 	m := map[string]string{}
 	for _, ph := range phases {
 		for _, tk := range ph.GetTasks() {
-			for _, cr := range tk.GetCriteria() {
-				m[cr.GetColumnKey()] = criterionLabel(cr)
+			for index, cr := range tk.GetCriteria() {
+				m[cr.GetColumnKey()] = criterionLabel(cr, index, prefix, "")
 			}
 		}
 	}
@@ -1485,9 +1526,9 @@ func criteriaTypeString(t enums.CriteriaType) string {
 	}
 }
 
-func criterionLabel(cr *matrixpb.CriterionColumn) string {
+func criterionLabel(cr *matrixpb.CriterionColumn, index int, prefix, breakAfter string) string {
 	if oc := cr.GetCriteria(); oc != nil && oc.GetName() != "" {
-		return oc.GetName()
+		return criterionlabel.Label(oc.GetName(), index, prefix, breakAfter)
 	}
 	return cr.GetColumnKey()
 }

@@ -9,6 +9,16 @@ import "strings"
 // attribute.code). An empty field disables that behavior; an unrecognized
 // reference is ignored fail-safe — the grid renders exactly as without it.
 type Options struct {
+	// CriterionPrefixJobCategoryCodes lists the job_category codes whose sheets
+	// prefix criterion names with the vertical's criterion_prefix label
+	// ("{letter}" = position in the activity). Empty disables the prefix.
+	CriterionPrefixJobCategoryCodes []string
+	// CriterionNameBreakAfter breaks screen header labels after the first of
+	// these characters (e.g. ":"); empty = no break. Exports never break.
+	CriterionNameBreakAfter string
+	// CriterionColumnWidth is one of "8","10","12","14","16" (rem) for every
+	// criterion column; empty = auto width.
+	CriterionColumnWidth string
 	// RowSortField orders the roster rows by the referenced attribute value
 	// (rows without a value last), then by row label.
 	RowSortField string

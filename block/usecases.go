@@ -799,6 +799,7 @@ type EntityUseCases struct {
 	ClientAttribute EntityClientAttributeUseCases
 	Staff           EntityStaffUseCases
 	WorkspaceUser   EntityWorkspaceUserUseCases
+	User            EntityUserUseCases
 }
 
 // EntityWorkspaceUserUseCases — the User-hydrating workspace-member list
@@ -807,6 +808,13 @@ type EntityUseCases struct {
 // callers build an id→name map from one call). Optional/nil-safe.
 type EntityWorkspaceUserUseCases struct {
 	ListWorkspaceUsers func(context.Context, *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
+}
+
+// EntityUserUseCases — the caller's own display name (session user only; no
+// id parameter, so it cannot read other users). Used to stamp "Printed by" on
+// documents staff print, since staff lack workspace_user:list. Optional/nil-safe.
+type EntityUserUseCases struct {
+	ReadSelfDisplayName func(context.Context) (firstName, lastName string, err error)
 }
 
 type EntityClientUseCases struct {

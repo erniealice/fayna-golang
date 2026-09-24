@@ -17,10 +17,55 @@ import (
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	cardbindingpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary_document_template"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
+
+func TestBuildColumnsLetterPrefixOnlyForConfiguredCategory(t *testing.T) {
+	phase := []*matrixpb.PhaseColumn{{Tasks: []*matrixpb.TaskColumn{{Criteria: []*matrixpb.CriterionColumn{
+		{ColumnKey: "first", Criteria: &criteriapb.OutcomeCriteria{Name: "Investigating"}},
+		{ColumnKey: "second", Criteria: &criteriapb.OutcomeCriteria{Name: "Applying"}},
+	}}}}}
+	labels := outcome_matrix.DefaultLabels()
+	labels.Grid.CriterionPrefix = "Objective {letter}: "
+	deps := &PageViewDeps{
+		Labels:  labels,
+		Options: outcome_matrix.Options{CriterionPrefixJobCategoryCodes: []string{"academic"}},
+	}
+	for _, tc := range []struct{ code, want string }{
+		{"academic", "Objective A: Investigating"},
+		{"subject_deportment", "Investigating"},
+		{"", "Investigating"},
+	} {
+		prefix := resolveCriterionPrefix(deps, &matrixpb.GetOutcomeMatrixResponse{JobCategoryCode: tc.code})
+		cols := buildColumns(phase, nil, nil, criterionDisplay{prefix: prefix})
+		if got := cols[0].Level2[0].Level3[0].Label; got != tc.want {
+			t.Errorf("category %q: got %q, want %q", tc.code, got, tc.want)
+		}
+		if tc.code == "academic" && cols[0].Level2[0].Level3[1].Label != "Objective B: Applying" {
+			t.Errorf("second criterion = %q", cols[0].Level2[0].Level3[1].Label)
+		}
+		if tc.code == "academic" {
+			screen := buildColumns(phase, nil, nil, criterionDisplay{prefix: prefix, breakAfter: ":"})
+			if got := screen[0].Level2[0].Level3[0].Label; got != "Objective A:\nInvestigating" {
+				t.Errorf("screen label = %q", got)
+			}
+			if got := criterionLabelsByColKey(phase, prefix)["first"]; got != "Objective A: Investigating" {
+				t.Errorf("narrative label = %q", got)
+			}
+		}
+	}
+	// Opt-out paths: no category list, or an empty vertical prefix.
+	if got := resolveCriterionPrefix(&PageViewDeps{Labels: labels}, &matrixpb.GetOutcomeMatrixResponse{JobCategoryCode: "academic"}); got != "" {
+		t.Errorf("no category list returned prefix %q", got)
+	}
+	deps.Labels.Grid.CriterionPrefix = ""
+	if got := resolveCriterionPrefix(deps, &matrixpb.GetOutcomeMatrixResponse{JobCategoryCode: "academic"}); got != "" {
+		t.Errorf("empty prefix label returned %q", got)
+	}
+}
 
 // captureOutcomeMatrixLogs runs fn with the package-level logger redirected
 // to a buffer, so a test can assert on the single once-per-request line

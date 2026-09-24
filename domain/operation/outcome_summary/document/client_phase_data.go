@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix/criterionlabel"
+
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	categorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
@@ -328,6 +330,11 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 			}
 		}
 	}
+	criterionPrefix, notAssessed := "", ""
+	if d != nil {
+		criterionPrefix = d.Labels.ClientDocument.CriterionPrefix
+		notAssessed = strings.TrimSpace(d.Labels.ClientDocument.NotAssessed)
+	}
 	loopCategories := map[string]bool{}
 	if d != nil {
 		for _, code := range d.DocOptions.PhaseJobCategoryCodes {
@@ -357,10 +364,12 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 		hasPhaseNumericOutcome := false
 		for _, templateTask := range templateTasksByPhase[entry.tp.GetId()] {
 			jobTask := jobTaskByTemplateTask[templateTask.GetId()]
-			for _, link := range criteriaByTemplateTask[templateTask.GetId()] {
+			for criterionIndex, link := range criteriaByTemplateTask[templateTask.GetId()] {
 				criterion := criteriaByID[link.GetOutcomeCriteriaId()]
 				assessment := map[string]any{
-					"assessment_name":    strings.TrimSpace(criterion.GetName()),
+					// Letter by position in the activity (owner 2026-09-24); never
+					// a line break inside the document.
+					"assessment_name":    criterionlabel.Label(strings.TrimSpace(criterion.GetName()), criterionIndex, criterionPrefix, ""),
 					"achievement_level":  "",
 					"maximum":            "",
 					"assessment_maximum": "",
@@ -404,6 +413,9 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 							hasPhaseNumericOutcome = true
 						}
 					}
+				}
+				if notAssessed != "" && assessment["achievement_level"] == "" && assessment["comment"] == "" {
+					assessment["comment"] = notAssessed
 				}
 				assessments = append(assessments, assessment)
 			}

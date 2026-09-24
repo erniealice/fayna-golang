@@ -85,6 +85,9 @@ type Deps struct {
 	ListClientAttributes     func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
 	ResolveAttributeIDByCode func(ctx context.Context, code string) (string, error)
 	ListWorkspaceUsers       func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
+	// ReadSelfDisplayName returns the caller's own first/last name (session user
+	// only). Preferred for "Printed by"; optional/nil-safe.
+	ReadSelfDisplayName func(ctx context.Context) (firstName, lastName string, err error)
 
 	// GenerateDoc wraps fycha DocumentService.ProcessBytes (template bytes + data
 	// map → processed .docx). Injected by the app container via the block Infra.
@@ -455,15 +458,37 @@ func printedNow(ctx context.Context) time.Time {
 	return time.Now().In(pyezatypes.LocationFromContext(ctx))
 }
 
+// printedByName is the printing user's name as "Last, First" (owner
+// 2026-09-24). Order: the caller's own user row (works for staff, who lack
+// workspace_user:list), then the workspace-user list (operators), then the
+// session e-mail's local part as a last resort.
 func printedByName(ctx context.Context, d *Deps, userID string) string {
+	if d.ReadSelfDisplayName != nil {
+		first, last, err := d.ReadSelfDisplayName(ctx)
+		if err != nil {
+			log.Printf("report card doc: read own display name: %v", err)
+		} else if name := lastFirst(first, last); name != "" {
+			return name
+		}
+	}
 	if name := workspaceUserName(ctx, d, userID); name != "" {
 		return name
 	}
-	// Staff principals cannot list workspace users (workspace_user:list), so fall
-	// back to the session identity — the same fallback the sidebar profile uses.
-	// Reading your own display identity is not a privileged operation.
 	email, _ := ctx.Value("email").(string)
 	return displayNameFromEmail(email)
+}
+
+// lastFirst formats "Last, First"; either part alone when the other is blank.
+func lastFirst(first, last string) string {
+	first, last = strings.TrimSpace(first), strings.TrimSpace(last)
+	switch {
+	case first != "" && last != "":
+		return last + ", " + first
+	case last != "":
+		return last
+	default:
+		return first
+	}
 }
 
 // displayNameFromEmail turns "maria.santos@x" into "Maria Santos".
@@ -498,8 +523,7 @@ func workspaceUserName(ctx context.Context, d *Deps, userID string) string {
 			continue
 		}
 		if u := wu.GetUser(); u != nil {
-			n := strings.TrimSpace(strings.TrimSpace(u.GetFirstName()) + " " + strings.TrimSpace(u.GetLastName()))
-			if n != "" {
+			if n := lastFirst(u.GetFirstName(), u.GetLastName()); n != "" {
 				return n
 			}
 		}

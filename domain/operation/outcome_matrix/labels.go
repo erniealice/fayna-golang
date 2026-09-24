@@ -231,6 +231,7 @@ type ScopeLabels struct {
 type GridLabels struct {
 	pyezatypes.CellGridLabels
 	CriterionColumn string `json:"criterion_column"`
+	CriterionPrefix string `json:"criterion_prefix"`
 	ScoreColumn     string `json:"score_column"`
 	ReadOnlyTooltip string `json:"read_only_tooltip"`
 

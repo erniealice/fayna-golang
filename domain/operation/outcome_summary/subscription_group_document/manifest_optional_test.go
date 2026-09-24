@@ -98,3 +98,18 @@ func TestJHSClientPhaseAuthoringTemplateV3MatchesManifest(t *testing.T) {
 		t.Fatalf("JHS client phase v3 authoring asset: %v", err)
 	}
 }
+
+// TestJHSClientPhaseAuthoringTemplateV4MatchesManifest validates the v4 layout
+// (owner 2026-09-24, output-fidelity addendum R1–R5, R7, R8, R11–R13): cover
+// academic year in the cover header, printed-by only in the footer, sample
+// identity grid, teacher line on its own row, and the required-but-unprinted
+// job tokens kept in hidden runs.
+func TestJHSClientPhaseAuthoringTemplateV4MatchesManifest(t *testing.T) {
+	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v4.docx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateTemplate(testClientPhaseProfile, docx); err != nil {
+		t.Fatalf("JHS client phase v4 authoring asset: %v", err)
+	}
+}

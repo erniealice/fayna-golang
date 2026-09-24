@@ -408,6 +408,7 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	deps.ListSubscriptionGroupMembers = u.Subscription.SubscriptionGroupMember.ListSubscriptionGroupMembers
 	deps.ListSubscriptionGroupWorkspaceUsers = u.Subscription.SubscriptionGroupWorkspaceUser.ListSubscriptionGroupWorkspaceUsers
 	deps.ListWorkspaceUsers = u.Entity.WorkspaceUser.ListWorkspaceUsers
+	deps.ReadSelfDisplayName = u.Entity.User.ReadSelfDisplayName
 	deps.ListJobs = u.Operation.Job.ListJobs
 	// view-3 per-client card: maps each phase_outcome_summary to its Sem 1 / Sem 2
 	// column via job_phase.phase_order.

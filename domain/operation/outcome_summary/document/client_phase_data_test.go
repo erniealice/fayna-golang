@@ -1,6 +1,7 @@
 package document
 
 import (
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"reflect"
 	"testing"
 
@@ -178,7 +179,7 @@ func TestBuildProjectedOutcomeSectionsKeepsStructureWithBlankOutcomes(t *testing
 
 func TestBuildProjectedOutcomeCellIndexBindsExactCodesAndOmitsMissingCoordinates(t *testing.T) {
 	card := clientPhaseProjectionFixture()
-	cells, totals := buildProjectedOutcomeCellIndex(card, false)
+	cells, totals, _, _ := buildProjectedOutcomeCellIndex(card, false)
 
 	path := "academic.art-template.technique.progress_report.m07.value"
 	if got, ok := resolvePath(cells, path); !ok || got != "Proficient" {
@@ -237,7 +238,7 @@ func TestBuildProjectedOutcomeCellIndexSuppressesConflictingDuplicateTuple(t *te
 	if clientID == "" {
 		t.Fatal("fixture must have a client identity")
 	}
-	cells, totals := buildProjectedOutcomeCellIndex(card, false)
+	cells, totals, _, _ := buildProjectedOutcomeCellIndex(card, false)
 	if got, ok := resolvePath(cells, "academic.art-template.technique.progress_report.m07.value"); ok {
 		t.Fatalf("conflicting duplicate cell resolved to %#v; want omitted", got)
 	}
@@ -255,7 +256,7 @@ func TestBuildProjectedOutcomeCellIndexDeduplicatesIdenticalCellValues(t *testin
 		JobTaskId: "task-art-2", TemplateTaskCriteriaId: "link-technique", NumericValue: ptr(float64(3)),
 		ScaledLabel: ptr("Proficient"), RecordedDate: ptr(int64(50)),
 	})
-	cells, totals := buildProjectedOutcomeCellIndex(card, false)
+	cells, totals, _, _ := buildProjectedOutcomeCellIndex(card, false)
 	path := "academic.art-template.technique.progress_report.m07"
 	if got, ok := resolvePath(cells, path+".value"); !ok || got != "Proficient" {
 		t.Fatalf("identical duplicate cell = %#v, %v; want deterministic deduplicated mark", got, ok)
@@ -273,7 +274,7 @@ func TestBuildProjectedOutcomeCellIndexDoesNotDoubleCountRepeatedSourceTask(t *t
 	// A projection join can repeat the same task row. Its cell identity and
 	// numeric contribution must remain one source assessment, not two.
 	card.JobTasks = append(card.JobTasks, card.JobTasks[0])
-	cells, totals := buildProjectedOutcomeCellIndex(card, false)
+	cells, totals, _, _ := buildProjectedOutcomeCellIndex(card, false)
 	if got, ok := resolvePath(cells, "academic.art-template.technique.progress_report.m07.numeric_value"); !ok || got != "3" {
 		t.Fatalf("repeated source task cell = %#v, %v; want 3", got, ok)
 	}
@@ -285,13 +286,13 @@ func TestBuildProjectedOutcomeCellIndexDoesNotDoubleCountRepeatedSourceTask(t *t
 func TestBuildProjectedOutcomeCellIndexEscapesDotsAndIgnoresForeignClientJobs(t *testing.T) {
 	card := clientPhaseProjectionFixture()
 	card.JobCategories[0].Code = ptr("other.category")
-	cells, _ := buildProjectedOutcomeCellIndex(card, false)
+	cells, _, _, _ := buildProjectedOutcomeCellIndex(card, false)
 	if got, ok := resolvePath(cells, "academic.art-template.technique.progress_report.m07.value"); !ok || got != "Proficient" {
 		t.Fatalf("own-client cell = %#v, %v; want unaffected academic value", got, ok)
 	}
 
 	card.JobCategories[1].Code = ptr("academic.with.dot")
-	cells, _ = buildProjectedOutcomeCellIndex(card, false)
+	cells, _, _, _ = buildProjectedOutcomeCellIndex(card, false)
 	if got, ok := resolvePath(cells, "academic~1with~1dot.art-template.technique.progress_report.m07.value"); !ok || got != "Proficient" {
 		t.Fatalf("escaped category cell = %#v, %v; want reversible dotted-code path", got, ok)
 	}
@@ -310,7 +311,7 @@ func TestBuildProjectedOutcomeCellIndexEscapesDotsAndIgnoresForeignClientJobs(t 
 		JobTaskId: "foreign-task", TemplateTaskCriteriaId: "link-technique", NumericValue: ptr(float64(99)),
 		ScaledLabel: ptr("Foreign marker"), RecordedDate: ptr(int64(99)),
 	})
-	cells, totals := buildProjectedOutcomeCellIndex(card, false)
+	cells, totals, _, _ := buildProjectedOutcomeCellIndex(card, false)
 	if got, ok := resolvePath(cells, "academic~1with~1dot.art-template.technique.progress_report.m07.value"); !ok || got != "Proficient" {
 		t.Fatalf("foreign job contaminated cell = %#v, %v; want own-client value", got, ok)
 	}
@@ -488,3 +489,67 @@ func clientPhaseProjectionFixture() *exportpb.ClientReportCardProjection {
 }
 
 func ptr[T any](value T) *T { return &value }
+
+// Owner 2026-09-24: the phase document's repeated subject pages carry only the
+// configured job categories; each job page also carries the identity copies.
+func TestBuildClientPhaseReportDataLimitsJobLoopToConfiguredCategories(t *testing.T) {
+	card := clientPhaseProjectionFixture()
+	deps := &Deps{DocOptions: outcome_summary.DocumentOptions{PhaseJobCategoryCodes: []string{"ACADEMIC"}}}
+	data, err := buildClientPhaseReportData(deps, card, testProgressReportPhaseCode, "", "")
+	if err != nil {
+		t.Fatalf("buildClientPhaseReportData() error = %v", err)
+	}
+	jobs := data["jobs"].([]any)
+	if len(jobs) == 0 {
+		t.Fatal("no jobs")
+	}
+	for _, raw := range jobs {
+		job := raw.(map[string]any)
+		if job["job_category_name"] != "Academic" {
+			t.Fatalf("job outside the configured categories: %#v", job)
+		}
+		if job["page_student_name"] != data["student_name"] || job["page_section_name"] != data["section_name"] {
+			t.Fatalf("job page identity missing: %#v", job)
+		}
+	}
+	all, err := buildClientPhaseReportData(&Deps{}, card, testProgressReportPhaseCode, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all["jobs"].([]any)) <= len(jobs) {
+		t.Fatalf("unfiltered build has %d jobs, filtered %d; want the filter to drop the non-academic job", len(all["jobs"].([]any)), len(jobs))
+	}
+}
+
+func TestTrimTrailingQualifier(t *testing.T) {
+	for in, want := range map[string]string{
+		"Palladium (AY 2026-27)": "Palladium",
+		"Palladium":              "Palladium",
+		"(AY 2026-27)":           "(AY 2026-27)",
+		" Nickel (A) ":           "Nickel",
+	} {
+		if got := trimTrailingQualifier(in); got != want {
+			t.Errorf("trimTrailingQualifier(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Owner 2026-09-24: the program-year label comes from the group's plan
+// attribute (configured code), copied onto every job page.
+func TestBuildClientPhaseReportDataPlanLabelFromPlanAttribute(t *testing.T) {
+	card := clientPhaseProjectionFixture()
+	card.PlanAttributes = []*exportpb.ClientReportCardAttribute{{Code: "program_year", Value: "Year 5"}, {Code: "other", Value: "x"}}
+	data, err := buildClientPhaseReportData(&Deps{DocOptions: outcome_summary.DocumentOptions{PlanLabelAttributeCode: "program_year"}}, card, testProgressReportPhaseCode, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range data["jobs"].([]any) {
+		if got := raw.(map[string]any)["page_plan_label"]; got != "Year 5" {
+			t.Fatalf("page_plan_label = %v, want Year 5", got)
+		}
+	}
+	blank, _ := buildClientPhaseReportData(&Deps{}, card, testProgressReportPhaseCode, "", "")
+	if got := blank["jobs"].([]any)[0].(map[string]any)["page_plan_label"]; got != "" {
+		t.Fatalf("unconfigured plan label = %v, want blank", got)
+	}
+}

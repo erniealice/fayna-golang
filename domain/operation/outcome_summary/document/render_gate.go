@@ -206,25 +206,60 @@ func reportRenderStatus(ctx context.Context, d *Deps, jobIDs []string, groupID s
 // already evaluated every expected group sheet; Fayna proves the response
 // covers exactly the selected client's distinct template-phase sheets and
 // NULL-template singleton sheets before applying the unchanged D5 predicate.
+// blocked is true when ANY of the client's sheets is blocked.
 func clientProjectionRenderStatus(card *exportpb.ClientReportCardProjection, groupID string) (bool, error) {
+	gate, err := clientProjectionSheetGate(card, groupID)
+	if err != nil {
+		return false, err
+	}
+	return gate.anyBlocked(), nil
+}
+
+// clientSheetGate is the per-sheet verdict of the D5 predicate: a group sheet
+// (keyed by template phase) or a singleton sheet (keyed by job phase) that has
+// entered workflow, is not fully published, and carries data.
+type clientSheetGate struct {
+	blockedTemplatePhases map[string]bool
+	blockedJobPhases      map[string]bool
+}
+
+func (g clientSheetGate) anyBlocked() bool {
+	return len(g.blockedTemplatePhases) > 0 || len(g.blockedJobPhases) > 0
+}
+
+// phaseBlocked reports whether the sheet that owns phase is blocked.
+func (g clientSheetGate) phaseBlocked(phase *jobphasepb.JobPhase) bool {
+	if phase == nil {
+		return true
+	}
+	if templatePhaseID := strings.TrimSpace(phase.GetTemplatePhaseId()); templatePhaseID != "" {
+		return g.blockedTemplatePhases[templatePhaseID]
+	}
+	return g.blockedJobPhases[strings.TrimSpace(phase.GetId())]
+}
+
+// clientProjectionSheetGate validates the projection's gate coverage exactly as
+// before (any gap fails closed with an error) and returns the per-sheet verdict.
+func clientProjectionSheetGate(card *exportpb.ClientReportCardProjection, groupID string) (clientSheetGate, error) {
+	gate := clientSheetGate{blockedTemplatePhases: map[string]bool{}, blockedJobPhases: map[string]bool{}}
 	if card == nil {
-		return false, fmt.Errorf("client render gate: projection is nil")
+		return gate, fmt.Errorf("client render gate: projection is nil")
 	}
 	groupID = strings.TrimSpace(groupID)
 	if groupID == "" || strings.TrimSpace(card.GetRenderGateAppliedSubscriptionGroupId()) != groupID {
-		return false, fmt.Errorf("client render gate: projection group echo mismatch")
+		return gate, fmt.Errorf("client render gate: projection group echo mismatch")
 	}
 
 	activeJobs := make(map[string]struct{}, len(card.GetJobs()))
 	for _, job := range card.GetJobs() {
 		if job == nil || strings.TrimSpace(job.GetId()) == "" {
-			return false, fmt.Errorf("client render gate: malformed projected job")
+			return gate, fmt.Errorf("client render gate: malformed projected job")
 		}
 		if !job.GetActive() {
 			continue
 		}
 		if _, duplicate := activeJobs[job.GetId()]; duplicate {
-			return false, fmt.Errorf("client render gate: duplicate projected job %q", job.GetId())
+			return gate, fmt.Errorf("client render gate: duplicate projected job %q", job.GetId())
 		}
 		activeJobs[job.GetId()] = struct{}{}
 	}
@@ -236,7 +271,7 @@ func clientProjectionRenderStatus(card *exportpb.ClientReportCardProjection, gro
 	seenPhaseIDs := make(map[string]struct{}, len(card.GetJobPhases()))
 	for _, phase := range card.GetJobPhases() {
 		if phase == nil || strings.TrimSpace(phase.GetId()) == "" {
-			return false, fmt.Errorf("client render gate: malformed projected job phase")
+			return gate, fmt.Errorf("client render gate: malformed projected job phase")
 		}
 		if !phase.GetActive() {
 			continue
@@ -245,7 +280,7 @@ func clientProjectionRenderStatus(card *exportpb.ClientReportCardProjection, gro
 			continue
 		}
 		if _, duplicate := seenPhaseIDs[phase.GetId()]; duplicate {
-			return false, fmt.Errorf("client render gate: duplicate projected job phase %q", phase.GetId())
+			return gate, fmt.Errorf("client render gate: duplicate projected job phase %q", phase.GetId())
 		}
 		seenPhaseIDs[phase.GetId()] = struct{}{}
 		if templatePhaseID := strings.TrimSpace(phase.GetTemplatePhaseId()); templatePhaseID != "" {
@@ -258,43 +293,47 @@ func clientProjectionRenderStatus(card *exportpb.ClientReportCardProjection, gro
 	rows := make(map[sheetKey]*exportpb.ClientReportCardRenderGateSheet, len(card.GetRenderGateSheets()))
 	for _, row := range card.GetRenderGateSheets() {
 		if row == nil || strings.TrimSpace(row.GetAppliedSubscriptionGroupId()) != groupID {
-			return false, fmt.Errorf("client render gate: malformed row or group echo mismatch")
+			return gate, fmt.Errorf("client render gate: malformed row or group echo mismatch")
 		}
 		templatePhaseID := strings.TrimSpace(row.GetJobTemplatePhaseId())
 		jobPhaseID := strings.TrimSpace(row.GetJobPhaseId())
 		if (templatePhaseID == "") == (jobPhaseID == "") {
-			return false, fmt.Errorf("client render gate: row must identify exactly one sheet key")
+			return gate, fmt.Errorf("client render gate: row must identify exactly one sheet key")
 		}
 		key := sheetKey{templatePhaseID: templatePhaseID, jobPhaseID: jobPhaseID}
 		projectedCount, requested := expected[key]
 		if !requested {
-			return false, fmt.Errorf("client render gate: unrequested sheet key")
+			return gate, fmt.Errorf("client render gate: unrequested sheet key")
 		}
 		if _, duplicate := rows[key]; duplicate {
-			return false, fmt.Errorf("client render gate: duplicate sheet key")
+			return gate, fmt.Errorf("client render gate: duplicate sheet key")
 		}
 		if templatePhaseID != "" {
 			if row.GetTargetCount() <= 0 || int(row.GetTargetCount()) < projectedCount {
-				return false, fmt.Errorf("client render gate: template sheet coverage is incomplete")
+				return gate, fmt.Errorf("client render gate: template sheet coverage is incomplete")
 			}
 		} else if row.GetTargetCount() != 1 || projectedCount != 1 {
-			return false, fmt.Errorf("client render gate: singleton sheet coverage is invalid")
+			return gate, fmt.Errorf("client render gate: singleton sheet coverage is invalid")
 		}
 		rows[key] = row
 	}
 	if len(rows) != len(expected) {
-		return false, fmt.Errorf("client render gate: sheet coverage is incomplete")
+		return gate, fmt.Errorf("client render gate: sheet coverage is incomplete")
 	}
 	for key := range expected {
 		row := rows[key]
 		if row == nil {
-			return false, fmt.Errorf("client render gate: expected sheet is missing")
+			return gate, fmt.Errorf("client render gate: expected sheet is missing")
 		}
 		if row.GetAnyWorkflowEntered() && !row.GetAllPublished() && row.GetHasData() {
-			return true, nil
+			if key.templatePhaseID != "" {
+				gate.blockedTemplatePhases[key.templatePhaseID] = true
+			} else {
+				gate.blockedJobPhases[key.jobPhaseID] = true
+			}
 		}
 	}
-	return false, nil
+	return gate, nil
 }
 
 // groupGrainRenderStatus is the GateGrainSubscriptionGroup path: template-

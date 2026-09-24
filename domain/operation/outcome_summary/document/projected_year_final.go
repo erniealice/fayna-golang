@@ -106,7 +106,7 @@ func buildProjectedYearFinalData(d *Deps, card *exportpb.ClientReportCardProject
 	// shape and omits the vertical-specific legacy alias.
 	delete(data, "conduct_rows")
 	data["outcome_sections"] = buildProjectedOutcomeSections(card, historical)
-	outcomeCells, outcomeTotals := buildProjectedOutcomeCellIndex(card, historical)
+	outcomeCells, outcomeTotals, _, _ := buildProjectedOutcomeCellIndex(card, historical)
 	data["outcome_cells"] = outcomeCells
 	data["outcome_totals"] = outcomeTotals
 	return data

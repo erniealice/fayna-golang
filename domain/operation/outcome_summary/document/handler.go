@@ -12,7 +12,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -309,9 +308,8 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 		var (
 			outBytes    []byte
 			contentType string
-			// Content-Disposition is set per-branch below (DOCX keeps its exact
-			// pre-W5 header for zero regression; PDF uses the LOCKED filename with an
-			// RFC-5987 encoding + nosniff).
+			// Content-Disposition is set per-branch below; both formats use
+			// clientDocumentFilename (PDF also sets nosniff).
 			err error
 		)
 		switch format {
@@ -336,17 +334,17 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 				return
 			}
 			contentType = pdfContentType
-			// LOCKED filename: "Report Card - {Student} - {AY} - {unixMilli}.pdf"
-			// (decisions.md Q-GSE PDF filename lock). AY derives from the group's
-			// price_schedule period (rc.SchedulePeriod); unixMilli is the current
-			// time in ms. Full conversion completes before any byte is streamed.
+			// Filename: "{name-dashed}-{client id}-{unix seconds}.pdf", shared with
+			// the explicit client document route (owner 2026-09-24; supersedes the
+			// Q-GSE "Report Card - ..." lock). Full conversion completes before any
+			// byte is streamed.
 			w.Header().Set("Content-Type", contentType)
 			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.Header().Set("Content-Disposition", contentDisposition(reportCardPDFFilename(rc)))
+			w.Header().Set("Content-Disposition", contentDisposition(clientDocumentFilename(rc.ClientName, clientID, time.Now(), "pdf")))
 			if _, err := w.Write(outBytes); err != nil {
 				log.Printf("report card pdf: write response: %v", err)
 			}
-		default: // "docx" — unchanged pre-W5 behavior
+		default: // "docx"
 			outBytes, err = d.GenerateDoc(tpl, data)
 			if err != nil {
 				log.Printf("report card doc: generate: %v", err)
@@ -357,9 +355,8 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 				http.Error(w, "failed to generate report card", http.StatusInternalServerError)
 				return
 			}
-			filename := "report-card-" + slug(rc.SubscriptionGroupName) + "-" + slug(rc.ClientName) + ".docx"
 			w.Header().Set("Content-Type", docxContentType)
-			w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+			w.Header().Set("Content-Disposition", contentDisposition(clientDocumentFilename(rc.ClientName, clientID, time.Now(), "docx")))
 			if _, err := w.Write(outBytes); err != nil {
 				log.Printf("report card doc: write response: %v", err)
 			}
@@ -397,21 +394,6 @@ func isLibreOfficeUnavailable(err error) bool {
 		return true
 	}
 	return strings.Contains(err.Error(), "LibreOffice is not installed")
-}
-
-// reportCardPDFFilename builds the LOCKED report-card PDF filename
-// "Report Card - {Student} - {AY} - {unixMilli}.pdf" (decisions.md). The raw
-// (possibly non-ASCII, space/comma-bearing) name is sanitized for transport by
-// contentDisposition.
-func reportCardPDFFilename(rc *reportCard) string {
-	client := firstNonEmpty(rc.ClientName, "Student")
-	ay := strings.TrimSpace(rc.SchedulePeriod)
-	name := "Report Card - " + client
-	if ay != "" {
-		name += " - " + ay
-	}
-	name += " - " + strconv.FormatInt(time.Now().UnixMilli(), 10) + ".pdf"
-	return name
 }
 
 // contentDisposition builds an attachment Content-Disposition with BOTH an
@@ -466,6 +448,30 @@ func encodeRFC5987(name string) string {
 // workspace_user read (whose adapter hydrates the joined user name). Falls
 // back to "" (callers keep the raw principal id). Nil-safe.
 func printedByName(ctx context.Context, d *Deps, userID string) string {
+	if name := workspaceUserName(ctx, d, userID); name != "" {
+		return name
+	}
+	// Staff principals cannot list workspace users (workspace_user:list), so fall
+	// back to the session identity — the same fallback the sidebar profile uses.
+	// Reading your own display identity is not a privileged operation.
+	email, _ := ctx.Value("email").(string)
+	return displayNameFromEmail(email)
+}
+
+// displayNameFromEmail turns "maria.santos@x" into "Maria Santos".
+func displayNameFromEmail(email string) string {
+	local := strings.TrimSpace(email)
+	if i := strings.IndexByte(local, '@'); i > 0 {
+		local = local[:i]
+	}
+	parts := strings.FieldsFunc(local, func(r rune) bool { return r == '.' || r == '_' || r == '-' || r == '+' })
+	for i, p := range parts {
+		parts[i] = strings.ToUpper(p[:1]) + p[1:]
+	}
+	return strings.Join(parts, " ")
+}
+
+func workspaceUserName(ctx context.Context, d *Deps, userID string) string {
 	if d.ListWorkspaceUsers == nil || strings.TrimSpace(userID) == "" {
 		return ""
 	}

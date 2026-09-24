@@ -119,6 +119,9 @@ func NewListView(deps *Deps) view.View {
 		}
 		types.ApplyColumnStyles(table.Columns, table.Rows)
 		types.ApplyTableSettings(table)
+		if outcome_summary.IsTableRefresh(viewCtx.Request, tableID) {
+			return view.OK("table-card", table)
+		}
 		return view.OK("subscription-group-document-template-settings", &PageData{
 			PageData: types.PageData{
 				CacheVersion: viewCtx.CacheVersion, Title: l.Title,

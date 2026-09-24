@@ -312,7 +312,7 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 	jobs := make([]any, 0, len(selected))
 	phaseName := selectedPhaseName
 	outcomeSections := buildProjectedOutcomeSections(card, historical)
-	outcomeCells, outcomeTotals := buildProjectedOutcomeCellIndex(card, historical)
+	outcomeCells, outcomeTotals, categoryCells, categoryTotals := buildProjectedOutcomeCellIndex(card, historical)
 	clientReferenceCode := ""
 	groupCategoryCode := ""
 	if d != nil {
@@ -328,8 +328,22 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 			}
 		}
 	}
+	loopCategories := map[string]bool{}
+	if d != nil {
+		for _, code := range d.DocOptions.PhaseJobCategoryCodes {
+			if code = strings.TrimSpace(code); code != "" {
+				loopCategories[strings.ToLower(code)] = true
+			}
+		}
+	}
 	groupLeads := make([]string, 0)
 	for _, entry := range selected {
+		if groupCategoryCode != "" && strings.EqualFold(strings.TrimSpace(entry.category.GetCode()), groupCategoryCode) {
+			groupLeads = append(groupLeads, strings.Split(teacherNames(card, entry.job.GetId(), entry.phase.GetId()), ", ")...)
+		}
+		if len(loopCategories) > 0 && !loopCategories[strings.ToLower(strings.TrimSpace(entry.category.GetCode()))] {
+			continue
+		}
 		phase := entry.phase
 		summary := phaseSummaries[phase.GetId()]
 		jobTaskByTemplateTask := make(map[string]*jobtaskpb.JobTask)
@@ -346,13 +360,15 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 			for _, link := range criteriaByTemplateTask[templateTask.GetId()] {
 				criterion := criteriaByID[link.GetOutcomeCriteriaId()]
 				assessment := map[string]any{
-					"assessment_name":   strings.TrimSpace(criterion.GetName()),
-					"achievement_level": "",
-					"maximum":           "",
-					"comment":           "",
+					"assessment_name":    strings.TrimSpace(criterion.GetName()),
+					"achievement_level":  "",
+					"maximum":            "",
+					"assessment_maximum": "",
+					"comment":            "",
 				}
 				if criterion.MaxScore != nil {
 					assessment["maximum"] = formatClientReportMaximum(float64(criterion.GetMaxScore()))
+					assessment["assessment_maximum"] = assessment["maximum"]
 					phaseMaximum += float64(criterion.GetMaxScore())
 				}
 				descriptions := make([]any, 0, len(ratingDescriptionsByLink[link.GetId()]))
@@ -421,9 +437,6 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 		if hasProgressNumericOutcome {
 			jobs[len(jobs)-1].(map[string]any)["progress_to_date_total"] = formatClientReportMaximum(progressTotal)
 		}
-		if groupCategoryCode != "" && strings.EqualFold(strings.TrimSpace(entry.category.GetCode()), groupCategoryCode) {
-			groupLeads = append(groupLeads, strings.Split(teacherNames(card, entry.job.GetId(), phase.GetId()), ", ")...)
-		}
 	}
 
 	studentName := strings.TrimSpace(card.Client.GetName())
@@ -436,14 +449,39 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 	if sectionName == "" {
 		sectionName = groupName
 	}
+	sectionName = trimTrailingQualifier(sectionName)
 	adviser := strings.Join(sortedUniqueStrings(groupLeads), " / ")
 	headerName := ""
 	if d != nil {
 		headerName = d.DocumentHeaderName
 	}
-	return map[string]any{
+	academicYear := strings.TrimSpace(card.Context.GetPriceScheduleName())
+	planLabel := ""
+	if d != nil {
+		if code := strings.TrimSpace(d.DocOptions.PlanLabelAttributeCode); code != "" {
+			for _, attribute := range card.GetPlanAttributes() {
+				if attribute != nil && strings.EqualFold(strings.TrimSpace(attribute.GetCode()), code) {
+					planLabel = strings.TrimSpace(attribute.GetValue())
+					break
+				}
+			}
+		}
+	}
+	// Per-job copies of the identity so a heading repeated on every job's page
+	// can print it (loop items do not fall back to root values).
+	for _, raw := range jobs {
+		job := raw.(map[string]any)
+		job["page_student_name"] = studentName
+		job["page_grade_level"] = grade
+		job["page_section_name"] = sectionName
+		job["page_academic_year"] = academicYear
+		job["page_client_reference"] = clientReference
+		job["page_adviser"] = adviser
+		job["page_plan_label"] = planLabel
+	}
+	data := map[string]any{
 		"school_name":      strings.TrimSpace(headerName),
-		"academic_year":    strings.TrimSpace(card.Context.GetPriceScheduleName()),
+		"academic_year":    academicYear,
 		"student_name":     studentName,
 		"grade_level":      grade,
 		"section_name":     sectionName,
@@ -456,7 +494,17 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 		"outcome_sections": outcomeSections,
 		"outcome_cells":    outcomeCells,
 		"outcome_totals":   outcomeTotals,
-	}, nil
+		"category_cells":   categoryCells,
+		"category_totals":  categoryTotals,
+	}
+	summaryJobCategory, summaryTaskCategory := "", ""
+	if d != nil {
+		summaryJobCategory, summaryTaskCategory = d.DocOptions.PeriodSummaryJobCategoryCode, d.DocOptions.PeriodSummaryTaskCategoryCode
+	}
+	for key, value := range buildPeriodSummaries(card, summaryJobCategory, summaryTaskCategory, historical) {
+		data[key] = value
+	}
+	return data, nil
 }
 
 // buildProjectedOutcomeCellIndex exposes exact code-keyed outcome paths for
@@ -468,11 +516,20 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 // source records map to the same full code tuple, that tuple (and its aggregate
 // total) is omitted as ambiguous. The repeated outcome_sections representation
 // remains lossless.
-func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, historical bool) (map[string]any, map[string]any) {
+//
+// It also returns a template-independent family keyed by category, criterion
+// and activity code only (category_cells / category_totals), so one document
+// template serves every grade's template of a category (e.g. the same month
+// activities across per-grade attendance templates). The same duplicate and
+// ambiguity rules apply at that grain: two different jobs of one category
+// yielding the same category/criterion/activity path omit the cell and total.
+func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, historical bool) (map[string]any, map[string]any, map[string]any, map[string]any) {
 	cellsRoot := map[string]any{}
 	totalsRoot := map[string]any{}
+	categoryCellsRoot := map[string]any{}
+	categoryTotalsRoot := map[string]any{}
 	if card == nil || card.GetClient() == nil || strings.TrimSpace(card.GetClient().GetClientId()) == "" {
-		return cellsRoot, totalsRoot
+		return cellsRoot, totalsRoot, categoryCellsRoot, categoryTotalsRoot
 	}
 	clientID := strings.TrimSpace(card.GetClient().GetClientId())
 	categories := map[string]*categorypb.JobCategory{}
@@ -551,6 +608,11 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 	totalCandidates := map[string]outcomeTotalCandidate{}
 	ambiguousTotals := map[string]bool{}
 	seenContributions := map[string]bool{}
+	categoryCandidates := map[string]outcomeCellCandidate{}
+	ambiguousCategoryCells := map[string]bool{}
+	categoryTotalCandidates := map[string]outcomeTotalCandidate{}
+	ambiguousCategoryTotals := map[string]bool{}
+	seenCategoryContributions := map[string]bool{}
 	for _, job := range card.GetJobs() {
 		if job == nil || strings.TrimSpace(job.GetId()) == "" || !historical && !job.GetActive() {
 			continue
@@ -627,6 +689,30 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 						cell.numeric = strconv.FormatFloat(outcome.GetNumericValue(), 'f', -1, 64)
 						cell.numericOK = true
 					}
+					categoryPath := []string{path[0], path[2], path[4]}
+					categoryKey := strings.Join(categoryPath, "\x00")
+					categoryCell := outcomeCellCandidate{path: categoryPath, owner: owner, value: cell.value, numeric: cell.numeric, numericOK: cell.numericOK}
+					if existing, exists := categoryCandidates[categoryKey]; exists && existing.owner != owner {
+						ambiguousCategoryCells[categoryKey] = true
+						ambiguousCategoryTotals[path[0]+"\x00"+path[2]] = true
+					} else {
+						categoryCandidates[categoryKey] = categoryCell
+					}
+					categoryTotalKey := path[0] + "\x00" + path[2]
+					if !seenCategoryContributions[categoryTotalKey+"\x00"+owner] {
+						seenCategoryContributions[categoryTotalKey+"\x00"+owner] = true
+						categoryTotal := categoryTotalCandidates[categoryTotalKey]
+						if categoryTotal.owner != "" && categoryTotal.owner != jobID {
+							ambiguousCategoryTotals[categoryTotalKey] = true
+						} else {
+							categoryTotal.owner = jobID
+							if outcome.NumericValue != nil {
+								categoryTotal.value += outcome.GetNumericValue()
+								categoryTotal.hasData = true
+							}
+							categoryTotalCandidates[categoryTotalKey] = categoryTotal
+						}
+					}
 					duplicateCellOwner := false
 					if existing, exists := candidates[key]; exists && existing.owner != owner {
 						duplicateCellOwner = true
@@ -682,7 +768,23 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 		}
 		setClientReportCodeScalar(totalsRoot, append(strings.Split(key, "\x00"), "numeric_value"), formatClientReportMaximum(total.value))
 	}
-	return cellsRoot, totalsRoot
+	for key, candidate := range categoryCandidates {
+		if ambiguousCategoryCells[key] {
+			continue
+		}
+		leaf := map[string]any{"value": candidate.value}
+		if candidate.numericOK {
+			leaf["numeric_value"] = candidate.numeric
+		}
+		setClientReportCodeLeaf(categoryCellsRoot, candidate.path, leaf)
+	}
+	for key, total := range categoryTotalCandidates {
+		if !total.hasData || ambiguousCategoryTotals[key] {
+			continue
+		}
+		setClientReportCodeScalar(categoryTotalsRoot, append(strings.Split(key, "\x00"), "numeric_value"), formatClientReportMaximum(total.value))
+	}
+	return cellsRoot, totalsRoot, categoryCellsRoot, categoryTotalsRoot
 }
 
 func clientReportPathCode(code string) bool {
@@ -1083,4 +1185,17 @@ func teacherNames(card *exportpb.ClientReportCardProjection, jobID, jobPhaseID s
 
 func formatClientReportMaximum(value float64) string {
 	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+// trimTrailingQualifier drops one trailing parenthetical qualifier from a
+// display name ("Palladium (AY 2026-27)" → "Palladium"); the qualifier repeats
+// information the document already prints (the academic year).
+func trimTrailingQualifier(name string) string {
+	name = strings.TrimSpace(name)
+	if strings.HasSuffix(name, ")") {
+		if open := strings.LastIndex(name, " ("); open > 0 {
+			return strings.TrimSpace(name[:open])
+		}
+	}
+	return name
 }

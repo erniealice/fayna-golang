@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strings"
+	"regexp"
 	"testing"
 	"time"
 
@@ -94,7 +94,7 @@ func TestDownload_ExplicitProgressReport_UsesExportPermissionAndPhaseBinding(t *
 			if got := w.Header().Get("Content-Type"); got != wantType {
 				t.Errorf("content-type = %q, want %q", got, wantType)
 			}
-			if disposition := w.Header().Get("Content-Disposition"); !strings.Contains(disposition, "progress-report-grade-10") || !strings.Contains(disposition, "."+format) {
+			if disposition := w.Header().Get("Content-Disposition"); !clientDocumentFilenamePattern.MatchString(disposition) {
 				t.Errorf("content-disposition = %q", disposition)
 			}
 			if projectionCalls != 1 || resolverCalls != 1 || renderCalls != 1 {
@@ -142,17 +142,29 @@ func TestDownload_ExplicitUnpublishedSheetRendersStructureWithBlankOutcomes(t *t
 	if !ok || len(jobs) == 0 {
 		t.Fatalf("jobs = %#v, want complete structure", rendered["jobs"])
 	}
+	// Owner 2026-09-24: on the phase document, notes print regardless of sheet
+	// status; scores, levels, totals and grades stay blank until published.
+	sawNote, sawNarrative := false, false
 	for _, raw := range jobs {
 		job := raw.(map[string]any)
 		if job["phase_grade"] != "" || job["phase_total"] != "" || job["progress_to_date_total"] != "" {
 			t.Fatalf("unpublished outcome value leaked: %#v", job)
 		}
+		if job["phase_comment"] == "Strong progress" {
+			sawNarrative = true
+		}
 		for _, rawAssessment := range job["assessments"].([]any) {
 			assessment := rawAssessment.(map[string]any)
-			if assessment["achievement_level"] != "" || assessment["comment"] != "" {
-				t.Fatalf("unpublished assessment leaked: %#v", assessment)
+			if assessment["achievement_level"] != "" {
+				t.Fatalf("unpublished assessment level leaked: %#v", assessment)
+			}
+			if assessment["comment"] == "Careful work" {
+				sawNote = true
 			}
 		}
+	}
+	if !sawNote || !sawNarrative {
+		t.Fatalf("teacher notes must print on an unpublished sheet (note=%v narrative=%v): %#v", sawNote, sawNarrative, jobs)
 	}
 	sections := rendered["outcome_sections"].([]any)
 	if len(sections) == 0 {
@@ -450,3 +462,89 @@ func TestBuildProjectedYearFinalDataKeepsHistoricalInactiveProjectionRows(t *tes
 }
 
 func testTime() time.Time { return time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC) }
+
+var clientDocumentFilenamePattern = regexp.MustCompile(`filename="[a-z0-9-]+-client-1-[0-9]{10}\.(pdf|docx)"`)
+
+func TestClientDocumentFilename(t *testing.T) {
+	now := time.Unix(1790000000, 0)
+	got := clientDocumentFilename("Nathan Dei Añora", "019ecb8e-d84c-7901-b375-c13828821dbe", now, "pdf")
+	want := "nathan-dei-anora-019ecb8e-d84c-7901-b375-c13828821dbe-1790000000.pdf"
+	if got != want {
+		t.Fatalf("filename = %q, want %q", got, want)
+	}
+	if got := clientDocumentFilename("", "c1", now, "docx"); got != "card-c1-1790000000.docx" {
+		t.Fatalf("empty-name filename = %q", got)
+	}
+}
+
+// TestDownload_ExplicitPhaseGateIsPerSheet: a blocked sheet for another subject
+// (or another term) no longer blanks a published sheet's scores.
+func TestDownload_ExplicitPhaseGateIsPerSheet(t *testing.T) {
+	card := clientPhaseProjectionFixture()
+	card.ClientSubscriptionIds = []string{"subscription-1"}
+	allowClientProjectionRender(card, "group-1")
+	card.RenderGateSheets[0].AllPublished = false // Biology still in progress
+	card.RenderGateSheets[0].AnyWorkflowEntered = true
+	card.RenderGateSheets[0].HasData = true
+
+	var rendered map[string]any
+	deps := &Deps{
+		ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindStaff },
+		GetSubscriptionGroupClientReportCard: func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
+			return &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: card}, nil
+		},
+		ResolveTemplateBytes: func(context.Context, string, string) ([]byte, error) { return []byte("template"), nil },
+		GenerateDoc: func(_ []byte, data map[string]any) ([]byte, error) {
+			rendered = data
+			return stubDocBytes, nil
+		},
+	}
+	r := httptest.NewRequest(http.MethodGet, "/document?period=progress_report&format=docx", nil)
+	r.SetPathValue("id", "group-1")
+	r.SetPathValue("client_id", "client-1")
+	r = r.WithContext(view.WithUserPermissions(r.Context(), types.NewUserPermissions([]string{"subscription_group_outcome_export:read"})))
+	w := httptest.NewRecorder()
+	NewDownloadHandler(deps)(w, r)
+	if w.Code != http.StatusOK || rendered == nil {
+		t.Fatalf("download status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, raw := range rendered["jobs"].([]any) {
+		job := raw.(map[string]any)
+		if job["job_name"] != "Art" {
+			continue
+		}
+		if job["phase_grade"] != "Meeting" || job["phase_total"] != "3" {
+			t.Fatalf("published Art sheet was blanked by Biology's gate: %#v", job)
+		}
+		return
+	}
+	t.Fatalf("Art job missing: %#v", rendered["jobs"])
+}
+
+func TestRedactBlockedClientPhaseScoresKeepsNotesOnly(t *testing.T) {
+	card := clientPhaseProjectionFixture()
+	gate := clientSheetGate{blockedTemplatePhases: map[string]bool{"template-phase-art": true}, blockedJobPhases: map[string]bool{}}
+	out := redactBlockedClientPhaseScores(card, gate)
+	outcome := out.GetTaskOutcomes()[0]
+	if outcome.NumericValue != nil || outcome.ScaledLabel != nil {
+		t.Fatalf("score survived redaction: %#v", outcome)
+	}
+	if outcome.GetDeterminationNote() != "Careful work" || outcome.GetJobTaskId() != "task-art" || outcome.GetTemplateTaskCriteriaId() != "link-technique" {
+		t.Fatalf("identity/note lost: %#v", outcome)
+	}
+	summary := out.GetPhaseOutcomeSummaries()[0]
+	if summary.ScaledLabel != nil || summary.ScaledScore != nil || summary.SummaryScore != nil {
+		t.Fatalf("summary score survived redaction: %#v", summary)
+	}
+	if summary.GetNarrative() != "Strong progress" || summary.GetJobPhaseId() != "phase-art" || !summary.GetActive() {
+		t.Fatalf("summary narrative/identity lost: %#v", summary)
+	}
+	// The input projection is not mutated.
+	if card.GetTaskOutcomes()[0].NumericValue == nil || card.GetPhaseOutcomeSummaries()[0].ScaledLabel == nil {
+		t.Fatal("redaction mutated the caller's projection")
+	}
+	// Nothing blocked → same pointer, no copy.
+	if redactBlockedClientPhaseScores(card, clientSheetGate{}) != card {
+		t.Fatal("unblocked gate should return the projection unchanged")
+	}
+}

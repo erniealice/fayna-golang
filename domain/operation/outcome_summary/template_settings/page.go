@@ -206,6 +206,9 @@ func NewListView(deps *Deps) view.View {
 		}
 		types.ApplyColumnStyles(tableConfig.Columns, tableConfig.Rows)
 		types.ApplyTableSettings(tableConfig)
+		if outcome_summary.IsTableRefresh(viewCtx.Request, tableID) {
+			return view.OK("table-card", tableConfig)
+		}
 
 		pageData := &PageData{
 			PageData: types.PageData{

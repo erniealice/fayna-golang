@@ -137,7 +137,7 @@ func TestClientDownloadDrawer_UsesScopedProjectionAndOffersAvailablePeriods(t *t
 			t.Errorf("period option %d selected=%v, want %v", index, option.Selected, index == 0)
 		}
 	}
-	if len(data.Formats) != 2 || data.Formats[0].Value != "docx" || !data.Formats[0].Selected || data.Formats[1].Value != "pdf" {
+	if len(data.Formats) != 2 || data.Formats[0].Value != "pdf" || !data.Formats[0].Selected || data.Formats[1].Value != "docx" || data.Formats[1].Selected {
 		t.Fatalf("format options = %+v", data.Formats)
 	}
 }

@@ -23,11 +23,18 @@
     "printed_at",
     "phase_name"
   ],
+  "optional_scalars": [
+    "summary_average_period_1",
+    "summary_average_period_2",
+    "summary_average_period_3",
+    "summary_transmuted_period_1",
+    "summary_transmuted_period_2",
+    "summary_transmuted_period_3"
+  ],
   "loops": {
     "jobs": {
       "scalars": [
         "job_name",
-        "job_category_name",
         "teacher_name",
         "phase_grade",
         "phase_comment",
@@ -36,12 +43,25 @@
         "progress_to_date_total",
         "progress_to_date_maximum"
       ],
+      "optional_scalars": [
+        "job_category_name",
+        "page_student_name",
+        "page_grade_level",
+        "page_section_name",
+        "page_academic_year",
+        "page_client_reference",
+        "page_adviser",
+        "page_plan_label"
+      ],
       "loops": {
         "assessments": {
           "scalars": [
             "assessment_name",
             "achievement_level",
             "comment"
+          ],
+          "optional_scalars": [
+            "assessment_maximum"
           ],
           "loops": {
             "rating_descriptions": {
@@ -52,6 +72,7 @@
                 "output_value",
                 "description"
               ],
+              "optional": true,
               "loops": {}
             }
           }
@@ -62,6 +83,7 @@
       "scalars": [
         "section_code"
       ],
+      "optional": true,
       "loops": {
         "rows": {
           "scalars": [
@@ -80,6 +102,26 @@
           }
         }
       }
+    },
+    "summary_jobs": {
+      "scalars": [
+        "summary_job_name",
+        "summary_period_1",
+        "summary_period_2",
+        "summary_period_3"
+      ],
+      "optional": true,
+      "loops": {}
+    },
+    "summary_tasks": {
+      "scalars": [
+        "summary_task_name",
+        "summary_task_period_1",
+        "summary_task_period_2",
+        "summary_task_period_3"
+      ],
+      "optional": true,
+      "loops": {}
     }
   }
 }

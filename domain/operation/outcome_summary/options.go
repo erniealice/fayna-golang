@@ -141,6 +141,24 @@ type DocumentOptions struct {
 	// task assignee renders as the group lead ("Adviser") and its per-phase
 	// summaries as the group conduct row. Empty = no group band (blank fields).
 	GroupCategoryFilter string
+	// PhaseJobCategoryCodes limits the phase document's repeated "jobs" loop to
+	// jobs whose job_category CODE is listed. Jobs of other categories still
+	// feed fixed cells (outcome_cells/outcome_totals) and identity (the group
+	// lead). Empty = every category (unchanged behaviour).
+	PhaseJobCategoryCodes []string
+	// PeriodSummaryJobCategoryCode: jobs of this job_category CODE become the
+	// phase document's summary_jobs rows (one row per job, one value per period
+	// = the job phase's stored summary score). Empty = no rows.
+	PeriodSummaryJobCategoryCode string
+	// PeriodSummaryTaskCategoryCode: the single job of this job_category CODE
+	// supplies summary_tasks rows (one row per activity code, one value per
+	// period) plus summary_average_period_N / summary_transmuted_period_N
+	// (its phase summary score / scaled label). Empty = none.
+	PeriodSummaryTaskCategoryCode string
+	// PlanLabelAttributeCode is the plan attribute CODE (plan_attribute on the
+	// group's plan, e.g. "program_year") whose value prints as each job page's
+	// plan label ({{page_plan_label}}). Empty = blank label.
+	PlanLabelAttributeCode string
 	// ClientReferenceAttributeCode is the client_attributes.<code> whose value
 	// prints as the client's reference number on the document identity line
 	// (e.g. "lrn"). Empty = blank reference.

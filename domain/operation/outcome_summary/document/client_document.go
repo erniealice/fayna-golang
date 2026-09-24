@@ -5,13 +5,16 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/erniealice/espyna-golang/consumer"
 	espynaports "github.com/erniealice/espyna-golang/ports"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/pyeza-golang/view"
+	"golang.org/x/text/unicode/norm"
 
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
@@ -66,6 +69,7 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 		SubscriptionGroupId:  groupID,
 		ClientId:             clientID,
 		ClientAttributeCodes: append([]string(nil), d.Options.Document.ClientAttributeCodes...),
+		PlanAttributeCodes:   planAttributeCodes(d.Options.Document),
 	})
 	if err != nil {
 		if errors.Is(err, espynaports.ErrClientReportNotFound) {
@@ -100,23 +104,24 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 		return
 	}
 
-	blocked, gateErr := clientProjectionRenderStatus(card, groupID)
+	gate, gateErr := clientProjectionSheetGate(card, groupID)
+	blocked := gate.anyBlocked()
 	if gateErr != nil {
 		log.Printf("client report render gate: cannot prove document safe: %v", gateErr)
 		http.Error(w, "report card cannot be generated right now — please retry", http.StatusServiceUnavailable)
 		return
 	}
-	// A proven unpublished sheet may be downloaded as a structural report.
-	// Recorded outcome values are blanked after the data map is assembled; a
-	// malformed or unprovable gate above remains a hard 503.
+	// A proven unpublished sheet may be downloaded as a structural report; a
+	// malformed or unprovable gate above remains a hard 503. Phase documents
+	// redact per sheet on the projection (notes kept, scores blank); Year Final
+	// blanks recorded values across the whole document after assembly.
 
 	printedBy := firstNonEmpty(consumer.GetUserIDFromContext(ctx), "system")
 	now := time.Now()
-	printedAt := now.Format("2006-01-02 15:04")
+	printedAt := now.Format("January 2, 2006 3:04 PM")
 	printedByDisplay := printedByName(ctx, d, printedBy)
 	var templateBytes []byte
 	var data map[string]any
-	var filenameBase string
 	if period != clientDocumentPeriodYearFinal {
 		if d.ResolveTemplateBytes != nil {
 			templateBytes, err = d.ResolveTemplateBytes(ctx, card.GetContext().GetPriceScheduleId(), period)
@@ -126,23 +131,21 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 			http.Error(w, "report period template is unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		data, err = buildClientPhaseReportData(d, card, period, printedByDisplay, printedAt)
+		data, err = buildClientPhaseReportData(d, redactBlockedClientPhaseScores(card, gate), period, printedByDisplay, printedAt)
 		if err != nil {
 			log.Printf("client phase report data: %v", err)
 			http.Error(w, "report period data is unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		filenameBase = slug(period)
 	} else {
 		templateBytes = clientYearFinalTemplate(ctx, d, card.GetContext().GetPriceScheduleId())
 		data = buildProjectedYearFinalData(d, card, printedByDisplay, printedAt, now)
-		filenameBase = "report-card"
 	}
 	if len(templateBytes) == 0 {
 		http.Error(w, "report template is unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if blocked {
+	if blocked && period == clientDocumentPeriodYearFinal {
 		blankDocumentOutcomeValues(data)
 	}
 
@@ -177,16 +180,10 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 		return
 	}
 
-	clientName := card.GetClient().GetName()
-	groupName := card.GetContext().GetSubscriptionGroupName()
-	filename := filenameBase + "-" + slug(groupName) + "-" + slug(clientName)
+	filename := clientDocumentFilename(card.GetClient().GetName(), clientID, now, format)
+	w.Header().Set("Content-Disposition", contentDisposition(filename))
 	if format == "pdf" {
-		filename += ".pdf"
-		w.Header().Set("Content-Disposition", contentDisposition(filename))
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-	} else {
-		filename += ".docx"
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	}
 	w.Header().Set("Content-Type", contentType)
 	if _, err := w.Write(output); err != nil {
@@ -286,4 +283,32 @@ func clientYearFinalTemplate(ctx context.Context, d *Deps, priceScheduleID strin
 		}
 	}
 	return templateBytes
+}
+
+// clientDocumentFilename builds "{name-dashed}-{client id}-{unix seconds}.{ext}".
+// Accents are folded before slugging so "Añora" becomes "anora", not "a-ora".
+func clientDocumentFilename(clientName, clientID string, now time.Time, format string) string {
+	name := slug(foldAccents(clientName))
+	id := slug(clientID)
+	return name + "-" + id + "-" + strconv.FormatInt(now.Unix(), 10) + "." + format
+}
+
+// foldAccents strips combining marks after NFD decomposition (ñ → n, é → e).
+func foldAccents(s string) string {
+	var b strings.Builder
+	for _, r := range norm.NFD.String(s) {
+		if !unicode.Is(unicode.Mn, r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// planAttributeCodes lists the configured plan attribute codes the document
+// reads (today only the plan label).
+func planAttributeCodes(options outcome_summary.DocumentOptions) []string {
+	if code := strings.TrimSpace(options.PlanLabelAttributeCode); code != "" {
+		return []string{code}
+	}
+	return nil
 }

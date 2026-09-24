@@ -179,8 +179,9 @@ func clientReportFormatOptions(labels outcome_summary.Labels) []types.SelectOpti
 	if pdf == "" {
 		pdf = "PDF"
 	}
+	// PDF is the default (owner 2026-09-24); DOCX stays available for editing.
 	return []types.SelectOption{
-		{Value: "docx", Label: docx, Selected: true},
-		{Value: "pdf", Label: pdf},
+		{Value: "pdf", Label: pdf, Selected: true},
+		{Value: "docx", Label: docx},
 	}
 }

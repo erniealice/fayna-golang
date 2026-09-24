@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -218,8 +219,8 @@ func TestDownload_DOCX_Unchanged(t *testing.T) {
 		t.Fatalf("docx content-type = %q, want %q", ct, docxContentType)
 	}
 	cd := w.Header().Get("Content-Disposition")
-	if !strings.Contains(cd, `filename="report-card-`) || !strings.HasSuffix(cd, `.docx"`) {
-		t.Fatalf("docx Content-Disposition unchanged shape expected, got %q", cd)
+	if !operatorFilenamePattern("docx").MatchString(cd) {
+		t.Fatalf("docx Content-Disposition = %q, want {name}-stu-1-{unix}.docx", cd)
 	}
 	if got := w.Body.Bytes(); string(got) != string(stubDocBytes) {
 		t.Fatalf("docx body = %q, want the docx bytes", got)
@@ -246,22 +247,11 @@ func TestDownload_PDF_ContentTypeAndFilename(t *testing.T) {
 		t.Fatalf("pdf must set nosniff, got %q", ns)
 	}
 	cd := w.Header().Get("Content-Disposition")
-	// LOCKED filename: "Report Card - {Student} - {AY} - {unixMilli}.pdf".
+	if !operatorFilenamePattern("pdf").MatchString(cd) {
+		t.Fatalf("pdf Content-Disposition = %q, want {name}-stu-1-{unix}.pdf", cd)
+	}
 	if !strings.Contains(cd, "filename*=UTF-8''") {
 		t.Fatalf("pdf Content-Disposition must carry an RFC-5987 filename*, got %q", cd)
-	}
-	if !strings.Contains(cd, "Report%20Card%20-%20") {
-		t.Fatalf("pdf filename* must be the LOCKED 'Report Card - ...' form, got %q", cd)
-	}
-	if !strings.Contains(cd, "2025-2026") {
-		t.Fatalf("pdf filename must include the AY, got %q", cd)
-	}
-	if !strings.HasSuffix(cd, ".pdf") && !strings.Contains(cd, ".pdf") {
-		t.Fatalf("pdf filename must end .pdf, got %q", cd)
-	}
-	// ASCII fallback must be present and reference the locked prefix.
-	if !strings.Contains(cd, `filename="Report Card - `) {
-		t.Fatalf("pdf Content-Disposition must carry the ASCII filename= fallback, got %q", cd)
 	}
 	if got := w.Body.Bytes(); string(got) != string(stubPDFBytes) {
 		t.Fatalf("pdf body mismatch")
@@ -324,4 +314,8 @@ func TestDownload_PDF_GenericError_500(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("generic pdf error must 500, got %d", w.Code)
 	}
+}
+
+func operatorFilenamePattern(ext string) *regexp.Regexp {
+	return regexp.MustCompile(`filename="[a-z0-9-]+-stu-1-[0-9]{10}\.` + ext + `"`)
 }

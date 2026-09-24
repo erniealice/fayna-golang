@@ -35,8 +35,14 @@ var manifestFiles embed.FS
 var completeTemplateToken = regexp.MustCompile(`\{\{[^{}]*\}\}`)
 
 type manifestNode struct {
-	Scalars []string                `json:"scalars"`
-	Loops   map[string]manifestNode `json:"loops"`
+	Scalars []string `json:"scalars"`
+	// OptionalScalars may be omitted by a template; when present they obey the
+	// same exactly-once and placement rules as Scalars.
+	OptionalScalars []string `json:"optional_scalars,omitempty"`
+	// Optional marks a loop a template may omit entirely (both markers and
+	// every token in its scope). Only meaningful for nested manifest loops.
+	Optional bool                    `json:"optional,omitempty"`
+	Loops    map[string]manifestNode `json:"loops"`
 }
 
 type renderManifest struct {
@@ -52,9 +58,11 @@ type renderManifest struct {
 		ProfileMismatch         string `json:"profile_mismatch"`
 		MissingOutcomeDisplay   string `json:"missing_outcome_display"`
 	} `json:"profile"`
-	Scalars     []string                `json:"scalars"`
-	Loops       map[string]manifestNode `json:"loops"`
-	StyleValues struct {
+	Scalars []string `json:"scalars"`
+	// OptionalScalars are root tokens a template may omit (client phase profile).
+	OptionalScalars []string                `json:"optional_scalars,omitempty"`
+	Loops           map[string]manifestNode `json:"loops"`
+	StyleValues     struct {
 		RowBold []string `json:"row_bold"`
 		FillHex []string `json:"fill_hex"`
 		TextHex []string `json:"text_hex"`
@@ -400,7 +408,8 @@ type manifestLoopScope struct {
 }
 
 type manifestScalarScope struct {
-	loop string
+	loop     string
+	optional bool
 }
 
 var clientPhaseRootScalars = []string{
@@ -409,17 +418,38 @@ var clientPhaseRootScalars = []string{
 }
 
 var clientPhaseJobScalars = []string{
-	"job_name", "job_category_name", "teacher_name", "phase_grade", "phase_comment",
+	"job_name", "teacher_name", "phase_grade", "phase_comment",
 	"phase_total", "phase_maximum", "progress_to_date_total", "progress_to_date_maximum",
+}
+
+// clientPhaseJobOptionalScalars: the category label and the per-job copies of
+// the document identity (for a heading repeated on every job's page) are
+// available but not every layout prints them.
+var clientPhaseJobOptionalScalars = []string{
+	"job_category_name",
+	"page_student_name", "page_grade_level", "page_section_name",
+	"page_academic_year", "page_client_reference", "page_adviser", "page_plan_label",
 }
 
 var clientPhaseAssessmentScalars = []string{
 	"assessment_name", "achievement_level", "comment",
 }
 
+var clientPhaseAssessmentOptionalScalars = []string{"assessment_maximum"}
+
 var clientPhaseRatingDescriptionScalars = []string{
 	"rating_label", "minimum", "maximum", "output_value", "description",
 }
+
+// Period summaries (optional): per-job rows and per-activity rows of the
+// configured summary categories, one value per period (phase order 1..3), plus
+// the activity-category job's per-period summary and transmuted label.
+var clientPhaseRootOptionalScalars = []string{
+	"summary_average_period_1", "summary_average_period_2", "summary_average_period_3",
+	"summary_transmuted_period_1", "summary_transmuted_period_2", "summary_transmuted_period_3",
+}
+var clientPhaseSummaryJobScalars = []string{"summary_job_name", "summary_period_1", "summary_period_2", "summary_period_3"}
+var clientPhaseSummaryTaskScalars = []string{"summary_task_name", "summary_task_period_1", "summary_task_period_2", "summary_task_period_3"}
 
 var clientPhaseOutcomeSectionScalars = []string{"section_code"}
 var clientPhaseOutcomeRowScalars = []string{"row_name", "total"}
@@ -432,13 +462,28 @@ func validateClientPhaseManifestShape(manifest renderManifest) error {
 	descriptions, descriptionsOK := assessments.Loops["rating_descriptions"]
 	rows, rowsOK := sections.Loops["rows"]
 	cells, cellsOK := rows.Loops["cells"]
-	if !jobsOK || !sectionsOK || !assessmentsOK || !descriptionsOK || !rowsOK || !cellsOK || len(manifest.Loops) != 2 ||
+	summaryJobs, summaryJobsOK := manifest.Loops["summary_jobs"]
+	summaryTasks, summaryTasksOK := manifest.Loops["summary_tasks"]
+	if !summaryJobsOK || !summaryTasksOK || !summaryJobs.Optional || !summaryTasks.Optional ||
+		len(summaryJobs.Loops) != 0 || len(summaryTasks.Loops) != 0 ||
+		!sameStrings(summaryJobs.Scalars, clientPhaseSummaryJobScalars) || len(summaryJobs.OptionalScalars) != 0 ||
+		!sameStrings(summaryTasks.Scalars, clientPhaseSummaryTaskScalars) || len(summaryTasks.OptionalScalars) != 0 ||
+		!sameStrings(manifest.OptionalScalars, clientPhaseRootOptionalScalars) {
+		return contractError("embedded client phase manifest does not match the registered repeated-table contract")
+	}
+	if !jobsOK || !sectionsOK || !assessmentsOK || !descriptionsOK || !rowsOK || !cellsOK || len(manifest.Loops) != 4 ||
 		len(jobs.Loops) != 1 || len(assessments.Loops) != 1 || len(descriptions.Loops) != 0 ||
 		len(sections.Loops) != 1 || len(rows.Loops) != 1 || len(cells.Loops) != 0 ||
-		!sameStrings(manifest.Scalars, clientPhaseRootScalars) || !sameStrings(jobs.Scalars, clientPhaseJobScalars) ||
-		!sameStrings(assessments.Scalars, clientPhaseAssessmentScalars) || !sameStrings(descriptions.Scalars, clientPhaseRatingDescriptionScalars) ||
-		!sameStrings(sections.Scalars, clientPhaseOutcomeSectionScalars) || !sameStrings(rows.Scalars, clientPhaseOutcomeRowScalars) ||
-		!sameStrings(cells.Scalars, clientPhaseOutcomeCellScalars) {
+		!sameStrings(manifest.Scalars, clientPhaseRootScalars) || len(manifest.Scalars) == 0 ||
+		!sameStrings(jobs.Scalars, clientPhaseJobScalars) || !sameStrings(jobs.OptionalScalars, clientPhaseJobOptionalScalars) ||
+		!sameStrings(assessments.Scalars, clientPhaseAssessmentScalars) || !sameStrings(assessments.OptionalScalars, clientPhaseAssessmentOptionalScalars) ||
+		!sameStrings(descriptions.Scalars, clientPhaseRatingDescriptionScalars) || len(descriptions.OptionalScalars) != 0 ||
+		!sameStrings(sections.Scalars, clientPhaseOutcomeSectionScalars) || len(sections.OptionalScalars) != 0 ||
+		!sameStrings(rows.Scalars, clientPhaseOutcomeRowScalars) || len(rows.OptionalScalars) != 0 ||
+		!sameStrings(cells.Scalars, clientPhaseOutcomeCellScalars) || len(cells.OptionalScalars) != 0 ||
+		// Only the rating_descriptions and outcome_sections loops may be omitted.
+		jobs.Optional || assessments.Optional || !descriptions.Optional ||
+		!sections.Optional || rows.Optional || cells.Optional {
 		return contractError("embedded client phase manifest does not match the registered repeated-table contract")
 	}
 	return nil
@@ -469,24 +514,28 @@ func validateClientPhaseManifestTokens(parts map[string][]byte, manifest renderM
 		return err
 	}
 	scalarScopes := make(map[string]manifestScalarScope)
-	for _, key := range manifest.Scalars {
-		if strings.TrimSpace(key) == "" {
-			return contractError("manifest contains an empty scalar key")
-		}
-		if _, duplicate := scalarScopes[key]; duplicate {
-			return contractError("manifest scalar %q is declared more than once", key)
-		}
-		scalarScopes[key] = manifestScalarScope{}
-	}
-	for _, scope := range loops {
-		for _, key := range scope.node.Scalars {
+	for index, list := range [][]string{manifest.Scalars, manifest.OptionalScalars} {
+		for _, key := range list {
 			if strings.TrimSpace(key) == "" {
 				return contractError("manifest contains an empty scalar key")
 			}
 			if _, duplicate := scalarScopes[key]; duplicate {
 				return contractError("manifest scalar %q is declared more than once", key)
 			}
-			scalarScopes[key] = manifestScalarScope{loop: scope.name}
+			scalarScopes[key] = manifestScalarScope{optional: index == 1}
+		}
+	}
+	for _, scope := range loops {
+		for index, list := range [][]string{scope.node.Scalars, scope.node.OptionalScalars} {
+			for _, key := range list {
+				if strings.TrimSpace(key) == "" {
+					return contractError("manifest contains an empty scalar key")
+				}
+				if _, duplicate := scalarScopes[key]; duplicate {
+					return contractError("manifest scalar %q is declared more than once", key)
+				}
+				scalarScopes[key] = manifestScalarScope{loop: scope.name, optional: index == 1}
+			}
 		}
 	}
 
@@ -505,7 +554,13 @@ func validateClientPhaseManifestTokens(parts map[string][]byte, manifest renderM
 		completeCount += scanner.completeCount
 		for _, occurrence := range scanner.occurrences {
 			if occurrence.part != "word/document.xml" {
-				return contractError("template token %q is outside word/document.xml", occurrence.key)
+				// Header/footer parts may carry root scalars only (e.g. the
+				// printed-by line); every loop token stays in the body.
+				scope, known := scalarScopes[occurrence.key]
+				if !headerFooterPart.MatchString(occurrence.part) || !known || scope.loop != "" ||
+					occurrence.kind != "text" || !isWordprocessingMLName(occurrence.element, "t") {
+					return contractError("template token %q is outside word/document.xml", occurrence.key)
+				}
 			}
 			byKey[occurrence.key] = append(byKey[occurrence.key], occurrence)
 		}
@@ -534,6 +589,12 @@ func validateClientPhaseManifestTokens(parts map[string][]byte, manifest renderM
 		}
 	}
 	for key, values := range byKey {
+		// Document-level (root) scalars may repeat (e.g. identity on a cover and on a
+		// summary page); every occurrence is placement-checked below. Loop tokens and
+		// markers stay exactly-once.
+		if scope, root := scalarScopes[key]; root && scope.loop == "" && len(values) > 1 {
+			continue
+		}
 		if len(values) != 1 {
 			return contractError("template token %q must occur exactly once", key)
 		}
@@ -549,8 +610,33 @@ func validateClientPhaseManifestTokens(parts map[string][]byte, manifest renderM
 		}
 		return contractError("unexpected template token %q", key)
 	}
-	for key := range scalarScopes {
-		if len(byKey[key]) != 1 {
+	// A loop is omitted when neither marker is present and it (or an omitted
+	// ancestor) is optional. Every token of an omitted loop's scope must then
+	// be absent too; required tokens of present scopes must be present.
+	omitted := make(map[string]bool, len(loops))
+	var isOmitted func(name string) bool
+	isOmitted = func(name string) bool {
+		if value, done := omitted[name]; done {
+			return value
+		}
+		scope := loops[name]
+		absent := len(byKey["#"+name]) == 0 && len(byKey["/"+name]) == 0
+		result := absent && (scope.node.Optional || (scope.parent != "" && isOmitted(scope.parent)))
+		omitted[name] = result
+		return result
+	}
+	for name := range loops {
+		isOmitted(name)
+	}
+	for key, scope := range scalarScopes {
+		present := len(byKey[key]) >= 1
+		if scope.loop != "" && omitted[scope.loop] {
+			if present {
+				return contractError("loop token %q is outside loop %q", key, scope.loop)
+			}
+			continue
+		}
+		if !present && !scope.optional {
 			return contractError("template scalar %q is missing", key)
 		}
 	}
@@ -558,6 +644,9 @@ func validateClientPhaseManifestTokens(parts map[string][]byte, manifest renderM
 	loopBounds := make(map[string][2]tokenOccurrence, len(loops))
 	loopKinds := make(map[string]string, len(loops))
 	for name := range loops {
+		if omitted[name] {
+			continue
+		}
 		starts, ends := byKey["#"+name], byKey["/"+name]
 		if len(starts) != 1 || len(ends) != 1 {
 			return contractError("loop %q must have one start and one end marker", name)
@@ -576,7 +665,7 @@ func validateClientPhaseManifestTokens(parts map[string][]byte, manifest renderM
 	// The flat map traversal above is unordered, so perform parent containment
 	// after collecting every loop's bounds.
 	for name, scope := range loops {
-		if scope.parent == "" {
+		if scope.parent == "" || omitted[name] {
 			continue
 		}
 		child, parent := loopBounds[name], loopBounds[scope.parent]
@@ -586,14 +675,22 @@ func validateClientPhaseManifestTokens(parts map[string][]byte, manifest renderM
 	}
 
 	for key, scalarScope := range scalarScopes {
+		if len(byKey[key]) == 0 {
+			continue // optional token, or a token of an omitted loop (checked above)
+		}
 		value := byKey[key][0]
 		if scalarScope.loop == "" {
-			if err := validateRootTokenPlacement(value); err != nil {
-				return err
-			}
-			for name, bounds := range loopBounds {
-				if value.order > bounds[0].order && value.order < bounds[1].order {
-					return contractError("root token %q is inside loop %q", key, name)
+			for _, occurrence := range byKey[key] {
+				if occurrence.part != "word/document.xml" {
+					continue // header/footer text token, checked when collected
+				}
+				if err := validateRootTokenPlacement(occurrence); err != nil {
+					return err
+				}
+				for name, bounds := range loopBounds {
+					if occurrence.order > bounds[0].order && occurrence.order < bounds[1].order {
+						return contractError("root token %q is inside loop %q", key, name)
+					}
 				}
 			}
 			continue
@@ -619,11 +716,16 @@ func validateClientPhaseManifestTokens(parts map[string][]byte, manifest renderM
 // Coded outcome paths are selected by each template from the typed projection.
 // Their category/template/criterion codes are data, so the shared profile must
 // validate the path shape without naming any vertical or academic year.
+var headerFooterPart = regexp.MustCompile(`^word/(header|footer)[0-9]*\.xml$`)
+
 func isClientPhaseFixedScalar(key string) bool {
 	parts := strings.Split(key, ".")
 	validCell := len(parts) == 7 && parts[0] == "outcome_cells" && parts[6] == "numeric_value"
 	validTotal := len(parts) == 5 && parts[0] == "outcome_totals" && parts[4] == "numeric_value"
-	if !validCell && !validTotal {
+	// Template-independent family: category.criterion.activity / category.criterion.
+	validCategoryCell := len(parts) == 5 && parts[0] == "category_cells" && parts[4] == "numeric_value"
+	validCategoryTotal := len(parts) == 4 && parts[0] == "category_totals" && parts[3] == "numeric_value"
+	if !validCell && !validTotal && !validCategoryCell && !validCategoryTotal {
 		return false
 	}
 	for _, part := range parts[1 : len(parts)-1] {

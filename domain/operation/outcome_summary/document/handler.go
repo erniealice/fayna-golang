@@ -19,6 +19,7 @@ import (
 
 	"github.com/erniealice/espyna-golang/consumer"
 	pyeza "github.com/erniealice/pyeza-golang"
+	pyezatypes "github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
@@ -276,7 +277,7 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 			rc.DocumentHeaderName = firstNonEmpty(d.Labels.Landing.Title, "Report Card")
 		}
 		rc.PrintedBy = firstNonEmpty(consumer.GetUserIDFromContext(ctx), "system")
-		now := time.Now()
+		now := printedNow(ctx)
 		rc.PrintedAt = now.Format("2006-01-02 15:04")
 		rc.PrintedAtLong = now.Format("January 2, 2006 03:04 PM")
 		rc.PrintedByName = printedByName(ctx, d, rc.PrintedBy)
@@ -447,6 +448,13 @@ func encodeRFC5987(name string) string {
 // printedByName resolves the printing user's display name via the
 // workspace_user read (whose adapter hydrates the joined user name). Falls
 // back to "" (callers keep the raw principal id). Nil-safe.
+// printedNow is the print timestamp in the request's display zone (the
+// user's timezone set by the app's timezone middleware, else the package
+// default), so the footer never shows the server's process zone.
+func printedNow(ctx context.Context) time.Time {
+	return time.Now().In(pyezatypes.LocationFromContext(ctx))
+}
+
 func printedByName(ctx context.Context, d *Deps, userID string) string {
 	if name := workspaceUserName(ctx, d, userID); name != "" {
 		return name

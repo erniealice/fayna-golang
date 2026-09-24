@@ -117,7 +117,7 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 	// blanks recorded values across the whole document after assembly.
 
 	printedBy := firstNonEmpty(consumer.GetUserIDFromContext(ctx), "system")
-	now := time.Now()
+	now := printedNow(ctx)
 	printedAt := now.Format("January 2, 2006 3:04 PM")
 	printedByDisplay := printedByName(ctx, d, printedBy)
 	var templateBytes []byte

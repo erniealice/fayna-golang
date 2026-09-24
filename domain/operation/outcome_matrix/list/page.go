@@ -218,7 +218,8 @@ type ApprovalPhase struct {
 	TargetLabel string // "{count} students/…" caption
 	BlankCount  int32
 
-	Hint string // workflow-locked or hard-frozen hint text ("" when neither)
+	Hint         string // workflow-locked or hard-frozen hint text ("" when neither)
+	ReturnReason string // localized returned-note text ("" unless editable and a reason exists)
 
 	// State-gated action affordances. Each *Path is the EXACT resolved POST path
 	// (used identically for hx-post and {{actionForm}} so the action-workspace
@@ -1134,6 +1135,11 @@ func buildApprovalBar(deps *PageViewDeps, perms *types.UserPermissions, resp *ma
 			PublishConfirm: l.Confirm.Publish,
 			ReturnConfirm:  l.Confirm.Return,
 		}
+		if inProgress && !mixed && !frozen {
+			if reason := ru.GetLastReturnReason(); reason != "" {
+				ap.ReturnReason = subReason(l.ReturnedReasonHint, reason)
+			}
+		}
 
 		// One hint line: hard-frozen dominates; else any workflow lock.
 		switch {
@@ -1187,6 +1193,13 @@ func approvalChipVariant(s jobphasepb.PhaseApprovalStatus) string {
 // subCount substitutes the "{count}" placeholder with n (once).
 func subCount(tmpl string, n int32) string {
 	return strings.Replace(tmpl, "{count}", strconv.FormatInt(int64(n), 10), 1)
+}
+
+// subReason substitutes the "{reason}" placeholder with the persisted return
+// reason. The resulting string remains an ordinary template data value; the
+// HTML template escapes the reason when it renders the visible note.
+func subReason(tmpl, reason string) string {
+	return strings.Replace(tmpl, "{reason}", reason, 1)
 }
 
 // buildColumns maps the proto phase→task→criterion tree into CellGridLevel1/2/3.

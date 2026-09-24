@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
+	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/types"
 
 	documentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
@@ -263,6 +264,12 @@ func rollup(phaseID string, status jobphasepb.PhaseApprovalStatus, mixed, hasDat
 	}
 }
 
+func rollupWithReason(phaseID string, status jobphasepb.PhaseApprovalStatus, mixed, hasData, frozen bool, target, blank int32, reason string) *matrixpb.PhaseApprovalRollup {
+	r := rollup(phaseID, status, mixed, hasData, frozen, target, blank)
+	r.LastReturnReason = reason
+	return r
+}
+
 func phaseCol(phaseID, label, taskID string) *matrixpb.PhaseColumn {
 	return &matrixpb.PhaseColumn{
 		JobTemplatePhaseId: phaseID,
@@ -380,6 +387,82 @@ func TestBuildApprovalBar_NoPermissions(t *testing.T) {
 	}
 	if bar[0].CanSubmit || bar[0].CanVerify || bar[0].CanPublish || bar[0].CanReturn {
 		t.Errorf("no-permission principal should see no actions: %+v", bar[0])
+	}
+}
+
+func TestBuildApprovalBar_ReturnReasonOnlyOnEditableInProgress(t *testing.T) {
+	labels := outcome_matrix.DefaultLabels()
+	deps := &PageViewDeps{Labels: labels, Routes: outcome_matrix.DefaultRoutes()}
+	perms := types.NewEmptyUserPermissions()
+	const reason = "Please add evidence"
+	resp := &matrixpb.GetOutcomeMatrixResponse{
+		Phases: []*matrixpb.PhaseColumn{
+			phaseCol("pA", "Sem 1", "tA"),
+			phaseCol("pB", "Sem 2", "tB"),
+			phaseCol("pC", "Sem 3", "tC"),
+			phaseCol("pD", "Sem 4", "tD"),
+			phaseCol("pE", "Sem 5", "tE"),
+		},
+		ApprovalRollups: []*matrixpb.PhaseApprovalRollup{
+			rollupWithReason("pA", sIP, false, true, false, 1, 0, reason),
+			rollupWithReason("pB", sFR, false, true, false, 1, 0, reason),
+			rollupWithReason("pC", sIP, true, true, false, 1, 0, reason),
+			rollupWithReason("pD", sIP, false, true, true, 1, 0, reason),
+			rollup("pE", sIP, false, true, false, 1, 0),
+		},
+	}
+
+	bar := buildApprovalBar(deps, perms, resp, "tmpl-1", "")
+	by := map[string]ApprovalPhase{}
+	for _, phase := range bar {
+		by[phase.PhaseID] = phase
+	}
+
+	want := subReason(labels.Approval.ReturnedReasonHint, reason)
+	if by["pA"].ReturnReason != want {
+		t.Errorf("in-progress return note = %q, want %q", by["pA"].ReturnReason, want)
+	}
+	indexed := phaseActions(bar, labels, "")
+	phase, ok := indexed["pA"].(PhaseActions)
+	if !ok {
+		t.Fatalf("in-progress return note did not keep the visible header slot: %#v", indexed["pA"])
+	}
+	if phase.Phase.ReturnReason != want {
+		t.Errorf("header action return note = %q, want %q", phase.Phase.ReturnReason, want)
+	}
+	for _, phaseID := range []string{"pB", "pC", "pD", "pE"} {
+		if got := by[phaseID].ReturnReason; got != "" {
+			t.Errorf("phase %s return note = %q, want empty", phaseID, got)
+		}
+	}
+}
+
+func TestPhaseActionsTemplate_ReturnReasonIsVisibleAndEscaped(t *testing.T) {
+	renderer := pyeza.NewHTMLRendererFromFS(pyeza.SharedFS, outcome_matrix.TemplatesFS)
+	if err := renderer.Init(); err != nil {
+		t.Fatalf("init outcome-matrix templates: %v", err)
+	}
+
+	labels := outcome_matrix.DefaultLabels()
+	const rawReason = `<script>alert("x")</script>`
+	data := types.CellGridSlot{Actions: PhaseActions{Phase: ApprovalPhase{
+		Slug:         "pA",
+		ReturnReason: subReason(labels.Approval.ReturnedReasonHint, rawReason),
+	}}}
+	var rendered bytes.Buffer
+	if err := renderer.GetTemplates().ExecuteTemplate(&rendered, "outcome-matrix-phase-actions", data); err != nil {
+		t.Fatalf("render outcome-matrix phase actions: %v", err)
+	}
+
+	html := rendered.String()
+	if !strings.Contains(html, `data-testid="pa-pA-return-note"`) {
+		t.Fatalf("return note testid missing from visible header actions: %s", html)
+	}
+	if !strings.Contains(html, "Returned with a note:") || !strings.Contains(html, "&lt;script&gt;") {
+		t.Fatalf("return reason was not rendered and escaped: %s", html)
+	}
+	if strings.Contains(html, "<script>alert") {
+		t.Fatalf("return reason rendered raw HTML: %s", html)
 	}
 }
 

@@ -156,10 +156,11 @@ type ApprovalLabels struct {
 	Errors  ApprovalErrorLabels   `json:"errors"`
 
 	// Derived-overlay + hint strings (codex label additions).
-	Mixed          string `json:"mixed"`            // mixed/Attention marker
-	NotStarted     string `json:"not_started"`      // IN_PROGRESS && no data
-	LockedHint     string `json:"locked_hint"`      // workflow-locked (advanced, not frozen)
-	HardFrozenHint string `json:"hard_frozen_hint"` // finalized / closed schedule
+	Mixed              string `json:"mixed"`                // mixed/Attention marker
+	NotStarted         string `json:"not_started"`          // IN_PROGRESS && no data
+	LockedHint         string `json:"locked_hint"`          // workflow-locked (advanced, not frozen)
+	HardFrozenHint     string `json:"hard_frozen_hint"`     // finalized / closed schedule
+	ReturnedReasonHint string `json:"returned_reason_hint"` // editable phase returned with a note; {reason} is substituted by the view
 }
 
 // ApprovalBarLabels — the bar heading.
@@ -324,10 +325,11 @@ func DefaultLabels() Labels {
 			Errors: ApprovalErrorLabels{
 				ActionFailed: "This phase could not be updated — it may be locked, finalized, or you may lack permission.",
 			},
-			Mixed:          "Attention — mixed",
-			NotStarted:     "Not started",
-			LockedHint:     "This phase is locked — return it to edit",
-			HardFrozenHint: "This phase is finalized and can no longer be edited",
+			Mixed:              "Attention — mixed",
+			NotStarted:         "Not started",
+			LockedHint:         "This phase is locked — return it to edit",
+			HardFrozenHint:     "This phase is finalized and can no longer be edited",
+			ReturnedReasonHint: "Returned with a note: {reason}",
 		},
 		Columns: ColumnsLabels{
 			Button:       "Columns",

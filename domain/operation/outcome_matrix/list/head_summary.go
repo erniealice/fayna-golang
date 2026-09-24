@@ -121,17 +121,18 @@ type PhaseActions struct {
 	DownloadTestID    string
 }
 
-// Any reports whether this phase has at least one available control. Templates
-// use it to skip the wrapper entirely: a rendered-but-empty slot would still
-// consume the header cell's space-between gap.
+// Any reports whether this phase has at least one available control or a
+// returned-reason note. Templates use it to skip the wrapper entirely when
+// there is nothing visible to put in the header cell.
 func (p PhaseActions) Any() bool {
 	return p.Phase.CanSubmit || p.Phase.CanVerify || p.Phase.CanPublish || p.Phase.CanReturn ||
-		p.DownloadDrawerURL != ""
+		p.DownloadDrawerURL != "" || p.Phase.ReturnReason != ""
 }
 
 // phaseActions indexes the already-derived approval bar by phase id, so each L1
-// header cell can carry its OWN controls. Returns nil when nothing is
-// actionable, which leaves every header cell's Actions nil and the slot unused.
+// header cell can carry its OWN controls or return note. Returns nil when
+// nothing is visible, which leaves every header cell's Actions nil and the slot
+// unused.
 func phaseActions(bar []ApprovalPhase, l outcome_matrix.Labels, _ string) map[string]any {
 	if len(bar) == 0 {
 		return nil
@@ -143,7 +144,7 @@ func phaseActions(bar []ApprovalPhase, l outcome_matrix.Labels, _ string) map[st
 		}
 		pa := PhaseActions{Phase: ph, Labels: l.Approval}
 		if !pa.Any() {
-			continue // no controls ⇒ no slot for this column
+			continue // no controls or note ⇒ no slot for this column
 		}
 		out[ph.PhaseID] = pa
 	}

@@ -93,6 +93,12 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 		templatePhases[phase.GetId()] = phase
 		phaseByTemplate[phase.GetJobTemplateId()] = append(phaseByTemplate[phase.GetJobTemplateId()], phase)
 	}
+	variantLabels := make(map[string]string, len(card.GetProductVariants()))
+	for _, variant := range card.GetProductVariants() {
+		if variant != nil && strings.TrimSpace(variant.GetId()) != "" {
+			variantLabels[variant.GetId()] = strings.TrimSpace(variant.GetSku())
+		}
+	}
 
 	criteriaByTemplateTask := make(map[string][]*templatecriteriapb.TemplateTaskCriteria)
 	criteriaByID := make(map[string]*criteriapb.OutcomeCriteria)
@@ -433,7 +439,10 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 			phaseComment = strings.TrimSpace(summary.GetNarrative())
 		}
 		progressTotal, progressMaximum, hasProgressNumericOutcome := projectedProgressToDate(entry, jobPhasesByJob, jobTasksByJobPhase, templatePhases, templateTasksByID, criteriaByTemplateTask, criteriaByID, taskOutcomes, historical)
-		jobName := firstNonEmpty(strings.TrimSpace(entry.job.GetName()), strings.TrimSpace(entry.template.GetName()))
+		jobName := composeJobVariantName(
+			firstNonEmpty(strings.TrimSpace(entry.job.GetName()), strings.TrimSpace(entry.template.GetName())),
+			variantLabels[strings.TrimSpace(entry.tp.GetOutputProductVariantId())],
+		)
 		jobs = append(jobs, map[string]any{
 			"job_name":                 jobName,
 			"job_category_name":        strings.TrimSpace(entry.category.GetName()),
@@ -1196,6 +1205,18 @@ func staffNames(card *exportpb.ClientReportCardProjection, jobID, jobPhaseID str
 	}
 	sort.Strings(names)
 	return strings.Join(names, ", ")
+}
+
+// composeJobVariantName names a job whose selected period is pinned to a
+// product variant as "Arts (Music)", matching the grade-sheet period header
+// (composePhaseLabel). A blank variant, or a name that already carries it,
+// leaves the name unchanged.
+func composeJobVariantName(name, variant string) string {
+	name, variant = strings.TrimSpace(name), strings.TrimSpace(variant)
+	if name == "" || variant == "" || strings.Contains(strings.ToLower(name), strings.ToLower(variant)) {
+		return name
+	}
+	return name + " (" + variant + ")"
 }
 
 // capNames keeps the first max names of a ", "-joined list (max <= 0 = all).

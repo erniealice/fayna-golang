@@ -15,6 +15,7 @@ import (
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phaseoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	templatecriteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
+	productvariantpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_variant"
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
@@ -551,5 +552,37 @@ func TestBuildClientPhaseReportDataPlanLabelFromPlanAttribute(t *testing.T) {
 	blank, _ := buildClientPhaseReportData(&Deps{}, card, testProgressReportPhaseCode, "", "")
 	if got := blank["jobs"].([]any)[0].(map[string]any)["page_plan_label"]; got != "" {
 		t.Fatalf("unconfigured plan label = %v, want blank", got)
+	}
+}
+
+// Owner 2026-09-25: a job whose selected period is pinned to a product variant
+// names that variant on its page ("Art (Music)"), as the grade-sheet header does.
+func TestBuildClientPhaseReportDataNamesSelectedPhaseVariant(t *testing.T) {
+	card := clientPhaseProjectionFixture()
+	card.JobTemplatePhases[2].OutputProductVariantId = ptr("variant-music")
+	card.ProductVariants = []*productvariantpb.ProductVariant{{Id: "variant-music", Sku: " Music "}}
+	data, err := buildClientPhaseReportData(&Deps{}, card, testProgressReportPhaseCode, "", "")
+	if err != nil {
+		t.Fatalf("buildClientPhaseReportData() error = %v", err)
+	}
+	gotNames := []string{}
+	for _, job := range data["jobs"].([]any) {
+		gotNames = append(gotNames, job.(map[string]any)["job_name"].(string))
+	}
+	if want := []string{"Art (Music)", "Art (Music)", "Biology", "Chemistry"}; !reflect.DeepEqual(gotNames, want) {
+		t.Errorf("job names = %v, want %v", gotNames, want)
+	}
+}
+
+func TestComposeJobVariantName(t *testing.T) {
+	for _, tc := range []struct{ name, variant, want string }{
+		{"Arts", "Music", "Arts (Music)"},
+		{"Arts", " ", "Arts"},
+		{"Arts: Music", "Music", "Arts: Music"},
+		{"", "Music", ""},
+	} {
+		if got := composeJobVariantName(tc.name, tc.variant); got != tc.want {
+			t.Errorf("composeJobVariantName(%q, %q) = %q, want %q", tc.name, tc.variant, got, tc.want)
+		}
 	}
 }

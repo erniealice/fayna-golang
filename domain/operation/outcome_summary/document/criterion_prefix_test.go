@@ -44,9 +44,9 @@ func TestClientPhaseCriteriaLetterPrefix(t *testing.T) {
 			if strings.Contains(a["assessment_name"].(string), "\n") {
 				t.Fatalf("document criterion name must never contain a line break: %q", a["assessment_name"])
 			}
-			if b["achievement_level"] == "" && b["comment"] == "" {
+			if b["comment"] == "" {
 				if a["comment"] != "Not yet assessed" {
-					t.Fatalf("unassessed criterion comment = %q, want Not yet assessed", a["comment"])
+					t.Fatalf("criterion without a note: comment = %q, want Not yet assessed", a["comment"])
 				}
 				placeholders++
 			} else if a["comment"] != b["comment"] {
@@ -59,4 +59,42 @@ func TestClientPhaseCriteriaLetterPrefix(t *testing.T) {
 		t.Fatal("fixture produced no assessments")
 	}
 	t.Logf("checked %d criteria, %d placeholders", checked, placeholders)
+}
+
+// TestClientPhaseNotAssessedWhenNoteEmpty: a graded criterion whose
+// determination note is empty reads "Not yet assessed" too (owner
+// 2026-09-25); its achievement level still prints.
+func TestClientPhaseNotAssessedWhenNoteEmpty(t *testing.T) {
+	card := clientPhaseProjectionFixture()
+	graded := 0
+	for _, outcome := range card.TaskOutcomes {
+		if outcome.NumericValue != nil {
+			graded++
+		}
+		empty := ""
+		outcome.DeterminationNote = &empty
+	}
+	if graded == 0 {
+		t.Fatal("fixture has no graded outcome")
+	}
+	labels := outcome_summary.Labels{ClientDocument: outcome_summary.ClientDocumentLabels{NotAssessed: "Not yet assessed"}}
+	data, err := buildClientPhaseReportData(&Deps{Labels: labels}, card, testProgressReportPhaseCode, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	leveled := 0
+	for _, job := range data["jobs"].([]any) {
+		for _, raw := range job.(map[string]any)["assessments"].([]any) {
+			a := raw.(map[string]any)
+			if a["comment"] != "Not yet assessed" {
+				t.Fatalf("criterion %q comment = %q, want Not yet assessed", a["assessment_name"], a["comment"])
+			}
+			if a["achievement_level"] != "" {
+				leveled++
+			}
+		}
+	}
+	if leveled == 0 {
+		t.Fatal("no graded criterion reached the document; the rule is untested")
+	}
 }

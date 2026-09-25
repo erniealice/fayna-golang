@@ -415,7 +415,9 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 						}
 					}
 				}
-				if notAssessed != "" && assessment["achievement_level"] == "" && assessment["comment"] == "" {
+				// An empty determination note reads "Not yet assessed", whether or
+				// not a level was recorded (owner 2026-09-25).
+				if notAssessed != "" && assessment["comment"] == "" {
 					assessment["comment"] = notAssessed
 				}
 				assessments = append(assessments, assessment)

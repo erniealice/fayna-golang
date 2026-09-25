@@ -108,3 +108,31 @@ func TestJHSClientPhaseAuthoringTemplateV5MatchesManifest(t *testing.T) {
 		t.Fatalf("JHS client phase v5 authoring asset: %v", err)
 	}
 }
+
+// TestJHSClientPhaseAuthoringTemplateV6MatchesManifest validates the v6 layout
+// (owner 2026-09-25): v5 with the achievement level, Total and Progress-to-date
+// values printed again and the Homeroom "Transmuted Grade" row removed (its
+// summary_transmuted_period_N tokens are optional root scalars).
+func TestJHSClientPhaseAuthoringTemplateV6MatchesManifest(t *testing.T) {
+	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v6.docx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateTemplate(testClientPhaseProfile, docx); err != nil {
+		t.Fatalf("JHS client phase v6 authoring asset: %v", err)
+	}
+}
+
+// TestJHSClientPhaseAuthoringTemplateV7MatchesManifest validates the v7 layout
+// (owner 2026-09-25): v6 with "Progress to date Grade" printing phase_grade
+// (the selected term's transmuted 1-7 grade); progress_to_date_total/_maximum
+// stay as hidden runs.
+func TestJHSClientPhaseAuthoringTemplateV7MatchesManifest(t *testing.T) {
+	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v7.docx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateTemplate(testClientPhaseProfile, docx); err != nil {
+		t.Fatalf("JHS client phase v7 authoring asset: %v", err)
+	}
+}

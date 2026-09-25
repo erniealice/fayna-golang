@@ -574,7 +574,7 @@ func clientPhaseValidator() func([]byte) error {
 // second copy of the token contract in this package.
 func jhsClientPhaseCandidate(t *testing.T) []byte {
 	t.Helper()
-	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v5.docx")
+	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v7.docx")
 	if err != nil {
 		t.Fatalf("read candidate docx: %v", err)
 	}

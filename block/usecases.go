@@ -61,6 +61,22 @@ import (
 	jobtemplateTaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
 	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phaseoutcomesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
+	ratingdescriptionsetpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/rating_description_set"
+	ratingdescriptionsetentrypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/rating_description_set_entry"
+	ratingdescriptionsetproductplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/rating_description_set_product_plan"
+
+	// Page-data picker DTOs (codex-review-impl2.out.md finding #6) — plain,
+	// block-local transport types, not proto: the sourcing espyna use cases
+	// are internal-package-only and cannot hand fayna a protobuf-generated
+	// type (there is none for these reads — they compose cross-domain
+	// repository reads under a single management-permission check), so the
+	// picker DTOs live in fayna's own domain packages instead. Same
+	// documented exception shape as the two dashboard slots above.
+	ratingdescriptionsetform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set/form"
+	ratingdescriptionsetlistdata "github.com/erniealice/fayna-golang/domain/operation/rating_description_set/listdata"
+	ratingdescriptionsetentryform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_entry/form"
+	ratingdescriptionsetproductplanform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_product_plan/form"
+	ratingdescriptionsetproductplanlistdata "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_product_plan/listdata"
 	reportingcheckpointpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/reporting_checkpoint"
 	scorescalepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/score_scale"
 	scorescalebandpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/score_scale_band"
@@ -230,6 +246,16 @@ type OperationUseCases struct {
 	ScoreScaleBand           ScoreScaleBandUseCases
 	JobOutcomeLine           JobOutcomeLineUseCases
 	ReportingCheckpoint      ReportingCheckpointUseCases
+
+	// Criterion descriptors by program year (20260925 plan, W3). OPTIONAL /
+	// nil-able, same degrade-to-empty-state convention as the education
+	// grading group above. MVP scope (sequence w3-fayna-views): list/detail/
+	// add/publish/deprecate on the set, add/edit on the entry, relink/unlink
+	// on the offering link. Edit/Delete/CreateVersion/bulk/copy-previous are
+	// deferred — TODO, see the plan sequence log.
+	RatingDescriptionSet            RatingDescriptionSetUseCases
+	RatingDescriptionSetEntry       RatingDescriptionSetEntryUseCases
+	RatingDescriptionSetProductPlan RatingDescriptionSetProductPlanUseCases
 }
 
 // JobUseCases — Job CRUD + list + the cross-tab reads the Job module needs.
@@ -412,6 +438,12 @@ type TaskOutcomeUseCases struct {
 	UpdateTaskOutcome func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error)
 	DeleteTaskOutcome func(context.Context, *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error)
 	ListTaskOutcomes  func(context.Context, *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error)
+	// Q26 conditional grade-sheet writes (PD 20260925-criterion-descriptors-
+	// by-program-year, schema-proposal §9.1). Optional: nil keeps the plain
+	// Create/Update path for non-description cells and fails description-mode
+	// cells closed (outcome_matrix action.Deps contract).
+	UpdateTaskOutcomeIfUnchanged func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest, *taskoutcomepb.TaskOutcome) (*taskoutcomepb.UpdateTaskOutcomeResponse, bool, error)
+	CreateTaskOutcomeIfAbsent    func(context.Context, *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, bool, error)
 	// ListCodedTaskOutcomeValuesByJob — ownership-joined latest-cell read
 	// (job → template ancestry) carrying phase/task/criterion codes. Optional /
 	// nil-safe: a nil closure leaves the coded-cell surface blank.
@@ -450,6 +482,16 @@ type OutcomeMatrixUseCases struct {
 	// degrades the gate to template grain.
 	GetPhaseApprovalGateRollup func(context.Context, *matrixpb.GetPhaseApprovalGateRollupRequest) (*matrixpb.GetPhaseApprovalGateRollupResponse, error)
 	ResolveStaff               func(ctx context.Context) (string, error)
+	// ResolveCellRatingDescriptions — per-cell rubric-text resolver (PD
+	// 20260925-criterion-descriptors-by-program-year; espyna service/operation/
+	// outcome_matrix.ResolveCellRatingDescriptions). Consumed by the record
+	// action's save path (action.Deps.ResolveCellRatingDescriptions), NOT by
+	// the matrix read — it answers "what does this cell's rubric say" for the
+	// description-mode cells in ONE save request. OPTIONAL / nil-able at this
+	// struct's level (the record action treats a nil closure as fail-closed:
+	// REJECTS every description-mode cell's save, per action.go's doc
+	// comment — never silently "no entry").
+	ResolveCellRatingDescriptions func(context.Context, *matrixpb.ResolveCellRatingDescriptionsRequest) (*matrixpb.ResolveCellRatingDescriptionsResponse, error)
 }
 
 // SubscriptionGroupOutcomeExportUseCases is the narrow composite read used by
@@ -537,6 +579,71 @@ type ScoreScaleBandUseCases struct {
 	UpdateScoreScaleBand func(context.Context, *scorescalebandpb.UpdateScoreScaleBandRequest) (*scorescalebandpb.UpdateScoreScaleBandResponse, error)
 	DeleteScoreScaleBand func(context.Context, *scorescalebandpb.DeleteScoreScaleBandRequest) (*scorescalebandpb.DeleteScoreScaleBandResponse, error)
 	ListScoreScaleBands  func(context.Context, *scorescalebandpb.ListScoreScaleBandsRequest) (*scorescalebandpb.ListScoreScaleBandsResponse, error)
+}
+
+// RatingDescriptionSetUseCases — RatingDescriptionSet CRUD (MVP: Create/Read/
+// List) + lifecycle (Publish/Deprecate). Edit/Delete/CreateVersion are
+// deferred (TODO, see the plan sequence log) so no closure fields exist for
+// them yet.
+type RatingDescriptionSetUseCases struct {
+	CreateRatingDescriptionSet    func(context.Context, *ratingdescriptionsetpb.CreateRatingDescriptionSetRequest) (*ratingdescriptionsetpb.CreateRatingDescriptionSetResponse, error)
+	ReadRatingDescriptionSet      func(context.Context, *ratingdescriptionsetpb.ReadRatingDescriptionSetRequest) (*ratingdescriptionsetpb.ReadRatingDescriptionSetResponse, error)
+	ListRatingDescriptionSets     func(context.Context, *ratingdescriptionsetpb.ListRatingDescriptionSetsRequest) (*ratingdescriptionsetpb.ListRatingDescriptionSetsResponse, error)
+	PublishRatingDescriptionSet   func(context.Context, *ratingdescriptionsetpb.PublishRatingDescriptionSetRequest) (*ratingdescriptionsetpb.PublishRatingDescriptionSetResponse, error)
+	DeprecateRatingDescriptionSet func(context.Context, *ratingdescriptionsetpb.DeprecateRatingDescriptionSetRequest) (*ratingdescriptionsetpb.DeprecateRatingDescriptionSetResponse, error)
+	// GetFormPageData — Add-set drawer's score_scale picker, authorized
+	// under rating_description_set:create (finding #6).
+	GetFormPageData func(context.Context) (*ratingdescriptionsetform.FormPageData, error)
+	// GetListSummaryPageData — the LIST page's SOLE data source (rows +
+	// scale name + entry/link counts), authorized ONCE under
+	// rating_description_set:list (codex-review-impl3.out.md finding #1).
+	GetListSummaryPageData func(context.Context) (*ratingdescriptionsetlistdata.PageData, error)
+}
+
+// RatingDescriptionSetEntryUseCases — RatingDescriptionSetEntry CRUD (MVP:
+// Create/Read/Update; Delete deferred — TODO).
+type RatingDescriptionSetEntryUseCases struct {
+	CreateRatingDescriptionSetEntry func(context.Context, *ratingdescriptionsetentrypb.CreateRatingDescriptionSetEntryRequest) (*ratingdescriptionsetentrypb.CreateRatingDescriptionSetEntryResponse, error)
+	ReadRatingDescriptionSetEntry   func(context.Context, *ratingdescriptionsetentrypb.ReadRatingDescriptionSetEntryRequest) (*ratingdescriptionsetentrypb.ReadRatingDescriptionSetEntryResponse, error)
+	UpdateRatingDescriptionSetEntry func(context.Context, *ratingdescriptionsetentrypb.UpdateRatingDescriptionSetEntryRequest) (*ratingdescriptionsetentrypb.UpdateRatingDescriptionSetEntryResponse, error)
+	ListRatingDescriptionSetEntries func(context.Context, *ratingdescriptionsetentrypb.ListRatingDescriptionSetEntriesRequest) (*ratingdescriptionsetentrypb.ListRatingDescriptionSetEntriesResponse, error)
+	// GetFormPageData — the set detail page's READ-ONLY matrix criteria/band
+	// source, authorized under rating_description_set:read (finding #6).
+	GetFormPageData func(context.Context) (*ratingdescriptionsetentryform.FormPageData, error)
+	// GetDrawerFormPageData — the Add/Edit entry DRAWER's criteria/band
+	// picker specifically, authorized under rating_description_set:update
+	// (not :read) so a read-only-only viewer (e.g. Section Template
+	// Manager: set list/read, nothing else) can no longer open the
+	// mutating drawer, while an update-only editor still can
+	// (codex-review-impl3.out.md round-2 disposition #11 — the shared
+	// :read gate under-served the update-only case and over-served the
+	// read-only case). Also resolves the Edit entry itself and the parent
+	// set's score_scale_id server-side, under this SAME :update
+	// authorization — codex-review-impl4.out.md "Update-only drawer": those
+	// were previously separate :read-gated calls (ReadRatingDescriptionSet /
+	// ReadRatingDescriptionSetEntry) an update-only editor could not make.
+	GetDrawerFormPageData func(ctx context.Context, ratingDescriptionSetID, entryID string) (*ratingdescriptionsetentryform.FormPageData, error)
+}
+
+// RatingDescriptionSetProductPlanUseCases — AY setup read + Relink/Unlink
+// (MVP scope; bulk relink / propose-from-previous-AY are deferred — TODO).
+type RatingDescriptionSetProductPlanUseCases struct {
+	GetRatingDescriptionSetProductPlanListPageData func(context.Context, *ratingdescriptionsetproductplanpb.GetRatingDescriptionSetProductPlanListPageDataRequest) (*ratingdescriptionsetproductplanpb.GetRatingDescriptionSetProductPlanListPageDataResponse, error)
+	ListRatingDescriptionSetProductPlans           func(context.Context, *ratingdescriptionsetproductplanpb.ListRatingDescriptionSetProductPlansRequest) (*ratingdescriptionsetproductplanpb.ListRatingDescriptionSetProductPlansResponse, error)
+	RelinkRatingDescriptionSetProductPlan          func(context.Context, *ratingdescriptionsetproductplanpb.RelinkRatingDescriptionSetProductPlanRequest) (*ratingdescriptionsetproductplanpb.RelinkRatingDescriptionSetProductPlanResponse, error)
+	UnlinkRatingDescriptionSetProductPlan          func(context.Context, *ratingdescriptionsetproductplanpb.UnlinkRatingDescriptionSetProductPlanRequest) (*ratingdescriptionsetproductplanpb.UnlinkRatingDescriptionSetProductPlanResponse, error)
+	// GetFormPageData — Relink drawer's offering/PUBLISHED-set picker,
+	// authorized under rating_description_set_product_plan:read (finding
+	// #6). NOT used by the list page any more (see GetListSummaryPageData).
+	GetFormPageData func(context.Context) (*ratingdescriptionsetproductplanform.FormPageData, error)
+	// GetListSummaryPageData — the assignment LIST page's SOLE data source
+	// (AY options + selected schedule's links + offering names + set
+	// name/version, all statuses), authorized ONCE under
+	// rating_description_set_product_plan:list, with the offering names
+	// sourced through a workspace-scoped product_plan read (NOT the
+	// generic ListProductPlans) — codex-review-impl3.out.md findings #1
+	// and #3.
+	GetListSummaryPageData func(context.Context, string) (*ratingdescriptionsetproductplanlistdata.PageData, error)
 }
 
 // JobOutcomeLineUseCases — JobOutcomeLine CRUD + list (education grading 20260616).

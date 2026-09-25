@@ -245,6 +245,73 @@ func wireScoreScaleBandDeps(deps *operation.ScoreScaleBandModuleDeps, u *UseCase
 	deps.ListScoreScaleBands = ssb.ListScoreScaleBands
 }
 
+func wireRatingDescriptionSetDeps(deps *operation.RatingDescriptionSetModuleDeps, u *UseCases) {
+	rds := &u.Operation.RatingDescriptionSet
+	deps.CreateRatingDescriptionSet = rds.CreateRatingDescriptionSet
+	deps.ReadRatingDescriptionSet = rds.ReadRatingDescriptionSet
+	deps.ListRatingDescriptionSets = rds.ListRatingDescriptionSets
+	deps.PublishRatingDescriptionSet = rds.PublishRatingDescriptionSet
+	deps.DeprecateRatingDescriptionSet = rds.DeprecateRatingDescriptionSet
+
+	deps.ListRatingDescriptionSetEntries = u.Operation.RatingDescriptionSetEntry.ListRatingDescriptionSetEntries
+	deps.ListRatingDescriptionSetProductPlans = u.Operation.RatingDescriptionSetProductPlan.ListRatingDescriptionSetProductPlans
+
+	// Pickers — optional/nil-safe (falls back to raw-id text inputs).
+	deps.ListScoreScales = u.Operation.ScoreScale.ListScoreScales
+	deps.ListScoreScaleBands = u.Operation.ScoreScaleBand.ListScoreScaleBands
+	deps.ListOutcomeCriterias = u.Operation.OutcomeCriteria.ListOutcomeCriterias
+	// Preferred picker source (finding #6) — authorized under
+	// rating_description_set:create, no separate score_scale:list grant.
+	deps.GetFormPageData = u.Operation.RatingDescriptionSet.GetFormPageData
+	// Detail matrix's band-row + criterion-name source (finding #6) —
+	// reuses rating_description_set_entry's page data (same criteria/bands
+	// the entry drawer already loads), authorized under
+	// rating_description_set:read.
+	deps.GetEntryFormPageData = u.Operation.RatingDescriptionSetEntry.GetFormPageData
+	// LIST page's SOLE data source (codex-review-impl3.out.md finding #1)
+	// — authorized ONCE under rating_description_set:list.
+	deps.GetListSummaryPageData = rds.GetListSummaryPageData
+}
+
+func wireRatingDescriptionSetEntryDeps(deps *operation.RatingDescriptionSetEntryModuleDeps, u *UseCases) {
+	rdse := &u.Operation.RatingDescriptionSetEntry
+	deps.CreateRatingDescriptionSetEntry = rdse.CreateRatingDescriptionSetEntry
+	deps.ReadRatingDescriptionSetEntry = rdse.ReadRatingDescriptionSetEntry
+	deps.UpdateRatingDescriptionSetEntry = rdse.UpdateRatingDescriptionSetEntry
+
+	deps.ReadRatingDescriptionSet = u.Operation.RatingDescriptionSet.ReadRatingDescriptionSet
+
+	deps.ListOutcomeCriterias = u.Operation.OutcomeCriteria.ListOutcomeCriterias
+	deps.ListScoreScaleBands = u.Operation.ScoreScaleBand.ListScoreScaleBands
+	// Drawer-specific picker source (codex-review-impl3.out.md round-2
+	// disposition #11) — authorized under rating_description_set:update
+	// (NOT :read, unlike the sibling detail-matrix source), so a read-only
+	// viewer can no longer open this mutating drawer while an update-only
+	// editor still can.
+	deps.GetFormPageData = rdse.GetDrawerFormPageData
+}
+
+func wireRatingDescriptionSetProductPlanDeps(deps *operation.RatingDescriptionSetProductPlanModuleDeps, u *UseCases) {
+	rdl := &u.Operation.RatingDescriptionSetProductPlan
+	deps.GetRatingDescriptionSetProductPlanListPageData = rdl.GetRatingDescriptionSetProductPlanListPageData
+	deps.RelinkRatingDescriptionSetProductPlan = rdl.RelinkRatingDescriptionSetProductPlan
+	deps.UnlinkRatingDescriptionSetProductPlan = rdl.UnlinkRatingDescriptionSetProductPlan
+
+	deps.ListRatingDescriptionSets = u.Operation.RatingDescriptionSet.ListRatingDescriptionSets
+	deps.ListProductPlans = u.Product.ProductPlan.ListProductPlans
+	deps.ListPriceSchedules = u.Subscription.PriceSchedule.ListPriceSchedules
+	// Preferred picker source (finding #6) — authorized under
+	// rating_description_set_product_plan:read, no separate
+	// product_plan:list / price_schedule:list / rating_description_set:list
+	// grant.
+	deps.GetFormPageData = rdl.GetFormPageData
+	// LIST page's SOLE data source (codex-review-impl3.out.md findings #1
+	// and #3) — authorized ONCE under rating_description_set_product_plan:
+	// list, offering names scoped through the offering's parent
+	// product+plan workspace.
+	deps.GetListSummaryPageData = rdl.GetListSummaryPageData
+}
+
 func wireJobOutcomeLineDeps(deps *operation.JobOutcomeLineModuleDeps, u *UseCases) {
 	jol := &u.Operation.JobOutcomeLine
 	deps.CreateJobOutcomeLine = jol.CreateJobOutcomeLine
@@ -287,6 +354,11 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	om := &u.Operation.OutcomeMatrix
 	deps.GetOutcomeMatrix = om.GetOutcomeMatrix
 	deps.GetOutcomeSummaryRoster = om.GetOutcomeSummaryRoster
+	// ResolveCellRatingDescriptions (PD 20260925-criterion-descriptors-by-
+	// program-year) — the record action's own Deps field (action.Deps,
+	// action.go) sources it from here (see NewOutcomeMatrixModule below),
+	// same pass-through shape as GetOutcomeMatrix/GetOutcomeSummaryRoster.
+	deps.ResolveCellRatingDescriptions = om.ResolveCellRatingDescriptions
 	// R3 / DEC-3: prefer the render-scoped resolver (subscription_group_outcome_
 	// export:read) over the old JOSDT list-gated one; fall back only when it is
 	// unwired (nil), so a STAFF principal keeps a working header/download.
@@ -325,6 +397,10 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	deps.UpdateTaskOutcome = to.UpdateTaskOutcome
 	deps.DeleteTaskOutcome = to.DeleteTaskOutcome
 	deps.ReadTaskOutcome = to.ReadTaskOutcome
+	// Q26 conditional writes (schema-proposal §9.1): snapshot-compared update
+	// and locked create-if-absent for the grade-sheet save path.
+	deps.UpdateTaskOutcomeIfUnchanged = to.UpdateTaskOutcomeIfUnchanged
+	deps.CreateTaskOutcomeIfAbsent = to.CreateTaskOutcomeIfAbsent
 
 	// NOTE: deps.ComputePhaseOutcome / deps.ComputeJobOutcome (inline grade
 	// recompute, W2) are NOT sourced here — they come from the app AppContext via

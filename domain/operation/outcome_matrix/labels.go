@@ -256,9 +256,24 @@ type GridLabels struct {
 	AverageTooltip string `json:"average_tooltip"`
 }
 
-// ErrorLabels — generic permission-denied string.
+// ErrorLabels — generic permission-denied string plus the translated per-cell
+// save-rejection messages. The record action maps its bounded ack codes
+// (rating_description_* / cell_changed_retry) onto these before the grid
+// shows them (action/record.go translateAckError); json tags byte-match the
+// lyngua keys under outcome_matrix.errors.
 type ErrorLabels struct {
 	PermissionDenied string `json:"permission_denied"`
+	// Rating-description resolution rejections (schema-proposal §5, Q22).
+	RatingDescriptionUnresolvedIdentity string `json:"rating_description_unresolved_identity"`
+	RatingDescriptionAmbiguous          string `json:"rating_description_ambiguous"`
+	RatingDescriptionInvalidConfig      string `json:"rating_description_invalid_config"`
+	// Resolver unwired / transport failure / omitted or duplicated result.
+	RatingDescriptionResolutionFailed string `json:"rating_description_resolution_failed"`
+	// A resolved description needs a placeholder value (e.g. the record's
+	// first name) that is missing for this record (schema-proposal §10).
+	RatingDescriptionPlaceholderUnresolved string `json:"rating_description_placeholder_unresolved"`
+	// Q26 conditional-write CONFLICT (schema-proposal §9.1).
+	CellChangedRetry string `json:"cell_changed_retry"`
 }
 
 // DefaultLabels returns Labels with English (general tier) defaults, byte-for-byte
@@ -302,7 +317,13 @@ func DefaultLabels() Labels {
 			AverageTooltip:  "Computed average — read only",
 		},
 		Errors: ErrorLabels{
-			PermissionDenied: "You do not have permission to perform this action",
+			PermissionDenied:                       "You do not have permission to perform this action",
+			RatingDescriptionUnresolvedIdentity:    "This rating was not saved: the student's subject or level could not be identified.",
+			RatingDescriptionAmbiguous:             "This rating was not saved: the rubric descriptors for this subject are misconfigured.",
+			RatingDescriptionInvalidConfig:         "This rating was not saved: the rubric descriptors for this subject are misconfigured.",
+			RatingDescriptionResolutionFailed:      "This rating was not saved: the rubric descriptors could not be checked. Please try again.",
+			RatingDescriptionPlaceholderUnresolved: "A description needs information that is missing for this record — contact an administrator.",
+			CellChangedRetry:                       "This rating was not saved: another change was made while you were editing. Please refresh and try again.",
 		},
 		Approval: ApprovalLabels{
 			Bar: ApprovalBarLabels{Title: "Phase Approvals"},

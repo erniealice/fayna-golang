@@ -1,0 +1,21 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "rating-description-set-link-list"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation */}}
+{{define "rating-description-set-link-list-content"}}
+<div class="page-content page-content--table">
+    {{if .ScheduleOptions}}
+    <div class="rdl-schedule-select-row">
+        <label class="form-label" for="rdl-schedule-select">{{.Labels.Filters.PriceSchedule}}</label>
+        <select id="rdl-schedule-select" class="form-select" onchange="window.location.href='{{.ListBaseURL}}?price_schedule_id=' + this.value">
+            {{range .ScheduleOptions}}
+            <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>
+            {{end}}
+        </select>
+    </div>
+    {{end}}
+    {{template "table-card" .Table}}
+</div>
+{{end}}

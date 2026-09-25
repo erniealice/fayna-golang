@@ -12,6 +12,11 @@ import (
 	jobdashboardview "github.com/erniealice/fayna-golang/domain/operation/job/dashboard"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	ratingdescriptionsetform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set/form"
+	ratingdescriptionsetlistdata "github.com/erniealice/fayna-golang/domain/operation/rating_description_set/listdata"
+	ratingdescriptionsetentryform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_entry/form"
+	ratingdescriptionsetproductplanform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_product_plan/form"
+	ratingdescriptionsetproductplanlistdata "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_product_plan/listdata"
 
 	"github.com/erniealice/espyna-golang/consumer"
 	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
@@ -407,6 +412,15 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.TaskOutcome.ListTaskOutcomes = op.TaskOutcome.ListTaskOutcomes.Execute
 			result.Operation.TaskOutcome.ListCodedTaskOutcomeValuesByJob = op.TaskOutcome.ListCodedTaskOutcomeValuesByJob.Execute
 			result.Operation.TaskOutcome.ListCodedTaskOutcomeValuesByJobHistorical = op.TaskOutcome.ListCodedTaskOutcomeValuesByJob.ExecuteHistorical
+			// Q26 conditional writes (schema-proposal §9.1) — nil-guarded so an
+			// espyna build without them leaves the seam unwired (fail-closed for
+			// description-mode cells, plain path otherwise).
+			if op.TaskOutcome.UpdateTaskOutcomeIfUnchanged != nil {
+				result.Operation.TaskOutcome.UpdateTaskOutcomeIfUnchanged = op.TaskOutcome.UpdateTaskOutcomeIfUnchanged.Execute
+			}
+			if op.TaskOutcome.CreateTaskOutcomeIfAbsent != nil {
+				result.Operation.TaskOutcome.CreateTaskOutcomeIfAbsent = op.TaskOutcome.CreateTaskOutcomeIfAbsent.Execute
+			}
 		}
 
 		if op.JobOutcomeSummary != nil {
@@ -458,6 +472,204 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.ScoreScaleBand.UpdateScoreScaleBand = op.ScoreScaleBand.UpdateScoreScaleBand.Execute
 			result.Operation.ScoreScaleBand.DeleteScoreScaleBand = op.ScoreScaleBand.DeleteScoreScaleBand.Execute
 			result.Operation.ScoreScaleBand.ListScoreScaleBands = op.ScoreScaleBand.ListScoreScaleBands.Execute
+		}
+
+		// Criterion descriptors by program year (20260925 plan, W3). MVP scope
+		// (sequence w3-fayna-views) — see the RatingDescriptionSet*UseCases
+		// doc comments in usecases.go for what's deferred.
+		if op.RatingDescriptionSet != nil {
+			result.Operation.RatingDescriptionSet.CreateRatingDescriptionSet = op.RatingDescriptionSet.CreateRatingDescriptionSet.Execute
+			result.Operation.RatingDescriptionSet.ReadRatingDescriptionSet = op.RatingDescriptionSet.ReadRatingDescriptionSet.Execute
+			result.Operation.RatingDescriptionSet.ListRatingDescriptionSets = op.RatingDescriptionSet.ListRatingDescriptionSets.Execute
+			result.Operation.RatingDescriptionSet.PublishRatingDescriptionSet = op.RatingDescriptionSet.PublishRatingDescriptionSet.Execute
+			result.Operation.RatingDescriptionSet.DeprecateRatingDescriptionSet = op.RatingDescriptionSet.DeprecateRatingDescriptionSet.Execute
+			// GetFormPageData (finding #6): the espyna use case's
+			// request/response are plain (non-protobuf) types declared in an
+			// espyna internal/ package fayna cannot import by name; op's
+			// static type is inferred (never named here), so calling
+			// .Execute(ctx, nil) and reading the exported response fields by
+			// selector both remain legal without that import. Converts into
+			// fayna's own DTO (ratingdescriptionsetform.FormPageData).
+			getRatingDescriptionSetFormPageData := op.RatingDescriptionSet.GetRatingDescriptionSetFormPageData
+			if getRatingDescriptionSetFormPageData != nil {
+				result.Operation.RatingDescriptionSet.GetFormPageData = func(ctx context.Context) (*ratingdescriptionsetform.FormPageData, error) {
+					resp, err := getRatingDescriptionSetFormPageData.Execute(ctx, nil)
+					if err != nil {
+						return nil, err
+					}
+					out := &ratingdescriptionsetform.FormPageData{}
+					for _, s := range resp.ScoreScales {
+						out.ScoreScales = append(out.ScoreScales, ratingdescriptionsetform.ScalePickerOption{ID: s.ID, Name: s.Name})
+					}
+					return out, nil
+				}
+			}
+			// GetListSummaryPageData (codex-review-impl3.out.md finding #1):
+			// the LIST page's sole data source — rows already enriched with
+			// scale name + entry/link counts. resp.Rows[i].Set is an esqyma
+			// PROTO type (setpb.RatingDescriptionSet), not an espyna
+			// internal/ type, so it is directly nameable/assignable here
+			// (unlike the plain request/response types above).
+			getRatingDescriptionSetListSummaryPageData := op.RatingDescriptionSet.GetRatingDescriptionSetListSummaryPageData
+			if getRatingDescriptionSetListSummaryPageData != nil {
+				result.Operation.RatingDescriptionSet.GetListSummaryPageData = func(ctx context.Context) (*ratingdescriptionsetlistdata.PageData, error) {
+					resp, err := getRatingDescriptionSetListSummaryPageData.Execute(ctx, nil)
+					if err != nil {
+						return nil, err
+					}
+					out := &ratingdescriptionsetlistdata.PageData{}
+					for _, r := range resp.Rows {
+						out.Rows = append(out.Rows, ratingdescriptionsetlistdata.Row{
+							Set:            r.Set,
+							ScoreScaleName: r.ScoreScaleName,
+							EntryCount:     r.EntryCount,
+							LinkCount:      r.LinkCount,
+						})
+					}
+					return out, nil
+				}
+			}
+		}
+
+		if op.RatingDescriptionSetEntry != nil {
+			result.Operation.RatingDescriptionSetEntry.CreateRatingDescriptionSetEntry = op.RatingDescriptionSetEntry.CreateRatingDescriptionSetEntry.Execute
+			result.Operation.RatingDescriptionSetEntry.ReadRatingDescriptionSetEntry = op.RatingDescriptionSetEntry.ReadRatingDescriptionSetEntry.Execute
+			result.Operation.RatingDescriptionSetEntry.UpdateRatingDescriptionSetEntry = op.RatingDescriptionSetEntry.UpdateRatingDescriptionSetEntry.Execute
+			result.Operation.RatingDescriptionSetEntry.ListRatingDescriptionSetEntries = op.RatingDescriptionSetEntry.ListRatingDescriptionSetEntries.Execute
+			// GetFormPageData (finding #6) — see the RatingDescriptionSet
+			// block above for why this can't name espyna's request/response
+			// types.
+			getRatingDescriptionSetEntryFormPageData := op.RatingDescriptionSetEntry.GetRatingDescriptionSetEntryFormPageData
+			if getRatingDescriptionSetEntryFormPageData != nil {
+				result.Operation.RatingDescriptionSetEntry.GetFormPageData = func(ctx context.Context) (*ratingdescriptionsetentryform.FormPageData, error) {
+					resp, err := getRatingDescriptionSetEntryFormPageData.Execute(ctx, nil)
+					if err != nil {
+						return nil, err
+					}
+					out := &ratingdescriptionsetentryform.FormPageData{}
+					for _, c := range resp.Criteria {
+						out.Criteria = append(out.Criteria, ratingdescriptionsetentryform.PickerOption{ID: c.ID, Name: c.Name})
+					}
+					for _, b := range resp.Bands {
+						out.Bands = append(out.Bands, ratingdescriptionsetentryform.BandPickerOption{
+							ID:            b.ID,
+							Name:          b.Name,
+							ScoreScaleID:  b.ScoreScaleId,
+							BandRole:      b.BandRole,
+							SequenceOrder: b.SequenceOrder,
+						})
+					}
+					return out, nil
+				}
+			}
+			// GetDrawerFormPageData (codex-review-impl3.out.md round-2
+			// disposition #11; codex-review-impl4.out.md "Update-only
+			// drawer") — the Add/Edit entry DRAWER's picker, authorized
+			// under :update (not :read, unlike GetFormPageData above which
+			// backs the read-only detail matrix). ExecuteForIDs is a
+			// plain-string wrapper (mirrors RatingDescriptionSetProductPlan's
+			// ExecuteForScheduleID below) so this closure need not name
+			// espyna's internal request type.
+			getRatingDescriptionSetEntryDrawerFormPageData := op.RatingDescriptionSetEntry.GetRatingDescriptionSetEntryDrawerFormPageData
+			if getRatingDescriptionSetEntryDrawerFormPageData != nil {
+				result.Operation.RatingDescriptionSetEntry.GetDrawerFormPageData = func(ctx context.Context, ratingDescriptionSetID, entryID string) (*ratingdescriptionsetentryform.FormPageData, error) {
+					resp, err := getRatingDescriptionSetEntryDrawerFormPageData.ExecuteForIDs(ctx, ratingDescriptionSetID, entryID)
+					if err != nil {
+						return nil, err
+					}
+					out := &ratingdescriptionsetentryform.FormPageData{ScoreScaleID: resp.ScoreScaleId}
+					for _, c := range resp.Criteria {
+						out.Criteria = append(out.Criteria, ratingdescriptionsetentryform.PickerOption{ID: c.ID, Name: c.Name})
+					}
+					for _, b := range resp.Bands {
+						out.Bands = append(out.Bands, ratingdescriptionsetentryform.BandPickerOption{
+							ID:            b.ID,
+							Name:          b.Name,
+							ScoreScaleID:  b.ScoreScaleId,
+							BandRole:      b.BandRole,
+							SequenceOrder: b.SequenceOrder,
+						})
+					}
+					if resp.Entry != nil {
+						out.Entry = &ratingdescriptionsetentryform.EntrySnapshot{
+							ID:                     resp.Entry.ID,
+							RatingDescriptionSetID: resp.Entry.RatingDescriptionSetId,
+							OutcomeCriteriaID:      resp.Entry.OutcomeCriteriaId,
+							ScoreScaleBandID:       resp.Entry.ScoreScaleBandId,
+							Description:            resp.Entry.Description,
+						}
+					}
+					return out, nil
+				}
+			}
+		}
+
+		if op.RatingDescriptionSetProductPlan != nil {
+			result.Operation.RatingDescriptionSetProductPlan.GetRatingDescriptionSetProductPlanListPageData = op.RatingDescriptionSetProductPlan.GetRatingDescriptionSetProductPlanListPageData.Execute
+			result.Operation.RatingDescriptionSetProductPlan.ListRatingDescriptionSetProductPlans = op.RatingDescriptionSetProductPlan.ListRatingDescriptionSetProductPlans.Execute
+			result.Operation.RatingDescriptionSetProductPlan.RelinkRatingDescriptionSetProductPlan = op.RatingDescriptionSetProductPlan.RelinkRatingDescriptionSetProductPlan.Execute
+			result.Operation.RatingDescriptionSetProductPlan.UnlinkRatingDescriptionSetProductPlan = op.RatingDescriptionSetProductPlan.UnlinkRatingDescriptionSetProductPlan.Execute
+			// GetFormPageData (finding #6) — see the RatingDescriptionSet
+			// block above for why this can't name espyna's request/response
+			// types.
+			getRatingDescriptionSetProductPlanFormPageData := op.RatingDescriptionSetProductPlan.GetRatingDescriptionSetProductPlanFormPageData
+			if getRatingDescriptionSetProductPlanFormPageData != nil {
+				result.Operation.RatingDescriptionSetProductPlan.GetFormPageData = func(ctx context.Context) (*ratingdescriptionsetproductplanform.FormPageData, error) {
+					resp, err := getRatingDescriptionSetProductPlanFormPageData.Execute(ctx, nil)
+					if err != nil {
+						return nil, err
+					}
+					out := &ratingdescriptionsetproductplanform.FormPageData{}
+					for _, pp := range resp.ProductPlans {
+						out.ProductPlans = append(out.ProductPlans, ratingdescriptionsetproductplanform.PickerOption{ID: pp.ID, Name: pp.Name})
+					}
+					for _, ps := range resp.PriceSchedules {
+						out.PriceSchedules = append(out.PriceSchedules, ratingdescriptionsetproductplanform.SchedulePickerOption{
+							ID:            ps.ID,
+							Name:          ps.Name,
+							Active:        ps.Active,
+							DateTimeStart: ps.DateTimeStart,
+						})
+					}
+					for _, s := range resp.PublishedSets {
+						out.PublishedSets = append(out.PublishedSets, ratingdescriptionsetproductplanform.PickerOption{ID: s.ID, Name: s.Name})
+					}
+					return out, nil
+				}
+			}
+			// GetListSummaryPageData (codex-review-impl3.out.md findings #1
+			// and #3): the assignment LIST page's sole data source. Uses
+			// ExecuteForScheduleID (a plain-string-parameter variant of
+			// Execute) instead of constructing the named request type,
+			// which fayna cannot import (espyna internal/ package). Link
+			// and Set fields are esqyma PROTO/plain-DTO types copied by
+			// value — directly nameable here.
+			getRatingDescriptionSetProductPlanListSummaryPageData := op.RatingDescriptionSetProductPlan.GetRatingDescriptionSetProductPlanListSummaryPageData
+			if getRatingDescriptionSetProductPlanListSummaryPageData != nil {
+				result.Operation.RatingDescriptionSetProductPlan.GetListSummaryPageData = func(ctx context.Context, priceScheduleID string) (*ratingdescriptionsetproductplanlistdata.PageData, error) {
+					resp, err := getRatingDescriptionSetProductPlanListSummaryPageData.ExecuteForScheduleID(ctx, priceScheduleID)
+					if err != nil {
+						return nil, err
+					}
+					out := &ratingdescriptionsetproductplanlistdata.PageData{SelectedScheduleID: resp.SelectedScheduleId}
+					for _, s := range resp.Schedules {
+						out.Schedules = append(out.Schedules, ratingdescriptionsetproductplanlistdata.ScheduleOption{
+							ID:            s.ID,
+							Name:          s.Name,
+							Active:        s.Active,
+							DateTimeStart: s.DateTimeStart,
+						})
+					}
+					for _, l := range resp.Links {
+						out.Links = append(out.Links, ratingdescriptionsetproductplanlistdata.LinkRow{
+							Link:            l.Link,
+							ProductPlanName: l.ProductPlanName,
+							Set:             ratingdescriptionsetproductplanlistdata.SetInfo{Name: l.Set.Name, Version: l.Set.Version},
+						})
+					}
+					return out, nil
+				}
+			}
 		}
 
 		if op.JobOutcomeLine != nil {
@@ -593,6 +805,16 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 	if uc.Service != nil && uc.Service.OutcomeMatrix != nil &&
 		uc.Service.OutcomeMatrix.GetPhaseApprovalGateRollup != nil {
 		result.Operation.OutcomeMatrix.GetPhaseApprovalGateRollup = uc.Service.OutcomeMatrix.GetPhaseApprovalGateRollup.Execute
+	}
+	// ResolveCellRatingDescriptions (PD 20260925-criterion-descriptors-by-
+	// program-year) rides the SAME Service seam; wired independently so a
+	// build without it keeps the matrix read while the record action's
+	// description-mode cells fail closed (action.Deps' own nil-closure
+	// contract — see action.go's doc comment — REJECTS those cells' saves,
+	// never silently "no entry").
+	if uc.Service != nil && uc.Service.OutcomeMatrix != nil &&
+		uc.Service.OutcomeMatrix.ResolveCellRatingDescriptions != nil {
+		result.Operation.OutcomeMatrix.ResolveCellRatingDescriptions = uc.Service.OutcomeMatrix.ResolveCellRatingDescriptions.Execute
 	}
 	// SubscriptionGroupOutcomeExport is a separate report-scoped service read,
 	// not an HTTP/gRPC transport route. The use case owns permission and

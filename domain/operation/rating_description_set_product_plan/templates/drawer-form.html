@@ -1,0 +1,57 @@
+{{/*
+Rating description set product plan Relink drawer — loaded into #sheetContent
+via HTMX. Handles both the first link (ExpectedCurrentLinkID empty) and a
+replacement (ExpectedCurrentLinkID = the current active link id).
+Data: .ProductPlanID, .ProductPlanLocked, .PriceScheduleID,
+      .RatingDescriptionSetID, .ExpectedCurrentLinkID, .Reason,
+      .ProductPlanOptions, .SetOptions, .FormAction, .WorkspaceID,
+      .CommonLabels, .Labels
+*/}}
+{{define "rating-description-set-product-plan-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="rating-description-set-link-form" id="rating-description-set-link-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    <input type="hidden" name="price_schedule_id" value="{{.PriceScheduleID}}">
+    <input type="hidden" id="rdl-expected-current" name="expected_current_link_id" value="{{.ExpectedCurrentLinkID}}">
+    {{if .ProductPlanLocked}}
+    <input type="hidden" name="product_plan_id" value="{{.ProductPlanID}}">
+    {{end}}
+
+    <div class="sheet-body">
+        {{if not .ProductPlanLocked}}
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "product_plan_id"
+                "Label" .Labels.Form.Offering
+                "Value" .ProductPlanID
+                "Options" .ProductPlanOptions
+                "Required" true
+            )}}
+        </div>
+        {{end}}
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "rating_description_set_id"
+                "ID" "rdl-set"
+                "Label" .Labels.Form.Set
+                "Value" .RatingDescriptionSetID
+                "Options" .SetOptions
+                "Required" true
+            )}}
+        </div>
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "reason"
+                "Label" .Labels.Form.Reason
+                "Value" .Reason
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" false)}}
+</form>
+{{end}}

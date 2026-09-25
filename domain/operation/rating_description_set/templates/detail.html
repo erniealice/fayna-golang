@@ -1,0 +1,88 @@
+{{/* Full page — for direct access / non-HTMX */}}
+{{define "rating-description-set-detail"}}
+{{template "app-shell" .}}
+{{end}}
+
+{{/* Content-only partial — for HTMX navigation.
+MVP scope: single view (Descriptors matrix). No tabs yet — TODO: assignments/
+versions/info tabs per interfaces.md §8. */}}
+{{define "rating-description-set-detail-content"}}
+<div class="page-content rds-detail-layout">
+    <div class="rds-detail-header">
+        <div class="rds-detail-header-info">
+            <span class="badge badge--{{index .Set "status_variant"}}" data-testid="rds-status">{{index .Set "version_status"}}</span>
+            <span class="rds-detail-version">v{{index .Set "version"}}</span>
+        </div>
+        <div class="rds-detail-header-actions">
+            {{if .CanPublish}}
+            {{$publishURL := routeWith "rating_description_set.publish" "id" (index .Set "id")}}
+            <form hx-post="{{$publishURL}}" hx-swap="none" data-hx-on="sheet-response" style="display:inline" data-confirm="{{.Labels.Confirm.PublishMessage}}">
+                {{actionForm $publishURL .WorkspaceID}}
+                <button type="submit" class="btn btn--primary" title="{{.Labels.Actions.Publish}}" data-testid="rds-publish">{{.Labels.Actions.Publish}}</button>
+            </form>
+            {{end}}
+            {{if .CanDeprecate}}
+            {{$deprecateURL := routeWith "rating_description_set.deprecate" "id" (index .Set "id")}}
+            <form hx-post="{{$deprecateURL}}" hx-swap="none" data-hx-on="sheet-response" style="display:inline" data-confirm="{{.Labels.Confirm.DeprecateMessage}}">
+                {{actionForm $deprecateURL .WorkspaceID}}
+                <button type="submit" class="btn btn--secondary" title="{{.Labels.Actions.Deprecate}}" data-testid="rds-deprecate">{{.Labels.Actions.Deprecate}}</button>
+            </form>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="rds-detail-body" role="tabpanel" aria-label="{{.Labels.Tabs.Descriptors}}">
+        <div class="rds-matrix-toolbar">
+            <span class="rds-matrix-filled" data-testid="rds-filled">{{.Labels.Matrix.Filled}} {{.FilledCount}}/{{.TotalCount}}</span>
+            {{if .CanAddEntry}}
+            <a href="#" class="btn btn--secondary" hx-get="{{.AddEntryURL}}" hx-target="#sheetContent" hx-swap="innerHTML" data-lf-action="sheet-open" data-testid="rds-add-entry">{{.Labels.Matrix.AddEntry}}</a>
+            {{end}}
+        </div>
+
+        {{if .MatrixColumns}}
+        <div class="rds-matrix-scroll">
+            <table id="rds-matrix" class="rds-matrix-table">
+                <thead>
+                    <tr>
+                        <th scope="col">&nbsp;</th>
+                        {{range .MatrixColumns}}
+                        <th scope="col">{{.Name}}</th>
+                        {{end}}
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .MatrixRows}}
+                    <tr{{if .IsZero}} class="rds-matrix-row-zero"{{end}}>
+                        <th scope="row">{{.Level}}</th>
+                        {{if .IsZero}}
+                        <td colspan="{{len $.MatrixColumns}}" class="rds-matrix-zero-hint">{{$.Labels.Matrix.LevelZeroHint}}</td>
+                        {{else}}
+                        {{range .Cells}}
+                        <td data-testid="{{.TestID}}" class="rds-matrix-cell{{if .Empty}} rds-matrix-cell-empty{{end}}">
+                            {{if .Empty}}
+                                {{if $.CanAddEntry}}
+                                <a href="#" class="rds-matrix-add" hx-get="{{$.AddEntryURL}}&outcome_criteria_id={{.CriterionID}}" hx-target="#sheetContent" hx-swap="innerHTML" data-lf-action="sheet-open" title="{{$.Labels.Matrix.EmptyCell}}">{{$.Labels.Matrix.EmptyCell}}</a>
+                                {{end}}
+                            {{else}}
+                                <span class="rds-matrix-text">{{.Description}}</span>
+                            {{end}}
+                        </td>
+                        {{end}}
+                        {{end}}
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <div class="coming-soon-panel">
+            <div class="coming-soon-title">{{.Labels.Empty.Title}}</div>
+            <p class="coming-soon-text">{{.Labels.Empty.Message}}</p>
+            {{if .CanAddEntry}}
+            <a href="#" class="btn btn--primary" hx-get="{{.AddEntryURL}}" hx-target="#sheetContent" hx-swap="innerHTML" data-lf-action="sheet-open">{{.Labels.Matrix.AddEntry}}</a>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}

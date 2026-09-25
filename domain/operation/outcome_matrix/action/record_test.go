@@ -80,7 +80,25 @@ type recorder struct {
 	readCT        enums.CriteriaType // CriteriaType the stored record reports (default NUMERIC_SCORE)
 	readNote      string             // determination_note the stored record reports
 	readNumeric   *float64           // numeric_value the stored record reports
+	readModified  *int64             // date_modified the stored record reports
 	deleteErr     error
+
+	// Q26 conditional-write fixture. By default BOTH conditional closures are
+	// wired (the production shape) and behave like the postgres adapter:
+	// update conflicts when updateConflict is set; create conflicts when the
+	// (job_task, criterion) cell was already created through this recorder
+	// (created) or createConflict is set. A conflicting call writes NOTHING
+	// (updateCalls/createCalls/lastUpdate/lastCreate untouched). plainOnly
+	// leaves both unwired to exercise the pre-Q26 / fail-closed paths.
+	plainOnly        bool
+	updateConflict   bool
+	createConflict   bool
+	created          map[string]bool
+	condUpdateCalls  int
+	condCreateCalls  int
+	plainUpdateCalls int
+	plainCreateCalls int
+	lastExpected     *taskoutcomepb.TaskOutcome
 
 	// recompute-eligibility fixture (wired only when wireElig): eligible + the
 	// scheme's in-scope criterion set. Unwired → the action falls back to
@@ -89,6 +107,15 @@ type recorder struct {
 	eligible bool
 	inScope  map[string]bool
 	eligErr  error
+
+	// rating-resolution fixture (wired only when wireRating): the batch
+	// ResolveCellRatingDescriptions fake. Unwired (a description-mode column
+	// with wireRating false) exercises the "resolver unwired" reject path.
+	wireRating  bool
+	ratingCalls int
+	ratingReq   *matrixpb.ResolveCellRatingDescriptionsRequest // last request seen
+	ratingResp  *matrixpb.ResolveCellRatingDescriptionsResponse
+	ratingErr   error
 }
 
 func (r *recorder) deps(matrix *matrixpb.GetOutcomeMatrixResponse) *Deps {
@@ -114,15 +141,18 @@ func (r *recorder) deps(matrix *matrixpb.GetOutcomeMatrixResponse) *Deps {
 				CriteriaVersionId: "cv1",
 				NumericValue:      r.readNumeric,
 				DeterminationNote: nonEmpty(r.readNote),
+				DateModified:      r.readModified,
 			}}}, nil
 		},
 		UpdateTaskOutcome: func(_ context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error) {
 			r.updateCalls++
+			r.plainUpdateCalls++
 			r.lastUpdate = req.GetData()
 			return &taskoutcomepb.UpdateTaskOutcomeResponse{}, nil
 		},
 		CreateTaskOutcome: func(_ context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, error) {
 			r.createCalls++
+			r.plainCreateCalls++
 			r.lastCreate = req.GetData()
 			return &taskoutcomepb.CreateTaskOutcomeResponse{Data: []*taskoutcomepb.TaskOutcome{{Id: "new-outcome-9"}}}, nil
 		},
@@ -133,6 +163,32 @@ func (r *recorder) deps(matrix *matrixpb.GetOutcomeMatrixResponse) *Deps {
 			}
 			return &taskoutcomepb.DeleteTaskOutcomeResponse{}, nil
 		},
+	}
+	if !r.plainOnly {
+		d.UpdateTaskOutcomeIfUnchanged = func(_ context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest, expected *taskoutcomepb.TaskOutcome) (*taskoutcomepb.UpdateTaskOutcomeResponse, bool, error) {
+			r.condUpdateCalls++
+			r.lastExpected = expected
+			if r.updateConflict {
+				return nil, true, nil
+			}
+			r.updateCalls++
+			r.lastUpdate = req.GetData()
+			return &taskoutcomepb.UpdateTaskOutcomeResponse{Data: []*taskoutcomepb.TaskOutcome{req.GetData()}}, false, nil
+		}
+		d.CreateTaskOutcomeIfAbsent = func(_ context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, bool, error) {
+			r.condCreateCalls++
+			addr := req.GetData().GetJobTaskId() + ":" + req.GetData().GetCriteriaVersionId()
+			if r.createConflict || r.created[addr] {
+				return nil, true, nil
+			}
+			if r.created == nil {
+				r.created = map[string]bool{}
+			}
+			r.created[addr] = true
+			r.createCalls++
+			r.lastCreate = req.GetData()
+			return &taskoutcomepb.CreateTaskOutcomeResponse{Data: []*taskoutcomepb.TaskOutcome{{Id: "new-outcome-9"}}}, false, nil
+		}
 	}
 	if !r.phaseNil {
 		d.ComputePhaseOutcome = func(_ context.Context, id string) (bool, error) {
@@ -149,6 +205,16 @@ func (r *recorder) deps(matrix *matrixpb.GetOutcomeMatrixResponse) *Deps {
 	if r.wireElig {
 		d.RecomputeEligibility = func(_ context.Context, _ string) (bool, map[string]bool, error) {
 			return r.eligible, r.inScope, r.eligErr
+		}
+	}
+	if r.wireRating {
+		d.ResolveCellRatingDescriptions = func(_ context.Context, req *matrixpb.ResolveCellRatingDescriptionsRequest) (*matrixpb.ResolveCellRatingDescriptionsResponse, error) {
+			r.ratingCalls++
+			r.ratingReq = req
+			if r.ratingErr != nil {
+				return nil, r.ratingErr
+			}
+			return r.ratingResp, nil
 		}
 	}
 	return d
@@ -240,27 +306,50 @@ func nonEmpty(v string) *string {
 
 func f64(v float64) *float64 { return &v }
 
-// descMatrix is numericMatrix with the column in numeric-with-description mode
-// and exact-map wording for levels 3, 4 and 5.
+// descMatrix is numericMatrix with the column marked NUMERIC_WITH_DESCRIPTION.
+// Q18 (no legacy fallback): the column itself carries no descriptions any
+// more — wire recorder.wireRating + ratingResp to supply them via the batch
+// resolver, the only source on the write path.
 func descMatrix(recorded bool) *matrixpb.GetOutcomeMatrixResponse {
 	m := numericMatrix(recorded)
-	col := m.Phases[0].Tasks[0].Criteria[0]
-	col.RatingMode = enums.RatingMode_RATING_MODE_NUMERIC_WITH_DESCRIPTION
-	for _, lv := range []struct {
-		match, text string
-	}{{"3", "Adequate: shows the skill in familiar situations."}, {"4", "Adequate: applies the skill soundly."}, {"5", "Substantial: applies the skill well."}} {
-		match := lv.match
-		col.RatingDescriptions = append(col.RatingDescriptions, &matrixpb.RatingDescription{
-			ScaleKind: enums.ScaleKind_SCALE_KIND_EXACT_MAP, InputMatch: &match, Description: lv.text,
-		})
-	}
+	m.Phases[0].Tasks[0].Criteria[0].RatingMode = enums.RatingMode_RATING_MODE_NUMERIC_WITH_DESCRIPTION
 	return m
 }
 
-// A create snapshots the matching description into determination_note, stores
-// the score as numeric_value only (never text_value), and acks hasNarrative.
+// levelDescs is the level 3/4/5 exact-map wording shared by the
+// description-mode tests below.
+func levelDescs() []*matrixpb.RatingDescription {
+	mk := func(match, text string) *matrixpb.RatingDescription {
+		m := match
+		return &matrixpb.RatingDescription{ScaleKind: enums.ScaleKind_SCALE_KIND_EXACT_MAP, InputMatch: &m, Description: text}
+	}
+	return []*matrixpb.RatingDescription{
+		mk("3", "Adequate: shows the skill in familiar situations."),
+		mk("4", "Adequate: applies the skill soundly."),
+		mk("5", "Substantial: applies the skill well."),
+	}
+}
+
+// ratingResp builds a one-cell ResolveCellRatingDescriptions success response
+// for the fixture cell (job-1 / jtinst-1 / cr1) with the given status and
+// descriptions.
+func ratingResp(status enums.RatingDescriptionResolutionStatus, descs []*matrixpb.RatingDescription) *matrixpb.ResolveCellRatingDescriptionsResponse {
+	return &matrixpb.ResolveCellRatingDescriptionsResponse{
+		Success: true,
+		Results: []*matrixpb.CellRatingResolution{{
+			Cell:         &matrixpb.CellRatingRef{JobId: jobID, JobTaskId: jobTaskID, OutcomeCriteriaId: criteriaID},
+			Status:       status,
+			Descriptions: descs,
+		}},
+	}
+}
+
+// A create snapshots the resolver's matching description into
+// determination_note, stores the score as numeric_value only (never
+// text_value), and acks hasNarrative. The resolver is called exactly once,
+// batched, keyed by the SERVER-DERIVED cell identity.
 func TestCellMode_Create_SnapshotsRatingDescriptionAsNarrative(t *testing.T) {
-	r := &recorder{}
+	r := &recorder{wireRating: true, ratingResp: ratingResp(enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_RESOLVED, levelDescs())}
 	items := cells(t, invoke(t, r.deps(descMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=4", allPerms))
 	if len(items) != 1 || !items[0].OK {
 		t.Fatalf("create failed: %+v", items)
@@ -278,41 +367,64 @@ func TestCellMode_Create_SnapshotsRatingDescriptionAsNarrative(t *testing.T) {
 	if !items[0].HasNarrative {
 		t.Fatal("ack must report hasNarrative for an auto-filled note")
 	}
+	if r.ratingCalls != 1 {
+		t.Fatalf("want exactly 1 batch resolve call, got %d", r.ratingCalls)
+	}
+	if got := len(r.ratingReq.GetCells()); got != 1 {
+		t.Fatalf("want 1 cell ref in the batch request, got %d", got)
+	}
 }
 
-// A binding without the mode, or a value with no description, writes no note.
+// A binding without the mode never calls the resolver and writes no note. A
+// RESOLVED binding whose value has no matching entry also writes no note
+// (Q20: level-0-shaped "no entry").
 func TestCellMode_Create_NoNoteWithoutModeOrMatch(t *testing.T) {
 	r := &recorder{}
 	items := cells(t, invoke(t, r.deps(numericMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=4", allPerms))
 	if len(items) != 1 || !items[0].OK || r.lastCreate.DeterminationNote != nil || items[0].HasNarrative {
 		t.Fatalf("standard binding must not write a note: %+v / %+v", items, r.lastCreate)
 	}
-	r = &recorder{}
+	if r.ratingCalls != 0 {
+		t.Fatalf("a non-description column must never call the resolver, got %d calls", r.ratingCalls)
+	}
+
+	r = &recorder{wireRating: true, ratingResp: ratingResp(enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_RESOLVED, levelDescs())}
 	items = cells(t, invoke(t, r.deps(descMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=7", allPerms))
 	if len(items) != 1 || !items[0].OK || r.lastCreate.DeterminationNote != nil || items[0].HasNarrative {
 		t.Fatalf("unmatched value must not write a note: %+v / %+v", items, r.lastCreate)
 	}
 }
 
-// The update path replaces the note only while it is empty or still the
-// description the OLD value produced; a grader's own wording is never touched.
+// The update path applies the note rules (schema-proposal §5): an entry
+// ALWAYS replaces the stored note (even staff-edited wording, even a
+// same-value re-pick — Q10/Q14); no entry clears the note only when the value
+// CHANGED; a same-value re-save with no entry keeps whatever note is stored;
+// NO_LINK behaves exactly like "no entry" (Q21).
 func TestCellMode_Update_RatingDescriptionNarrativeRules(t *testing.T) {
+	resolved := func(descs []*matrixpb.RatingDescription) *matrixpb.ResolveCellRatingDescriptionsResponse {
+		return ratingResp(enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_RESOLVED, descs)
+	}
+	noLink := ratingResp(enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_NO_LINK, nil)
+
 	for _, tc := range []struct {
 		name     string
 		note     string
 		oldValue *float64
 		form     string
+		resp     *matrixpb.ResolveCellRatingDescriptionsResponse
 		wantNote *string // nil = the request must not touch the note
 		wantHas  bool
 	}{
-		{"empty note is filled", "", f64(3), "5", ptr("Substantial: applies the skill well."), true},
-		{"untouched auto note follows the score", "Adequate: shows the skill in familiar situations.", f64(3), "4", ptr("Adequate: applies the skill soundly."), true},
-		{"grader wording is preserved", "Great effort on the proof.", f64(3), "4", nil, true},
-		{"auto note cleared when the new value has no description", "Adequate: shows the skill in familiar situations.", f64(3), "7", ptr(""), false},
-		{"same score keeps the note untouched", "Adequate: applies the skill soundly.", f64(4), "4", nil, true},
+		{"entry fills an empty note", "", f64(3), "5", resolved(levelDescs()), ptr("Substantial: applies the skill well."), true},
+		{"entry ALWAYS replaces staff-edited wording (Q10)", "Great effort on the proof.", f64(3), "4", resolved(levelDescs()), ptr("Adequate: applies the skill soundly."), true},
+		{"same-value re-pick replaces the note with the entry (Q14)", "Adequate: applies the skill soundly.", f64(4), "4", resolved(levelDescs()), ptr("Adequate: applies the skill soundly."), true},
+		{"changed TO a value with no entry clears the note", "Adequate: shows the skill in familiar situations.", f64(3), "7", resolved(levelDescs()), ptr(""), false},
+		{"same value with no entry keeps the note (0→0 shape)", "staff wrote this at an unscored level", f64(7), "7", resolved(levelDescs()), nil, true},
+		{"NO_LINK + changed value clears the note like no entry (Q21)", "old note under a linked set", f64(3), "9", noLink, ptr(""), false},
+		{"NO_LINK + same value keeps the note (Q21)", "staff note written under NO_LINK", f64(9), "9", noLink, nil, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := &recorder{readNote: tc.note, readNumeric: tc.oldValue}
+			r := &recorder{readNote: tc.note, readNumeric: tc.oldValue, wireRating: true, ratingResp: tc.resp}
 			items := cells(t, invoke(t, r.deps(descMatrix(true)), "save_mode=cell&cells."+existingID+"="+tc.form, allPerms))
 			if len(items) != 1 || !items[0].OK {
 				t.Fatalf("update failed: %+v", items)
@@ -330,7 +442,73 @@ func TestCellMode_Update_RatingDescriptionNarrativeRules(t *testing.T) {
 			if items[0].HasNarrative != tc.wantHas {
 				t.Fatalf("hasNarrative = %v, want %v", items[0].HasNarrative, tc.wantHas)
 			}
+			if r.ratingCalls != 1 {
+				t.Fatalf("want exactly 1 batch resolve call, got %d", r.ratingCalls)
+			}
 		})
+	}
+}
+
+// UNRESOLVED_IDENTITY / AMBIGUOUS / INVALID_CONFIG reject the cell's save
+// entirely (Q22): no write is attempted, the ack fails with a bounded reason.
+func TestCellMode_RatingResolution_RejectsIntegrityStatuses(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status enums.RatingDescriptionResolutionStatus
+	}{
+		{"unresolved identity", enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_UNRESOLVED_IDENTITY},
+		{"ambiguous", enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_AMBIGUOUS},
+		{"invalid config", enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_INVALID_CONFIG},
+		{"placeholder unresolved", enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_PLACEHOLDER_UNRESOLVED},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &recorder{readNote: "existing note", readNumeric: f64(3), wireRating: true,
+				ratingResp: ratingResp(tc.status, nil)}
+			items := cells(t, invoke(t, r.deps(descMatrix(true)), "save_mode=cell&cells."+existingID+"=5", allPerms))
+			got := items[0]
+			if got.OK {
+				t.Fatalf("%v must reject the save", tc.status)
+			}
+			if got.Error == "" {
+				t.Fatalf("rejected cell must carry a bounded error code")
+			}
+			if r.updateCalls != 0 {
+				t.Fatalf("a rejected resolution must never reach UpdateTaskOutcome, got %d calls", r.updateCalls)
+			}
+		})
+	}
+}
+
+// A batch/transport error from the resolver rejects the cell — never a
+// silent downgrade to "no entry".
+func TestCellMode_RatingResolution_ResolverErrorRejects(t *testing.T) {
+	r := &recorder{wireRating: true, ratingErr: context.DeadlineExceeded}
+	items := cells(t, invoke(t, r.deps(descMatrix(true)), "save_mode=cell&cells."+existingID+"=5", allPerms))
+	got := items[0]
+	if got.OK || r.updateCalls != 0 {
+		t.Fatalf("a batch resolver error must reject the cell without writing: %+v (updateCalls=%d)", got, r.updateCalls)
+	}
+}
+
+// An unwired resolver on a description-mode column fails closed (never
+// silently "no entry").
+func TestCellMode_RatingResolution_UnwiredResolverRejects(t *testing.T) {
+	r := &recorder{}
+	items := cells(t, invoke(t, r.deps(descMatrix(true)), "save_mode=cell&cells."+existingID+"=5", allPerms))
+	got := items[0]
+	if got.OK || r.updateCalls != 0 {
+		t.Fatalf("an unwired resolver on a description-mode column must reject, got %+v (updateCalls=%d)", got, r.updateCalls)
+	}
+}
+
+// A resolver response that omits the requested cell rejects it (Astra r5 /
+// RD-66) — never treated as "no entry".
+func TestCellMode_RatingResolution_MissingResultRejects(t *testing.T) {
+	r := &recorder{wireRating: true, ratingResp: &matrixpb.ResolveCellRatingDescriptionsResponse{Success: true}}
+	items := cells(t, invoke(t, r.deps(descMatrix(true)), "save_mode=cell&cells."+existingID+"=5", allPerms))
+	got := items[0]
+	if got.OK || r.updateCalls != 0 {
+		t.Fatalf("a resolver response omitting the requested cell must reject it: %+v (updateCalls=%d)", got, r.updateCalls)
 	}
 }
 
@@ -786,5 +964,58 @@ func TestBounds_RejectsNonFiniteScore(t *testing.T) {
 		if r.updateCalls != 0 {
 			t.Errorf("%s: must never reach UpdateTaskOutcome, got %d calls", v, r.updateCalls)
 		}
+	}
+}
+
+// schema-proposal §10: a PLACEHOLDER_UNRESOLVED cell is rejected with the
+// bounded code rating_description_placeholder_unresolved on BOTH write paths
+// (no create, no update — value and note untouched), and a RESOLVED cell's
+// already-rendered text (the resolver substitutes the tag server-side) is
+// written verbatim as the note — the note rules are unchanged.
+func TestCellMode_PlaceholderUnresolved_RejectsCreateAndUpdate(t *testing.T) {
+	unresolved := ratingResp(enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_PLACEHOLDER_UNRESOLVED, nil)
+	// The ack carries the translated label (translateAckErrors) — or the raw
+	// bounded code when no label is loaded.
+	isPlaceholderAck := func(msg string) bool {
+		return msg == "rating_description_placeholder_unresolved" ||
+			(msg != "" && msg == outcome_matrix.DefaultLabels().Errors.RatingDescriptionPlaceholderUnresolved)
+	}
+
+	r := &recorder{readNote: "existing note", readNumeric: f64(3), wireRating: true, ratingResp: unresolved}
+	items := cells(t, invoke(t, r.deps(descMatrix(true)), "save_mode=cell&cells."+existingID+"=5", allPerms))
+	if len(items) != 1 || items[0].OK || !isPlaceholderAck(items[0].Error) {
+		t.Fatalf("update ack = %+v, want rejected with rating_description_placeholder_unresolved", items)
+	}
+	if r.updateCalls != 0 {
+		t.Fatalf("rejected update must never reach UpdateTaskOutcome, got %d", r.updateCalls)
+	}
+
+	r = &recorder{wireRating: true, ratingResp: unresolved}
+	items = cells(t, invoke(t, r.deps(descMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=4", allPerms))
+	if len(items) != 1 || items[0].OK || !isPlaceholderAck(items[0].Error) {
+		t.Fatalf("create ack = %+v, want rejected with rating_description_placeholder_unresolved", items)
+	}
+	if r.lastCreate != nil {
+		t.Fatalf("rejected create must never write, got %+v", r.lastCreate)
+	}
+
+	match := "4"
+	rendered := ratingResp(enums.RatingDescriptionResolutionStatus_RATING_DESCRIPTION_RESOLUTION_STATUS_RESOLVED,
+		[]*matrixpb.RatingDescription{{ScaleKind: enums.ScaleKind_SCALE_KIND_EXACT_MAP, InputMatch: &match, Description: "Ana applies the skill soundly."}})
+	r = &recorder{wireRating: true, ratingResp: rendered}
+	items = cells(t, invoke(t, r.deps(descMatrix(false)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=4", allPerms))
+	if len(items) != 1 || !items[0].OK || r.lastCreate == nil || r.lastCreate.DeterminationNote == nil ||
+		*r.lastCreate.DeterminationNote != "Ana applies the skill soundly." {
+		t.Fatalf("rendered text must be written verbatim as the note: %+v / %+v", items, r.lastCreate)
+	}
+}
+
+// The placeholder-unresolved ack code translates through the typed
+// ErrorLabels field (lyngua outcome_matrix.errors.rating_description_placeholder_unresolved).
+func TestTranslateAckErrors_PlaceholderUnresolved(t *testing.T) {
+	acks := []cellAck{{key: "k", errMsg: "rating_description_placeholder_unresolved"}}
+	translateAckErrors(acks, outcome_matrix.DefaultLabels().Errors)
+	if acks[0].errMsg != outcome_matrix.DefaultLabels().Errors.RatingDescriptionPlaceholderUnresolved || acks[0].errMsg == "rating_description_placeholder_unresolved" {
+		t.Fatalf("errMsg = %q, want the translated label", acks[0].errMsg)
 	}
 }

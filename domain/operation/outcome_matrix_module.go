@@ -46,6 +46,16 @@ type OutcomeMatrixModuleDeps struct {
 
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
 
+	// ResolveCellRatingDescriptions — per-cell rubric-text resolver (PD
+	// 20260925-criterion-descriptors-by-program-year; espyna service/operation/
+	// outcome_matrix.ResolveCellRatingDescriptions, sourced via the block's
+	// wireOutcomeMatrixDeps). Threaded straight into the record action's own
+	// Deps below — the record action is the ONLY consumer (grading save path),
+	// never the matrix read. Optional/nil-safe: action.Deps' own doc comment
+	// governs the nil-closure behaviour (fail-closed reject, never silent
+	// "no entry").
+	ResolveCellRatingDescriptions func(ctx context.Context, req *matrixpb.ResolveCellRatingDescriptionsRequest) (*matrixpb.ResolveCellRatingDescriptionsResponse, error)
+
 	// ListJobTemplateSummaries backs the (template, section) PAIR VALIDATION the
 	// section-scoped routes require (20260725). It is NOT an optimisation — the
 	// adapter's section predicate narrows by subscription_group_member with no
@@ -91,6 +101,11 @@ type OutcomeMatrixModuleDeps struct {
 	UpdateTaskOutcome func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error)
 	DeleteTaskOutcome func(ctx context.Context, req *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error)
 	ReadTaskOutcome   func(ctx context.Context, req *taskoutcomepb.ReadTaskOutcomeRequest) (*taskoutcomepb.ReadTaskOutcomeResponse, error)
+
+	// Q26 conditional writes (PD 20260925-criterion-descriptors-by-program-
+	// year, schema-proposal §9.1) — see action.Deps for the contract.
+	UpdateTaskOutcomeIfUnchanged func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest, expected *taskoutcomepb.TaskOutcome) (*taskoutcomepb.UpdateTaskOutcomeResponse, bool, error)
+	CreateTaskOutcomeIfAbsent    func(ctx context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, bool, error)
 
 	ResolveStaff func(ctx context.Context) (string, error)
 
@@ -220,17 +235,20 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 	matrixView := outcomematrixlist.NewView(pageDeps)
 
 	recordView := outcomematrixaction.NewRecordAction(&outcomematrixaction.Deps{
-		Routes:               deps.Routes,
-		Labels:               deps.Labels,
-		CreateTaskOutcome:    deps.CreateTaskOutcome,
-		UpdateTaskOutcome:    deps.UpdateTaskOutcome,
-		DeleteTaskOutcome:    deps.DeleteTaskOutcome,
-		ReadTaskOutcome:      deps.ReadTaskOutcome,
-		GetOutcomeMatrix:     deps.GetOutcomeMatrix,
-		ResolveStaff:         deps.ResolveStaff,
-		ComputePhaseOutcome:  deps.ComputePhaseOutcome,
-		ComputeJobOutcome:    deps.ComputeJobOutcome,
-		RecomputeEligibility: deps.RecomputeEligibility,
+		Routes:                        deps.Routes,
+		Labels:                        deps.Labels,
+		CreateTaskOutcome:             deps.CreateTaskOutcome,
+		UpdateTaskOutcome:             deps.UpdateTaskOutcome,
+		DeleteTaskOutcome:             deps.DeleteTaskOutcome,
+		ReadTaskOutcome:               deps.ReadTaskOutcome,
+		UpdateTaskOutcomeIfUnchanged:  deps.UpdateTaskOutcomeIfUnchanged,
+		CreateTaskOutcomeIfAbsent:     deps.CreateTaskOutcomeIfAbsent,
+		GetOutcomeMatrix:              deps.GetOutcomeMatrix,
+		ResolveStaff:                  deps.ResolveStaff,
+		ComputePhaseOutcome:           deps.ComputePhaseOutcome,
+		ComputeJobOutcome:             deps.ComputeJobOutcome,
+		RecomputeEligibility:          deps.RecomputeEligibility,
+		ResolveCellRatingDescriptions: deps.ResolveCellRatingDescriptions,
 	})
 
 	// Per-phase approval transition handlers (the signed HTMX POST forms in the

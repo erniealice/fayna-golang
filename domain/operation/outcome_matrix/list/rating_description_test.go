@@ -23,6 +23,24 @@ func TestBuildCellInputNumericIsJustANumber(t *testing.T) {
 	}
 }
 
+// RD-24 (Q14, schema-proposal §5): only a NUMERIC_WITH_DESCRIPTION column tells
+// the AutoSave client to resubmit an intentional same-value commit — an
+// ordinary numeric column keeps the plain dirty check.
+func TestBuildCellInputResubmitSameValueOnlyForDescriptionMode(t *testing.T) {
+	standard := buildCellInput(&matrixpb.CriterionColumn{Criteria: numericCriteria()})
+	if standard.ResubmitSameValue {
+		t.Fatalf("a standard-mode column must not set resubmit_same_value: %+v", standard)
+	}
+
+	desc := buildCellInput(&matrixpb.CriterionColumn{
+		Criteria:   numericCriteria(),
+		RatingMode: enumspb.RatingMode_RATING_MODE_NUMERIC_WITH_DESCRIPTION,
+	})
+	if !desc.ResubmitSameValue {
+		t.Fatalf("a NUMERIC_WITH_DESCRIPTION column must set resubmit_same_value: %+v", desc)
+	}
+}
+
 func narrativeRows(cell *matrixpb.OutcomeCell) []*matrixpb.OutcomeRow {
 	return []*matrixpb.OutcomeRow{{ClientId: "c1", Cells: map[string]*matrixpb.OutcomeCell{"tt1:cr1": cell}}}
 }

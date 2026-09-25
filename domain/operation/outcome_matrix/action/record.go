@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	"github.com/erniealice/pyeza-golang/view"
 
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
@@ -143,9 +144,19 @@ func NewRecordAction(deps *Deps) view.View {
 		byOutcome := auth.byOutcome
 		byCreateAddr := auth.byCreateAddr
 
-		// Per-cell dispatch. Each addressed cell yields exactly one ack (cellMode)
-		// / counts toward saved|failed (legacy). A partial failure never aborts.
+		// Per-cell dispatch, in two passes. Pass 1 parses the form and applies
+		// every permission/addressability gate exactly as before — deletes and
+		// not-addressable cells ack immediately (they never touch the rating
+		// resolver), while update/create writes are QUEUED rather than applied
+		// immediately. Pass 2 dispatches the queued writes. The split exists so
+		// every description-mode cell of THIS request can be resolved in ONE
+		// Deps.ResolveCellRatingDescriptions call (Q18/RD-66) before any write
+		// happens, instead of one resolver round trip per cell.
+		//
+		// A partial failure never aborts the batch; each addressed cell still
+		// yields exactly one ack (cellMode) / counts toward saved|failed (legacy).
 		var acks []cellAck
+		pending := make([]pendingCellWrite, 0, len(viewCtx.Request.Form))
 		for key, vals := range viewCtx.Request.Form {
 			if len(vals) == 0 {
 				continue
@@ -164,7 +175,8 @@ func NewRecordAction(deps *Deps) view.View {
 					clearKey = key
 				}
 				if raw == "" {
-					// Blank on an existing cell is a clear request.
+					// Blank on an existing cell is a clear request — dispatched
+					// immediately; a delete never touches the rating resolver.
 					if !hasDelete || !allowedUpdate[outcomeID] {
 						log.Printf("[outcome-matrix] delete blocked: outcome %s not addressable for staff %s", outcomeID, actingStaff)
 						acks = append(acks, cellAck{key: key, errMsg: "not_editable"})
@@ -188,13 +200,7 @@ func NewRecordAction(deps *Deps) view.View {
 					acks = append(acks, cellAck{key: key, errMsg: "not_editable"})
 					continue
 				}
-				normVal, ok, hasNote := updateCell(ctx, deps, actingStaff, outcomeID, raw, sc.ct, sc.bounds, sc.ratings)
-				acks = append(acks, cellAck{
-					key: key, ok: ok, outcomeID: outcomeID, value: normVal, hasNote: hasNote,
-					numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
-					jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
-					errMsg: failMsg(ok, "value_rejected"),
-				})
+				pending = append(pending, pendingCellWrite{key: key, outcomeID: outcomeID, raw: raw, sc: sc})
 
 			case strings.HasPrefix(key, "new."):
 				addr := strings.TrimPrefix(key, "new.")
@@ -207,14 +213,8 @@ func NewRecordAction(deps *Deps) view.View {
 				}
 				createAddr := jobTaskID + ":" + criteriaID
 				sc := byCreateAddr[createAddr]
-				if ct, addressable := allowedCreate[createAddr]; hasCreate && addressable {
-					newID, normVal, done, hasNote := createCell(ctx, deps, actingStaff, jobTaskID, criteriaID, ct, raw, sc.bounds, sc.ratings)
-					acks = append(acks, cellAck{
-						key: key, ok: done, outcomeID: newID, value: normVal, hasNote: hasNote,
-						numeric: isNumericCriteria(ct), criteriaID: criteriaID,
-						jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
-						errMsg: failMsg(done, "value_rejected"),
-					})
+				if _, addressable := allowedCreate[createAddr]; hasCreate && addressable {
+					pending = append(pending, pendingCellWrite{key: key, raw: raw, sc: sc, isCreate: true})
 					continue
 				}
 				// Lost-ack idempotent retry: the address now carries an existing
@@ -222,19 +222,56 @@ func NewRecordAction(deps *Deps) view.View {
 				// ack was lost) → resolve to an UPDATE, return its id so the client
 				// renames new.* → cells.*. Never a duplicate insert.
 				if sc.outcomeID != "" && hasUpdate && allowedUpdate[sc.outcomeID] {
-					normVal, done, hasNote := updateCell(ctx, deps, actingStaff, sc.outcomeID, raw, sc.ct, sc.bounds, sc.ratings)
-					acks = append(acks, cellAck{
-						key: key, ok: done, outcomeID: sc.outcomeID, value: normVal, hasNote: hasNote,
-						numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
-						jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
-						errMsg: failMsg(done, "value_rejected"),
-					})
+					pending = append(pending, pendingCellWrite{key: key, outcomeID: sc.outcomeID, raw: raw, sc: sc})
 					continue
 				}
 				log.Printf("[outcome-matrix] create blocked: job_task %s criteria %s not addressable for staff %s", jobTaskID, criteriaID, actingStaff)
 				acks = append(acks, cellAck{key: key, errMsg: "not_editable"})
 			}
 		}
+
+		// Batch-resolve every description-mode pending cell's rating descriptions
+		// in ONE call (Q18/RD-66), keyed by the SERVER-DERIVED (job_id,
+		// job_task_id, outcome_criteria_id) identity — never the POST body. Cells
+		// whose column is not in description mode are skipped inside
+		// resolveRatingDescriptions and simply have no entry here.
+		scs := make([]srvCell, len(pending))
+		for i, pw := range pending {
+			scs[i] = pw.sc
+		}
+		resolutions := resolveRatingDescriptions(ctx, deps.ResolveCellRatingDescriptions, scs)
+
+		// Pass 2: dispatch the queued writes now that every description-mode
+		// cell's resolution is known.
+		for _, pw := range pending {
+			var res *ratingResolution
+			if pw.sc.descriptionMode {
+				if r, ok := resolutions[ratingCellKey{pw.sc.jobID, pw.sc.jobTaskID, pw.sc.criteriaID}]; ok {
+					res = &r
+				}
+			}
+			if pw.isCreate {
+				newID, normVal, done, hasNote, reason := createCell(ctx, deps, actingStaff, pw.sc.jobTaskID, pw.sc.criteriaID, pw.sc.ct, pw.raw, pw.sc.bounds, res)
+				acks = append(acks, cellAck{
+					key: pw.key, ok: done, outcomeID: newID, value: normVal, hasNote: hasNote,
+					numeric: isNumericCriteria(pw.sc.ct), criteriaID: pw.sc.criteriaID,
+					jobPhaseID: pw.sc.jobPhaseID, jobID: pw.sc.jobID,
+					errMsg: pickErrMsg(done, reason),
+				})
+				continue
+			}
+			normVal, done, hasNote, reason := updateCell(ctx, deps, actingStaff, pw.outcomeID, pw.raw, pw.sc.ct, pw.sc.bounds, res)
+			acks = append(acks, cellAck{
+				key: pw.key, ok: done, outcomeID: pw.outcomeID, value: normVal, hasNote: hasNote,
+				numeric: isNumericCriteria(pw.sc.ct), criteriaID: pw.sc.criteriaID,
+				jobPhaseID: pw.sc.jobPhaseID, jobID: pw.sc.jobID,
+				errMsg: pickErrMsg(done, reason),
+			})
+		}
+
+		// Translate the bounded rejection codes the grid shows verbatim
+		// (rating_description_* / cell_changed_retry) into lyngua wording.
+		translateAckErrors(acks, deps.Labels.Errors)
 
 		// Classify which saved numeric cells drive a scaled-summary recompute from
 		// the scoring graph (RecomputeEligibility), not the value's type: a phase
@@ -287,10 +324,66 @@ type srvCell struct {
 	jobTaskID  string
 	criteriaID string
 	ct         enums.CriteriaType
-	bounds     cellBounds         // the criterion's server-side value contract
-	ratings    ratingDescriptions // binding rating descriptions → outcome narrative (nil = off)
-	jobPhaseID string
-	jobID      string
+	bounds     cellBounds // the criterion's server-side value contract
+	// descriptionMode is true when the column is bound RATING_MODE_NUMERIC_
+	// WITH_DESCRIPTION (Q18: the batch resolver, never the column, is the
+	// source of the actual wording — see rating_description.go).
+	descriptionMode bool
+	jobPhaseID      string
+	jobID           string
+}
+
+// pendingCellWrite is one addressed, permission-checked, addressable cell
+// write DEFERRED past the batch rating-resolution call (see NewRecordAction).
+// isCreate selects createCell vs updateCell; outcomeID is the update target
+// (empty for a pure create; the resolved existing outcome id for a new.*
+// idempotent retry, matching the pre-batching behaviour exactly).
+type pendingCellWrite struct {
+	key       string
+	outcomeID string
+	raw       string
+	sc        srvCell
+	isCreate  bool
+}
+
+// pickErrMsg returns "" on success, the callee's specific reason when it
+// supplied one (e.g. a rating-resolution rejection code), or the generic
+// value_rejected default otherwise — preserving the pre-resolver ack
+// vocabulary for every failure the resolver doesn't specifically explain.
+func pickErrMsg(ok bool, reason string) string {
+	if ok {
+		return ""
+	}
+	if reason != "" {
+		return reason
+	}
+	return "value_rejected"
+}
+
+// ackCellChangedRetry is the Q26 CONFLICT ack code (lyngua
+// outcome_matrix.errors.cell_changed_retry).
+const ackCellChangedRetry = "cell_changed_retry"
+
+// translateAckErrors replaces each failed ack's bounded rejection code with
+// its translated label (outcome_matrix.errors.*). Unknown codes, and codes
+// whose label is empty (an app that did not load the labels), keep the code.
+func translateAckErrors(acks []cellAck, labels outcome_matrix.ErrorLabels) {
+	byCode := map[string]string{
+		"rating_description_unresolved_identity":    labels.RatingDescriptionUnresolvedIdentity,
+		"rating_description_ambiguous":              labels.RatingDescriptionAmbiguous,
+		"rating_description_invalid_config":         labels.RatingDescriptionInvalidConfig,
+		"rating_description_resolution_failed":      labels.RatingDescriptionResolutionFailed,
+		"rating_description_placeholder_unresolved": labels.RatingDescriptionPlaceholderUnresolved,
+		ackCellChangedRetry:                         labels.CellChangedRetry,
+	}
+	for i := range acks {
+		if acks[i].ok || acks[i].errMsg == "" {
+			continue
+		}
+		if msg := byCode[acks[i].errMsg]; msg != "" {
+			acks[i].errMsg = msg
+		}
+	}
 }
 
 // cellAck is the internal per-cell outcome collected during dispatch, projected
@@ -495,36 +588,53 @@ func failMsg(ok bool, reason string) string {
 }
 
 // updateCell applies the IDOR guard then routes through task_outcome:update.
-// Returns the normalized stored value + whether the write succeeded (false on
-// any guard/parse/use-case failure — counted as a failure). colCT is the
+// Returns the normalized stored value, whether the write succeeded (false on
+// any guard/parse/use-case failure — counted as a failure), whether the
+// outcome carries a note afterward, and — only on a rating-resolution
+// rejection — the bounded ack reason (schema-proposal §5, Q22). colCT is the
 // column's SERVER-DERIVED criteria type (from the same matrix that authorized
 // the address): the stored row's own type wins when present, but a row with
 // CRITERIA_TYPE_UNSPECIFIED (grid-created rows historically never stamped it,
 // making them permanently un-editable — every value "failed to parse as
 // UNSPECIFIED") falls back to the column type, and the update re-stamps it so
 // the row self-heals.
-func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, colCT enums.CriteriaType, bounds cellBounds, ratings ratingDescriptions) (string, bool, bool) {
-	if deps.ReadTaskOutcome == nil || deps.UpdateTaskOutcome == nil {
-		return "", false, false
+//
+// res carries the batch resolver's outcome for this cell (nil ⇒ the column is
+// not in description mode — the note is never touched). Callers pass res
+// only for the cell it was resolved for (record.go keys it by the cell's own
+// server-derived job_id/job_task_id/criteria_id).
+func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, colCT enums.CriteriaType, bounds cellBounds, res *ratingResolution) (value string, ok bool, hasNote bool, reason string) {
+	if deps.ReadTaskOutcome == nil || (deps.UpdateTaskOutcome == nil && deps.UpdateTaskOutcomeIfUnchanged == nil) {
+		return "", false, false, ""
 	}
 	readResp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
 	})
 	if err != nil {
 		log.Printf("[outcome-matrix] read failed for outcome %s: %v", outcomeID, err)
-		return "", false, false
+		return "", false, false, ""
 	}
 	records := readResp.GetData()
-	if len(records) == 0 {
-		return "", false, false
+	if len(records) == 0 || records[0] == nil {
+		return "", false, false, ""
 	}
+	// existing is also the Q26 snapshot the conditional write compares against.
 	existing := records[0]
 
 	// IDOR guard: the outcome MUST belong to the acting staff.
 	if existing.GetRecordedBy() != actingStaff {
 		log.Printf("[outcome-matrix] IDOR blocked: staff %s tried to edit outcome %s owned by %s",
 			actingStaff, outcomeID, existing.GetRecordedBy())
-		return "", false, false
+		return "", false, false, ""
+	}
+
+	// Rating-resolution rejection (Q22): UNRESOLVED_IDENTITY / AMBIGUOUS /
+	// INVALID_CONFIG / a batch or transport failure / an unwired resolver.
+	// Rejected BEFORE any parse or write — value and note stay exactly as
+	// stored.
+	if res != nil && res.reject {
+		log.Printf("[outcome-matrix] rating resolution rejected outcome %s update: %s (%s)", outcomeID, res.reason, res.logMsg)
+		return "", false, existing.GetDeterminationNote() != "", res.reason
 	}
 
 	ct := existing.GetCriteriaType()
@@ -543,33 +653,49 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 	// no-op that reports success.
 	if !applyValueStrict(req.Data, ct, raw, bounds) {
 		log.Printf("[outcome-matrix] update rejected: value does not parse as %v (or violates the criterion's declared bounds) for outcome %s", ct, outcomeID)
-		return "", false, false
+		return "", false, false, ""
 	}
 
-	// Rating description → narrative (numeric-with-description bindings only).
-	// The stored note is replaced only while it is still the description the OLD
-	// value produced (or empty): a grader's own wording is never overwritten, and
-	// an untouched auto note follows the score. "" clears an auto note whose new
-	// value has no description.
+	// Rating description → narrative (numeric-with-description bindings only;
+	// schema-proposal §5). res == nil ⇒ the column is not in description mode:
+	// applyDescriptionNote leaves the note untouched and reports the current
+	// hasNote truthfully.
 	note := existing.GetDeterminationNote()
-	if ratings.enabled() && req.Data.NumericValue != nil {
-		auto := ""
-		if existing.NumericValue != nil {
-			auto = ratings.describe(existing.GetNumericValue())
-		}
-		if note == "" || note == auto {
-			if next := ratings.describe(*req.Data.NumericValue); next != note {
-				req.Data.DeterminationNote = &next
-				note = next
-			}
+	hasNote = note != ""
+	if req.Data.NumericValue != nil {
+		n, has := applyDescriptionNote(res, existing.NumericValue, *req.Data.NumericValue, note)
+		hasNote = has
+		if n != nil {
+			req.Data.DeterminationNote = n
 		}
 	}
 
-	if _, err := deps.UpdateTaskOutcome(ctx, req); err != nil {
-		log.Printf("[outcome-matrix] update failed for outcome %s: %v", outcomeID, err)
-		return "", false, false
+	// Q26 (schema-proposal §9.1): the write lands only if the row still
+	// carries the snapshot this request read above (value, note,
+	// date_modified) — the note decision was made against that snapshot, so a
+	// concurrent save in between must reject this cell, never overwrite.
+	switch {
+	case deps.UpdateTaskOutcomeIfUnchanged != nil:
+		_, conflict, err := deps.UpdateTaskOutcomeIfUnchanged(ctx, req, existing)
+		if err != nil {
+			log.Printf("[outcome-matrix] conditional update failed for outcome %s: %v", outcomeID, err)
+			return "", false, false, ""
+		}
+		if conflict {
+			log.Printf("[outcome-matrix] conditional update CONFLICT for outcome %s: cell changed since read", outcomeID)
+			return "", false, existing.GetDeterminationNote() != "", ackCellChangedRetry
+		}
+	case res != nil:
+		// Description-mode cell without the conditional write: fail closed.
+		log.Printf("[outcome-matrix] update rejected for outcome %s: description-mode cell requires UpdateTaskOutcomeIfUnchanged (unwired)", outcomeID)
+		return "", false, existing.GetDeterminationNote() != "", ""
+	default:
+		if _, err := deps.UpdateTaskOutcome(ctx, req); err != nil {
+			log.Printf("[outcome-matrix] update failed for outcome %s: %v", outcomeID, err)
+			return "", false, false, ""
+		}
 	}
-	return normalizedValue(ct, req.Data), true, note != ""
+	return normalizedValue(ct, req.Data), true, hasNote, ""
 }
 
 // deleteCell removes an editable outcome with a server-derived IDOR guard (staff-owned
@@ -617,11 +743,24 @@ func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) 
 // (the proto-entity-status-conventions trap — a new outcome must default
 // active). A value that does not parse as the criterion's type fails the cell.
 // Returns the new task_outcome id (for the client's new.*→cells.* rename
-// handshake) + the normalized stored value.
-func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteriaID string, ct enums.CriteriaType, raw string, bounds cellBounds, ratings ratingDescriptions) (string, string, bool, bool) {
-	if deps.CreateTaskOutcome == nil {
-		return "", "", false, false
+// handshake), the normalized stored value, whether the note carries a
+// narrative, and — only on a rating-resolution rejection — the bounded ack
+// reason (schema-proposal §5, Q22).
+//
+// res carries the batch resolver's outcome for this cell (nil ⇒ the column is
+// not in description mode — no note is written).
+func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteriaID string, ct enums.CriteriaType, raw string, bounds cellBounds, res *ratingResolution) (newID, value string, ok, hasNote bool, reason string) {
+	if deps.CreateTaskOutcome == nil && deps.CreateTaskOutcomeIfAbsent == nil {
+		return "", "", false, false, ""
 	}
+
+	// Rating-resolution rejection (Q22), checked before any parse or write —
+	// a brand-new cell that cannot be resolved must not be created at all.
+	if res != nil && res.reject {
+		log.Printf("[outcome-matrix] rating resolution rejected job_task %s criteria %s create: %s (%s)", jobTaskID, criteriaID, res.reason, res.logMsg)
+		return "", "", false, false, res.reason
+	}
+
 	req := &taskoutcomepb.CreateTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{
 			JobTaskId:         jobTaskID,
@@ -637,30 +776,51 @@ func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteri
 		// Do NOT log the raw value (it is user content); the type + criteria id
 		// are sufficient to diagnose a rejected create.
 		log.Printf("[outcome-matrix] create rejected: value does not parse as %v (or violates the criterion's declared bounds) for criteria %s", ct, criteriaID)
-		return "", "", false, false
+		return "", "", false, false, ""
 	}
 
 	// Rating description → narrative snapshot for a numeric-with-description
-	// binding (see rating_description.go). No description ⇒ no note.
-	note := ""
-	if ratings.enabled() && req.Data.NumericValue != nil {
-		if note = ratings.describe(*req.Data.NumericValue); note != "" {
-			req.Data.DeterminationNote = &note
+	// binding (see rating_description.go). No matching entry ⇒ no note (a
+	// brand-new cell has no prior note to clear or keep — schema-proposal §5,
+	// "Create path: same rules").
+	hasNoteVal := false
+	if req.Data.NumericValue != nil {
+		if n, has := createDescriptionNote(res, *req.Data.NumericValue); n != nil {
+			req.Data.DeterminationNote = n
+			hasNoteVal = has
 		}
 	}
 
-	resp, err := deps.CreateTaskOutcome(ctx, req)
+	// Q26 (schema-proposal §9.1): create only while the cell is still empty
+	// (job_task row lock + active-outcome absence check); a concurrent create
+	// for the same cell rejects this one instead of inserting a duplicate.
+	var resp *taskoutcomepb.CreateTaskOutcomeResponse
+	var err error
+	switch {
+	case deps.CreateTaskOutcomeIfAbsent != nil:
+		var conflict bool
+		resp, conflict, err = deps.CreateTaskOutcomeIfAbsent(ctx, req)
+		if err == nil && conflict {
+			log.Printf("[outcome-matrix] create-if-absent CONFLICT for job_task %s criteria %s: cell already has an outcome", jobTaskID, criteriaID)
+			return "", "", false, false, ackCellChangedRetry
+		}
+	case res != nil:
+		log.Printf("[outcome-matrix] create rejected for job_task %s criteria %s: description-mode cell requires CreateTaskOutcomeIfAbsent (unwired)", jobTaskID, criteriaID)
+		return "", "", false, false, ""
+	default:
+		resp, err = deps.CreateTaskOutcome(ctx, req)
+	}
 	if err != nil {
 		log.Printf("[outcome-matrix] create failed for job_task %s criteria %s: %v", jobTaskID, criteriaID, err)
-		return "", "", false, false
+		return "", "", false, false, ""
 	}
 	// The new id backs the mandatory new.*→cells.* rename handshake; without it
 	// the client would re-CREATE on its next save (a duplicate).
-	newID := ""
+	newIDVal := ""
 	if data := resp.GetData(); len(data) > 0 && data[0] != nil {
-		newID = data[0].GetId()
+		newIDVal = data[0].GetId()
 	}
-	return newID, normalizedValue(ct, req.Data), true, note != ""
+	return newIDVal, normalizedValue(ct, req.Data), true, hasNoteVal, ""
 }
 
 // normalizedValue renders the stored typed value back to its canonical string

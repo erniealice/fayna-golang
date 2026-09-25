@@ -1,0 +1,55 @@
+{{/*
+Rating description set entry drawer — loaded into #sheetContent via HTMX from
+the parent set's Descriptors matrix. Used by Add and Edit.
+Data: .RatingDescriptionSetID, .OutcomeCriteriaID, .ScoreScaleBandID,
+      .Description, .CriteriaOptions, .BandOptions, .ID, .FormAction,
+      .IsEdit, .WorkspaceID, .CommonLabels, .Labels
+*/}}
+{{define "rating-description-set-entry-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="rating-description-set-entry-form" id="rating-description-set-entry-form">
+    {{actionForm .FormAction .WorkspaceID}}
+    {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+    <input type="hidden" name="rating_description_set_id" value="{{.RatingDescriptionSetID}}">
+
+    <div class="sheet-body">
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "outcome_criteria_id"
+                "ID" "rdse-outcome-criteria"
+                "Label" .Labels.Form.Criterion
+                "Value" .OutcomeCriteriaID
+                "Options" .CriteriaOptions
+                "Required" true
+                "Disabled" .IsEdit
+            )}}
+        </div>
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "score_scale_band_id"
+                "ID" "rdse-band"
+                "Label" .Labels.Form.Level
+                "Value" .ScoreScaleBandID
+                "Options" .BandOptions
+                "Required" true
+                "Disabled" .IsEdit
+            )}}
+        </div>
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "textarea"
+                "Name" "description"
+                "ID" "rdse-description"
+                "Label" .Labels.Form.Description
+                "Value" .Description
+                "Required" true
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" .IsEdit)}}
+</form>
+{{end}}

@@ -147,16 +147,22 @@ func resolveCellAuthority(ctx context.Context, deps authorityDeps, templateID st
 	// a cell (addressed by column_key) can be tested against the hard-frozen set
 	// below.
 	typeByColKey := make(map[string]enums.CriteriaType)
-	phaseByColKey := make(map[string]string)               // column_key → job_template_phase_id
-	boundsByColKey := make(map[string]cellBounds)          // column_key → value contract
-	ratingsByColKey := make(map[string]ratingDescriptions) // column_key → binding rating descriptions
+	phaseByColKey := make(map[string]string)      // column_key → job_template_phase_id
+	boundsByColKey := make(map[string]cellBounds) // column_key → value contract
+	// descModeByColKey marks which columns are bound RATING_MODE_NUMERIC_WITH_
+	// DESCRIPTION. Q18 (no legacy fallback): this is only a MODE FLAG — the
+	// column's own (legacy) RatingDescriptions are never read here any more.
+	// The write path (record.go) uses this flag to decide which cells enter
+	// the batch ResolveCellRatingDescriptions call; the actual wording comes
+	// back from that resolver, keyed by the cell's own server-derived identity.
+	descModeByColKey := make(map[string]bool)
 	for _, phase := range matrix.GetPhases() {
 		for _, task := range phase.GetTasks() {
 			for _, crit := range task.GetCriteria() {
 				typeByColKey[crit.GetColumnKey()] = crit.GetCriteria().GetCriteriaType()
 				phaseByColKey[crit.GetColumnKey()] = phase.GetJobTemplatePhaseId()
 				boundsByColKey[crit.GetColumnKey()] = boundsFromCriteria(crit.GetCriteria())
-				ratingsByColKey[crit.GetColumnKey()] = ratingDescriptionsFromColumn(crit)
+				descModeByColKey[crit.GetColumnKey()] = crit.GetRatingMode() == enums.RatingMode_RATING_MODE_NUMERIC_WITH_DESCRIPTION
 			}
 		}
 	}
@@ -206,14 +212,14 @@ func resolveCellAuthority(ctx context.Context, deps authorityDeps, templateID st
 				continue
 			}
 			sc := srvCell{
-				outcomeID:  cell.GetOutcomeId(),
-				jobTaskID:  cell.GetJobTaskId(),
-				criteriaID: criteriaID,
-				ct:         typeByColKey[colKey],
-				bounds:     boundsByColKey[colKey],
-				ratings:    ratingsByColKey[colKey],
-				jobPhaseID: cell.GetJobPhaseId(),
-				jobID:      cell.GetJobId(),
+				outcomeID:       cell.GetOutcomeId(),
+				jobTaskID:       cell.GetJobTaskId(),
+				criteriaID:      criteriaID,
+				ct:              typeByColKey[colKey],
+				bounds:          boundsByColKey[colKey],
+				descriptionMode: descModeByColKey[colKey],
+				jobPhaseID:      cell.GetJobPhaseId(),
+				jobID:           cell.GetJobId(),
 			}
 			if cell.GetOutcomeId() != "" {
 				allowedUpdate[cell.GetOutcomeId()] = true

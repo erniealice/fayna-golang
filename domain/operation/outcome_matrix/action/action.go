@@ -23,6 +23,21 @@ type Deps struct {
 	ReadTaskOutcome   func(ctx context.Context, req *taskoutcomepb.ReadTaskOutcomeRequest) (*taskoutcomepb.ReadTaskOutcomeResponse, error)
 	DeleteTaskOutcome func(ctx context.Context, req *taskoutcomepb.DeleteTaskOutcomeRequest) (*taskoutcomepb.DeleteTaskOutcomeResponse, error)
 
+	// Q26 conditional writes (schema-proposal §9.1, interfaces.md §2b). The
+	// record action writes every value cell through these when wired:
+	//   - UpdateTaskOutcomeIfUnchanged lands only if the row still carries the
+	//     snapshot read earlier in the SAME request (expected: numeric_value,
+	//     determination_note, date_modified).
+	//   - CreateTaskOutcomeIfAbsent inserts only when the (job_task,
+	//     criterion) cell still has no active outcome (job_task row lock).
+	// conflict == true ⇒ nothing was written; the cell is rejected with
+	// `cell_changed_retry` (value + note untouched). When nil, a
+	// description-mode cell is REJECTED (fail closed — its note decision
+	// depends on the snapshot); other cells fall back to the plain
+	// Create/UpdateTaskOutcome closures (pre-Q26 behaviour).
+	UpdateTaskOutcomeIfUnchanged func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest, expected *taskoutcomepb.TaskOutcome) (resp *taskoutcomepb.UpdateTaskOutcomeResponse, conflict bool, err error)
+	CreateTaskOutcomeIfAbsent    func(ctx context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (resp *taskoutcomepb.CreateTaskOutcomeResponse, conflict bool, err error)
+
 	// GetOutcomeMatrix re-derives the acting principal's MINE-scoped matrix on
 	// POST so the batch save only touches cells the server itself says are
 	// addressable — the POST body's cell addresses are attacker-controlled and
@@ -31,6 +46,29 @@ type Deps struct {
 
 	// ResolveStaff maps the acting session user → staff_id ("" == fail-closed).
 	ResolveStaff func(ctx context.Context) (string, error)
+
+	// ResolveCellRatingDescriptions batch-resolves the numeric-with-description
+	// cells of ONE save request to their linked rating_description_set entries
+	// (schema-proposal §4/§5; interfaces.md §2 OutcomeMatrixService RPC). The
+	// record action calls it exactly once per request with every description-
+	// mode cell's SERVER-DERIVED identity (job_id, job_task_id,
+	// outcome_criteria_id — never the POST body; a POST-supplied identity is
+	// never trusted for resolution any more than it is for authority).
+	//
+	// Q18 (no legacy fallback): this is the ONLY source of description text for
+	// a description-mode cell — the column's own (legacy per-slot)
+	// RatingDescriptions are never read on the write path any more. A nil
+	// closure (unwired) REJECTS every description-mode cell's save in the
+	// request (fail-closed — never silently "no entry"); see
+	// rating_description.go's resolveRatingDescriptions.
+	//
+	// NOTE (espyna wiring, added ahead of the esqyma proto regen this depends
+	// on — matrixpb.ResolveCellRatingDescriptions{Request,Response} do not
+	// exist yet as of this write; this field will not compile until the W1
+	// proto regen (CHECKPOINT-1) lands): the espyna agent wires this from
+	// OutcomeMatrixModuleDeps (see fayna-golang.md "Resolver pass-through") —
+	// this package only declares and calls the seam.
+	ResolveCellRatingDescriptions func(ctx context.Context, req *matrixpb.ResolveCellRatingDescriptionsRequest) (*matrixpb.ResolveCellRatingDescriptionsResponse, error)
 
 	// ComputePhaseOutcome / ComputeJobOutcome are the inline grade-recompute
 	// closures (Q-GSE-5) called after a successful ACADEMIC cell write in

@@ -1503,6 +1503,12 @@ func buildCellInput(cr *matrixpb.CriterionColumn) types.CellInputDescriptor {
 	}
 	d.Prompt = oc.GetTextPrompt()
 
+	// Q14 (schema-proposal §5): a description-mode binding must resolve on an
+	// intentional same-value re-save/re-pick too (the AutoSave client's normal
+	// dirty check would otherwise never re-POST an unchanged value). This is
+	// the SERVER-DERIVED column's own rating_mode — never a POST value.
+	d.ResubmitSameValue = cr.GetRatingMode() == enums.RatingMode_RATING_MODE_NUMERIC_WITH_DESCRIPTION
+
 	return d
 }
 

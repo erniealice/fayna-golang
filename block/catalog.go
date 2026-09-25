@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/erniealice/espyna-golang/consumer/compose"
 	fulfillmentdomain "github.com/erniealice/fayna-golang/domain/fulfillment"
@@ -31,6 +32,9 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	"github.com/erniealice/fayna-golang/domain/operation/performance"
+	"github.com/erniealice/fayna-golang/domain/operation/rating_description_set"
+	"github.com/erniealice/fayna-golang/domain/operation/rating_description_set_entry"
+	"github.com/erniealice/fayna-golang/domain/operation/rating_description_set_product_plan"
 	"github.com/erniealice/fayna-golang/domain/operation/reporting_checkpoint"
 	"github.com/erniealice/fayna-golang/domain/operation/score_scale"
 	"github.com/erniealice/fayna-golang/domain/operation/score_scale_band"
@@ -563,6 +567,108 @@ func ScoreScaleBandUnit(uc *UseCases, _ *Infra) compose.Unit {
 	return u
 }
 
+// ratingDescriptionSetsSupported reports whether the database provider wired
+// the rating-description-set capability (codex-review-impl2 #8). espyna leaves
+// all three RatingDescriptionSet* use-case groups nil on providers without the
+// repositories (mock_db / firestore); the three units then skip mounting
+// instead of registering routes whose handlers would have no use cases. The
+// capability is all-or-nothing, so one representative func per group is
+// checked. Logged once.
+func ratingDescriptionSetsSupported(uc *UseCases) bool {
+	ok := uc != nil &&
+		uc.Operation.RatingDescriptionSet.ListRatingDescriptionSets != nil &&
+		uc.Operation.RatingDescriptionSetEntry.ListRatingDescriptionSetEntries != nil &&
+		uc.Operation.RatingDescriptionSetProductPlan.ListRatingDescriptionSetProductPlans != nil
+	if !ok {
+		ratingDescriptionSetsSkipOnce.Do(func() {
+			log.Printf("fayna block: rating description sets unsupported by the database provider — rating_description_set* modules not mounted")
+		})
+	}
+	return ok
+}
+
+var ratingDescriptionSetsSkipOnce sync.Once
+
+// RatingDescriptionSetUnit registers the "Rubric Descriptors" list + detail
+// (Descriptors matrix) + add/publish/deprecate (20260925 plan, MVP scope —
+// see sequence w3-fayna-views). It wires the entry unit's routes so the
+// matrix's Add/Edit entry links resolve (evaluation_template pattern).
+func RatingDescriptionSetUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := rating_description_set.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		if !ratingDescriptionSetsSupported(uc) {
+			return nil // codex impl2 #8: provider without the capability — do not mount
+		}
+		r := u.Routes.(*rating_description_set.Routes)
+		l := u.Labels.(*rating_description_set.Labels)
+
+		deps := &operation.RatingDescriptionSetModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		if entryRoutes, ok := compose.RoutesOf[*rating_description_set_entry.Routes](mc, "operation.rating_description_set_entry"); ok {
+			deps.EntryRoutes = *entryRoutes
+		}
+		wireRatingDescriptionSetDeps(deps, uc)
+		operation.NewRatingDescriptionSetModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+// RatingDescriptionSetEntryUnit registers the entry drawer (Add/Edit only —
+// Delete deferred, TODO). No standalone page — surfaces via the parent
+// rating_description_set detail's Descriptors matrix (evaluation_template_item
+// pattern).
+func RatingDescriptionSetEntryUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := rating_description_set_entry.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		if !ratingDescriptionSetsSupported(uc) {
+			return nil // codex impl2 #8
+		}
+		r := u.Routes.(*rating_description_set_entry.Routes)
+		l := u.Labels.(*rating_description_set_entry.Labels)
+
+		deps := &operation.RatingDescriptionSetEntryModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireRatingDescriptionSetEntryDeps(deps, uc)
+		operation.NewRatingDescriptionSetEntryModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
+// RatingDescriptionSetProductPlanUnit registers "Descriptor Assignments" —
+// the AY setup list (active links per academic year) + Relink/Unlink (MVP
+// scope; bulk assign / copy-previous-AY deferred — TODO).
+func RatingDescriptionSetProductPlanUnit(uc *UseCases, _ *Infra) compose.Unit {
+	u := rating_description_set_product_plan.Describe()
+	u.Mount = func(mc *compose.MountContext) error {
+		if !ratingDescriptionSetsSupported(uc) {
+			return nil // codex impl2 #8
+		}
+		r := u.Routes.(*rating_description_set_product_plan.Routes)
+		l := u.Labels.(*rating_description_set_product_plan.Labels)
+
+		deps := &operation.RatingDescriptionSetProductPlanModuleDeps{
+			Routes:       *r,
+			Labels:       *l,
+			CommonLabels: mc.Common,
+			TableLabels:  mc.Table,
+		}
+		wireRatingDescriptionSetProductPlanDeps(deps, uc)
+		operation.NewRatingDescriptionSetProductPlanModule(deps).RegisterRoutes(mc.Routes)
+		return nil
+	}
+	return u
+}
+
 func JobOutcomeLineUnit(uc *UseCases, _ *Infra) compose.Unit {
 	u := job_outcome_line.Describe()
 	u.Mount = func(mc *compose.MountContext) error {
@@ -925,6 +1031,10 @@ func AllUnits(uc *UseCases, infra *Infra, opts ...EngineOption) []compose.Unit {
 		TemplateTaskCriteriaUnit(uc, infra),
 		ScoreScaleUnit(uc, infra),
 		ScoreScaleBandUnit(uc, infra),
+		// Criterion descriptors by program year (20260925 plan, MVP scope).
+		RatingDescriptionSetUnit(uc, infra),
+		RatingDescriptionSetEntryUnit(uc, infra),
+		RatingDescriptionSetProductPlanUnit(uc, infra),
 		JobOutcomeLineUnit(uc, infra),
 		ReportingCheckpointUnit(uc, infra),
 		TaskOutcomeUnit(uc, infra),

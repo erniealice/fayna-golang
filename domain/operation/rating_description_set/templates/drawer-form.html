@@ -1,0 +1,55 @@
+{{/*
+Rating description set Add drawer — loaded into #sheetContent via HTMX.
+CreateRatingDescriptionSet always creates a DRAFT at version 1 — MVP scope
+has no Edit action (TODO, see sequence log).
+Data: .Name, .Code, .ScoreScaleID, .SourceRef, .ScaleOptions, .FormAction,
+      .WorkspaceID, .CommonLabels, .Labels
+*/}}
+{{define "rating-description-set-drawer-form"}}
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="rating-description-set-form">
+    {{actionForm .FormAction .WorkspaceID}}
+
+    <div class="sheet-body">
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "name"
+                "Label" .Labels.Form.Name
+                "Value" .Name
+                "Required" true
+            )}}
+        </div>
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "code"
+                "Label" .Labels.Form.Code
+                "Value" .Code
+            )}}
+        </div>
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "select"
+                "Name" "score_scale_id"
+                "Label" .Labels.Form.Scale
+                "Value" .ScoreScaleID
+                "Options" .ScaleOptions
+                "Required" true
+            )}}
+        </div>
+
+        <div class="form-row single">
+            {{template "form-group" (dict
+                "Type" "text"
+                "Name" "source_ref"
+                "Label" .Labels.Form.SourceRef
+                "Value" .SourceRef
+            )}}
+        </div>
+    </div>
+
+    {{template "sheet-form-footer" (dict "CommonLabels" .CommonLabels "ShowCancel" true "IsEdit" false)}}
+</form>
+{{end}}

@@ -80,6 +80,12 @@ type SubscriptionGroupExportOptions struct {
 	// with Options.Row.GroupByField. A configured client-attribute band without
 	// a module is invalid and explicit export fails closed.
 	GroupByAttributeModule string
+	// CellFormat is the trusted display template for each report cell on the
+	// group page and its CSV/PDF export. Tokens: {composite} (the stored raw
+	// composite, pre-transmutation) and {scaled} (the transmuted output). Empty
+	// means "{scaled}" (the pre-existing display); an invalid template logs and
+	// falls back to "{scaled}". See FormatReportCell.
+	CellFormat string
 }
 
 // ResolvedSubscriptionGroupDocumentTemplate is the locator-free result of the app-owned
@@ -95,6 +101,20 @@ type ResolvedSubscriptionGroupDocumentTemplate struct {
 // zero value preserves existing consumers and never advertises or mounts the
 // SubscriptionGroup Template path.
 func (o Options) SubscriptionGroupExportEnabled() bool { return o.SubscriptionGroupExport.Enabled }
+
+// ReportCellFormat returns the validated report-cell template (default
+// "{scaled}"). Invalid templates fail safe to the default display.
+func (o Options) ReportCellFormat() string {
+	format := o.SubscriptionGroupExport.CellFormat
+	if strings.TrimSpace(format) == "" {
+		return CellFormatScaled
+	}
+	if err := ValidateCellFormat(format); err != nil {
+		logInvalidCellFormat(format, err)
+		return CellFormatScaled
+	}
+	return format
+}
 
 // ExportRowBandConfig validates the presentation-only row-band reference. An
 // empty reference deliberately disables banding; any non-empty unsupported

@@ -168,7 +168,7 @@ func TestBuildRows_PhantomBlank_RealShown(t *testing.T) {
 		"jobR0": {HasMarks: true, HasPositiveMark: true},  // enrolled → keep
 	}
 
-	rows := buildRows(clients, templateIDs, cellJob, labelByJob, evByJob, "sec1", outcome_summary.Routes{}, outcome_summary.Labels{}, false, false)
+	rows := buildRows(clients, templateIDs, cellJob, labelByJob, nil, "", evByJob, "sec1", outcome_summary.Routes{}, outcome_summary.Labels{}, false, false)
 	if len(rows) != 1 {
 		t.Fatalf("want 1 row, got %d", len(rows))
 	}
@@ -217,7 +217,7 @@ func TestBuildRows_PhantomBlank_RealShown(t *testing.T) {
 func TestBuildRows_ClientDownloadOpensScopedDrawerInSecondColumn(t *testing.T) {
 	rows := buildRows(
 		map[string]client{"student-123456": {clientID: "student-123456", name: "Student"}},
-		nil, nil, nil, nil, "group-123456",
+		nil, nil, nil, nil, "", nil, "group-123456",
 		outcome_summary.Routes{
 			ClientCardURL:           "/report-cards/section/{id}/student/{client_id}",
 			ClientDocumentURL:       "/report-cards/section/{id}/student/{client_id}/document",
@@ -250,7 +250,7 @@ func TestBuildRows_ClientDownloadOpensScopedDrawerInSecondColumn(t *testing.T) {
 func TestBuildRows_HidesClientDownloadWithoutExplicitExportCapability(t *testing.T) {
 	rows := buildRows(
 		map[string]client{"student-1": {clientID: "student-1", name: "Student"}},
-		nil, nil, nil, nil, "group-1",
+		nil, nil, nil, nil, "", nil, "group-1",
 		outcome_summary.Routes{
 			ClientCardURL:           "/report-cards/section/{id}/student/{client_id}",
 			ClientDocumentURL:       "/report-cards/section/{id}/student/{client_id}/document",
@@ -266,7 +266,7 @@ func TestBuildRows_HidesClientDownloadWithoutExplicitExportCapability(t *testing
 func TestBuildRows_LegacyOperatorKeepsPeriodlessFullCardDownload(t *testing.T) {
 	rows := buildRows(
 		map[string]client{"student-1": {clientID: "student-1", name: "Student"}},
-		nil, nil, nil, nil, "group-1",
+		nil, nil, nil, nil, "", nil, "group-1",
 		outcome_summary.Routes{
 			ClientCardURL:     "/report-cards/section/{id}/student/{client_id}",
 			ClientDocumentURL: "/report-cards/section/{id}/student/{client_id}/document",

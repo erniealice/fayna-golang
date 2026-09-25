@@ -249,6 +249,11 @@ type GridLabels struct {
 	// vertical's own term arrives through lyngua, never through this default.
 	TotalColumn  string `json:"total_column"`
 	TotalTooltip string `json:"total_tooltip"`
+	// Same derived leaf when every criterion in the phase aggregates its task
+	// values by AVERAGE (outcome_criteria.aggregation_method): the composite is
+	// then an average, not a total. Selected from the data, never by category.
+	AverageColumn  string `json:"average_column"`
+	AverageTooltip string `json:"average_tooltip"`
 }
 
 // ErrorLabels — generic permission-denied string.
@@ -293,6 +298,8 @@ func DefaultLabels() Labels {
 			RatingTooltip:   "Computed rating — read only",
 			TotalColumn:     "Total",
 			TotalTooltip:    "Computed total — read only",
+			AverageColumn:   "Average",
+			AverageTooltip:  "Computed average — read only",
 		},
 		Errors: ErrorLabels{
 			PermissionDenied: "You do not have permission to perform this action",

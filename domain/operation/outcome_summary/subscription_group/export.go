@@ -669,7 +669,7 @@ func normalizeExplicitMatrix(ctx context.Context, deps *Deps, resp *exportpb.Get
 		row.cells = byID
 		for _, column := range resp.GetJobTemplateColumns() {
 			cell := byID[column.GetJobTemplateId()]
-			row.values = append(row.values, outcome_summary.ExportCellValue(cell, ""))
+			row.values = append(row.values, outcome_summary.FormatReportCell(cell, "", deps.Options.ReportCellFormat()))
 		}
 		rows = append(rows, row)
 	}

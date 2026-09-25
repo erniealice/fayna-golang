@@ -359,7 +359,7 @@ func buildGroupTable(ctx context.Context, deps *Deps, groupID, rawJC string) (*s
 	}
 
 	// summaries(job_id IN jobs) → jobID → scaled label.
-	labelByJob := fetchSummaryLabels(ctx, deps, jobIDs, l)
+	labelByJob, scoreByJob := fetchSummaryLabels(ctx, deps, jobIDs, l)
 	if len(labelByJob) == 0 {
 		return group, nil, tabs
 	}
@@ -424,7 +424,7 @@ func buildGroupTable(ctx context.Context, deps *Deps, groupID, rawJC string) (*s
 	canDownloadClientDocument := clientDocumentMounted && deps.Options.SubscriptionGroupExportEnabled() &&
 		deps.Routes.ClientDownloadDrawerURL != "" && outcome_summary.CanExplicitExport(perms, ctx, deps.ResolvePrincipalKind)
 	canDownloadLegacyDocument := clientDocumentMounted && outcome_summary.CanLegacyDetail(perms)
-	rows := buildRows(clients, orderedColumnIDs(columns), cellJob, labelByJob, evByJob, groupID, deps.Routes, l, canDownloadClientDocument, canDownloadLegacyDocument)
+	rows := buildRows(clients, orderedColumnIDs(columns), cellJob, labelByJob, scoreByJob, deps.Options.ReportCellFormat(), evByJob, groupID, deps.Routes, l, canDownloadClientDocument, canDownloadLegacyDocument)
 	applyRowPresentation(table, rows, clients, attrValues, deps.Options)
 	numberRows(table)
 	types.ApplyColumnStyles(table.Columns, allRows(table))
@@ -948,11 +948,13 @@ func fetchGroupJobs(ctx context.Context, deps *Deps, subIDs []string, historical
 }
 
 // fetchSummaryLabels returns jobID → year-final label (scaled_label, falling
-// back to a formatted scaled_score), chunked by job_id.
-func fetchSummaryLabels(ctx context.Context, deps *Deps, jobIDs []string, l outcome_summary.Labels) map[string]string {
+// back to a formatted scaled_score) and jobID → stored raw composite
+// (summary_score, only when set), chunked by job_id.
+func fetchSummaryLabels(ctx context.Context, deps *Deps, jobIDs []string, l outcome_summary.Labels) (map[string]string, map[string]*float64) {
 	out := map[string]string{}
+	scores := map[string]*float64{}
 	if deps.ListJobOutcomeSummarys == nil || len(jobIDs) == 0 {
-		return out
+		return out, scores
 	}
 	for start := 0; start < len(jobIDs); start += pageLimit {
 		end := start + pageLimit
@@ -981,9 +983,15 @@ func fetchSummaryLabels(ctx context.Context, deps *Deps, jobIDs []string, l outc
 			} else if s.ScaledScore != nil {
 				out[jid] = strconv.FormatFloat(s.GetScaledScore(), 'f', -1, 64)
 			}
+			// An imported (authoritative) final's stored 0 is a placeholder,
+			// not a composite — omit it so the cell falls back to the label.
+			if s.SummaryScore != nil && !(s.GetIsAuthoritative() && s.GetSummaryScore() == 0) {
+				v := s.GetSummaryScore()
+				scores[jid] = &v
+			}
 		}
 	}
-	return out
+	return out, scores
 }
 
 // fetchClients resolves client_id → display name + last_name, chunked.
@@ -1201,6 +1209,8 @@ func buildRows(
 	clients map[string]client,
 	templateIDs []string,
 	cellJob, labelByJob map[string]string,
+	scoreByJob map[string]*float64,
+	cellFormat string,
 	evByJob map[string]outcome_summary.EnrollmentEvidence,
 	groupID string,
 	routes outcome_summary.Routes,
@@ -1234,9 +1244,12 @@ func buildRows(
 				span := `<span class="rc-cell-empty" data-testid="` + testid + `"></span>`
 				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(span)})
 			case jobID != "" && label != "":
+				// Presence + enrollment blanking stay keyed on the scaled label
+				// (above); only the displayed text follows the cell template.
+				value := outcome_summary.ApplyCellFormat(cellFormat, label, scoreByJob[jobID])
 				url := route.ResolveURL(routes.JobSummaryURL, "id", jobID)
-				anchor := `<a href="` + html.EscapeString(url) + `" class="table-link" data-testid="` + testid + `" hx-push-url="true">` + html.EscapeString(label) + `</a>`
-				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(anchor), CSVValue: label})
+				anchor := `<a href="` + html.EscapeString(url) + `" class="table-link" data-testid="` + testid + `" hx-push-url="true">` + html.EscapeString(value) + `</a>`
+				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(anchor), CSVValue: value})
 			default:
 				span := `<span class="rc-cell-empty" data-testid="` + testid + `">` + html.EscapeString(empty) + `</span>`
 				cells = append(cells, types.TableCell{Type: "html", HTML: texttemplate.HTML(span), CSVValue: empty})

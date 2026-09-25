@@ -204,7 +204,7 @@ func buildReportTable(deps *Deps, matrix *explicitMatrix, subscriptionGroupID st
 		}}
 		cells = append(cells, rowActionsCell(subscriptionGroupID, row.clientID, deps.Routes, deps.Labels, canDownloadClientDocument, canDownloadLegacyDocument))
 		for index := range matrix.columns {
-			value := outcome_summary.ExportCellValue(row.cells[matrix.columns[index].GetJobTemplateId()], empty)
+			value := outcome_summary.FormatReportCell(row.cells[matrix.columns[index].GetJobTemplateId()], empty, deps.Options.ReportCellFormat())
 			cells = append(cells, types.TableCell{Type: "text", Value: value, CSVValue: value})
 		}
 		tableRows = append(tableRows, types.TableRow{

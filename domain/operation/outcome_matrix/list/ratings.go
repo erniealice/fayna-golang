@@ -78,6 +78,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	"github.com/erniealice/pyeza-golang/types"
 
+	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
 
@@ -162,6 +163,7 @@ func augmentRatingColumns(
 	// the transmuted output it was transmuted into. testKey prefers the phase
 	// CODE ("s1") for a stable, readable testid; slug(id) is the fallback.
 	testKeyByPhase := map[string]string{}
+	averaged := averagedPhases(resp)
 	for i := range cfg.Columns {
 		l1 := &cfg.Columns[i]
 		if _, isPhase := codeByPhase[l1.Key]; !isPhase {
@@ -172,12 +174,13 @@ func augmentRatingColumns(
 			tk = slug(l1.Key)
 		}
 		testKeyByPhase[l1.Key] = slug(tk)
+		totalLabel, _ := compositeLabels(l.Grid, averaged[l1.Key])
 		l1.Level2 = append(l1.Level2,
 			types.CellGridLevel2{
 				Key: totalKeyPrefix + l1.Key,
 				Level3: []types.CellGridLevel3{{
 					ColumnKey: totalKeyPrefix + l1.Key,
-					Label:     l.Grid.TotalColumn,
+					Label:     totalLabel,
 					CellInput: types.CellInputDescriptor{Type: "text"},
 				}},
 			},
@@ -235,14 +238,46 @@ func augmentRatingColumns(
 			if !isCol {
 				continue // phase pruned from this view (or unknown) — no column
 			}
+			_, totalTooltip := compositeLabels(l.Grid, averaged[phaseID])
 			row.Cells[totalKeyPrefix+phaseID] = ratingCell(
-				formatSummaryScore(pe), l.Grid.TotalTooltip, "om-total-"+row.ID+"-"+tk)
+				formatSummaryScore(pe), totalTooltip, "om-total-"+row.ID+"-"+tk)
 			row.Cells[ratingKeyPrefix+phaseID] = ratingCell(
 				pe.GetScaledLabel(), l.Grid.RatingTooltip, "om-rating-"+row.ID+"-"+tk)
 		}
 		row.Cells[finalColumnKey] = ratingCell(
 			rr.GetYearFinalLabel(), l.Grid.RatingTooltip, "om-rating-"+row.ID+"-final")
 	}
+}
+
+// averagedPhases reports, per job_template_phase id, whether the phase's
+// composite is an average: it has at least one criterion column and EVERY
+// criterion aggregates its task values by AVERAGE. Any other shape (mixed,
+// MAXIMUM, unspecified, no criteria) keeps the total wording. Pure.
+func averagedPhases(resp *matrixpb.GetOutcomeMatrixResponse) map[string]bool {
+	out := map[string]bool{}
+	for _, ph := range resp.GetPhases() {
+		seen, allAverage := false, true
+		for _, task := range ph.GetTasks() {
+			for _, c := range task.GetCriteria() {
+				seen = true
+				if c.GetCriteria().GetAggregationMethod() != enums.AggregationMethod_AGGREGATION_METHOD_AVERAGE {
+					allAverage = false
+				}
+			}
+		}
+		if seen && allAverage {
+			out[ph.GetJobTemplatePhaseId()] = true
+		}
+	}
+	return out
+}
+
+// compositeLabels picks the composite leaf's header + cell tooltip.
+func compositeLabels(g outcome_matrix.GridLabels, averaged bool) (column, tooltip string) {
+	if averaged {
+		return g.AverageColumn, g.AverageTooltip
+	}
+	return g.TotalColumn, g.TotalTooltip
 }
 
 // fetchRatingRoster wraps the P2 composite read, threading the SAME resolved

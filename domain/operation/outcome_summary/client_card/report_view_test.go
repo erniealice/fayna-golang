@@ -61,9 +61,9 @@ func TestClientProjectionGroupByPreservesCompleteOutcomeSet(t *testing.T) {
 func TestClientProjectionQueryCannotOverrideConfiguredGrouping(t *testing.T) {
 	deps := clientProjectionDeps(fourCategoryProjection())
 	reads := 0
-	deps.GetSubscriptionGroupClientReportCard = func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
+	deps.GetSubscriptionGroupClientOutcomeSummary = func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
 		reads++
-		return &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: fourCategoryProjection()}, nil
+		return &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true, OutcomeSummary: fourCategoryProjection()}, nil
 	}
 	result := NewView(deps).Handle(clientProjectionContext(t, deps.Routes, "sg-1", "client-a", "group_by=student"), clientProjectionViewContext(t, deps.Routes, "sg-1", "client-a", "group_by=student"))
 	if result.StatusCode != 200 {
@@ -77,12 +77,12 @@ func TestClientProjectionQueryCannotOverrideConfiguredGrouping(t *testing.T) {
 func TestClientProjectionUsesOneExactGroupClientRead(t *testing.T) {
 	deps := clientProjectionDeps(fourCategoryProjection())
 	reads := 0
-	deps.GetSubscriptionGroupClientReportCard = func(_ context.Context, request *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
+	deps.GetSubscriptionGroupClientOutcomeSummary = func(_ context.Context, request *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
 		reads++
 		if request.GetSubscriptionGroupId() != "sg-1" || request.GetClientId() != "client-a" {
 			t.Fatalf("projection request scope = %q/%q", request.GetSubscriptionGroupId(), request.GetClientId())
 		}
-		return &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: fourCategoryProjection()}, nil
+		return &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true, OutcomeSummary: fourCategoryProjection()}, nil
 	}
 	result := NewView(deps).Handle(clientProjectionContext(t, deps.Routes, "sg-1", "client-a", ""), clientProjectionViewContext(t, deps.Routes, "sg-1", "client-a", ""))
 	if result.StatusCode != 200 || reads != 1 {
@@ -95,21 +95,21 @@ func TestClientProjectionMapsNotFoundAndDependencyFailuresWithoutUsingForbidden(
 	foreign.Context.SubscriptionGroupId = "another-group"
 	cases := []struct {
 		name     string
-		response *exportpb.GetSubscriptionGroupClientReportCardResponse
+		response *exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse
 		err      error
 		want     int
 	}{
 		{name: "typed not found", err: espynaports.ErrClientReportNotFound, want: http.StatusNotFound},
 		{name: "projection dependency failure", err: errors.New("query unavailable"), want: http.StatusServiceUnavailable},
 		{name: "nil response", want: http.StatusServiceUnavailable},
-		{name: "unsuccessful response", response: &exportpb.GetSubscriptionGroupClientReportCardResponse{}, want: http.StatusServiceUnavailable},
-		{name: "successful empty projection", response: &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true}, want: http.StatusNotFound},
-		{name: "foreign projection", response: &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: foreign}, want: http.StatusNotFound},
+		{name: "unsuccessful response", response: &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{}, want: http.StatusServiceUnavailable},
+		{name: "successful empty projection", response: &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true}, want: http.StatusNotFound},
+		{name: "foreign projection", response: &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true, OutcomeSummary: foreign}, want: http.StatusNotFound},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			deps := clientProjectionDeps(fourCategoryProjection())
-			deps.GetSubscriptionGroupClientReportCard = func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
+			deps.GetSubscriptionGroupClientOutcomeSummary = func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
 				return tc.response, tc.err
 			}
 			vc := clientProjectionViewContext(t, deps.Routes, "sg-1", "client-a", "")
@@ -121,7 +121,7 @@ func TestClientProjectionMapsNotFoundAndDependencyFailuresWithoutUsingForbidden(
 	}
 }
 
-func clientProjectionDeps(projection *exportpb.ClientReportCardProjection) *Deps {
+func clientProjectionDeps(projection *exportpb.ClientOutcomeSummaryProjection) *Deps {
 	deps := &Deps{Routes: outcome_summary.DefaultRoutes(), Labels: outcome_summary.DefaultLabels()}
 	deps.Routes.ClientDownloadDrawerURL = "/download/{id}/{client_id}"
 	deps.Routes.ClientDocumentURL = "/document/{id}/{client_id}"
@@ -131,8 +131,8 @@ func clientProjectionDeps(projection *exportpb.ClientReportCardProjection) *Deps
 	deps.Options.ClientCard.Row.GroupByField = outcome_summary.ListColumnsJobCategory
 	deps.Options.ClientCard.IncludeAllCategories = true
 	deps.ResolvePrincipalKind = func(context.Context) int32 { return outcome_summary.PrincipalKindStaff }
-	deps.GetSubscriptionGroupClientReportCard = func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
-		return &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: projection}, nil
+	deps.GetSubscriptionGroupClientOutcomeSummary = func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
+		return &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true, OutcomeSummary: projection}, nil
 	}
 	return deps
 }
@@ -163,7 +163,7 @@ func clientProjectionContext(t *testing.T, routes outcome_summary.Routes, groupI
 	return view.WithUserPermissions(vc.Request.Context(), types.NewUserPermissions([]string{"subscription_group_outcome_export:read"}))
 }
 
-func fourCategoryProjection() *exportpb.ClientReportCardProjection {
+func fourCategoryProjection() *exportpb.ClientOutcomeSummaryProjection {
 	categories := []*jobcategorypb.JobCategory{
 		{Id: "cat-c", Name: "Category C", Code: strPtr("category_c"), SortOrder: int32Ptr(30)},
 		{Id: "cat-d", Name: "Category D", Code: strPtr("category_d"), SortOrder: int32Ptr(40)},
@@ -194,9 +194,9 @@ func fourCategoryProjection() *exportpb.ClientReportCardProjection {
 			templatePhases = append(templatePhases, &jobtemplatephasepb.JobTemplatePhase{Id: "tp-" + category.GetCode() + "-" + code, Name: code, Code: strPtr(code), PhaseOrder: int32(phaseIndex + 1), Active: true})
 		}
 	}
-	return &exportpb.ClientReportCardProjection{
+	return &exportpb.ClientOutcomeSummaryProjection{
 		Context:               &exportpb.SubscriptionGroupOutcomeExportContext{SubscriptionGroupId: "sg-1", SubscriptionGroupName: "Group A"},
-		Client:                &exportpb.ClientReportCardClient{ClientId: "client-a", Name: "Learner A"},
+		Client:                &exportpb.ClientOutcomeSummaryClient{ClientId: "client-a", Name: "Learner A"},
 		ClientSubscriptionIds: []string{"subscription-a"},
 		Jobs:                  jobs, JobTemplates: templates, JobCategories: categories,
 		JobPhases: phases, JobTemplatePhases: templatePhases,

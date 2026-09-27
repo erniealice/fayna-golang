@@ -318,7 +318,7 @@ func DefaultLabels() Labels {
 		},
 		Errors: ErrorLabels{
 			PermissionDenied:                       "You do not have permission to perform this action",
-			RatingDescriptionUnresolvedIdentity:    "This rating was not saved: the student's subject or level could not be identified.",
+			RatingDescriptionUnresolvedIdentity:    "This rating was not saved: the client's job or level could not be identified.",
 			RatingDescriptionAmbiguous:             "This rating was not saved: the rubric descriptors for this subject are misconfigured.",
 			RatingDescriptionInvalidConfig:         "This rating was not saved: the rubric descriptors for this subject are misconfigured.",
 			RatingDescriptionResolutionFailed:      "This rating was not saved: the rubric descriptors could not be checked. Please try again.",

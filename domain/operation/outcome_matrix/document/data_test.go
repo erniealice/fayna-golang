@@ -17,7 +17,7 @@ func TestBuildSheetData_ManifestSeeding(t *testing.T) {
 		PrintedAt:    "2026-07-20 09:30",
 	}
 	periodLabels := []string{"Semester 1"} // only one period label supplied
-	students := []SheetStudent{
+	students := []SheetClient{
 		{Name: "Cruz, Juan", PhaseFinals: []string{"6"}, YearFinal: "6"},
 	}
 	data := BuildSheetData(header, periodLabels, students)
@@ -95,7 +95,7 @@ func TestBuildSheetData_PositionalMapping(t *testing.T) {
 	data := BuildSheetData(
 		SheetHeader{Title: "GS"},
 		[]string{"Sem 1", "Sem 2"},
-		[]SheetStudent{{Name: "A", PhaseFinals: []string{"1", "2"}, YearFinal: "2"}},
+		[]SheetClient{{Name: "A", PhaseFinals: []string{"1", "2"}, YearFinal: "2"}},
 	)
 	if data["period1_label"] != "Sem 1" || data["period2_label"] != "Sem 2" {
 		t.Errorf("period labels mis-mapped: p1=%v p2=%v", data["period1_label"], data["period2_label"])

@@ -530,7 +530,7 @@ func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageVi
 		periodLabels = append(periodLabels, c.label)
 	}
 
-	students := make([]sheetdoc.SheetStudent, 0, len(rows))
+	students := make([]sheetdoc.SheetClient, 0, len(rows))
 	for _, row := range rows {
 		byPhase := make(map[string]string, len(row.GetPhases()))
 		for _, pe := range row.GetPhases() {
@@ -540,7 +540,7 @@ func writeGradeSheetPDF(ctx context.Context, w http.ResponseWriter, deps *PageVi
 		for _, c := range cols {
 			finals = append(finals, byPhase[c.id])
 		}
-		students = append(students, sheetdoc.SheetStudent{
+		students = append(students, sheetdoc.SheetClient{
 			Name:        rosterLabel(row, names),
 			PhaseFinals: finals,
 			YearFinal:   row.GetYearFinalLabel(),

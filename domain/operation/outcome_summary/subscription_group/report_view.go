@@ -216,7 +216,7 @@ func buildReportTable(deps *Deps, matrix *explicitMatrix, subscriptionGroupID st
 	}
 
 	table := &types.TableConfig{
-		ID:          "report-cards-grid",
+		ID:          "outcome-summaries-grid",
 		Columns:     columns,
 		Rows:        tableRows,
 		ShowSearch:  true,
@@ -296,7 +296,7 @@ func reportPage(viewCtx *view.ViewContext, deps *Deps, exportContext *exportpb.S
 			Title:               l.SubscriptionGroup.Title,
 			CurrentPath:         viewCtx.CurrentPath,
 			ActiveNav:           deps.Routes.ActiveNav,
-			ActiveSubNav:        "report-cards",
+			ActiveSubNav:        "outcome-summaries",
 			HeaderBreadcrumb:    l.SubscriptionGroup.Title,
 			HeaderBreadcrumbURL: route.ResolveURL(deps.Routes.ListURL),
 			HeaderTitle:         exportContext.GetSubscriptionGroupName(),

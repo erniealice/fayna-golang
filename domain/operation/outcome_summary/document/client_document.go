@@ -52,20 +52,20 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 		http.Error(w, `invalid format: must be "docx" or "pdf"`, http.StatusBadRequest)
 		return
 	}
-	if d.GetSubscriptionGroupClientReportCard == nil {
-		http.Error(w, "client report card projection is not configured", http.StatusServiceUnavailable)
+	if d.GetSubscriptionGroupClientOutcomeSummary == nil {
+		http.Error(w, "client outcome summary projection is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	if format == "docx" && d.GenerateDoc == nil {
-		http.Error(w, "report card rendering is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "outcome summary rendering is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	if format == "pdf" && d.GeneratePDF == nil {
-		http.Error(w, "report card PDF rendering is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "outcome summary PDF rendering is not configured", http.StatusServiceUnavailable)
 		return
 	}
 
-	response, err := d.GetSubscriptionGroupClientReportCard(ctx, &exportpb.GetSubscriptionGroupClientReportCardRequest{
+	response, err := d.GetSubscriptionGroupClientOutcomeSummary(ctx, &exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest{
 		SubscriptionGroupId:  groupID,
 		ClientId:             clientID,
 		ClientAttributeCodes: append([]string(nil), d.Options.Document.ClientAttributeCodes...),
@@ -76,16 +76,16 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		log.Printf("client report card projection: %v", err)
-		http.Error(w, "client report card is temporarily unavailable", http.StatusServiceUnavailable)
+		log.Printf("client outcome summary projection: %v", err)
+		http.Error(w, "client outcome summary is temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	if response == nil || !response.GetSuccess() {
-		log.Printf("client report card projection: incomplete response")
-		http.Error(w, "client report card is temporarily unavailable", http.StatusServiceUnavailable)
+		log.Printf("client outcome summary projection: incomplete response")
+		http.Error(w, "client outcome summary is temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if response.GetReportCard() == nil {
+	if response.GetOutcomeSummary() == nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -93,7 +93,7 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	card := response.GetReportCard()
+	card := response.GetOutcomeSummary()
 	if period == clientDocumentPeriodYearFinal {
 		if !clientProjectionHasYearFinal(card) {
 			http.Error(w, "requested report period is not available", http.StatusNotFound)
@@ -108,7 +108,7 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 	blocked := gate.anyBlocked()
 	if gateErr != nil {
 		log.Printf("client report render gate: cannot prove document safe: %v", gateErr)
-		http.Error(w, "report card cannot be generated right now — please retry", http.StatusServiceUnavailable)
+		http.Error(w, "outcome summary cannot be generated right now — please retry", http.StatusServiceUnavailable)
 		return
 	}
 	// A proven unpublished sheet may be downloaded as a structural report; a
@@ -162,11 +162,11 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 		if err != nil {
 			if isLibreOfficeUnavailable(err) {
 				log.Printf("client report PDF: LibreOffice unavailable: %v", err)
-				http.Error(w, "report card PDF rendering is unavailable — LibreOffice is not installed", http.StatusServiceUnavailable)
+				http.Error(w, "outcome summary PDF rendering is unavailable — LibreOffice is not installed", http.StatusServiceUnavailable)
 				return
 			}
 			log.Printf("client report PDF: generate: %v", err)
-			http.Error(w, "failed to generate report card PDF", http.StatusInternalServerError)
+			http.Error(w, "failed to generate outcome summary PDF", http.StatusInternalServerError)
 			return
 		}
 		contentType = pdfContentType
@@ -174,18 +174,18 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 		output, err = d.GenerateDoc(templateBytes, data)
 		if err != nil {
 			log.Printf("client report DOCX: generate: %v", err)
-			http.Error(w, "failed to generate report card", http.StatusInternalServerError)
+			http.Error(w, "failed to generate outcome summary", http.StatusInternalServerError)
 			return
 		}
 		contentType = docxContentType
 	}
 	if len(output) == 0 {
-		http.Error(w, "failed to generate report card", http.StatusInternalServerError)
+		http.Error(w, "failed to generate outcome summary", http.StatusInternalServerError)
 		return
 	}
 
 	filename := clientDocumentFilename(card.GetClient().GetName(), clientID, now, format)
-	w.Header().Set("Content-Disposition", contentDisposition(filename))
+	w.Header().Set("Content-Disposition", contentDisposition(filename, d.Labels.Document.DownloadFilename))
 	if format == "pdf" {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 	}
@@ -195,11 +195,11 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 	}
 }
 
-func clientProjectionMatchesRequest(response *exportpb.GetSubscriptionGroupClientReportCardResponse, groupID, clientID string) bool {
-	if response == nil || !response.GetSuccess() || response.GetReportCard() == nil {
+func clientProjectionMatchesRequest(response *exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, groupID, clientID string) bool {
+	if response == nil || !response.GetSuccess() || response.GetOutcomeSummary() == nil {
 		return false
 	}
-	card := response.GetReportCard()
+	card := response.GetOutcomeSummary()
 	if card.GetContext() == nil || card.GetContext().GetSubscriptionGroupId() != groupID ||
 		card.GetClient() == nil || card.GetClient().GetClientId() != clientID ||
 		len(card.GetClientSubscriptionIds()) == 0 {
@@ -208,7 +208,7 @@ func clientProjectionMatchesRequest(response *exportpb.GetSubscriptionGroupClien
 	return true
 }
 
-func clientProjectionHasPhase(card *exportpb.ClientReportCardProjection, phaseCode string) bool {
+func clientProjectionHasPhase(card *exportpb.ClientOutcomeSummaryProjection, phaseCode string) bool {
 	if card == nil {
 		return false
 	}
@@ -220,7 +220,7 @@ func clientProjectionHasPhase(card *exportpb.ClientReportCardProjection, phaseCo
 	return false
 }
 
-func clientProjectionPhaseCatalog(card *exportpb.ClientReportCardProjection) []outcome_summary.ClientReportPhase {
+func clientProjectionPhaseCatalog(card *exportpb.ClientOutcomeSummaryProjection) []outcome_summary.ClientReportPhase {
 	if card == nil || card.GetContext() == nil {
 		return nil
 	}
@@ -263,7 +263,7 @@ func clientProjectionPhaseCatalog(card *exportpb.ClientReportCardProjection) []o
 	return outcome_summary.BuildClientReportPhaseCatalog(entries)
 }
 
-func clientProjectionHasYearFinal(card *exportpb.ClientReportCardProjection) bool {
+func clientProjectionHasYearFinal(card *exportpb.ClientOutcomeSummaryProjection) bool {
 	if card == nil {
 		return false
 	}

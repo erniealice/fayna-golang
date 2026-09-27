@@ -55,7 +55,7 @@ func TestClientDownloadDrawerTemplate_RendersFetchDownloadFeedback(t *testing.T)
 	}
 }
 
-func downloadDrawerDeps(response *exportpb.GetSubscriptionGroupClientReportCardResponse, calls *int) *DrawerDeps {
+func downloadDrawerDeps(response *exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, calls *int) *DrawerDeps {
 	return &DrawerDeps{
 		Routes: outcome_summary.Routes{
 			ClientDownloadDrawerURL: "/action/report-cards/section/{id}/student/{client_id}/download",
@@ -68,7 +68,7 @@ func downloadDrawerDeps(response *exportpb.GetSubscriptionGroupClientReportCardR
 			WholeReportProfile: bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1,
 		}},
 		ClientAttributeCodes: []string{"gender"},
-		GetSubscriptionGroupClientReportCard: func(_ context.Context, req *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
+		GetSubscriptionGroupClientOutcomeSummary: func(_ context.Context, req *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
 			*calls++
 			if req.GetSubscriptionGroupId() != "group-1" || req.GetClientId() != "client-1" || len(req.GetClientAttributeCodes()) != 1 || req.GetClientAttributeCodes()[0] != "gender" {
 				return nil, context.Canceled
@@ -83,11 +83,11 @@ func TestClientDownloadDrawer_UsesScopedProjectionAndOffersAvailablePeriods(t *t
 	s1, s2, progress, inactive, unreferenced := "s1", "s2", "progress_report", "s3", "unused"
 	phaseS1, phaseS2, phaseProgress := "template-phase-s1", "template-phase-s2", "template-phase-progress"
 	phaseS1Duplicate, phaseInactive, phaseUnreferenced := "template-phase-s1-copy", "template-phase-inactive", "template-phase-unused"
-	response := &exportpb.GetSubscriptionGroupClientReportCardResponse{
+	response := &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{
 		Success: true,
-		ReportCard: &exportpb.ClientReportCardProjection{
+		OutcomeSummary: &exportpb.ClientOutcomeSummaryProjection{
 			Context:               &exportpb.SubscriptionGroupOutcomeExportContext{SubscriptionGroupId: "group-1"},
-			Client:                &exportpb.ClientReportCardClient{ClientId: "client-1"},
+			Client:                &exportpb.ClientOutcomeSummaryClient{ClientId: "client-1"},
 			ClientSubscriptionIds: []string{"subscription-1"},
 			Jobs:                  []*jobpb.Job{{Id: "job-1"}, {Id: "job-2"}},
 			JobTemplatePhases: []*jobtemplatephasepb.JobTemplatePhase{
@@ -151,7 +151,7 @@ func TestDownloadDrawerData_FormURLUsesWorkspaceRewriteSuffix(t *testing.T) {
 
 func TestClientReportPeriodOptions_SelectsYearFinalWhenNoActiveReferencedPhase(t *testing.T) {
 	labels := outcome_summary.DefaultLabels()
-	projection := &exportpb.ClientReportCardProjection{
+	projection := &exportpb.ClientOutcomeSummaryProjection{
 		Jobs:                []*jobpb.Job{{Id: "job-1"}},
 		JobTemplatePhases:   []*jobtemplatephasepb.JobTemplatePhase{{Id: "phase-1", Active: true, Code: stringPtr("s1"), Name: "Term 1"}},
 		JobPhases:           []*jobphasepb.JobPhase{{JobId: "job-1", Active: false, TemplatePhaseId: stringPtr("phase-1")}},
@@ -164,7 +164,7 @@ func TestClientReportPeriodOptions_SelectsYearFinalWhenNoActiveReferencedPhase(t
 }
 
 func TestClientReportPeriodOptions_OffersYearFinalWithoutPublishedSummary(t *testing.T) {
-	projection := &exportpb.ClientReportCardProjection{Jobs: []*jobpb.Job{{Id: "job-1"}}}
+	projection := &exportpb.ClientOutcomeSummaryProjection{Jobs: []*jobpb.Job{{Id: "job-1"}}}
 	options := clientReportPeriodOptions(outcome_summary.DefaultLabels(), projection)
 	if len(options) != 1 || options[0].Value != clientReportYearFinalPeriod || !options[0].Selected {
 		t.Fatalf("period options = %+v, want selected Year Final with projected job and no summary", options)
@@ -193,9 +193,9 @@ func TestClientDownloadDrawer_RejectsMismatchedProjectionContext(t *testing.T) {
 	request := httptest.NewRequest("GET", "/action/report-cards/section/group-1/student/client-1/download", nil)
 	request.SetPathValue("id", "group-1")
 	request.SetPathValue("client_id", "client-1")
-	response := &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: &exportpb.ClientReportCardProjection{
+	response := &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true, OutcomeSummary: &exportpb.ClientOutcomeSummaryProjection{
 		Context: &exportpb.SubscriptionGroupOutcomeExportContext{SubscriptionGroupId: "other-group"},
-		Client:  &exportpb.ClientReportCardClient{ClientId: "client-1"},
+		Client:  &exportpb.ClientOutcomeSummaryClient{ClientId: "client-1"},
 	}}
 	ctx := view.WithUserPermissions(context.Background(), types.NewUserPermissions([]string{"subscription_group_outcome_export:read"}))
 	result := NewDownloadDrawer(downloadDrawerDeps(response, &calls)).Handle(ctx, &view.ViewContext{Request: request})

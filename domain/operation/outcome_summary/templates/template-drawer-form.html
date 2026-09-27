@@ -21,8 +21,8 @@
 
         <div class="form-row single">
             <div class="form-group">
-                <label class="form-label" for="report_card_price_schedule_id">{{.Labels.ScheduleLabel}}</label>
-                <select class="form-input" id="report_card_price_schedule_id" name="price_schedule_id" data-testid="outcome-summary-template-schedule-select" hx-get="{{.PeriodURL}}" hx-trigger="change" hx-target="#report_card_template_period_code" hx-swap="outerHTML" hx-include="this">
+                <label class="form-label" for="outcome_summary_price_schedule_id">{{.Labels.ScheduleLabel}}</label>
+                <select class="form-input" id="outcome_summary_price_schedule_id" name="price_schedule_id" data-testid="outcome-summary-template-schedule-select" hx-get="{{.PeriodURL}}" hx-trigger="change" hx-target="#outcome_summary_template_period_code" hx-swap="outerHTML" hx-include="this">
                     {{range .ScheduleOptions}}
                     <option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
                     {{end}}
@@ -33,7 +33,7 @@
 
         <div class="form-row single">
             <div class="form-group">
-                <label class="form-label" for="report_card_template_period_code">{{.Labels.PeriodLabel}}</label>
+                <label class="form-label" for="outcome_summary_template_period_code">{{.Labels.PeriodLabel}}</label>
                 {{template "outcome-summary-template-period-options" .}}
             </div>
         </div>
@@ -55,8 +55,8 @@
 
         <div class="form-row single">
             <div class="form-group">
-                <label class="form-label" for="report_card_template_file">{{.Labels.FileLabel}} <span class="form-required" aria-hidden="true">*</span></label>
-                <input type="file" class="form-input" id="report_card_template_file" name="template_file" accept="{{.AcceptTypes}}" data-testid="outcome-summary-template-file" required>
+                <label class="form-label" for="outcome_summary_template_file">{{.Labels.FileLabel}} <span class="form-required" aria-hidden="true">*</span></label>
+                <input type="file" class="form-input" id="outcome_summary_template_file" name="template_file" accept="{{.AcceptTypes}}" data-testid="outcome-summary-template-file" required>
             </div>
         </div>
     </div>
@@ -65,4 +65,4 @@
 </form>
 {{end}}
 
-{{define "outcome-summary-template-period-options"}}<select class="form-input" id="report_card_template_period_code" name="job_template_phase_code" data-testid="outcome-summary-template-period-select">{{range .PeriodOptions}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>{{end}}
+{{define "outcome-summary-template-period-options"}}<select class="form-input" id="outcome_summary_template_period_code" name="job_template_phase_code" data-testid="outcome-summary-template-period-select">{{range .PeriodOptions}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>{{end}}

@@ -86,17 +86,17 @@ type Deps struct {
 	// A configured route value alone is insufficient when rendering is unwired.
 	ClientDocumentMounted bool
 
-	ListSubscriptionGroups               func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
-	ListSubscriptionGroupMembers         func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
-	ListJobs                             func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
-	ListJobTemplates                     func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
-	ListClients                          func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
-	ListJobOutcomeSummarys               func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
-	ListPhaseOutcomeSummarysByJob        func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
-	ListJobPhases                        func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
-	GetSubscriptionGroupOutcomeExport    func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
-	GetSubscriptionGroupClientReportCard func(ctx context.Context, req *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
-	ClientAttributeCodes                 []string
+	ListSubscriptionGroups                   func(ctx context.Context, req *subscriptiongrouppb.ListSubscriptionGroupsRequest) (*subscriptiongrouppb.ListSubscriptionGroupsResponse, error)
+	ListSubscriptionGroupMembers             func(ctx context.Context, req *subscriptiongroupmemberpb.ListSubscriptionGroupMembersRequest) (*subscriptiongroupmemberpb.ListSubscriptionGroupMembersResponse, error)
+	ListJobs                                 func(ctx context.Context, req *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error)
+	ListJobTemplates                         func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
+	ListClients                              func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
+	ListJobOutcomeSummarys                   func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
+	ListPhaseOutcomeSummarysByJob            func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
+	ListJobPhases                            func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
+	GetSubscriptionGroupOutcomeExport        func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	GetSubscriptionGroupClientOutcomeSummary func(ctx context.Context, req *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error)
+	ClientAttributeCodes                     []string
 
 	// Non-enrolled-placeholder evidence walk (job_phase → job_task →
 	// task_outcome). ListJobPhases (above) is reused. Optional/nil-safe: when
@@ -297,9 +297,9 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 	// a positive task mark and is kept. Nil-safe: unwired closures → empty map →
 	// nothing blanked. Fail-closed: on a read error keep every grade (blank
 	// nothing) rather than risk blanking a real one from incomplete evidence.
-	evByJob, err := outcome_summary.FetchJobMarkEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
+	evByJob, err := outcome_summary.FetchJobTaskOutcomeEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
 	if err != nil {
-		log.Printf("outcome summary client card: enrollment evidence unavailable, keeping all grades: %v", err)
+		log.Printf("outcome summary client card: task outcome evidence unavailable, keeping all grades: %v", err)
 		evByJob = nil
 	}
 
@@ -334,7 +334,7 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 		// The subject-name cell stays so the row set is stable. A genuinely
 		// enrolled subject — even one scored a real 0/1 — has a positive task
 		// mark and keeps its grades.
-		if outcome_summary.IsNonEnrolledCell(evByJob[e.jobID], yearByJob[e.jobID], sem[1], sem[2]) {
+		if outcome_summary.IsPlaceholderOutcomeCell(evByJob[e.jobID], yearByJob[e.jobID], sem[1], sem[2]) {
 			s1f, s2f, yf = blankCell(), blankCell(), blankCell()
 		}
 		cells := []types.TableCell{
@@ -353,7 +353,7 @@ func buildTable(ctx context.Context, deps *Deps, subID string, historical bool) 
 	}
 
 	cfg := &types.TableConfig{
-		ID:              "report-cards-client",
+		ID:              "outcome-summaries-client",
 		ColumnGroups:    buildColumnGroups(l),
 		NameColumnLabel: l.Client.SubjectColumn,
 		ShowSearch:      false,
@@ -801,7 +801,7 @@ func okPage(ctx context.Context, viewCtx *view.ViewContext, deps *Deps, group *s
 			Title:               name,
 			CurrentPath:         viewCtx.CurrentPath,
 			ActiveNav:           deps.Routes.ActiveNav,
-			ActiveSubNav:        "report-cards",
+			ActiveSubNav:        "outcome-summaries",
 			HeaderBreadcrumb:    group.GetName(),
 			HeaderBreadcrumbURL: route.ResolveURL(deps.Routes.SubscriptionGroupURL, "id", group.GetId()),
 			HeaderTitle:         name,

@@ -28,8 +28,8 @@ import (
 // entries in one set, silently truncated to 100 by an unfiltered, unpaginated
 // single call. entryMaxPages bounds the loop independently of the adapter's
 // own short-final-page termination, mirroring the established pattern in
-// fayna-golang/domain/operation/outcome_summary/enrollment.go
-// (markEvidencePageLimit/markEvidenceMaxPages).
+// fayna-golang/domain/operation/outcome_summary/task_outcome_evidence.go
+// (taskOutcomeEvidencePageLimit/taskOutcomeEvidenceMaxPages).
 const (
 	entryPageLimit = 100
 	entryMaxPages  = 50 // 5,000 entries/set ceiling — far beyond any real rubric
@@ -53,7 +53,7 @@ func ratingDescriptionSetIDFilter(setID string) *commonpb.FilterRequest {
 // idSort orders each page by the primary key so OFFSET pagination is
 // deterministic across pages (without an explicit unique sort key, ties in
 // the adapter's default `date_created DESC` order can drop or duplicate rows
-// across page boundaries — see enrollment.go markEvidenceSortByID).
+// across page boundaries — see task_outcome_evidence.go taskOutcomeEvidenceSortByID).
 func idSort() *commonpb.SortRequest {
 	return &commonpb.SortRequest{Fields: []*commonpb.SortField{{Field: "id"}}}
 }
@@ -114,10 +114,10 @@ type MatrixCell struct {
 // MatrixRow is one band (level) row — cells are positionally aligned with
 // PageData.MatrixColumns.
 type MatrixRow struct {
-	BandID  string
-	Level   string
-	IsZero  bool // band_role == "no_description" (Q20) — never editable
-	Cells   []MatrixCell
+	BandID string
+	Level  string
+	IsZero bool // band_role == "no_description" (Q20) — never editable
+	Cells  []MatrixCell
 }
 
 // PageData holds the data for the rating description set detail page.

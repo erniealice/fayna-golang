@@ -24,8 +24,8 @@ func TestDownload_ShowUnpublishedValuesPrintsRecordedLevels(t *testing.T) {
 	deps := &Deps{
 		DocOptions:           outcome_summary.DocumentOptions{ShowUnpublishedValues: true},
 		ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindStaff },
-		GetSubscriptionGroupClientReportCard: func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
-			return &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: card}, nil
+		GetSubscriptionGroupClientOutcomeSummary: func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
+			return &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true, OutcomeSummary: card}, nil
 		},
 		ResolveTemplateBytes: func(context.Context, string, string) ([]byte, error) { return []byte("template"), nil },
 		GeneratePDF: func(_ []byte, data map[string]any) ([]byte, error) {

@@ -72,11 +72,6 @@ import (
 	// repository reads under a single management-permission check), so the
 	// picker DTOs live in fayna's own domain packages instead. Same
 	// documented exception shape as the two dashboard slots above.
-	ratingdescriptionsetform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set/form"
-	ratingdescriptionsetlistdata "github.com/erniealice/fayna-golang/domain/operation/rating_description_set/listdata"
-	ratingdescriptionsetentryform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_entry/form"
-	ratingdescriptionsetproductplanform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_product_plan/form"
-	ratingdescriptionsetproductplanlistdata "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_product_plan/listdata"
 	reportingcheckpointpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/reporting_checkpoint"
 	scorescalepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/score_scale"
 	scorescalebandpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/score_scale_band"
@@ -102,6 +97,11 @@ import (
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
+	ratingdescriptionsetform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set/form"
+	ratingdescriptionsetlistdata "github.com/erniealice/fayna-golang/domain/operation/rating_description_set/listdata"
+	ratingdescriptionsetentryform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_entry/form"
+	ratingdescriptionsetproductplanform "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_product_plan/form"
+	ratingdescriptionsetproductplanlistdata "github.com/erniealice/fayna-golang/domain/operation/rating_description_set_product_plan/listdata"
 
 	fulfillmentdashboard "github.com/erniealice/fayna-golang/domain/fulfillment/fulfillment/dashboard"
 	cycleview "github.com/erniealice/fayna-golang/domain/operation/evaluation_cycle"
@@ -497,19 +497,19 @@ type OutcomeMatrixUseCases struct {
 // SubscriptionGroupOutcomeExportUseCases is the narrow composite read used by
 // the subscription-group download drawer and its explicit CSV/PDF export path.
 type SubscriptionGroupOutcomeExportUseCases struct {
-	GetSubscriptionGroupOutcomeExport    func(context.Context, *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
-	GetSubscriptionGroupClientReportCard func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
-	ListSubscriptionGroupOutcomeLanding  func(context.Context, *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
-	// ResolvePublishedReportCardTemplate is the render-scoped josdt resolver
+	GetSubscriptionGroupOutcomeExport        func(context.Context, *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
+	GetSubscriptionGroupClientOutcomeSummary func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error)
+	ListSubscriptionGroupOutcomeLanding      func(context.Context, *espynaports.SubscriptionGroupOutcomeLandingRequest) (*espynaports.SubscriptionGroupOutcomeLandingResponse, error)
+	// ResolvePublishedOutcomeSummaryTemplate is the render-scoped josdt resolver
 	// (R3 / DEC-3): espyna's service/operation/subscription_group_outcome_export.
-	// ResolvePublishedReportCardTemplate, authorized against
+	// ResolvePublishedOutcomeSummaryTemplate, authorized against
 	// subscription_group_outcome_export:read rather than the management-only
-	// job_outcome_summary_document_template:list gate FindApplicableReportCardBinding
+	// job_outcome_summary_document_template:list gate FindApplicableOutcomeSummaryDocumentTemplate
 	// (below) uses. OPTIONAL / nil-able: wireOutcomeMatrixDeps / wireOutcomeSummaryDeps
 	// prefer this closure when present and fall back to the old JOSDT
 	// list-gated resolver otherwise, so a STAFF principal keeps a working
 	// report-card header/download even without this seam wired.
-	ResolvePublishedReportCardTemplate func(context.Context, *bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
+	ResolvePublishedOutcomeSummaryTemplate func(context.Context, *bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*bindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
 }
 
 // JobTemplateSummaryUseCases — the generic resolver-scoped, template-grain
@@ -813,7 +813,7 @@ type SubscriptionUseCases struct {
 // SubscriptionGroupProductPlanStaffUseCases — bare list of the class-edge
 // (subscription_group_product_plan_staff, "who services this cohort's
 // offering") rows. Backs the report-card document's class-edge teacher
-// derivation (D5 derive-on-read, fetchClassEdgeTeachers). Optional/nil-safe:
+// derivation (D5 derive-on-read, fetchProductPlanEdgeStaff). Optional/nil-safe:
 // nil → the teacher line falls back to its prior assignee-only behavior.
 type SubscriptionGroupProductPlanStaffUseCases struct {
 	ListSubscriptionGroupProductPlanStaffs func(context.Context, *sgppspb.ListSubscriptionGroupProductPlanStaffsRequest) (*sgppspb.ListSubscriptionGroupProductPlanStaffsResponse, error)

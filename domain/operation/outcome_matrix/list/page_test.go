@@ -119,9 +119,9 @@ func noopResolveBinding(context.Context, *cardbindingpb.FindApplicableJobOutcome
 // ListSubscriptionGroupMembers/ListSubscriptionGroups.
 func TestResolvePhaseDocumentScheduleID_SectionScoped(t *testing.T) {
 	deps := &PageViewDeps{
-		FindApplicableReportCardBinding: noopResolveBinding,
-		ListSubscriptionGroupMembers:    deniedSubscriptionGroupMembers(t),
-		ListSubscriptionGroups:          deniedSubscriptionGroups(t),
+		FindApplicableOutcomeSummaryDocumentTemplate: noopResolveBinding,
+		ListSubscriptionGroupMembers:                 deniedSubscriptionGroupMembers(t),
+		ListSubscriptionGroups:                       deniedSubscriptionGroups(t),
 	}
 	section := outcome_matrix.GroupScope{GroupID: "group-1", GroupName: "Grade 10 Tantalum", PriceScheduleID: "sched-ay2627"}
 
@@ -141,7 +141,7 @@ func TestResolvePhaseDocumentScheduleID_Unscoped(t *testing.T) {
 	origin := "sub-origin-1"
 	memberCalls, groupCalls := 0, 0
 	deps := &PageViewDeps{
-		FindApplicableReportCardBinding: noopResolveBinding,
+		FindApplicableOutcomeSummaryDocumentTemplate: noopResolveBinding,
 		ListJobs: func(context.Context, *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error) {
 			return &jobpb.ListJobsResponse{Data: []*jobpb.Job{
 				{OriginType: enums.OriginType_ORIGIN_TYPE_SUBSCRIPTION, OriginId: &origin},
@@ -192,14 +192,14 @@ func TestResolvePhaseDocumentScheduleID_MissingInputsLog(t *testing.T) {
 		},
 		{
 			name:       "section scoped but schedule unresolved",
-			deps:       &PageViewDeps{FindApplicableReportCardBinding: noopResolveBinding},
+			deps:       &PageViewDeps{FindApplicableOutcomeSummaryDocumentTemplate: noopResolveBinding},
 			section:    outcome_matrix.GroupScope{GroupID: "group-1"},
 			wantReason: "schedule unresolved",
 		},
 		{
 			name: "unscoped with no origin job",
 			deps: &PageViewDeps{
-				FindApplicableReportCardBinding: noopResolveBinding,
+				FindApplicableOutcomeSummaryDocumentTemplate: noopResolveBinding,
 				ListJobs: func(context.Context, *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error) {
 					return &jobpb.ListJobsResponse{}, nil
 				},
@@ -210,7 +210,7 @@ func TestResolvePhaseDocumentScheduleID_MissingInputsLog(t *testing.T) {
 		{
 			name: "unscoped origin found but group unresolved",
 			deps: &PageViewDeps{
-				FindApplicableReportCardBinding: noopResolveBinding,
+				FindApplicableOutcomeSummaryDocumentTemplate: noopResolveBinding,
 				ListJobs: func(context.Context, *jobpb.ListJobsRequest) (*jobpb.ListJobsResponse, error) {
 					subID := "sub-1"
 					return &jobpb.ListJobsResponse{Data: []*jobpb.Job{

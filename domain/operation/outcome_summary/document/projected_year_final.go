@@ -30,11 +30,11 @@ type projectedJob struct {
 }
 
 // buildProjectedYearFinalData maps the one-client typed projection onto the
-// existing report-card template contract. It reads no extra entities and uses
+// existing outcome summary template contract. It reads no extra entities and uses
 // the same root builder/blank-seeding path as the legacy document renderer.
-func buildProjectedYearFinalData(d *Deps, card *exportpb.ClientReportCardProjection, printedBy, printedAt string, now time.Time) map[string]any {
+func buildProjectedYearFinalData(d *Deps, card *exportpb.ClientOutcomeSummaryProjection, printedBy, printedAt string, now time.Time) map[string]any {
 	if card == nil {
-		return buildReportCardData(reportCard{DocumentHeaderName: d.DocumentHeaderName})
+		return buildClientOutcomeSummaryData(clientOutcomeSummary{DocumentHeaderName: d.DocumentHeaderName})
 	}
 	context := card.GetContext()
 	groupName := ""
@@ -43,8 +43,8 @@ func buildProjectedYearFinalData(d *Deps, card *exportpb.ClientReportCardProject
 		groupName = strings.TrimSpace(context.GetSubscriptionGroupName())
 		period = strings.TrimSpace(context.GetPriceScheduleName())
 	}
-	name, ayFromGroup := groupParts(groupName)
-	grade, sectionName := gradeSection(name)
+	name, ayFromGroup := splitGroupQualifier(groupName, d.Options.GroupPeriodQualifierPrefix)
+	grade, sectionName := planLevelAndGroupLabel(name, context.GetPlanName())
 	if period == "" {
 		period = ayFromGroup
 	}
@@ -74,8 +74,8 @@ func buildProjectedYearFinalData(d *Deps, card *exportpb.ClientReportCardProject
 	historical := context != nil && context.GetHistorical()
 	jobCategories, groupLead, leadDisplay := buildProjectedJobCategories(card, strings.TrimSpace(d.DocOptions.GroupCategoryFilter), historical)
 	subjects, formation, itemRatings, groupRatingOne, groupRatingTwo := buildProjectedLegacyCardRows(d, card)
-	rc := reportCard{
-		DocumentHeaderName:    firstNonEmpty(strings.TrimSpace(d.DocumentHeaderName), d.Labels.Landing.Title, "Report Card"),
+	rc := clientOutcomeSummary{
+		DocumentHeaderName:    firstNonEmpty(strings.TrimSpace(d.DocumentHeaderName), d.Labels.Landing.Title, "Outcome Summary"),
 		SchedulePeriod:        ayFromGroup,
 		SchedulePeriodDisplay: period,
 		SchedulePeriodSpaced:  strings.Replace(period, "-", " - ", 1),
@@ -100,7 +100,7 @@ func buildProjectedYearFinalData(d *Deps, card *exportpb.ClientReportCardProject
 		JobIDs:                append([]string(nil), card.GetRenderGateJobIds()...),
 		JobCategories:         jobCategories,
 	}
-	data := buildReportCardData(rc)
+	data := buildClientOutcomeSummaryData(rc)
 	// The operator path keeps its historical contract. The explicit client
 	// export exposes the same projected coded cells through the neutral matrix
 	// shape and omits the vertical-specific legacy alias.
@@ -112,7 +112,7 @@ func buildProjectedYearFinalData(d *Deps, card *exportpb.ClientReportCardProject
 	return data
 }
 
-func buildProjectedJobCategories(card *exportpb.ClientReportCardProjection, groupCategoryCode string, historical bool) (map[string]any, string, string) {
+func buildProjectedJobCategories(card *exportpb.ClientOutcomeSummaryProjection, groupCategoryCode string, historical bool) (map[string]any, string, string) {
 	categories := map[string]*jobcategorypb.JobCategory{}
 	for _, category := range card.GetJobCategories() {
 		if category != nil && strings.TrimSpace(category.GetId()) != "" {
@@ -211,7 +211,7 @@ func buildProjectedJobCategories(card *exportpb.ClientReportCardProjection, grou
 			criteriaByID[criterion.GetId()] = criterion
 		}
 	}
-	outcomesByKey := map[string]*exportpb.ClientReportCardTaskOutcome{}
+	outcomesByKey := map[string]*exportpb.ClientOutcomeSummaryTaskOutcome{}
 	for _, outcome := range card.GetTaskOutcomes() {
 		if outcome == nil {
 			continue
@@ -371,7 +371,7 @@ func buildProjectedJobCategories(card *exportpb.ClientReportCardProjection, grou
 	return result, groupLead, leadDisplay
 }
 
-func cardTemplateByID(card *exportpb.ClientReportCardProjection, templateID string) *jobtemplatepb.JobTemplate {
+func cardTemplateByID(card *exportpb.ClientOutcomeSummaryProjection, templateID string) *jobtemplatepb.JobTemplate {
 	for _, template := range card.GetJobTemplates() {
 		if template != nil && strings.TrimSpace(template.GetId()) == strings.TrimSpace(templateID) {
 			return template
@@ -380,14 +380,15 @@ func cardTemplateByID(card *exportpb.ClientReportCardProjection, templateID stri
 	return nil
 }
 
-// buildProjectedLegacyCardRows fills the normalized reportCard fields consumed
-// by buildReportCardData. It mirrors the legacy transcript walk from only the
+// buildProjectedLegacyCardRows fills the normalized clientOutcomeSummary fields consumed
+// by buildClientOutcomeSummaryData. It mirrors the legacy transcript walk from only the
 // selected client's typed projection: per-job/phase/criterion maxima come from
 // latest task outcomes; stored phase and job summary labels remain authoritative.
-func buildProjectedLegacyCardRows(d *Deps, card *exportpb.ClientReportCardProjection) ([]itemRow, []formationGroup, []ratingRow, string, string) {
+func buildProjectedLegacyCardRows(d *Deps, card *exportpb.ClientOutcomeSummaryProjection) ([]itemRow, []formationGroup, []ratingRow, string, string) {
 	if card == nil {
 		return nil, nil, nil, "", ""
 	}
+	scheduleNames := []string{card.GetContext().GetPriceScheduleName()}
 	historical := card.GetContext().GetHistorical()
 	categoryByID := map[string]*jobcategorypb.JobCategory{}
 	for _, category := range card.GetJobCategories() {
@@ -456,7 +457,7 @@ func buildProjectedLegacyCardRows(d *Deps, card *exportpb.ClientReportCardProjec
 			tasksByPhase[task.GetJobPhaseId()] = append(tasksByPhase[task.GetJobPhaseId()], task)
 		}
 	}
-	outcomes := map[string]*exportpb.ClientReportCardTaskOutcome{}
+	outcomes := map[string]*exportpb.ClientOutcomeSummaryTaskOutcome{}
 	for _, outcome := range card.GetTaskOutcomes() {
 		if outcome == nil {
 			continue
@@ -559,10 +560,10 @@ func buildProjectedLegacyCardRows(d *Deps, card *exportpb.ClientReportCardProjec
 			if template := templateByID[job.GetJobTemplateId()]; template != nil {
 				name = firstNonEmpty(name, template.GetName())
 			}
-			academicNames[strings.ToLower(cleanSubject(name))] = true
+			academicNames[strings.ToLower(stripScheduleSuffix(name, scheduleNames))] = true
 			tr := transcripts[job.GetId()]
 			crit, hasMarks := tr.yearCriteria()
-			row := itemRow{Name: cleanSubject(name), CritA: crit.a, CritB: crit.b, CritC: crit.c, CritD: crit.d, Total: crit.total}
+			row := itemRow{Name: stripScheduleSuffix(name, scheduleNames), CritA: crit.a, CritB: crit.b, CritC: crit.c, CritD: crit.d, Total: crit.total}
 			for _, phase := range phasesByJob[job.GetId()] {
 				order := templatePhaseByID[phase.GetTemplatePhaseId()].GetPhaseOrder()
 				summary := phaseSummaries[phase.GetId()]
@@ -598,8 +599,8 @@ func buildProjectedLegacyCardRows(d *Deps, card *exportpb.ClientReportCardProjec
 			}
 			if summary := finalSummaries[job.GetId()]; summary != nil {
 				average := strings.TrimSpace(summary.GetScaledLabel())
-				if !outcome_summary.IsNonEnrolledCell(outcome_summary.EnrollmentEvidence{HasMarks: true}, average) {
-					formation = appendFormationRow(formation, category, firstNonEmpty(templateByID[job.GetJobTemplateId()].GetName(), job.GetName()), average)
+				if !outcome_summary.IsPlaceholderOutcomeCell(outcome_summary.TaskOutcomeEvidence{HasTaskOutcome: true}, average) {
+					formation = appendFormationRow(formation, category, firstNonEmpty(templateByID[job.GetJobTemplateId()].GetName(), job.GetName()), average, scheduleNames)
 				}
 			}
 		}
@@ -612,7 +613,7 @@ func buildProjectedLegacyCardRows(d *Deps, card *exportpb.ClientReportCardProjec
 		if template := templateByID[job.GetJobTemplateId()]; template != nil {
 			name = firstNonEmpty(name, template.GetName())
 		}
-		rating.nameOf[job.GetId()] = cleanSubject(name)
+		rating.nameOf[job.GetId()] = stripScheduleSuffix(name, scheduleNames)
 		if summary := finalSummaries[job.GetId()]; summary != nil {
 			rating.avg[job.GetId()] = strings.TrimSpace(summary.GetScaledLabel())
 		}
@@ -636,17 +637,17 @@ func buildProjectedLegacyCardRows(d *Deps, card *exportpb.ClientReportCardProjec
 	return subjects, formation, items, groupOne, groupTwo
 }
 
-func appendFormationRow(groups []formationGroup, category *jobcategorypb.JobCategory, name, average string) []formationGroup {
+func appendFormationRow(groups []formationGroup, category *jobcategorypb.JobCategory, name, average string, scheduleNames []string) []formationGroup {
 	for i := range groups {
 		if groups[i].Title == strings.TrimSpace(category.GetName()) {
-			groups[i].Rows = append(groups[i].Rows, formationRow{Subject: cleanSubject(name), Average: average})
+			groups[i].Rows = append(groups[i].Rows, formationRow{Subject: stripScheduleSuffix(name, scheduleNames), Average: average})
 			return groups
 		}
 	}
-	return append(groups, formationGroup{Title: strings.TrimSpace(category.GetName()), Rows: []formationRow{{Subject: cleanSubject(name), Average: average}}})
+	return append(groups, formationGroup{Title: strings.TrimSpace(category.GetName()), Rows: []formationRow{{Subject: stripScheduleSuffix(name, scheduleNames), Average: average}}})
 }
 
-func projectedJobStaffNames(card *exportpb.ClientReportCardProjection, jobID string, phases []*jobphasepb.JobPhase) string {
+func projectedJobStaffNames(card *exportpb.ClientOutcomeSummaryProjection, jobID string, phases []*jobphasepb.JobPhase) string {
 	phaseIDs := map[string]struct{}{}
 	for _, phase := range phases {
 		phaseIDs[phase.GetId()] = struct{}{}
@@ -658,7 +659,7 @@ func projectedJobStaffNames(card *exportpb.ClientReportCardProjection, jobID str
 		}
 	}
 	names := []string{}
-	for _, assignment := range card.GetTeacherAssignments() {
+	for _, assignment := range card.GetStaffAssignments() {
 		if assignment == nil || assignment.GetJobPhaseId() == "" {
 			continue
 		}

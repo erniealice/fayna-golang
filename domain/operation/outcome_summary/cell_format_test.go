@@ -6,14 +6,14 @@ import (
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
 
-func reportCell(label *string, composite *float64, ev *exportpb.EnrollmentEvidence) *exportpb.SubscriptionGroupOutcomeCell {
-	return &exportpb.SubscriptionGroupOutcomeCell{JobTemplateId: "job-1", ScaledLabel: label, SummaryScore: composite, EnrollmentEvidence: ev}
+func reportCell(label *string, composite *float64, ev *exportpb.TaskOutcomeEvidence) *exportpb.SubscriptionGroupOutcomeCell {
+	return &exportpb.SubscriptionGroupOutcomeCell{JobTemplateId: "job-1", ScaledLabel: label, SummaryScore: composite, TaskOutcomeEvidence: ev}
 }
 
 func strp(s string) *string   { return &s }
 func f64p(v float64) *float64 { return &v }
-func enrolled() *exportpb.EnrollmentEvidence {
-	return &exportpb.EnrollmentEvidence{HasMarks: true, HasPositiveMark: true}
+func enrolled() *exportpb.TaskOutcomeEvidence {
+	return &exportpb.TaskOutcomeEvidence{HasTaskOutcome: true, HasPositiveTaskOutcome: true}
 }
 
 func TestFormatReportCell_Templates(t *testing.T) {
@@ -57,7 +57,7 @@ func TestFormatReportCell_MissingTokenCollapses(t *testing.T) {
 
 func TestFormatReportCell_NonEnrolledStillBlank(t *testing.T) {
 	// Untaken-elective scaffold: all-zero marks, floored "1" year-final.
-	scaffold := reportCell(strp("1"), f64p(0), &exportpb.EnrollmentEvidence{HasMarks: true})
+	scaffold := reportCell(strp("1"), f64p(0), &exportpb.TaskOutcomeEvidence{HasTaskOutcome: true})
 	for _, format := range []string{"{scaled}", "{composite}", "{composite} / {scaled}"} {
 		if got := FormatReportCell(scaffold, "—", format); got != "—" {
 			t.Errorf("format %q non-enrolled = %q, want blank", format, got)
@@ -66,7 +66,7 @@ func TestFormatReportCell_NonEnrolledStillBlank(t *testing.T) {
 	if got := FormatReportCell(nil, "—", "{composite}"); got != "—" {
 		t.Errorf("nil cell = %q, want blank", got)
 	}
-	noJob := &exportpb.SubscriptionGroupOutcomeCell{SummaryScore: f64p(50), EnrollmentEvidence: enrolled()}
+	noJob := &exportpb.SubscriptionGroupOutcomeCell{SummaryScore: f64p(50), TaskOutcomeEvidence: enrolled()}
 	if got := FormatReportCell(noJob, "—", "{composite}"); got != "—" {
 		t.Errorf("missing job cell = %q, want blank", got)
 	}

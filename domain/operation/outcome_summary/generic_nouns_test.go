@@ -1,83 +1,75 @@
 package outcome_summary
 
 import (
-	"bufio"
-	"os"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
 
+var genericIdentifierNoun = regexp.MustCompile(`ReportCard|reportCard|Teacher|teacher[A-Z]|Student|student[A-Z]|Enrollment|enrollment[A-Z]|Homeroom|homeroom[A-Z]|Deportment|deportment[A-Z]`)
+var genericStringNoun = regexp.MustCompile(`(?i)report[-_ ]?cards?|teacher|student|enrol|homeroom|deportment`)
+var persistedNounLiterals = map[string]bool{
+	"report_card": true, "templates/report_card": true,
+	"student_name": true, "page_student_name": true,
+	"teacher_line": true, "section_name": true, "students": true,
+}
+var genericVerbWording = regexp.MustCompile(`(?i)enroll members|members enrolled|no members enrolled|enrolled in payroll|schedule enrollment|will be enrolled from active seats`)
+
 func TestNoVerticalNounsInGenericCode(t *testing.T) {
-	root := outcomeSummaryRepoRoot(t)
-	target := filepath.Join(root, "packages", "fayna-golang", "domain", "operation", "outcome_summary")
-	pattern := regexp.MustCompile(`(?i)\b(section|student)\b`)
-
+	root := "../../.."
+	fset := token.NewFileSet()
 	var violations []string
-	err := filepath.Walk(target, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		if info.IsDir() || strings.HasSuffix(info.Name(), "_test.go") {
-			return nil
-		}
-		if filepath.Ext(info.Name()) != ".go" && filepath.Ext(info.Name()) != ".html" {
-			return nil
-		}
-
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		lineNumber := 0
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			lineNumber++
-			line := scanner.Text()
-			if !pattern.MatchString(line) || allowedVerticalNounLine(path, line) {
-				continue
+		if entry.IsDir() {
+			if entry.Name() == "vendor" || entry.Name() == "node_modules" || entry.Name() == "pkg" {
+				return filepath.SkipDir
 			}
-			violations = append(violations, filepath.ToSlash(path)+":"+itoa(lineNumber)+": "+strings.TrimSpace(line))
+			return nil
 		}
-		return scanner.Err()
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			switch n := node.(type) {
+			case *ast.Ident:
+				if genericIdentifierNoun.MatchString(n.Name) {
+					violations = append(violations, fmt.Sprintf("%s:%d: identifier %s", path, fset.Position(n.Pos()).Line, n.Name))
+				}
+			case *ast.BasicLit:
+				if n.Kind != token.STRING {
+					break
+				}
+				value, err := strconv.Unquote(n.Value)
+				if err != nil || !genericStringNoun.MatchString(value) {
+					break
+				}
+				if persistedNounLiterals[value] || genericVerbWording.MatchString(value) {
+					break
+				}
+				violations = append(violations, fmt.Sprintf("%s:%d: string contains %q", path, fset.Position(n.Pos()).Line, genericStringNoun.FindString(value)))
+			}
+			return true
+		})
+		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(violations) > 0 {
-		t.Fatalf("generic outcome_summary code contains vertical nouns:\n%s", strings.Join(violations, "\n"))
+	if len(violations) != 0 {
+		t.Fatalf("vertical nouns in generic code:\n%s", strings.Join(violations, "\n"))
 	}
-}
-
-func allowedVerticalNounLine(path, line string) bool {
-	slashPath := filepath.ToSlash(path)
-	if strings.Contains(slashPath, "/document/") && strings.Contains(line, "Student") {
-		return true
-	}
-	if strings.HasSuffix(slashPath, "/document/formation.go") && strings.Contains(strings.ToUpper(line), "STUDENT FORMATION") {
-		return true
-	}
-	if strings.Contains(line, "sectionStyleMarker") || strings.Contains(line, "sectionLibreMarker") {
-		return true
-	}
-	if strings.Contains(line, "form-section") || strings.Contains(line, "os-narrative-section") || strings.Contains(line, "os-section-heading") {
-		return true
-	}
-	return false
-}
-
-func itoa(value int) string {
-	if value == 0 {
-		return "0"
-	}
-	var digits [20]byte
-	index := len(digits)
-	for value > 0 {
-		index--
-		digits[index] = byte('0' + value%10)
-		value /= 10
-	}
-	return string(digits[index:])
 }

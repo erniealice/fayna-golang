@@ -32,7 +32,7 @@
          aria-controls="tabContent"; the group table below IS the panel each
          AY tab reveals, so give it the matching tabpanel region (resolves the
          reference + is semantically honest). */}}
-    {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "report-cards-tabs" "Label" .TabsAria)}}
+    {{template "tabs" (dict "Items" .TabItems "ActiveTab" .ActiveTab "Variant" "default" "ID" "outcome-summaries-tabs" "Label" .TabsAria)}}
     <div id="tabContent" role="tabpanel"{{if .ActiveTab}} aria-labelledby="tab-{{.ActiveTab}}"{{end}}>
         {{template "table-card" .Table}}
     </div>

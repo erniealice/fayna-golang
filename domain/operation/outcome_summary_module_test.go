@@ -211,11 +211,11 @@ func TestSubscriptionGroupDocumentTemplateSettingsDeps_DropsWholeReportProfile(t
 // (T-A6) proves the module actually threads ListSubscriptionGroupProductPlanStaffs,
 // ListProductPlans, and ListProductPlanStaffs from OutcomeSummaryModuleDeps
 // into documentview.Deps: before this wiring these three closures were
-// declared but nothing ever assigned them, so fetchClassEdgeTeachers always
+// declared but nothing ever assigned them, so fetchProductPlanEdgeStaff always
 // saw a nil ListSubscriptionGroupProductPlanStaffs/ListProductPlans and the
 // eligibility gate never ran. Driving a real ClientDocument download and
 // observing all three stubs fire is the only way to prove the FULL chain
-// (module -> newClientDocumentHandler -> document.Deps -> fetchClassEdgeTeachers)
+// (module -> newClientDocumentHandler -> document.Deps -> fetchProductPlanEdgeStaff)
 // is connected, not just that the struct fields exist.
 func TestOutcomeSummaryModule_WiresClassEdgeAndEligibilityIntoDocumentDeps(t *testing.T) {
 	sp := func(s string) *string { return &s }
@@ -261,7 +261,7 @@ func TestOutcomeSummaryModule_WiresClassEdgeAndEligibilityIntoDocumentDeps(t *te
 		},
 		// The three closures under test. The edge links a product_plan_staff row
 		// so the eligibility gate actually has something to fetch — a nil-link
-		// edge would let fetchClassEdgeTeachers skip ListProductPlanStaffs
+		// edge would let fetchProductPlanEdgeStaff skip ListProductPlanStaffs
 		// entirely and this test would pass for the wrong reason.
 		ListSubscriptionGroupProductPlanStaffs: func(context.Context, *sgppspb.ListSubscriptionGroupProductPlanStaffsRequest) (*sgppspb.ListSubscriptionGroupProductPlanStaffsResponse, error) {
 			sgppsCalled = true
@@ -299,10 +299,10 @@ func TestOutcomeSummaryModule_WiresClassEdgeAndEligibilityIntoDocumentDeps(t *te
 		t.Fatalf("download must succeed to prove the class-edge fetch actually ran end to end, got %d: %s", w.Code, w.Body.String())
 	}
 	if !sgppsCalled {
-		t.Fatal("module must wire ListSubscriptionGroupProductPlanStaffs into document.Deps — fetchClassEdgeTeachers never called it")
+		t.Fatal("module must wire ListSubscriptionGroupProductPlanStaffs into document.Deps — fetchProductPlanEdgeStaff never called it")
 	}
 	if !productPlansCalled {
-		t.Fatal("module must wire ListProductPlans into document.Deps — fetchClassEdgeTeachers never called it")
+		t.Fatal("module must wire ListProductPlans into document.Deps — fetchProductPlanEdgeStaff never called it")
 	}
 	if !productPlanStaffsCalled {
 		t.Fatal("module must wire ListProductPlanStaffs into document.Deps — the eligibility gate never called it")

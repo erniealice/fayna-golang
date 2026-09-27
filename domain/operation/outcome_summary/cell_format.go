@@ -96,8 +96,8 @@ func applyCellTokens(format, scaled, composite string) string {
 // scaled value yet (a real mark exists) — the only case where a composite may
 // render without a scaled companion.
 func enrolledWithoutScaled(cell *exportpb.SubscriptionGroupOutcomeCell) bool {
-	if strings.TrimSpace(cell.GetJobTemplateId()) == "" || cell.GetEnrollmentEvidence() == nil {
+	if strings.TrimSpace(cell.GetJobTemplateId()) == "" || cell.GetTaskOutcomeEvidence() == nil {
 		return false
 	}
-	return cell.GetEnrollmentEvidence().GetHasPositiveMark()
+	return cell.GetTaskOutcomeEvidence().GetHasPositiveTaskOutcome()
 }

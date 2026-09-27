@@ -16,10 +16,10 @@ import (
 
 // periodSummaryFixture: two per-subject jobs of category "rows_by_job" and one
 // job of category "rows_by_task" with two activities, over periods 1 and 2.
-func periodSummaryFixture() *exportpb.ClientReportCardProjection {
+func periodSummaryFixture() *exportpb.ClientOutcomeSummaryProjection {
 	client := "client-1"
-	return &exportpb.ClientReportCardProjection{
-		Client: &exportpb.ClientReportCardClient{ClientId: client},
+	return &exportpb.ClientOutcomeSummaryProjection{
+		Client: &exportpb.ClientOutcomeSummaryClient{ClientId: client},
 		JobCategories: []*categorypb.JobCategory{
 			{Id: "cat-job", Code: ptr("rows_by_job")}, {Id: "cat-task", Code: ptr("rows_by_task")},
 		},
@@ -53,7 +53,7 @@ func periodSummaryFixture() *exportpb.ClientReportCardProjection {
 			{Id: "task-h1-e", JobPhaseId: "p-home-1", TemplateTaskId: ptr("tt-h1-e"), Active: true},
 			{Id: "task-h2-d", JobPhaseId: "p-home-2", TemplateTaskId: ptr("tt-h2-d"), Active: true},
 		},
-		TaskOutcomes: []*exportpb.ClientReportCardTaskOutcome{
+		TaskOutcomes: []*exportpb.ClientOutcomeSummaryTaskOutcome{
 			{JobTaskId: "task-h1-d", TemplateTaskCriteriaId: "l1", NumericValue: ptr(float64(92))},
 			{JobTaskId: "task-h1-e", TemplateTaskCriteriaId: "l2", NumericValue: ptr(float64(85))},
 		},

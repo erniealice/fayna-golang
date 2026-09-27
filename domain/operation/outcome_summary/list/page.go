@@ -189,8 +189,8 @@ func renderFlat(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewConte
 		},
 	}
 
-	// List page highlights "report-cards" in sidebar, not "jobs"
-	activeSubNav := "report-cards"
+	// List page highlights "outcome-summaries" in sidebar, not "jobs"
+	activeSubNav := "outcome-summaries"
 
 	pageData := &PageData{
 		PageData: types.PageData{
@@ -332,7 +332,7 @@ func renderLanding(ctx context.Context, deps *ListViewDeps, viewCtx *view.ViewCo
 	rows := buildSubscriptionGroupRows(groups, selected, subjectCount, clientCount, l, deps.Routes, deps.Options, subscriptionGroupExportAllowed, outcome_summary.CanLegacyDetail(perms), cats, subjectsByCat, statusByCat, showUncategorized)
 
 	tableConfig := &types.TableConfig{
-		ID:                   "report-cards-subscription-groups",
+		ID:                   "outcome-summaries-subscription-groups",
 		Columns:              landingColumnsFor(l, cats, showUncategorized),
 		Rows:                 rows,
 		ShowSearch:           true,
@@ -409,7 +409,7 @@ func renderExportReaderLanding(
 	}
 	resp, err := deps.ListSubscriptionGroupOutcomeLanding(ctx, req)
 	if err != nil {
-		log.Printf("report cards landing: scoped export-reader aggregate: %v", err)
+		log.Printf("outcome summaries landing: scoped export-reader aggregate: %v", err)
 		return renderEmptyScopedLanding(deps, viewCtx, scope)
 	}
 
@@ -444,7 +444,7 @@ func renderExportReaderLanding(
 		false,
 	)
 	tableConfig := &types.TableConfig{
-		ID:                   "report-cards-subscription-groups",
+		ID:                   "outcome-summaries-subscription-groups",
 		Columns:              landingColumns(deps.Labels),
 		Rows:                 rows,
 		ShowSearch:           true,
@@ -547,7 +547,7 @@ func renderEmptyScopedLanding(deps *ListViewDeps, viewCtx *view.ViewContext, sco
 	l := deps.Labels
 
 	tableConfig := &types.TableConfig{
-		ID:                   "report-cards-subscription-groups",
+		ID:                   "outcome-summaries-subscription-groups",
 		Columns:              landingColumns(l),
 		Rows:                 nil,
 		ShowSearch:           true,
@@ -604,7 +604,7 @@ func listAllSchedules(ctx context.Context, deps *ListViewDeps) []*priceschedulep
 	}
 	out := make([]*priceschedulepb.PriceSchedule, 0, 4)
 	if resp, err := deps.ListPriceSchedules(ctx, &priceschedulepb.ListPriceSchedulesRequest{}); err != nil {
-		log.Printf("report cards landing: list active price schedules: %v", err)
+		log.Printf("outcome summaries landing: list active price schedules: %v", err)
 	} else {
 		out = append(out, resp.GetData()...)
 	}
@@ -616,7 +616,7 @@ func listAllSchedules(ctx context.Context, deps *ListViewDeps) []*priceschedulep
 			}},
 		},
 	}); err != nil {
-		log.Printf("report cards landing: list inactive price schedules: %v", err)
+		log.Printf("outcome summaries landing: list inactive price schedules: %v", err)
 	} else {
 		out = append(out, resp.GetData()...)
 	}
@@ -654,7 +654,7 @@ func scopeGroupsByServicingGrant(ctx context.Context, deps *ListViewDeps, groups
 	// same way.
 	granted, err := outcome_summary.GrantedSubscriptionGroupIDs(ctx, deps.ListWorkspaceUsers, deps.ListSubscriptionGroupWorkspaceUsers)
 	if err != nil {
-		log.Printf("report cards landing: resolve servicing grants for group scoping: %v", err)
+		log.Printf("outcome summaries landing: resolve servicing grants for group scoping: %v", err)
 		return nil // fail-closed
 	}
 	out := groups[:0:0]
@@ -672,7 +672,7 @@ func listAllGroups(ctx context.Context, deps *ListViewDeps) []*subscriptiongroup
 	}
 	out := make([]*subscriptiongrouppb.SubscriptionGroup, 0, 16)
 	if resp, err := deps.ListSubscriptionGroups(ctx, &subscriptiongrouppb.ListSubscriptionGroupsRequest{}); err != nil {
-		log.Printf("report cards landing: list active subscription groups: %v", err)
+		log.Printf("outcome summaries landing: list active subscription groups: %v", err)
 	} else {
 		out = append(out, resp.GetData()...)
 	}
@@ -684,7 +684,7 @@ func listAllGroups(ctx context.Context, deps *ListViewDeps) []*subscriptiongroup
 			}},
 		},
 	}); err != nil {
-		log.Printf("report cards landing: list inactive subscription groups: %v", err)
+		log.Printf("outcome summaries landing: list inactive subscription groups: %v", err)
 	} else {
 		out = append(out, resp.GetData()...)
 	}
@@ -790,7 +790,7 @@ func groupCounts(ctx context.Context, deps *ListViewDeps) (subjects map[string]i
 	}
 	resp, err := deps.ListJobTemplateSummaries(ctx, &summarypb.ListJobTemplateSummariesRequest{})
 	if err != nil {
-		log.Printf("report cards landing: list job template summaries: %v", err)
+		log.Printf("outcome summaries landing: list job template summaries: %v", err)
 		return
 	}
 	seen := map[string]map[string]bool{}
@@ -877,7 +877,7 @@ func fillHistoricalCounts(
 		for _, req := range requests {
 			resp, err := deps.ListSubscriptionGroupMembers(ctx, req)
 			if err != nil {
-				log.Printf("report cards landing: historical member counts: %v", err)
+				log.Printf("outcome summaries landing: historical member counts: %v", err)
 				continue
 			}
 			for _, m := range resp.GetData() {
@@ -936,7 +936,7 @@ func fillHistoricalCounts(
 					}
 					resp, err := deps.ListJobs(ctx, req)
 					if err != nil {
-						log.Printf("report cards landing: historical subject counts (page %d): %v", page, err)
+						log.Printf("outcome summaries landing: historical subject counts (page %d): %v", page, err)
 						break
 					}
 					for _, j := range resp.GetData() {
@@ -1042,11 +1042,11 @@ func filterSchedulesByScope(schedules []*priceschedulepb.PriceSchedule, scope st
 func scopeActiveSubNav(scope string) string {
 	switch scope {
 	case "current":
-		return "report-cards-current"
+		return "outcome-summaries-current"
 	case "past":
-		return "report-cards-past"
+		return "outcome-summaries-past"
 	default:
-		return "report-cards"
+		return "outcome-summaries"
 	}
 }
 

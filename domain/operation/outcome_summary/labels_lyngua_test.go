@@ -94,6 +94,15 @@ func TestLabelsLynguaContract(t *testing.T) {
 		}
 	}
 	for path := range labelPaths {
+		if path == "document.download_filename" {
+			if _, ok := generalPaths[path]; !ok {
+				t.Errorf("Labels json path %q has no general translation value", path)
+			}
+			if _, ok := educationPaths[path]; !ok {
+				t.Errorf("Labels json path %q has no education translation value", path)
+			}
+			continue
+		}
 		if _, ok := commonPaths[path]; !ok {
 			t.Errorf("Labels json path %q has no common translation value", path)
 		}
@@ -101,8 +110,8 @@ func TestLabelsLynguaContract(t *testing.T) {
 	if len(commonPaths) == 0 || len(educationPaths) == 0 {
 		t.Fatal("common and education outcome_summary label paths must both be loaded")
 	}
-	if len(commonPaths) != len(labelPaths) {
-		t.Fatalf("common label path count = %d, Labels path count = %d", len(commonPaths), len(labelPaths))
+	if len(commonPaths)+1 != len(labelPaths) {
+		t.Fatalf("common label path count = %d, Labels path count = %d (one general document filename)", len(commonPaths), len(labelPaths))
 	}
 }
 

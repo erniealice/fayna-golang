@@ -16,19 +16,19 @@ import (
 // fptr returns a *float64 for the optional task_outcome numeric_value.
 func fptr(v float64) *float64 { return &v }
 
-// TestIsNonEnrolledCell is the enrollment-suppression invariant (owed B1/T2
+// TestIsPlaceholderOutcomeCell is the enrollment-suppression invariant (owed B1/T2
 // test): a phantom (untaken-elective all-zero scaffold floored to "1") is a
 // placeholder → BLANK; a genuinely-enrolled subject scored a real 0 or 1 has a
 // positive task mark → SHOWN; a historical import (no task rows but a stored
 // band) → KEPT. NEVER blank a real grade.
-func TestIsNonEnrolledCell(t *testing.T) {
-	phantom := EnrollmentEvidence{HasMarks: true, HasPositiveMark: false} // all-zero scaffold
-	enrolled := EnrollmentEvidence{HasMarks: true, HasPositiveMark: true} // ≥1 positive mark
-	noTasks := EnrollmentEvidence{HasMarks: false, HasPositiveMark: false}
+func TestIsPlaceholderOutcomeCell(t *testing.T) {
+	phantom := TaskOutcomeEvidence{HasTaskOutcome: true, HasPositiveTaskOutcome: false} // all-zero scaffold
+	enrolled := TaskOutcomeEvidence{HasTaskOutcome: true, HasPositiveTaskOutcome: true} // ≥1 positive mark
+	noTasks := TaskOutcomeEvidence{HasTaskOutcome: false, HasPositiveTaskOutcome: false}
 
 	cases := []struct {
 		name string
-		ev   EnrollmentEvidence
+		ev   TaskOutcomeEvidence
 		band []string
 		want bool // true = placeholder (blank)
 	}{
@@ -57,8 +57,8 @@ func TestIsNonEnrolledCell(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := IsNonEnrolledCell(c.ev, c.band...); got != c.want {
-				t.Fatalf("IsNonEnrolledCell(%+v, %v) = %v, want %v", c.ev, c.band, got, c.want)
+			if got := IsPlaceholderOutcomeCell(c.ev, c.band...); got != c.want {
+				t.Fatalf("IsPlaceholderOutcomeCell(%+v, %v) = %v, want %v", c.ev, c.band, got, c.want)
 			}
 		})
 	}
@@ -87,7 +87,7 @@ func TestNumGreaterThan(t *testing.T) {
 	}
 }
 
-// --- FetchJobMarkEvidence walk ------------------------------------------------
+// --- FetchJobTaskOutcomeEvidence walk ------------------------------------------------
 
 func phasesFn(phases ...*jobphasepb.JobPhase) func(context.Context, *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error) {
 	return func(context.Context, *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error) {
@@ -107,10 +107,10 @@ func outcomesFn(outcomes ...*taskoutcomepb.TaskOutcome) func(context.Context, *t
 	}
 }
 
-// TestFetchJobMarkEvidence exercises the job_phase → job_task → task_outcome
-// walk: a positive mark → HasPositiveMark; an all-zero scaffold → HasMarks but
-// not positive; a subject with no task_outcome rows → absent (HasMarks=false).
-func TestFetchJobMarkEvidence(t *testing.T) {
+// TestFetchJobTaskOutcomeEvidence exercises the job_phase → job_task → task_outcome
+// walk: a positive mark → HasPositiveTaskOutcome; an all-zero scaffold → HasTaskOutcome but
+// not positive; a subject with no task_outcome rows → absent (HasTaskOutcome=false).
+func TestFetchJobTaskOutcomeEvidence(t *testing.T) {
 	phases := phasesFn(
 		&jobphasepb.JobPhase{Id: "phPos", JobId: "jobPos", Active: true},
 		&jobphasepb.JobPhase{Id: "phZero", JobId: "jobZero", Active: true},
@@ -127,45 +127,45 @@ func TestFetchJobMarkEvidence(t *testing.T) {
 		// tkNone: no task_outcome rows at all (historical / untaken-with-no-scaffold).
 	)
 
-	ev, _ := FetchJobMarkEvidence(context.Background(), phases, tasks, outcomes,
+	ev, _ := FetchJobTaskOutcomeEvidence(context.Background(), phases, tasks, outcomes,
 		[]string{"jobPos", "jobZero", "jobNone"})
 
-	if got := ev["jobPos"]; !got.HasMarks || !got.HasPositiveMark {
-		t.Errorf("jobPos = %+v, want HasMarks && HasPositiveMark", got)
+	if got := ev["jobPos"]; !got.HasTaskOutcome || !got.HasPositiveTaskOutcome {
+		t.Errorf("jobPos = %+v, want HasTaskOutcome && HasPositiveTaskOutcome", got)
 	}
-	if got := ev["jobZero"]; !got.HasMarks || got.HasPositiveMark {
-		t.Errorf("jobZero (all-zero scaffold) = %+v, want HasMarks && !HasPositiveMark", got)
+	if got := ev["jobZero"]; !got.HasTaskOutcome || got.HasPositiveTaskOutcome {
+		t.Errorf("jobZero (all-zero scaffold) = %+v, want HasTaskOutcome && !HasPositiveTaskOutcome", got)
 	}
-	if got, ok := ev["jobNone"]; ok || got.HasMarks {
+	if got, ok := ev["jobNone"]; ok || got.HasTaskOutcome {
 		t.Errorf("jobNone (no task_outcome) = %+v ok=%v, want absent / zero evidence", got, ok)
 	}
 }
 
-// TestFetchJobMarkEvidence_InactiveAndNilSkipped: an inactive task_outcome or a
+// TestFetchJobTaskOutcomeEvidence_InactiveAndNilSkipped: an inactive task_outcome or a
 // nil numeric_value carries no evidence.
-func TestFetchJobMarkEvidence_InactiveAndNilSkipped(t *testing.T) {
+func TestFetchJobTaskOutcomeEvidence_InactiveAndNilSkipped(t *testing.T) {
 	phases := phasesFn(&jobphasepb.JobPhase{Id: "ph1", JobId: "job1", Active: true})
 	tasks := tasksFn(&jobtaskpb.JobTask{Id: "tk1", JobPhaseId: "ph1", Active: true})
 	outcomes := outcomesFn(
 		&taskoutcomepb.TaskOutcome{JobTaskId: "tk1", NumericValue: fptr(9), Active: false}, // inactive
 		&taskoutcomepb.TaskOutcome{JobTaskId: "tk1", NumericValue: nil, Active: true},      // no numeric
 	)
-	ev, _ := FetchJobMarkEvidence(context.Background(), phases, tasks, outcomes, []string{"job1"})
-	if got, ok := ev["job1"]; ok || got.HasMarks {
+	ev, _ := FetchJobTaskOutcomeEvidence(context.Background(), phases, tasks, outcomes, []string{"job1"})
+	if got, ok := ev["job1"]; ok || got.HasTaskOutcome {
 		t.Errorf("inactive/nil-numeric outcomes must carry no evidence, got %+v ok=%v", got, ok)
 	}
 }
 
-// TestFetchJobMarkEvidence_ErrorFailsClosed guards the fail-closed evidence
+// TestFetchJobTaskOutcomeEvidence_ErrorFailsClosed guards the fail-closed evidence
 // contract (codex #3): a read error mid-walk must abort with (nil, err) — never
 // a partial map. A full first page of all-zero marks (forcing a second page)
-// followed by an errored second page must NOT yield HasMarks=true for job1; the
+// followed by an errored second page must NOT yield HasTaskOutcome=true for job1; the
 // caller relies on nil evidence to keep the grade instead of blanking a real one.
-func TestFetchJobMarkEvidence_ErrorFailsClosed(t *testing.T) {
+func TestFetchJobTaskOutcomeEvidence_ErrorFailsClosed(t *testing.T) {
 	phases := phasesFn(&jobphasepb.JobPhase{Id: "ph1", JobId: "job1", Active: true})
 	tasks := tasksFn(&jobtaskpb.JobTask{Id: "tk1", JobPhaseId: "ph1", Active: true})
 
-	full := make([]*taskoutcomepb.TaskOutcome, markEvidencePageLimit)
+	full := make([]*taskoutcomepb.TaskOutcome, taskOutcomeEvidencePageLimit)
 	for i := range full {
 		full[i] = &taskoutcomepb.TaskOutcome{JobTaskId: "tk1", NumericValue: fptr(0), Active: true}
 	}
@@ -178,7 +178,7 @@ func TestFetchJobMarkEvidence_ErrorFailsClosed(t *testing.T) {
 		return nil, errors.New("transient db error")
 	}
 
-	ev, err := FetchJobMarkEvidence(context.Background(), phases, tasks, outcomes, []string{"job1"})
+	ev, err := FetchJobTaskOutcomeEvidence(context.Background(), phases, tasks, outcomes, []string{"job1"})
 	if err == nil {
 		t.Fatal("want a non-nil error when a page read fails, got nil")
 	}
@@ -229,13 +229,13 @@ func idSortPage[T interface{ GetId() string }](rows []T, sort *commonpb.SortRequ
 	return rows[start:end]
 }
 
-// TestFetchJobMarkEvidence_PaginationStable is the regression guard for the
+// TestFetchJobTaskOutcomeEvidence_PaginationStable is the regression guard for the
 // unstable-OFFSET under-blank: 50 jobs × 3 phases = 150 phases (and matching
 // tasks/outcomes) inside ONE IN-chunk force a genuine multi-page walk (limit
 // 100). It asserts (1) every paged request across all three levels carries the
 // unique id-sort (without which OFFSET paging over tied date_created silently
 // drops whole jobs), and (2) all 50 jobs' evidence survives the page seam.
-func TestFetchJobMarkEvidence_PaginationStable(t *testing.T) {
+func TestFetchJobTaskOutcomeEvidence_PaginationStable(t *testing.T) {
 	const nJobs = 50
 	var (
 		jobIDs   []string
@@ -301,7 +301,7 @@ func TestFetchJobMarkEvidence_PaginationStable(t *testing.T) {
 		return &taskoutcomepb.ListTaskOutcomesResponse{Data: idSortPage(matched, req.GetSort(), page, limit)}, nil
 	}
 
-	ev, _ := FetchJobMarkEvidence(context.Background(), listPhases, listTasks, listOutcomes, jobIDs)
+	ev, _ := FetchJobTaskOutcomeEvidence(context.Background(), listPhases, listTasks, listOutcomes, jobIDs)
 
 	// (1) every paged request carried the unique id-sort.
 	if len(sortFields) == 0 {
@@ -327,28 +327,28 @@ func TestFetchJobMarkEvidence_PaginationStable(t *testing.T) {
 	}
 	for j := 0; j < nJobs; j++ {
 		jid := fmt.Sprintf("job%03d", j)
-		if got := ev[jid]; !got.HasMarks || !got.HasPositiveMark {
-			t.Fatalf("job %s = %+v, want HasMarks && HasPositiveMark (paging dropped its rows)", jid, got)
+		if got := ev[jid]; !got.HasTaskOutcome || !got.HasPositiveTaskOutcome {
+			t.Fatalf("job %s = %+v, want HasTaskOutcome && HasPositiveTaskOutcome (paging dropped its rows)", jid, got)
 		}
 	}
 }
 
-// TestFetchJobMarkEvidence_NilSafe: any nil closure (a tier that never wired the
+// TestFetchJobTaskOutcomeEvidence_NilSafe: any nil closure (a tier that never wired the
 // walk, e.g. service-admin) yields an empty map — nothing is blanked downstream.
-func TestFetchJobMarkEvidence_NilSafe(t *testing.T) {
+func TestFetchJobTaskOutcomeEvidence_NilSafe(t *testing.T) {
 	phases := phasesFn(&jobphasepb.JobPhase{Id: "ph1", JobId: "job1", Active: true})
 	tasks := tasksFn(&jobtaskpb.JobTask{Id: "tk1", JobPhaseId: "ph1", Active: true})
 
-	if ev, _ := FetchJobMarkEvidence(context.Background(), nil, tasks, outcomesFn(), []string{"job1"}); len(ev) != 0 {
+	if ev, _ := FetchJobTaskOutcomeEvidence(context.Background(), nil, tasks, outcomesFn(), []string{"job1"}); len(ev) != 0 {
 		t.Errorf("nil listJobPhases must yield empty evidence, got %v", ev)
 	}
-	if ev, _ := FetchJobMarkEvidence(context.Background(), phases, nil, outcomesFn(), []string{"job1"}); len(ev) != 0 {
+	if ev, _ := FetchJobTaskOutcomeEvidence(context.Background(), phases, nil, outcomesFn(), []string{"job1"}); len(ev) != 0 {
 		t.Errorf("nil listJobTasks must yield empty evidence, got %v", ev)
 	}
-	if ev, _ := FetchJobMarkEvidence(context.Background(), phases, tasks, nil, []string{"job1"}); len(ev) != 0 {
+	if ev, _ := FetchJobTaskOutcomeEvidence(context.Background(), phases, tasks, nil, []string{"job1"}); len(ev) != 0 {
 		t.Errorf("nil listTaskOutcomes must yield empty evidence, got %v", ev)
 	}
-	if ev, _ := FetchJobMarkEvidence(context.Background(), phases, tasks, outcomesFn(), nil); len(ev) != 0 {
+	if ev, _ := FetchJobTaskOutcomeEvidence(context.Background(), phases, tasks, outcomesFn(), nil); len(ev) != 0 {
 		t.Errorf("empty jobIDs must yield empty evidence, got %v", ev)
 	}
 }

@@ -170,7 +170,7 @@ func TestOkPage_DownloadWiredIntoPrimaryAction(t *testing.T) {
 	request := httptest.NewRequest("GET", "/rc/group/sec-1/client/c-1", nil)
 	request = request.WithContext(view.WithUserPermissions(request.Context(), types.NewUserPermissions([]string{"subscription_group_outcome_export:read", "job_outcome_summary:read"})))
 	viewCtx := &view.ViewContext{Request: request, CacheVersion: "v1", CurrentPath: "/rc/group/sec-1/client/c-1"}
-	table := &types.TableConfig{ID: "report-cards-client"}
+	table := &types.TableConfig{ID: "outcome-summaries-client"}
 
 	res := okPage(request.Context(), viewCtx, deps, group, "c-1", "Ada Lovelace", table)
 	pd, ok := res.Data.(*PageData)
@@ -210,7 +210,7 @@ func TestOkPage_OperatorFallsBackToPeriodlessDownloadWithoutExplicitRoute(t *tes
 		"job_outcome_summary:list", "job_outcome_summary:read",
 	})))
 	viewCtx := &view.ViewContext{Request: request, CurrentPath: request.URL.Path}
-	table := &types.TableConfig{ID: "report-cards-client"}
+	table := &types.TableConfig{ID: "outcome-summaries-client"}
 	res := okPage(request.Context(), viewCtx, deps, group, "c-1", "Ada Lovelace", table)
 	pa := res.Data.(*PageData).Table.PrimaryAction
 	if pa == nil || !pa.Download || pa.ActionURL != "" || pa.Href != "/rc/group/sec-1/client/c-1/document?format=pdf" {
@@ -227,7 +227,7 @@ func TestOkPage_NoDocumentURL_NoPrimaryAction(t *testing.T) {
 	}
 	group := &subscriptiongrouppb.SubscriptionGroup{Id: "sec-1", Name: "S"}
 	viewCtx := &view.ViewContext{CacheVersion: "v1"}
-	table := &types.TableConfig{ID: "report-cards-client"}
+	table := &types.TableConfig{ID: "outcome-summaries-client"}
 
 	res := okPage(context.Background(), viewCtx, deps, group, "c-1", "N", table)
 	pd := res.Data.(*PageData)

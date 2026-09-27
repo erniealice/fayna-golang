@@ -41,6 +41,7 @@ import (
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	productplanstaffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan_staff"
+	planpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/plan"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
@@ -82,6 +83,7 @@ type Deps struct {
 	ListOutcomeCriterias     func(ctx context.Context, req *criteriapb.ListOutcomeCriteriasRequest) (*criteriapb.ListOutcomeCriteriasResponse, error)
 	GetStaffListPageData     func(ctx context.Context, req *staffpb.GetStaffListPageDataRequest) (*staffpb.GetStaffListPageDataResponse, error)
 	ListPriceSchedules       func(ctx context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error)
+	ListPlans                func(ctx context.Context, req *planpb.ListPlansRequest) (*planpb.ListPlansResponse, error)
 	ListClientAttributes     func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
 	ResolveAttributeIDByCode func(ctx context.Context, code string) (string, error)
 	ListWorkspaceUsers       func(ctx context.Context, req *workspaceuserpb.ListWorkspaceUsersRequest) (*workspaceuserpb.ListWorkspaceUsersResponse, error)
@@ -117,7 +119,7 @@ type Deps struct {
 	// product_plan_id to the product_id a job carries in output_product_id.
 	// ListProductPlanStaffs gates a linked edge on its product_plan_staff
 	// eligibility row's active flag (the generic "eligibility" concept) —
-	// fetchClassEdgeTeachers keeps a linked edge only while that row is active,
+	// fetchProductPlanEdgeStaff keeps a linked edge only while that row is active,
 	// and fails closed (drops linked edges) on a list error. ALL THREE
 	// optional/nil-safe — a missing closure leaves the teacher line on its prior
 	// (assignee-only) behavior, never a panic.
@@ -173,7 +175,7 @@ type Deps struct {
 	// Staff client documents use one client-scoped projection, then a trusted
 	// profile resolver for phase-specific output. Both are typed application
 	// ports; storage locators and raw SQL stay outside Fayna.
-	GetSubscriptionGroupClientReportCard     func(ctx context.Context, req *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
+	GetSubscriptionGroupClientOutcomeSummary func(ctx context.Context, req *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error)
 	ResolveSubscriptionGroupDocumentTemplate func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error)
 }
 
@@ -181,7 +183,7 @@ type Deps struct {
 func NewDownloadHandler(d *Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if d == nil {
-			http.Error(w, "report card rendering is not configured", http.StatusServiceUnavailable)
+			http.Error(w, "outcome summary rendering is not configured", http.StatusServiceUnavailable)
 			return
 		}
 		ctx := r.Context()
@@ -222,14 +224,14 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 		switch format {
 		case "docx":
 			if d.GenerateDoc == nil {
-				log.Printf("report card doc: GenerateDoc not wired — refusing to serve")
-				http.Error(w, "report card rendering is not configured", http.StatusServiceUnavailable)
+				log.Printf("outcome summary doc: GenerateDoc not wired — refusing to serve")
+				http.Error(w, "outcome summary rendering is not configured", http.StatusServiceUnavailable)
 				return
 			}
 		case "pdf":
 			if d.GeneratePDF == nil {
-				log.Printf("report card pdf: GeneratePDF not wired — refusing to serve")
-				http.Error(w, "report card PDF rendering is not configured", http.StatusServiceUnavailable)
+				log.Printf("outcome summary pdf: GeneratePDF not wired — refusing to serve")
+				http.Error(w, "outcome summary PDF rendering is not configured", http.StatusServiceUnavailable)
 				return
 			}
 		}
@@ -270,14 +272,14 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 		blocked, gateErr := reportRenderStatus(ctx, d, rc.JobIDs, groupID)
 		if gateErr != nil {
 			log.Printf("report render gate: cannot prove sheet safe: %v", gateErr)
-			http.Error(w, "report card cannot be generated right now — please retry", http.StatusServiceUnavailable)
+			http.Error(w, "outcome summary cannot be generated right now — please retry", http.StatusServiceUnavailable)
 			return
 		}
 		// A proven unpublished sheet can use the complete document layout with
 		// its recorded outcomes blank. The gate error above still fails closed.
 
 		if rc.DocumentHeaderName == "" {
-			rc.DocumentHeaderName = firstNonEmpty(d.Labels.Landing.Title, "Report Card")
+			rc.DocumentHeaderName = firstNonEmpty(d.Labels.Landing.Title, "Outcome Summary")
 		}
 		rc.PrintedBy = firstNonEmpty(consumer.GetUserIDFromContext(ctx), "system")
 		now := printedNow(ctx)
@@ -304,7 +306,7 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 
 		// The SAME data map feeds both formats — PDF conversion happens AFTER the
 		// identical DOCX assembly (fycha renders the DOCX then LibreOffice converts).
-		data := buildReportCardData(*rc)
+		data := buildClientOutcomeSummaryData(*rc)
 		if blocked {
 			blankDocumentOutcomeValues(data)
 		}
@@ -325,44 +327,44 @@ func NewDownloadHandler(d *Deps) http.HandlerFunc {
 				// ErrLibreOfficeUnavailable sentinel is matched by its stable message
 				// rather than errors.Is. Any other error is a genuine 500.
 				if isLibreOfficeUnavailable(err) {
-					log.Printf("report card pdf: LibreOffice unavailable: %v", err)
-					http.Error(w, "report card PDF rendering is unavailable — LibreOffice is not installed", http.StatusServiceUnavailable)
+					log.Printf("outcome summary pdf: LibreOffice unavailable: %v", err)
+					http.Error(w, "outcome summary PDF rendering is unavailable — LibreOffice is not installed", http.StatusServiceUnavailable)
 					return
 				}
-				log.Printf("report card pdf: generate: %v", err)
-				http.Error(w, "failed to generate report card PDF", http.StatusInternalServerError)
+				log.Printf("outcome summary pdf: generate: %v", err)
+				http.Error(w, "failed to generate outcome summary PDF", http.StatusInternalServerError)
 				return
 			}
 			if len(outBytes) == 0 {
-				http.Error(w, "failed to generate report card PDF", http.StatusInternalServerError)
+				http.Error(w, "failed to generate outcome summary PDF", http.StatusInternalServerError)
 				return
 			}
 			contentType = pdfContentType
 			// Filename: "{name-dashed}-{client id}-{unix seconds}.pdf", shared with
 			// the explicit client document route (owner 2026-09-24; supersedes the
-			// Q-GSE "Report Card - ..." lock). Full conversion completes before any
+			// Q-GSE "Outcome Summary - ..." lock). Full conversion completes before any
 			// byte is streamed.
 			w.Header().Set("Content-Type", contentType)
 			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.Header().Set("Content-Disposition", contentDisposition(clientDocumentFilename(rc.ClientName, clientID, time.Now(), "pdf")))
+			w.Header().Set("Content-Disposition", contentDisposition(clientDocumentFilename(rc.ClientName, clientID, time.Now(), "pdf"), d.Labels.Document.DownloadFilename))
 			if _, err := w.Write(outBytes); err != nil {
-				log.Printf("report card pdf: write response: %v", err)
+				log.Printf("outcome summary pdf: write response: %v", err)
 			}
 		default: // "docx"
 			outBytes, err = d.GenerateDoc(tpl, data)
 			if err != nil {
-				log.Printf("report card doc: generate: %v", err)
-				http.Error(w, "failed to generate report card", http.StatusInternalServerError)
+				log.Printf("outcome summary doc: generate: %v", err)
+				http.Error(w, "failed to generate outcome summary", http.StatusInternalServerError)
 				return
 			}
 			if len(outBytes) == 0 {
-				http.Error(w, "failed to generate report card", http.StatusInternalServerError)
+				http.Error(w, "failed to generate outcome summary", http.StatusInternalServerError)
 				return
 			}
 			w.Header().Set("Content-Type", docxContentType)
-			w.Header().Set("Content-Disposition", contentDisposition(clientDocumentFilename(rc.ClientName, clientID, time.Now(), "docx")))
+			w.Header().Set("Content-Disposition", contentDisposition(clientDocumentFilename(rc.ClientName, clientID, time.Now(), "docx"), d.Labels.Document.DownloadFilename))
 			if _, err := w.Write(outBytes); err != nil {
-				log.Printf("report card doc: write response: %v", err)
+				log.Printf("outcome summary doc: write response: %v", err)
 			}
 		}
 	}
@@ -404,14 +406,14 @@ func isLibreOfficeUnavailable(err error) bool {
 // ASCII-safe filename="" fallback and an RFC-5987 filename*=UTF-8” form, so
 // names with spaces/commas/non-ASCII (client names) download correctly across
 // browsers without header injection.
-func contentDisposition(name string) string {
-	ascii := asciiFilename(name)
+func contentDisposition(name, fallback string) string {
+	ascii := asciiFilename(name, fallback)
 	return `attachment; filename="` + ascii + `"; filename*=UTF-8''` + encodeRFC5987(name)
 }
 
 // asciiFilename produces a safe quoted-string fallback: printable-ASCII only,
 // with '"' and '\' (the quoted-string escapes) and control chars replaced by '_'.
-func asciiFilename(name string) string {
+func asciiFilename(name, fallback string) string {
 	var b strings.Builder
 	for _, r := range name {
 		if r >= 0x20 && r < 0x7f && r != '"' && r != '\\' {
@@ -422,7 +424,7 @@ func asciiFilename(name string) string {
 	}
 	out := strings.TrimSpace(b.String())
 	if out == "" {
-		return "report-card.pdf"
+		return firstNonEmpty(strings.TrimSpace(fallback), "outcome-summary.pdf")
 	}
 	return out
 }
@@ -466,7 +468,7 @@ func printedByName(ctx context.Context, d *Deps, userID string) string {
 	if d.ReadSelfDisplayName != nil {
 		first, last, err := d.ReadSelfDisplayName(ctx)
 		if err != nil {
-			log.Printf("report card doc: read own display name: %v", err)
+			log.Printf("outcome summary doc: read own display name: %v", err)
 		} else if name := lastFirst(first, last); name != "" {
 			return name
 		}
@@ -512,7 +514,7 @@ func workspaceUserName(ctx context.Context, d *Deps, userID string) string {
 		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("user_id", userID)}},
 	})
 	if err != nil {
-		log.Printf("report card doc: list workspace users: %v", err)
+		log.Printf("outcome summary doc: list workspace users: %v", err)
 		return ""
 	}
 	for _, wu := range resp.GetData() {

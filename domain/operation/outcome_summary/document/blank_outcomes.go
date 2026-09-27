@@ -69,11 +69,11 @@ func blankDocumentOutcomeNode(node any, inOutcomeCells bool) {
 // Term 1 renders its scores even while Term 2 or Term 3 is still in progress.
 // Fields are allowlisted, so a new score field added to either message stays
 // redacted until it is explicitly admitted here.
-func redactBlockedClientPhaseScores(card *exportpb.ClientReportCardProjection, gate clientSheetGate) *exportpb.ClientReportCardProjection {
+func redactBlockedClientPhaseScores(card *exportpb.ClientOutcomeSummaryProjection, gate clientSheetGate) *exportpb.ClientOutcomeSummaryProjection {
 	if card == nil || !gate.anyBlocked() {
 		return card
 	}
-	out := proto.Clone(card).(*exportpb.ClientReportCardProjection)
+	out := proto.Clone(card).(*exportpb.ClientOutcomeSummaryProjection)
 
 	phases := make(map[string]*jobphasepb.JobPhase, len(out.GetJobPhases()))
 	for _, phase := range out.GetJobPhases() {
@@ -96,7 +96,7 @@ func redactBlockedClientPhaseScores(card *exportpb.ClientReportCardProjection, g
 		if outcome == nil || !blocked(taskPhase[strings.TrimSpace(outcome.GetJobTaskId())]) {
 			continue
 		}
-		out.TaskOutcomes[i] = &exportpb.ClientReportCardTaskOutcome{
+		out.TaskOutcomes[i] = &exportpb.ClientOutcomeSummaryTaskOutcome{
 			JobTaskId:              outcome.GetJobTaskId(),
 			TemplateTaskCriteriaId: outcome.GetTemplateTaskCriteriaId(),
 			DeterminationNote:      outcome.DeterminationNote,

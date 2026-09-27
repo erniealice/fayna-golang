@@ -57,9 +57,9 @@ type PageViewDeps struct {
 	// GetOutcomeMatrix — the new espyna use case (typed against the generated
 	// esqyma request/response). Wired via the module Deps, never raw SQL.
 	GetOutcomeMatrix func(ctx context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error)
-	// FindApplicableReportCardBinding resolves a published document for one AY
+	// FindApplicableOutcomeSummaryDocumentTemplate resolves a published document for one AY
 	// and phase code. Optional: the existing phase label remains when absent.
-	FindApplicableReportCardBinding func(context.Context, *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
+	FindApplicableOutcomeSummaryDocumentTemplate func(context.Context, *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
 
 	// ListJobTemplateSummaries backs the (template, section) pair guard on the
 	// Group* routes. See outcome_matrix/section_scope.go for why the section
@@ -299,7 +299,7 @@ func NewView(deps *PageViewDeps) view.View {
 			if scheduleID, reason := resolvePhaseDocumentScheduleID(ctx, deps, section, templateID); reason != "" {
 				log.Printf("outcome matrix: phase document labels skipped for template %s (section scoped=%v): %s", templateID, section.Scoped(), reason)
 			} else {
-				composePhaseDocumentLabels(ctx, deps.FindApplicableReportCardBinding, scheduleID, resp.GetPhases())
+				composePhaseDocumentLabels(ctx, deps.FindApplicableOutcomeSummaryDocumentTemplate, scheduleID, resp.GetPhases())
 			}
 		}
 
@@ -555,7 +555,7 @@ func sampleOriginSubscription(ctx context.Context, deps *PageViewDeps, templateI
 // caller can log ONE line per request instead of the previous silent
 // early-return.
 func resolvePhaseDocumentScheduleID(ctx context.Context, deps *PageViewDeps, section outcome_matrix.GroupScope, templateID string) (scheduleID, reason string) {
-	if deps.FindApplicableReportCardBinding == nil {
+	if deps.FindApplicableOutcomeSummaryDocumentTemplate == nil {
 		return "", "resolver nil"
 	}
 	if section.Scoped() {

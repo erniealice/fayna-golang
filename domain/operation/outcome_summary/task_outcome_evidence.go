@@ -12,41 +12,41 @@ import (
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 )
 
-// markEvidencePageLimit chunks ListFilter(IN) id sets so each call's result set
-// stays under the adapter's default cap. markEvidenceMaxPages bounds every
+// taskOutcomeEvidencePageLimit chunks ListFilter(IN) id sets so each call's result set
+// stays under the adapter's default cap. taskOutcomeEvidenceMaxPages bounds every
 // offset page-loop independently of the adapter's own termination (which relies
 // on a short final page) — a group's phase/task set (roster × subjects × ~2
 // phases ≈ 600+) far exceeds the default row caps, and an uncapped single call
 // silently truncates the evidence, so every walk pages explicitly.
 const (
-	markEvidencePageLimit = 100
-	markEvidenceMaxPages  = 100
+	taskOutcomeEvidencePageLimit = 100
+	taskOutcomeEvidenceMaxPages  = 100
 )
 
-// EnrollmentEvidence is the per-job task-mark evidence that drives the
+// TaskOutcomeEvidence is the per-job task-mark evidence that drives the
 // non-enrolled-placeholder predicate. It is the generic, surface-agnostic
 // distillation of "does this job carry real grading marks" — the same signal
 // the report-card DOCX (B1) uses to suppress untaken-elective placeholder rows.
-type EnrollmentEvidence struct {
-	// HasMarks is true iff the job has ≥1 numeric task_outcome (an all-zero
+type TaskOutcomeEvidence struct {
+	// HasTaskOutcome is true iff the job has ≥1 numeric task_outcome (an all-zero
 	// scaffold OR a positive mark). Distinguishes an all-zero active scaffold
 	// (an untaken parallel track — a placeholder) from a subject with no
 	// task_outcome at all (a historical import — a real, kept subject).
-	HasMarks bool
-	// HasPositiveMark is true iff the job has ≥1 task_outcome with a numeric
+	HasTaskOutcome bool
+	// HasPositiveTaskOutcome is true iff the job has ≥1 task_outcome with a numeric
 	// value > 0. The authoritative enrollment discriminator: a genuinely-taken
 	// subject always carries a positive per-criterion mark somewhere, even when
 	// its composite year-final floors to "0"/"1".
-	HasPositiveMark bool
+	HasPositiveTaskOutcome bool
 }
 
-// FetchJobMarkEvidence walks job_phase → job_task → task_outcome for the given
+// FetchJobTaskOutcomeEvidence walks job_phase → job_task → task_outcome for the given
 // jobIDs and returns per-job mark evidence (existence + any-positive), keyed by
 // job id. It is the bulk (no N+1), existence-only counterpart to the DOCX's
 // per-criterion fetchCriteriaByJob: every walk pages explicitly and chunks its
 // IN-filter so a large group's evidence is never silently truncated.
 //
-// PRINCIPAL PREREQUISITE (report cards are admin/registrar-only today): the
+// PRINCIPAL PREREQUISITE (outcome summaries are admin/registrar-only today): the
 // task walk uses listJobTasks, which staff-narrows to tasks assigned to the
 // acting principal when that principal is a workspace STAFF member. For a
 // non-staff principal (admin/registrar — the only ones the Layer-3
@@ -59,7 +59,7 @@ type EnrollmentEvidence struct {
 //
 // Fully nil-safe: any nil closure (a tier that never wired the walk, e.g.
 // service-admin's flat surfaces) or an empty jobIDs yields an empty map, so
-// IsNonEnrolledCell then keeps every cell (no behavior change off-education).
+// IsPlaceholderOutcomeCell then keeps every cell (no behavior change off-education).
 //
 // FAIL-CLOSED evidence contract: a suppression decision must rest on COMPLETE
 // evidence, so any list-read error aborts the whole walk and returns (nil, err)
@@ -69,14 +69,14 @@ type EnrollmentEvidence struct {
 // mark errored) would otherwise blank a genuinely-earned "0"/"1" on an official
 // document. Keeping a phantom "1" is a cosmetic miss; blanking a real grade is a
 // data error — so we always fail toward keeping the grade.
-func FetchJobMarkEvidence(
+func FetchJobTaskOutcomeEvidence(
 	ctx context.Context,
 	listJobPhases func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error),
 	listJobTasks func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error),
 	listTaskOutcomes func(ctx context.Context, req *taskoutcomepb.ListTaskOutcomesRequest) (*taskoutcomepb.ListTaskOutcomesResponse, error),
 	jobIDs []string,
-) (map[string]EnrollmentEvidence, error) {
-	out := map[string]EnrollmentEvidence{}
+) (map[string]TaskOutcomeEvidence, error) {
+	out := map[string]TaskOutcomeEvidence{}
 	if listJobPhases == nil || listJobTasks == nil || listTaskOutcomes == nil || len(jobIDs) == 0 {
 		return out, nil
 	}
@@ -84,17 +84,17 @@ func FetchJobMarkEvidence(
 	// 1. job_phase → owning job. (phase_id -> job_id)
 	jobByPhase := map[string]string{}
 	phaseIDs := make([]string, 0, len(jobIDs)*2)
-	for start := 0; start < len(jobIDs); start += markEvidencePageLimit {
-		end := start + markEvidencePageLimit
+	for start := 0; start < len(jobIDs); start += taskOutcomeEvidencePageLimit {
+		end := start + taskOutcomeEvidencePageLimit
 		if end > len(jobIDs) {
 			end = len(jobIDs)
 		}
 		chunk := jobIDs[start:end]
-		for page := int32(1); page <= markEvidenceMaxPages; page++ {
+		for page := int32(1); page <= taskOutcomeEvidenceMaxPages; page++ {
 			resp, err := listJobPhases(ctx, &jobphasepb.ListJobPhasesRequest{
-				Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{markEvidenceListIn("job_id", chunk)}},
-				Pagination: markEvidencePage(page),
-				Sort:       markEvidenceSortByID(),
+				Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{taskOutcomeEvidenceListIn("job_id", chunk)}},
+				Pagination: taskOutcomeEvidencePage(page),
+				Sort:       taskOutcomeEvidenceSortByID(),
 			})
 			if err != nil {
 				// Fail-closed: incomplete evidence must not drive suppression.
@@ -112,7 +112,7 @@ func FetchJobMarkEvidence(
 				jobByPhase[pid] = jid
 				phaseIDs = append(phaseIDs, pid)
 			}
-			if len(data) < markEvidencePageLimit {
+			if len(data) < taskOutcomeEvidencePageLimit {
 				break
 			}
 		}
@@ -124,17 +124,17 @@ func FetchJobMarkEvidence(
 	// 2. job_task → owning job (via phase). (task_id -> job_id)
 	jobByTask := map[string]string{}
 	taskIDs := make([]string, 0, len(phaseIDs))
-	for start := 0; start < len(phaseIDs); start += markEvidencePageLimit {
-		end := start + markEvidencePageLimit
+	for start := 0; start < len(phaseIDs); start += taskOutcomeEvidencePageLimit {
+		end := start + taskOutcomeEvidencePageLimit
 		if end > len(phaseIDs) {
 			end = len(phaseIDs)
 		}
 		chunk := phaseIDs[start:end]
-		for page := int32(1); page <= markEvidenceMaxPages; page++ {
+		for page := int32(1); page <= taskOutcomeEvidenceMaxPages; page++ {
 			resp, err := listJobTasks(ctx, &jobtaskpb.ListJobTasksRequest{
-				Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{markEvidenceListIn("job_phase_id", chunk)}},
-				Pagination: markEvidencePage(page),
-				Sort:       markEvidenceSortByID(),
+				Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{taskOutcomeEvidenceListIn("job_phase_id", chunk)}},
+				Pagination: taskOutcomeEvidencePage(page),
+				Sort:       taskOutcomeEvidenceSortByID(),
 			})
 			if err != nil {
 				// Fail-closed: incomplete evidence must not drive suppression.
@@ -153,7 +153,7 @@ func FetchJobMarkEvidence(
 				jobByTask[id] = jid
 				taskIDs = append(taskIDs, id)
 			}
-			if len(data) < markEvidencePageLimit {
+			if len(data) < taskOutcomeEvidencePageLimit {
 				break
 			}
 		}
@@ -163,17 +163,17 @@ func FetchJobMarkEvidence(
 	}
 
 	// 3. task_outcome → per-job evidence (any numeric mark; any positive mark).
-	for start := 0; start < len(taskIDs); start += markEvidencePageLimit {
-		end := start + markEvidencePageLimit
+	for start := 0; start < len(taskIDs); start += taskOutcomeEvidencePageLimit {
+		end := start + taskOutcomeEvidencePageLimit
 		if end > len(taskIDs) {
 			end = len(taskIDs)
 		}
 		chunk := taskIDs[start:end]
-		for page := int32(1); page <= markEvidenceMaxPages; page++ {
+		for page := int32(1); page <= taskOutcomeEvidenceMaxPages; page++ {
 			resp, err := listTaskOutcomes(ctx, &taskoutcomepb.ListTaskOutcomesRequest{
-				Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{markEvidenceListIn("job_task_id", chunk)}},
-				Pagination: markEvidencePage(page),
-				Sort:       markEvidenceSortByID(),
+				Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{taskOutcomeEvidenceListIn("job_task_id", chunk)}},
+				Pagination: taskOutcomeEvidencePage(page),
+				Sort:       taskOutcomeEvidenceSortByID(),
 			})
 			if err != nil {
 				// Fail-closed: incomplete evidence must not drive suppression.
@@ -189,13 +189,13 @@ func FetchJobMarkEvidence(
 					continue
 				}
 				ev := out[jid]
-				ev.HasMarks = true
+				ev.HasTaskOutcome = true
 				if t.GetNumericValue() > 0 {
-					ev.HasPositiveMark = true
+					ev.HasPositiveTaskOutcome = true
 				}
 				out[jid] = ev
 			}
-			if len(data) < markEvidencePageLimit {
+			if len(data) < taskOutcomeEvidencePageLimit {
 				break
 			}
 		}
@@ -203,13 +203,13 @@ func FetchJobMarkEvidence(
 	return out, nil
 }
 
-// IsNonEnrolledCell reports whether a rendered grade cell (or subject row) is a
+// IsPlaceholderOutcomeCell reports whether a rendered grade cell (or subject row) is a
 // non-enrolled placeholder that must render BLANK — the grid/card mirror of the
 // DOCX's isNonEnrolledPlaceholder row suppression. bands are the cell's stored
 // labels (year-final + any semester bands). A row is a placeholder when it
 // carries NO positive grade evidence:
 //
-//   - no per-criterion mark is > 0 (ev.HasPositiveMark — the authoritative
+//   - no per-criterion mark is > 0 (ev.HasPositiveTaskOutcome — the authoritative
 //     discriminator: a genuinely-taken subject, including one whose composite
 //     floors to "0"/"1", always has ≥1 positive task_outcome), AND
 //   - no REAL (> 1) stored year-final / semester band (the transmute-of-zero
@@ -219,11 +219,11 @@ func FetchJobMarkEvidence(
 //
 // A genuinely-enrolled subject with a real 0 keeps rendering: it has a positive
 // mark somewhere, a real (> 1) stored band, or — for historical imports — no
-// task_outcome but a real stored band (HasMarks=false + a band present). A
+// task_outcome but a real stored band (HasTaskOutcome=false + a band present). A
 // rendered grid cell always has a band, so hasSummary is normally true and the
 // decision reduces to "all-zero scaffold with no > 1 band".
-func IsNonEnrolledCell(ev EnrollmentEvidence, bands ...string) bool {
-	if ev.HasPositiveMark {
+func IsPlaceholderOutcomeCell(ev TaskOutcomeEvidence, bands ...string) bool {
+	if ev.HasPositiveTaskOutcome {
 		return false // real per-criterion mark → enrolled
 	}
 	hasSummary := false
@@ -235,22 +235,22 @@ func IsNonEnrolledCell(ev EnrollmentEvidence, bands ...string) bool {
 			hasSummary = true
 		}
 	}
-	// All-zero scaffold (HasMarks) or fully-blank (no summary) → placeholder.
+	// All-zero scaffold (HasTaskOutcome) or fully-blank (no summary) → placeholder.
 	// No task_outcome BUT a summary present → historical real subject → keep.
-	return ev.HasMarks || !hasSummary
+	return ev.HasTaskOutcome || !hasSummary
 }
 
 // NumGreaterThan reports whether s parses as a number strictly greater than n.
 // Non-numeric or blank values are treated as not-greater (false). Shared by
-// IsNonEnrolledCell and the DOCX placeholder predicate so the numeric-band test
+// IsPlaceholderOutcomeCell and the DOCX placeholder predicate so the numeric-band test
 // is defined once.
 func NumGreaterThan(s string, n float64) bool {
 	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	return err == nil && f > n
 }
 
-// markEvidenceListIn builds a LIST_IN filter for the mark-evidence walk.
-func markEvidenceListIn(field string, values []string) *commonpb.TypedFilter {
+// taskOutcomeEvidenceListIn builds a LIST_IN filter for the mark-evidence walk.
+func taskOutcomeEvidenceListIn(field string, values []string) *commonpb.TypedFilter {
 	return &commonpb.TypedFilter{
 		Field: field,
 		FilterType: &commonpb.TypedFilter_ListFilter{
@@ -259,25 +259,25 @@ func markEvidenceListIn(field string, values []string) *commonpb.TypedFilter {
 	}
 }
 
-// markEvidencePage builds an offset pagination request for the given 1-based page.
-func markEvidencePage(page int32) *commonpb.PaginationRequest {
+// taskOutcomeEvidencePage builds an offset pagination request for the given 1-based page.
+func taskOutcomeEvidencePage(page int32) *commonpb.PaginationRequest {
 	return &commonpb.PaginationRequest{
-		Limit:  int32(markEvidencePageLimit),
+		Limit:  int32(taskOutcomeEvidencePageLimit),
 		Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
 	}
 }
 
-// markEvidenceSortByID sorts each paged list by the primary key (id ASC), a
+// taskOutcomeEvidenceSortByID sorts each paged list by the primary key (id ASC), a
 // UNIQUE column, so OFFSET pagination is deterministic across pages. Without it
 // the base adapter falls back to `ORDER BY date_created DESC`; education1's
 // bulk-seed stamps every phase/task/outcome row of a group with an IDENTICAL
 // date_created, and OFFSET paging over a fully-tied sort key returns an
 // overlapping/gapped subset per page — silently dropping whole jobs' mark rows,
-// which flips a taken job to HasMarks=false and leaves its phantom cell showing
+// which flips a taken job to HasTaskOutcome=false and leaves its phantom cell showing
 // "1" (an under-blank). A unique id-sort makes every row land on exactly one
 // page. The base List REPLACES the default order with this Sort; existence-only
 // walks don't care about row order, only that no row is dropped or duplicated.
-func markEvidenceSortByID() *commonpb.SortRequest {
+func taskOutcomeEvidenceSortByID() *commonpb.SortRequest {
 	return &commonpb.SortRequest{
 		Fields: []*commonpb.SortField{{Field: "id"}}, // Direction zero-value = ASC
 	}

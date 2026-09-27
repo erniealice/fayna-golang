@@ -3,7 +3,6 @@ package document
 import (
 	"context"
 	"log"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	ttcpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/template_task_criteria"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	productplanstaffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan_staff"
+	planpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/plan"
 	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
@@ -39,7 +39,7 @@ const (
 )
 
 // templateReferencedAttributeCodes is the LEAK-LAW guard for the v3 template's
-// hard-coded {{client_attributes.<code>}} placeholders. buildReportCardData seeds
+// hard-coded {{client_attributes.<code>}} placeholders. buildClientOutcomeSummaryData seeds
 // the client_attributes map with a blank leaf for EVERY code listed here BEFORE
 // overlaying the app-configured DocumentOptions.ClientAttributeCodes values, so a
 // referenced placeholder always resolves (blank, never a verbatim leak) even when
@@ -61,7 +61,7 @@ type criterionRow struct {
 	OrderMax map[int32]string
 }
 
-// itemRow is one row of the report card (one item / job — e.g. a school
+// itemRow is one row of the outcome summary (one item / job — e.g. a school
 // subject). Generic identifiers; the vertical wording lives in lyngua values
 // and the template placeholder keys.
 type itemRow struct {
@@ -87,11 +87,11 @@ type itemRow struct {
 	OrderTotals map[int32]string
 }
 
-// reportCard is one client's assembled card (meta + ordered subjects). Generic
+// clientOutcomeSummary is one client's assembled card (meta + ordered subjects). Generic
 // field identifiers; the vertical rendered wording lives in lyngua values and in
 // the .docx template's placeholder keys (school_name/academic_year/… — the
 // operator template contract, unchanged).
-type reportCard struct {
+type clientOutcomeSummary struct {
 	DocumentHeaderName    string
 	SchedulePeriod        string
 	ClientName            string
@@ -102,7 +102,7 @@ type reportCard struct {
 	PrintedAt             string
 	Subjects              []itemRow
 	// PriceScheduleID is the group's AY anchor (subscription_group.price_schedule_id),
-	// threaded to the report-card template-binding resolver. Empty → the resolver
+	// threaded to the outcome summary template-binding resolver. Empty → the resolver
 	// returns the workspace-wide fallback binding (or none → embedded template).
 	PriceScheduleID string
 	// FormationGroups are the Formation-page (DOCX v2) category blocks — the
@@ -133,7 +133,7 @@ type reportCard struct {
 
 	// JobCategories is the converged generic block-layout tree: job_category.code
 	// → subtree {jobs[], singleton projection}. Assembled by collectCard,
-	// flattened by buildReportCardData under the "job_categories" root key, and
+	// flattened by buildClientOutcomeSummaryData under the "job_categories" root key, and
 	// blank-guarded against the block manifest. Nil on the v1/v2 tiers (the block
 	// artifact is the only reader).
 	JobCategories map[string]any
@@ -147,11 +147,11 @@ type ratingRow struct {
 	Phase2 string
 }
 
-// buildReportCardData mirrors buildInvoiceData: it flattens the assembled card
+// buildClientOutcomeSummaryData mirrors buildInvoiceData: it flattens the assembled card
 // into the doctemplate data map, emitting EVERY key referenced by the template
 // as a pre-formatted string (blank/dash, never omitted) so no raw {{..}} leaks
 // (engine leaks unresolved placeholders verbatim — G3/G5).
-func buildReportCardData(rc reportCard) map[string]any {
+func buildClientOutcomeSummaryData(rc clientOutcomeSummary) map[string]any {
 	subjects := make([]any, 0, len(rc.Subjects))
 	for _, s := range rc.Subjects {
 		// v2 criteria loop (crit_*) — FROZEN emission shape.
@@ -250,17 +250,18 @@ func buildReportCardData(rc reportCard) map[string]any {
 	return data
 }
 
-// collectCard assembles one client's report card by mirroring the view-3
+// collectCard assembles one client's outcome summary by mirroring the view-3
 // client_card fetch (group EXISTS gate → membership IDOR gate → jobs →
 // phase/year summaries) and ADDING the job_outcome_line per-criterion fetch.
 // Returns (nil,false) on any gate failure (fail-closed; the handler maps to
 // 403/404 without leaking which check failed).
-func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*reportCard, bool) {
+func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*clientOutcomeSummary, bool) {
 	group := fetchGroup(ctx, d, groupID)
 	if group == nil {
 		return nil, false
 	}
 	historical := !group.GetActive()
+	scheduleNames := fetchScheduleNames(ctx, d)
 
 	subID := memberSubscription(ctx, d, groupID, clientID, historical)
 	if subID == "" {
@@ -339,7 +340,7 @@ func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*repor
 	// its prior assignee-only behavior. Built over ALL of this card's subscription
 	// jobs (academic + deportment + group) so both the subject line and the group
 	// lead can fall back to the class edge.
-	classStaff := fetchClassEdgeTeachers(ctx, d, groupID, jobs)
+	classStaff := fetchProductPlanEdgeStaff(ctx, d, groupID, jobs)
 
 	// Display enrichment lookups (all optional/nil-safe → blank fields).
 	critNames := fetchCriterionNames(ctx, d, transcripts)
@@ -352,7 +353,7 @@ func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*repor
 	conduct := fetchItemRatings(ctx, d, deportJobs, groupJob, historical)
 	academicNames := map[string]bool{}
 	for _, jid := range jobIDs {
-		academicNames[strings.ToLower(cleanSubject(colName(tmplNames, jobTemplate[jid])))] = true
+		academicNames[strings.ToLower(stripScheduleSuffix(colName(tmplNames, jobTemplate[jid]), scheduleNames))] = true
 	}
 	merged := mergeRotationPairs(conduct, academicNames, fetchInactiveSubjectNames(ctx, d, subID))
 
@@ -421,7 +422,7 @@ func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*repor
 	academicRows := make([]academicTreeRow, 0, len(entries))
 	for _, e := range entries {
 		sem := semByJob[e.jobID]
-		display := cleanSubject(e.name)
+		display := stripScheduleSuffix(e.name, scheduleNames)
 		tr := transcripts[e.jobID]
 		// crit is derived from the transcript iff this job had ≥1 numeric
 		// task_outcome (even an all-zero one); hasMarks distinguishes an all-zero
@@ -500,7 +501,7 @@ func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*repor
 
 	// Converged generic block-layout tree (job_categories.<code>.jobs[] + the
 	// group-category singleton projection). Blank-guarded against the manifest in
-	// buildReportCardData. Nil-safe throughout — every unwired source blanks.
+	// buildClientOutcomeSummaryData. Nil-safe throughout — every unwired source blanks.
 	jobCategories := buildJobCategoriesTree(ctx, d, treeInputs{
 		cats:         cats,
 		academicCat:  catID,
@@ -515,8 +516,8 @@ func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*repor
 		historical:   historical,
 	}, treeStrictYear)
 
-	name, ay := groupParts(group.GetName())
-	grade, sectionName := gradeSection(name)
+	name, ay := splitGroupQualifier(group.GetName(), d.Options.GroupPeriodQualifierPrefix)
+	grade, sectionName := planLevelAndGroupLabel(name, fetchPlanName(ctx, d, group.GetPlanId()))
 	// The v2 display period prefers the price_schedule name (live format
 	// "2025-2026", active+inactive two-pass); the v1 `academic_year` key KEEPS
 	// the group-derived value — an operator-bound v1 template must not see
@@ -542,7 +543,7 @@ func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*repor
 		gateJobIDs = append(gateJobIDs, groupJob.GetId())
 	}
 
-	rc := &reportCard{
+	rc := &clientOutcomeSummary{
 		DocumentHeaderName:    strings.TrimSpace(d.DocumentHeaderName),
 		JobIDs:                gateJobIDs,
 		SchedulePeriod:        ay,
@@ -581,7 +582,7 @@ func fetchGroup(ctx context.Context, d *Deps, groupID string) *subscriptiongroup
 	for _, req := range requests {
 		resp, err := d.ListSubscriptionGroups(ctx, req)
 		if err != nil {
-			log.Printf("report card doc: list subscription group: %v", err)
+			log.Printf("outcome summary doc: list subscription group: %v", err)
 			continue
 		}
 		for _, g := range resp.GetData() {
@@ -610,7 +611,7 @@ func memberSubscription(ctx context.Context, d *Deps, groupID, clientID string, 
 	for _, req := range requests {
 		resp, err := d.ListSubscriptionGroupMembers(ctx, req)
 		if err != nil {
-			log.Printf("report card doc: list members: %v", err)
+			log.Printf("outcome summary doc: list members: %v", err)
 			continue
 		}
 		for _, m := range resp.GetData() {
@@ -645,7 +646,7 @@ func fetchJobs(ctx context.Context, d *Deps, subID string, historical bool) []*j
 				},
 			})
 			if err != nil {
-				log.Printf("report card doc: list jobs (page %d): %v", page, err)
+				log.Printf("outcome summary doc: list jobs (page %d): %v", page, err)
 				break
 			}
 			for _, j := range resp.GetData() {
@@ -687,7 +688,7 @@ func fetchTemplateNames(ctx context.Context, d *Deps, templateIDs []string, hist
 				Filters: &commonpb.FilterRequest{Filters: filters},
 			})
 			if err != nil {
-				log.Printf("report card doc: list job templates: %v", err)
+				log.Printf("outcome summary doc: list job templates: %v", err)
 				continue
 			}
 			for _, t := range resp.GetData() {
@@ -732,7 +733,7 @@ func fetchPhaseOrders(ctx context.Context, d *Deps, jobIDs []string, historical 
 				Filters: &commonpb.FilterRequest{Filters: filters},
 			})
 			if err != nil {
-				log.Printf("report card doc: list job phases: %v", err)
+				log.Printf("outcome summary doc: list job phases: %v", err)
 				continue
 			}
 			for _, p := range resp.GetData() {
@@ -759,7 +760,7 @@ func fetchSemesterLabels(ctx context.Context, d *Deps, jobIDs []string, phaseOrd
 	for _, jid := range jobIDs {
 		resp, err := d.ListPhaseOutcomeSummarysByJob(ctx, &phasesumpb.ListPhaseOutcomeSummarysByJobRequest{JobId: jid})
 		if err != nil {
-			log.Printf("report card doc: list phase summaries by job: %v", err)
+			log.Printf("outcome summary doc: list phase summaries by job: %v", err)
 			continue
 		}
 		for _, s := range resp.GetPhaseOutcomeSummarys() {
@@ -800,7 +801,7 @@ func fetchYearLabels(ctx context.Context, d *Deps, jobIDs []string) map[string]s
 			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("job_id", jobIDs[start:end])}},
 		})
 		if err != nil {
-			log.Printf("report card doc: list job outcome summaries: %v", err)
+			log.Printf("outcome summary doc: list job outcome summaries: %v", err)
 			continue
 		}
 		for _, s := range resp.GetData() {
@@ -1012,7 +1013,7 @@ func fetchTranscripts(ctx context.Context, d *Deps, jobByPhase map[string]string
 				},
 			})
 			if err != nil {
-				log.Printf("report card doc: list job tasks: %v", err)
+				log.Printf("outcome summary doc: list job tasks: %v", err)
 				break
 			}
 			data := resp.GetData()
@@ -1085,7 +1086,7 @@ func fetchTranscripts(ctx context.Context, d *Deps, jobByPhase map[string]string
 				},
 			})
 			if err != nil {
-				log.Printf("report card doc: list task outcomes: %v", err)
+				log.Printf("outcome summary doc: list task outcomes: %v", err)
 				break
 			}
 			data := resp.GetData()
@@ -1233,13 +1234,13 @@ func fetchCriteriaSequence(ctx context.Context, d *Deps, tmplTaskSet map[string]
 func listTemplateTaskCriteriasSafe(ctx context.Context, d *Deps, req *ttcpb.ListTemplateTaskCriteriasRequest) (resp *ttcpb.ListTemplateTaskCriteriasResponse, ok bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("report card doc: template_task_criteria unavailable, using stable criterion order: %v", r)
+			log.Printf("outcome summary doc: template_task_criteria unavailable, using stable criterion order: %v", r)
 			resp, ok = nil, false
 		}
 	}()
 	r, err := d.ListTemplateTaskCriterias(ctx, req)
 	if err != nil {
-		log.Printf("report card doc: list template task criteria: %v", err)
+		log.Printf("outcome summary doc: list template task criteria: %v", err)
 		return nil, false
 	}
 	return r, true
@@ -1281,7 +1282,7 @@ func fetchCriterionNames(ctx context.Context, d *Deps, transcripts map[string]*t
 			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("id", ids[start:end])}},
 		})
 		if err != nil {
-			log.Printf("report card doc: list outcome criteria: %v", err)
+			log.Printf("outcome summary doc: list outcome criteria: %v", err)
 			continue
 		}
 		for _, c := range resp.GetData() {
@@ -1351,7 +1352,7 @@ func fetchStaffNames(ctx context.Context, d *Deps, transcripts map[string]*trans
 			},
 		})
 		if err != nil {
-			log.Printf("report card doc: staff list page data: %v", err)
+			log.Printf("outcome summary doc: staff list page data: %v", err)
 			continue
 		}
 		requested := map[string]bool{}
@@ -1516,7 +1517,7 @@ func classStaffIDs(byJob map[string][]string) []string {
 	return out
 }
 
-// fetchClassEdgeTeachers derives every active primary class-edge servicer for
+// fetchProductPlanEdgeStaff derives every active primary class-edge servicer for
 // each of the card's jobs, keyed by job id — the read half of the D5 derive-on-read model. The class
 // edge (subscription_group_product_plan_staff, "sgpps") is the UI-maintained "who
 // services this cohort's offering" source of truth. Resolution (GENERIC, no
@@ -1546,7 +1547,7 @@ func classStaffIDs(byJob map[string][]string) []string {
 // before. Only ACTIVE edges for THIS group are honored (defense-in-depth
 // against an adapter that ignores the filter — a stale or foreign-cohort edge
 // must never attribute a teacher).
-func fetchClassEdgeTeachers(ctx context.Context, d *Deps, groupID string, jobs []*jobpb.Job) map[string][]string {
+func fetchProductPlanEdgeStaff(ctx context.Context, d *Deps, groupID string, jobs []*jobpb.Job) map[string][]string {
 	out := map[string][]string{}
 	if d.ListSubscriptionGroupProductPlanStaffs == nil || d.ListProductPlans == nil || groupID == "" || len(jobs) == 0 {
 		return out
@@ -1571,7 +1572,7 @@ func fetchClassEdgeTeachers(ctx context.Context, d *Deps, groupID string, jobs [
 			},
 		})
 		if err != nil {
-			log.Printf("report card doc: list class edges: %v", err)
+			log.Printf("outcome summary doc: list class edges: %v", err)
 			break
 		}
 		data := resp.GetData()
@@ -1614,7 +1615,7 @@ func fetchClassEdgeTeachers(ctx context.Context, d *Deps, groupID string, jobs [
 				Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("id", chunk)}},
 			})
 			if err != nil {
-				log.Printf("report card doc: list product plan staff eligibility: %v", err)
+				log.Printf("outcome summary doc: list product plan staff eligibility: %v", err)
 				eligibilityFailed = true
 				break
 			}
@@ -1670,7 +1671,7 @@ func fetchClassEdgeTeachers(ctx context.Context, d *Deps, groupID string, jobs [
 			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("id", chunk)}},
 		})
 		if err != nil {
-			log.Printf("report card doc: list product plans: %v", err)
+			log.Printf("outcome summary doc: list product plans: %v", err)
 			continue
 		}
 		want := map[string]bool{}
@@ -1733,7 +1734,7 @@ func fetchSchedulePeriod(ctx context.Context, d *Deps, priceScheduleID string) s
 	for _, req := range requests {
 		resp, err := d.ListPriceSchedules(ctx, req)
 		if err != nil {
-			log.Printf("report card doc: list price schedules: %v", err)
+			log.Printf("outcome summary doc: list price schedules: %v", err)
 			continue
 		}
 		for _, ps := range resp.GetData() {
@@ -1768,7 +1769,7 @@ func fetchClientReference(ctx context.Context, d *Deps, clientID string) string 
 		}},
 	})
 	if err != nil {
-		log.Printf("report card doc: list client attributes: %v", err)
+		log.Printf("outcome summary doc: list client attributes: %v", err)
 		return ""
 	}
 	for _, ca := range resp.GetData() {
@@ -1817,7 +1818,7 @@ func fetchClientAttributes(ctx context.Context, d *Deps, clientID string) map[st
 		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("client_id", clientID)}},
 	})
 	if err != nil {
-		log.Printf("report card doc: list client attributes (map): %v", err)
+		log.Printf("outcome summary doc: list client attributes (map): %v", err)
 		return out
 	}
 	for _, ca := range resp.GetData() {
@@ -1881,48 +1882,131 @@ func categoryIDByCode(cats map[string]catInfo, code string) string {
 // task_outcome but a real year-final (hasMarks=false + a summary present).
 func isNonEnrolledPlaceholder(row itemRow, hasMarks bool) bool {
 	// Delegate to the shared enrollment predicate so the grid/card surfaces and
-	// the DOCX apply ONE definition of "non-enrolled placeholder". HasPositiveMark
+	// the DOCX apply ONE definition of "non-enrolled placeholder". HasPositiveTaskOutcome
 	// is derived from this row's already-fetched per-criterion marks (the DOCX
 	// fetches marks per-criterion via fetchCriteriaByJob rather than the generic
 	// existence walk, so it computes the positive-mark signal here from the row).
-	ev := outcome_summary.EnrollmentEvidence{
-		HasMarks: hasMarks,
-		HasPositiveMark: outcome_summary.NumGreaterThan(row.CritA, 0) ||
+	ev := outcome_summary.TaskOutcomeEvidence{
+		HasTaskOutcome: hasMarks,
+		HasPositiveTaskOutcome: outcome_summary.NumGreaterThan(row.CritA, 0) ||
 			outcome_summary.NumGreaterThan(row.CritB, 0) ||
 			outcome_summary.NumGreaterThan(row.CritC, 0) ||
 			outcome_summary.NumGreaterThan(row.CritD, 0) ||
 			outcome_summary.NumGreaterThan(row.Total, 0),
 	}
-	return outcome_summary.IsNonEnrolledCell(ev, row.YearFinal, row.Sem1Band, row.Sem2Band)
+	return outcome_summary.IsPlaceholderOutcomeCell(ev, row.YearFinal, row.Sem1Band, row.Sem2Band)
 }
 
 // --- small helpers --------------------------------------------------------
 
-var ayRe = regexp.MustCompile(`\(\s*AY\s*([^)]+?)\s*\)`)
-var gradeRe = regexp.MustCompile(`^(Grade\s+\S+)\s+(.+)$`)
-var subjSuffixRe = regexp.MustCompile(`\s*(?:—|–|-)\s*AY\s.*$`)
-
-// groupParts splits "Grade 9 Gold (AY 2025-26)" → ("Grade 9 Gold", "2025-26").
-func groupParts(full string) (name, ay string) {
+// splitGroupQualifier separates only a trailing qualifier with the app's period prefix.
+func splitGroupQualifier(full, periodPrefix string) (name, period string) {
 	full = strings.TrimSpace(full)
-	if m := ayRe.FindStringSubmatch(full); len(m) == 2 {
-		ay = strings.TrimSpace(m[1])
+	prefix := strings.TrimSpace(periodPrefix)
+	if prefix == "" {
+		return full, ""
 	}
-	name = strings.TrimSpace(ayRe.ReplaceAllString(full, ""))
-	return name, ay
+	if !strings.HasSuffix(full, ")") {
+		return full, ""
+	}
+	open := strings.LastIndex(full, " (")
+	if open < 0 {
+		return full, ""
+	}
+	qualifier := strings.TrimSpace(full[open+2 : len(full)-1])
+	if qualifier == "" {
+		return full, ""
+	}
+	if !strings.HasPrefix(qualifier, prefix) {
+		return full, ""
+	}
+	qualifier = strings.TrimSpace(strings.TrimPrefix(qualifier, prefix))
+	return strings.TrimSpace(full[:open]), qualifier
 }
 
-// gradeSection splits "Grade 9 Gold" → ("Grade 9", "Gold").
-func gradeSection(name string) (grade, group string) {
-	if m := gradeRe.FindStringSubmatch(name); len(m) == 3 {
-		return strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
+// planLevelAndGroupLabel uses the group's plan name as the level and removes
+// that exact leading name from the group's display label when present.
+func planLevelAndGroupLabel(groupName, planName string) (level, groupLabel string) {
+	groupName, planName = strings.TrimSpace(groupName), strings.TrimSpace(planName)
+	if planName == "" {
+		return "", groupName
 	}
-	return "", name
+	if strings.HasPrefix(groupName, planName+" ") {
+		return planName, strings.TrimSpace(strings.TrimPrefix(groupName, planName))
+	}
+	return planName, groupName
 }
 
-// cleanSubject strips the trailing " — AY 2025-2026" from a subject label.
-func cleanSubject(name string) string {
-	return strings.TrimSpace(subjSuffixRe.ReplaceAllString(name, ""))
+// stripScheduleSuffix removes a separator plus an exact known schedule name.
+func stripScheduleSuffix(name string, scheduleNames []string) string {
+	name = strings.TrimSpace(name)
+	for _, schedule := range scheduleNames {
+		schedule = strings.TrimSpace(schedule)
+		if schedule == "" {
+			continue
+		}
+		for _, separator := range []string{"—", "–", "-"} {
+			if suffix := separator + " " + schedule; strings.HasSuffix(name, suffix) {
+				return strings.TrimSpace(strings.TrimSuffix(name, suffix))
+			}
+		}
+	}
+	return name
+}
+
+func fetchPlanName(ctx context.Context, d *Deps, planID string) string {
+	if d.ListPlans == nil || planID == "" {
+		return ""
+	}
+	for _, req := range []*planpb.ListPlansRequest{
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", planID)}}},
+		{Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", planID), boolEq("active", false)}}},
+	} {
+		resp, err := d.ListPlans(ctx, req)
+		if err != nil {
+			continue
+		}
+		for _, plan := range resp.GetData() {
+			if plan.GetId() == planID {
+				return strings.TrimSpace(plan.GetName())
+			}
+		}
+	}
+	return ""
+}
+
+func fetchScheduleNames(ctx context.Context, d *Deps) []string {
+	if d.ListPriceSchedules == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var names []string
+	for _, active := range []bool{true, false} {
+		for page := int32(1); page <= maxPages; page++ {
+			resp, err := d.ListPriceSchedules(ctx, &priceschedulepb.ListPriceSchedulesRequest{
+				Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{boolEq("active", active)}},
+				Sort:    gateIDSort(),
+				Pagination: &commonpb.PaginationRequest{
+					Limit:  pageLimit,
+					Method: &commonpb.PaginationRequest_Offset{Offset: &commonpb.OffsetPagination{Page: page}},
+				},
+			})
+			if err != nil {
+				break
+			}
+			for _, schedule := range resp.GetData() {
+				name := strings.TrimSpace(schedule.GetName())
+				if name != "" && !seen[name] {
+					seen[name] = true
+					names = append(names, name)
+				}
+			}
+			if len(resp.GetData()) < pageLimit {
+				break
+			}
+		}
+	}
+	return names
 }
 
 func clientName(ctx context.Context, d *Deps, clientID string) string {
@@ -1933,7 +2017,7 @@ func clientName(ctx context.Context, d *Deps, clientID string) string {
 		Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEq("id", clientID)}},
 	})
 	if err != nil {
-		log.Printf("report card doc: list client: %v", err)
+		log.Printf("outcome summary doc: list client: %v", err)
 		return clientID
 	}
 	for _, c := range resp.GetData() {

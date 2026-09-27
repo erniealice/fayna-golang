@@ -40,10 +40,10 @@ type SheetHeader struct {
 	PrintedAt    string // printed_at (formatted timestamp)
 }
 
-// SheetStudent is one roster row: the display name, the per-period final labels
+// SheetClient is one roster row: the display name, the per-period final labels
 // in sequence order (positional → period1, period2, …), and the stored year
 // final (D8: read verbatim, never recomputed). Any slot may be "" → blank cell.
-type SheetStudent struct {
+type SheetClient struct {
 	Name        string
 	PhaseFinals []string
 	YearFinal   string
@@ -55,7 +55,7 @@ type SheetStudent struct {
 // artifact prints two period columns, so extra slots are harmless (the engine
 // ignores unreferenced keys) and short slots are blank-seeded by the manifest.
 // Pure and DB-free — the caller (export.go's PDF branch) does all the fetching.
-func BuildSheetData(header SheetHeader, periodLabels []string, students []SheetStudent) map[string]any {
+func BuildSheetData(header SheetHeader, periodLabels []string, students []SheetClient) map[string]any {
 	data := map[string]any{
 		"sheet_title":   header.Title,
 		"section_name":  header.SectionName,

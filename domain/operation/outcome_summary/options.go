@@ -22,6 +22,9 @@ import (
 //   - client-column ref "last_name"
 //   - direction         "asc" | "desc"               (default "asc")
 type Options struct {
+	// GroupPeriodQualifierPrefix is removed from a trailing group qualifier
+	// when presenting its period. The empty value keeps the full qualifier.
+	GroupPeriodQualifierPrefix string
 	// Tab configures view-1's tabstrip (one tab per referenced entity row).
 	Tab TabOptions
 	// List configures WHAT view-1 lists.

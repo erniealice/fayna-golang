@@ -5,7 +5,7 @@ package outcome_summary
 // Extracted from packages/fayna-golang/domain/operation/routes.go.
 // Pure structural move — route string values are byte-identical.
 
-// Outcome Summary routes (report cards)
+// Outcome Summary routes (outcome summaries)
 const (
 	ListURL = "/outcomes/summaries"
 	// ListScopeURL is the activeness-scoped report-cards landing: {scope} ∈
@@ -26,13 +26,13 @@ const (
 	// to one row). Education keeps the unchanged value bound to
 	// outcome_summary.subscription_group_export in education/route.json.
 	SubscriptionGroupExportURL = "/outcomes/summaries/subscription-group/{id}/export"
-	// ClientCardURL is the per-client report card (view-3): {id} = subscription_group
+	// ClientCardURL is the per-client outcome summary (view-3): {id} = subscription_group
 	// id, {client_id} = the client id. The generic "client" path noun is
 	// lyngua-fied to "client" on education
 	// Education keeps the unchanged value bound to outcome_summary.client in
 	// education/route.json.
 	ClientCardURL = "/outcomes/summaries/subscription-group/{id}/client/{client_id}"
-	// ClientDocumentURL streams the per-client report card as a .docx download
+	// ClientDocumentURL streams the per-client outcome summary as a .docx download
 	// ({id} = subscription_group id, {client_id} = the client id).
 	// Education keeps the unchanged value bound to outcome_summary.client_document
 	// in education/route.json.
@@ -45,7 +45,7 @@ const (
 	GroupDetailURL = "/subscription-groups/detail/{id}"
 	PhaseURL       = "/jobs/detail/{id}/phase/{phase_id}/summary"
 
-	// TemplateSettingsURL is the standalone report-card template management page
+	// TemplateSettingsURL is the standalone outcome summary template management page
 	// (TB3): list of AY→document_template bindings + upload/publish/delete. A
 	// dedicated settings surface (D3), NOT a tab on the landing. GET only — no
 	// mutation, so it stays outside /action/. Education overrides it to
@@ -71,14 +71,14 @@ const (
 	TemplateDeleteURL = "/action/outcome-summary/templates/delete"
 )
 
-// Routes holds all route paths for outcome summary (report card) views.
+// Routes holds all route paths for outcome summary (outcome summary) views.
 type Routes struct {
 	// Sidebar navigation context
 	ActiveNav    string `json:"active_nav"`
 	ActiveSubNav string `json:"active_sub_nav"`
 
 	// ListActiveSubNav overrides ActiveSubNav for the standalone list page.
-	// Job/phase summary pages highlight "jobs" while the list page highlights "report-cards".
+	// Job/phase summary pages highlight "jobs" while the list page highlights "outcome-summaries".
 	ListActiveSubNav string `json:"list_active_sub_nav"`
 
 	ListURL                    string `json:"list_url"`
@@ -102,7 +102,7 @@ type Routes struct {
 	TemplateDeleteURL   string `json:"template_delete_url"`
 
 	// SubscriptionGroup Template management is a distinct document family from the
-	// existing report-card template settings above. Generic defaults stay empty.
+	// existing outcome summary template settings above. Generic defaults stay empty.
 	SubscriptionGroupDocumentTemplateSettingsURL string `json:"subscription_group_document_template_settings_url"`
 	SubscriptionGroupDocumentTemplateUploadURL   string `json:"subscription_group_document_template_upload_url"`
 	SubscriptionGroupDocumentTemplatePublishURL  string `json:"subscription_group_document_template_publish_url"`
@@ -115,7 +115,7 @@ func DefaultRoutes() Routes {
 	return Routes{
 		ActiveNav:        "job",
 		ActiveSubNav:     "jobs",
-		ListActiveSubNav: "report-cards",
+		ListActiveSubNav: "outcome-summaries",
 
 		ListURL:                    ListURL,
 		ListScopeURL:               ListScopeURL,

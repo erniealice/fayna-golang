@@ -825,25 +825,25 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupOutcomeExport.Execute
 	}
 	if uc.Service != nil && uc.Service.SubscriptionGroupOutcomeExport != nil &&
-		uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientReportCard != nil {
-		result.Operation.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientReportCard =
-			uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientReportCard.Execute
+		uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientOutcomeSummary != nil {
+		result.Operation.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientOutcomeSummary =
+			uc.Service.SubscriptionGroupOutcomeExport.GetSubscriptionGroupClientOutcomeSummary.Execute
 	}
 	if uc.Service != nil && uc.Service.SubscriptionGroupOutcomeExport != nil &&
 		uc.Service.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding != nil {
 		result.Operation.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding =
 			uc.Service.SubscriptionGroupOutcomeExport.ListSubscriptionGroupOutcomeLanding.Execute
 	}
-	// ResolvePublishedReportCardTemplate (R3 / DEC-3) rides the SAME
+	// ResolvePublishedOutcomeSummaryTemplate (R3 / DEC-3) rides the SAME
 	// SubscriptionGroupOutcomeExport service seam, authorized against
 	// subscription_group_outcome_export:read instead of the management-only
 	// job_outcome_summary_document_template:list gate. Wired independently;
 	// wireOutcomeMatrixDeps / wireOutcomeSummaryDeps prefer it and fall back to
 	// the old JOSDT resolver only when this closure is nil.
 	if uc.Service != nil && uc.Service.SubscriptionGroupOutcomeExport != nil &&
-		uc.Service.SubscriptionGroupOutcomeExport.ResolvePublishedReportCardTemplate != nil {
-		result.Operation.SubscriptionGroupOutcomeExport.ResolvePublishedReportCardTemplate =
-			uc.Service.SubscriptionGroupOutcomeExport.ResolvePublishedReportCardTemplate.Execute
+		uc.Service.SubscriptionGroupOutcomeExport.ResolvePublishedOutcomeSummaryTemplate != nil {
+		result.Operation.SubscriptionGroupOutcomeExport.ResolvePublishedOutcomeSummaryTemplate =
+			uc.Service.SubscriptionGroupOutcomeExport.ResolvePublishedOutcomeSummaryTemplate.Execute
 	}
 	// ResolveStaff maps the session user → active staff_id through the typed staff
 	// list use case (the read-only gate + record-action IDOR guard authority).

@@ -1,4 +1,4 @@
-// Package document renders a client's report card as a .docx through the
+// Package document renders a client's outcome summary as a .docx through the
 // fycha `doctemplate` engine (injected as a GenerateDoc closure — fayna does
 // NOT import fycha). Two template artifacts ship embedded:
 //
@@ -38,40 +38,40 @@ package document
 import _ "embed"
 
 //go:embed report-card-template.docx
-var reportCardTemplateV1 []byte
+var clientOutcomeSummaryTemplateV1 []byte
 
 //go:embed report-card-template-v2.docx
-var reportCardTemplateV2 []byte
+var clientOutcomeSummaryTemplateV2 []byte
 
 //go:embed report-card-template-v3.docx
-var reportCardTemplateV3 []byte
+var clientOutcomeSummaryTemplateV3 []byte
 
 //go:embed outcome-summary-template-block.docx
-var reportCardTemplateBlock []byte
+var clientOutcomeSummaryTemplateBlock []byte
 
 //go:embed outcome-summary-template-block.manifest.json
-var reportCardTemplateBlockManifest []byte
+var clientOutcomeSummaryTemplateBlockManifest []byte
 
 // Template returns the ORIGINAL v1 summary-layout template bytes — the
 // package-wide zero-option fallback (tiers that configure nothing keep their
 // exact prior document), and the registered version-1 artifact for the
 // existing binding row.
-func Template() []byte { return reportCardTemplateV1 }
+func Template() []byte { return clientOutcomeSummaryTemplateV1 }
 
 // TemplateV1 is the explicit-name alias for the original v1 artifact.
-func TemplateV1() []byte { return reportCardTemplateV1 }
+func TemplateV1() []byte { return clientOutcomeSummaryTemplateV1 }
 
 // TemplateV2 returns the v2 faithful block-layout template bytes. KEPT as the
 // registered v2 artifact; no longer the block-variant fallback (v3 supersedes
 // it). Its content is school-specific operator material — it must never become
 // another tier's implicit fallback.
-func TemplateV2() []byte { return reportCardTemplateV2 }
+func TemplateV2() []byte { return clientOutcomeSummaryTemplateV2 }
 
 // Deprecated: the v3 placeholder emissions were superseded by the converged
 // contract, and no selector renders these bytes any longer (the block
 // TemplateVariant selects TemplateBlock). The frozen bytes and this accessor are
 // retained only as the registered v3 artifact; do not wire new callers to it.
-func TemplateV3() []byte { return reportCardTemplateV3 }
+func TemplateV3() []byte { return clientOutcomeSummaryTemplateV3 }
 
 // TemplateBlock returns the converged generic-variable block-layout template
 // bytes — one body loop {{#job_categories.<code>.jobs}}, per-phase leaves, the
@@ -79,11 +79,11 @@ func TemplateV3() []byte { return reportCardTemplateV3 }
 // embedded artifact where the app opts in via DocumentOptions.TemplateVariant ==
 // TemplateVariantBlock. Its content is school-specific operator material — it
 // must never become another tier's implicit fallback.
-func TemplateBlock() []byte { return reportCardTemplateBlock }
+func TemplateBlock() []byte { return clientOutcomeSummaryTemplateBlock }
 
 // ManifestBlock returns the blank-guard manifest JSON that accompanies
 // TemplateBlock: every scalar path and loop path the artifact references,
 // generated from the same profile as the DOCX. The builder consumes it to seed
 // the referenced tree blank before overlay (the engine leaks unresolved leaves
 // verbatim), so no handwritten placeholder inventory is maintained.
-func ManifestBlock() []byte { return reportCardTemplateBlockManifest }
+func ManifestBlock() []byte { return clientOutcomeSummaryTemplateBlockManifest }

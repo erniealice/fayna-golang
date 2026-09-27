@@ -29,7 +29,7 @@ import (
 func TestExplicitPeriodDocumentName(t *testing.T) {
 	labels := outcome_summary.DefaultLabels()
 	category := &exportpb.JobCategoryOption{JobTemplatePhases: []*exportpb.JobTemplatePhaseOption{{Code: "q1", Name: "Term 1"}}}
-	deps := &Deps{Labels: labels, FindApplicableReportCardBinding: func(_ context.Context, req *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error) {
+	deps := &Deps{Labels: labels, FindApplicableOutcomeSummaryDocumentTemplate: func(_ context.Context, req *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error) {
 		if req.GetPriceScheduleId() != "ay-1" || req.GetJobTemplatePhaseCode() != "q1" {
 			t.Fatalf("resolver request = %#v", req)
 		}
@@ -50,7 +50,7 @@ func TestExplicitPeriodDocumentName(t *testing.T) {
 func exportCell(id string, label *string, score *float64, hasMarks, positive bool) *exportpb.SubscriptionGroupOutcomeCell {
 	return &exportpb.SubscriptionGroupOutcomeCell{
 		JobTemplateId: id, ScaledLabel: label, ScaledScore: score,
-		EnrollmentEvidence: &exportpb.EnrollmentEvidence{HasMarks: hasMarks, HasPositiveMark: positive},
+		TaskOutcomeEvidence: &exportpb.TaskOutcomeEvidence{HasTaskOutcome: hasMarks, HasPositiveTaskOutcome: positive},
 	}
 }
 
@@ -266,7 +266,7 @@ func TestSubscriptionGroupExport_MissingForeignAndZeroMatrixStatuses(t *testing.
 	}
 }
 
-func TestSubscriptionGroupExport_PermutedIDsAndEnrollmentRules(t *testing.T) {
+func TestSubscriptionGroupExport_PermutedIDsAndTaskOutcomeEvidenceRules(t *testing.T) {
 	deps, _ := exportDeps(exportFixture())
 	w := runExport(deps, "/export?format=csv&job_category_id=cat-a&period=final", "job_outcome_summary:list")
 	if w.Code != 200 {
@@ -299,7 +299,7 @@ func TestSubscriptionGroupExport_CorruptMatrixFailsBeforeBytes(t *testing.T) {
 			r.ClientRows[0].Cells[0].JobTemplateId = "unknown"
 		}},
 		{"missing evidence", func(r *exportpb.GetSubscriptionGroupOutcomeExportResponse) {
-			r.ClientRows[0].Cells[0].EnrollmentEvidence = nil
+			r.ClientRows[0].Cells[0].TaskOutcomeEvidence = nil
 		}},
 	}
 	for _, tc := range cases {

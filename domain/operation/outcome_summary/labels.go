@@ -20,9 +20,10 @@ type Labels struct {
 	// vocabulary. Canonical tags stay generic; vertical wording is a Lyngua value.
 	SubscriptionGroupExport SubscriptionGroupExportLabels `json:"subscription_group_export"`
 	ClientDocumentDownload  ClientDocumentDownloadLabels  `json:"client_document_download"`
+	Document                DocumentLabels                `json:"document"`
 	// ClientDocument holds wording printed INSIDE client documents (not UI).
 	ClientDocument ClientDocumentLabels `json:"client_document"`
-	// TemplateSettings holds the TB3 report-card template management surface
+	// TemplateSettings holds the TB3 outcome summary template management surface
 	// strings. Same snake_case-json-tag rule as LandingLabels — a missing tag
 	// silently falls back to the compiled default.
 	TemplateSettings TemplateSettingsLabels `json:"template_settings"`
@@ -105,9 +106,9 @@ type SubscriptionGroupDocumentTemplateSettingsLabels struct {
 	CleanupFailed                                         string `json:"cleanup_failed"`
 }
 
-// TemplateSettingsLabels holds the report-card template settings page strings
+// TemplateSettingsLabels holds the outcome summary template settings page strings
 // (list + upload drawer + publish/delete). Generic identifiers; the vertical
-// wording ("Report Card Template") lives only in lyngua values.
+// wording ("Outcome Summary Template") lives only in lyngua values.
 type TemplateSettingsLabels struct {
 	Title          string `json:"title"`
 	Subtitle       string `json:"subtitle"`
@@ -144,7 +145,7 @@ type TemplateSettingsLabels struct {
 	UploadFailed   string `json:"upload_failed"`
 }
 
-// PeriodLabels holds the view-3 (per-client report card) strings, grouped by
+// PeriodLabels holds the view-3 (per-client outcome summary) strings, grouped by
 // grading period. Same snake_case-json-tag rule as LandingLabels/SubscriptionGroupLabels —
 // a per-tier override silently falls back to the compiled default without the
 // tag. (Renamed from ClientLabels{Semester1,Semester2}: generic identifiers,
@@ -284,6 +285,10 @@ type ColumnLabels struct {
 	IssuedBy      string `json:"issued_by"`
 }
 
+type DocumentLabels struct {
+	DownloadFilename string `json:"download_filename"`
+}
+
 type EmptyLabels struct {
 	Title   string `json:"title"`
 	Message string `json:"message"`
@@ -330,9 +335,9 @@ func DefaultLabels() Labels {
 	return Labels{
 		Page: PageLabels{
 			JobHeading:   "Outcome Summary",
-			JobCaption:   "Job-level outcome report card",
+			JobCaption:   "Job-level outcome summary",
 			PhaseHeading: "Phase Outcome Summary",
-			PhaseCaption: "Phase-level outcome report card",
+			PhaseCaption: "Phase-level outcome summary",
 		},
 		Buttons: ButtonLabels{
 			GenerateSummary: "Generate Summary",
@@ -370,7 +375,7 @@ func DefaultLabels() Labels {
 		Errors: ErrorLabels{
 			NotFound:         "Outcome summary not found",
 			PermissionDenied: "You do not have permission to perform this action",
-			RenderGate:       "This report card cannot be generated yet — its grades are still being reviewed and have not been published. Please try again after the grading period is published.",
+			RenderGate:       "This outcome summary cannot be generated yet — its outcomes are still being reviewed and have not been published. Please try again after the reporting period is published.",
 		},
 		Landing: LandingLabels{
 			Title:           "Outcome Reports",
@@ -446,7 +451,7 @@ func DefaultLabels() Labels {
 			GroupJobCategory:  "Job category",
 		},
 		ClientDocumentDownload: ClientDocumentDownloadLabels{
-			DrawerTitle:           "Download Report Card",
+			DrawerTitle:           "Download Outcome Summary",
 			PeriodLabel:           "Period",
 			PeriodYearFinal:       "Year Final",
 			FormatLabel:           "Format",
@@ -457,6 +462,7 @@ func DefaultLabels() Labels {
 			DownloadNotice:        "Preparing your file. Please do not close this window or refresh the page until the download completes.",
 			DownloadErrorFallback: "The download could not be completed. Please try again.",
 		},
+		Document: DocumentLabels{DownloadFilename: "outcome-summary.pdf"},
 		TemplateSettings: TemplateSettingsLabels{
 			Title:              "Outcome Report Templates",
 			Subtitle:           "Upload and publish the document template used to render outcome reports per schedule",

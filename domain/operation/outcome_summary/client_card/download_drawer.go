@@ -31,7 +31,7 @@ type DrawerDeps struct {
 	ResolvePrincipalKind func(context.Context) int32
 	ClientAttributeCodes []string
 
-	GetSubscriptionGroupClientReportCard func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
+	GetSubscriptionGroupClientOutcomeSummary func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error)
 }
 
 // DownloadDrawerData is the template-facing state for the HTMX-loaded partial.
@@ -57,7 +57,7 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 			profile.CategoryBindingScope != subscriptiongroupdocument.CategoryBindingScopeAllCategories ||
 			strings.TrimSpace(deps.Routes.ClientDownloadDrawerURL) == "" ||
 			strings.TrimSpace(deps.Routes.ClientDocumentURL) == "" ||
-			deps.GetSubscriptionGroupClientReportCard == nil {
+			deps.GetSubscriptionGroupClientOutcomeSummary == nil {
 			return view.Error(fmt.Errorf("client report download is not configured"))
 		}
 		if viewCtx == nil || viewCtx.Request == nil || viewCtx.Request.URL == nil {
@@ -69,7 +69,7 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 			return view.ViewResult{Error: fmt.Errorf("subscription group and client ids are required"), StatusCode: http.StatusBadRequest}
 		}
 
-		response, err := deps.GetSubscriptionGroupClientReportCard(ctx, &exportpb.GetSubscriptionGroupClientReportCardRequest{
+		response, err := deps.GetSubscriptionGroupClientOutcomeSummary(ctx, &exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest{
 			SubscriptionGroupId:  groupID,
 			ClientId:             clientID,
 			ClientAttributeCodes: append([]string(nil), deps.ClientAttributeCodes...),
@@ -77,19 +77,19 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 		if err != nil {
 			return view.Error(fmt.Errorf("load client report download options: %w", err))
 		}
-		if response == nil || !response.GetSuccess() || response.GetReportCard() == nil {
-			return view.ViewResult{Error: fmt.Errorf("client report card not found"), StatusCode: http.StatusNotFound}
+		if response == nil || !response.GetSuccess() || response.GetOutcomeSummary() == nil {
+			return view.ViewResult{Error: fmt.Errorf("client outcome summary not found"), StatusCode: http.StatusNotFound}
 		}
-		projection := response.GetReportCard()
+		projection := response.GetOutcomeSummary()
 		if projection.GetContext() == nil || projection.GetContext().GetSubscriptionGroupId() != groupID ||
 			projection.GetClient() == nil || projection.GetClient().GetClientId() != clientID ||
 			len(projection.GetClientSubscriptionIds()) == 0 {
-			return view.ViewResult{Error: fmt.Errorf("client report card not found"), StatusCode: http.StatusNotFound}
+			return view.ViewResult{Error: fmt.Errorf("client outcome summary not found"), StatusCode: http.StatusNotFound}
 		}
 
 		periods := clientReportPeriodOptions(deps.Labels, projection)
 		if len(periods) == 0 {
-			return view.ViewResult{Error: fmt.Errorf("client report card has no downloadable outcomes"), StatusCode: http.StatusNotFound}
+			return view.ViewResult{Error: fmt.Errorf("client outcome summary has no downloadable outcomes"), StatusCode: http.StatusNotFound}
 		}
 		return view.OK("outcome-summary-client-download-drawer-form", &DownloadDrawerData{
 			FormURL:      route.ResolveURL(deps.Routes.ClientDocumentURL, "id", groupID, "client_id", clientID),
@@ -101,7 +101,7 @@ func NewDownloadDrawer(deps *DrawerDeps) view.View {
 	})
 }
 
-func clientReportPeriodOptions(labels outcome_summary.Labels, projection *exportpb.ClientReportCardProjection) []types.SelectOption {
+func clientReportPeriodOptions(labels outcome_summary.Labels, projection *exportpb.ClientOutcomeSummaryProjection) []types.SelectOption {
 	if projection == nil {
 		return nil
 	}
@@ -154,7 +154,7 @@ func clientReportPeriodOptions(labels outcome_summary.Labels, projection *export
 	return options
 }
 
-func clientProjectionHasYearFinal(projection *exportpb.ClientReportCardProjection) bool {
+func clientProjectionHasYearFinal(projection *exportpb.ClientOutcomeSummaryProjection) bool {
 	if projection == nil {
 		return false
 	}

@@ -115,9 +115,9 @@ func TestBuildProjectedOutcomeSectionsSpansProjectedPhasesAndRetainsZero(t *test
 	card.JobTasks = append(card.JobTasks, &jobtaskpb.JobTask{
 		Id: "task-art-final", JobPhaseId: "phase-art-final", TemplateTaskId: ptr("template-task-art"), Active: true,
 	})
-	card.TaskOutcomes = append(card.TaskOutcomes, &exportpb.ClientReportCardTaskOutcome{
+	card.TaskOutcomes = append(card.TaskOutcomes, &exportpb.ClientOutcomeSummaryTaskOutcome{
 		JobTaskId: "task-art-m08", TemplateTaskCriteriaId: "link-m08", NumericValue: ptr(float64(2)), RecordedDate: ptr(int64(55)),
-	}, &exportpb.ClientReportCardTaskOutcome{
+	}, &exportpb.ClientOutcomeSummaryTaskOutcome{
 		JobTaskId: "task-art-final", TemplateTaskCriteriaId: "link-technique", NumericValue: ptr(float64(0)), RecordedDate: ptr(int64(60)),
 	})
 	sections := buildProjectedOutcomeSections(card, false)
@@ -232,7 +232,7 @@ func TestBuildProjectedOutcomeCellIndexSuppressesConflictingDuplicateTuple(t *te
 	card.JobTasks = append(card.JobTasks, &jobtaskpb.JobTask{
 		Id: "task-art-2", JobPhaseId: "phase-art-2", TemplateTaskId: ptr("template-task-art"), Active: true,
 	})
-	card.TaskOutcomes = append(card.TaskOutcomes, &exportpb.ClientReportCardTaskOutcome{
+	card.TaskOutcomes = append(card.TaskOutcomes, &exportpb.ClientOutcomeSummaryTaskOutcome{
 		JobTaskId: "task-art-2", TemplateTaskCriteriaId: "link-technique", NumericValue: ptr(float64(4)),
 		ScaledLabel: ptr("Advanced"), RecordedDate: ptr(int64(50)),
 	})
@@ -253,7 +253,7 @@ func TestBuildProjectedOutcomeCellIndexDeduplicatesIdenticalCellValues(t *testin
 	card.JobTasks = append(card.JobTasks, &jobtaskpb.JobTask{
 		Id: "task-art-2", JobPhaseId: "phase-art-2", TemplateTaskId: ptr("template-task-art"), Active: true,
 	})
-	card.TaskOutcomes = append(card.TaskOutcomes, &exportpb.ClientReportCardTaskOutcome{
+	card.TaskOutcomes = append(card.TaskOutcomes, &exportpb.ClientOutcomeSummaryTaskOutcome{
 		JobTaskId: "task-art-2", TemplateTaskCriteriaId: "link-technique", NumericValue: ptr(float64(3)),
 		ScaledLabel: ptr("Proficient"), RecordedDate: ptr(int64(50)),
 	})
@@ -308,7 +308,7 @@ func TestBuildProjectedOutcomeCellIndexEscapesDotsAndIgnoresForeignClientJobs(t 
 	card.JobTasks = append(card.JobTasks, &jobtaskpb.JobTask{
 		Id: "foreign-task", JobPhaseId: "foreign-phase", TemplateTaskId: ptr("template-task-art"), Active: true,
 	})
-	card.TaskOutcomes = append(card.TaskOutcomes, &exportpb.ClientReportCardTaskOutcome{
+	card.TaskOutcomes = append(card.TaskOutcomes, &exportpb.ClientOutcomeSummaryTaskOutcome{
 		JobTaskId: "foreign-task", TemplateTaskCriteriaId: "link-technique", NumericValue: ptr(float64(99)),
 		ScaledLabel: ptr("Foreign marker"), RecordedDate: ptr(int64(99)),
 	})
@@ -370,17 +370,17 @@ func TestBuildClientPhaseReportDataOmitsJobsWithoutSelectedActivePhase(t *testin
 func TestBuildClientPhaseReportDataRejectsMissingPhaseAndMalformedProjection(t *testing.T) {
 	tests := []struct {
 		name string
-		card *exportpb.ClientReportCardProjection
+		card *exportpb.ClientOutcomeSummaryProjection
 	}{
 		{name: "nil projection"},
-		{name: "missing context", card: &exportpb.ClientReportCardProjection{Client: &exportpb.ClientReportCardClient{ClientId: "client-1"}}},
-		{name: "missing client", card: &exportpb.ClientReportCardProjection{Context: &exportpb.SubscriptionGroupOutcomeExportContext{SubscriptionGroupId: "group-1"}}},
-		{name: "job belongs to another client", card: func() *exportpb.ClientReportCardProjection {
+		{name: "missing context", card: &exportpb.ClientOutcomeSummaryProjection{Client: &exportpb.ClientOutcomeSummaryClient{ClientId: "client-1"}}},
+		{name: "missing client", card: &exportpb.ClientOutcomeSummaryProjection{Context: &exportpb.SubscriptionGroupOutcomeExportContext{SubscriptionGroupId: "group-1"}}},
+		{name: "job belongs to another client", card: func() *exportpb.ClientOutcomeSummaryProjection {
 			card := clientPhaseProjectionFixture()
 			card.Jobs[0].ClientId = ptr("client-other")
 			return card
 		}()},
-		{name: "no requested phase", card: func() *exportpb.ClientReportCardProjection {
+		{name: "no requested phase", card: func() *exportpb.ClientOutcomeSummaryProjection {
 			card := clientPhaseProjectionFixture()
 			for _, phase := range card.JobTemplatePhases {
 				phase.Code = ptr("term_1")
@@ -417,7 +417,7 @@ func TestBuildClientPhaseReportDataSelectsAnyActiveClientPhaseCode(t *testing.T)
 
 func TestStaffNamesUsesTheSelectedJobPhase(t *testing.T) {
 	card := clientPhaseProjectionFixture()
-	card.TeacherAssignments = []*exportpb.ClientReportCardTeacherAssignment{
+	card.StaffAssignments = []*exportpb.ClientOutcomeSummaryStaffAssignment{
 		{JobId: "job-art", JobPhaseId: "phase-art", DisplayName: "Selected Teacher"},
 		{JobId: "job-art", JobPhaseId: "phase-art-2", DisplayName: "Other Phase Teacher"},
 		{JobId: "job-bio", JobPhaseId: "phase-art", DisplayName: "Mismatched Job Teacher"},
@@ -433,12 +433,12 @@ func TestFormatClientReportMaximumPreservesFractionalValues(t *testing.T) {
 	}
 }
 
-func clientPhaseProjectionFixture() *exportpb.ClientReportCardProjection {
+func clientPhaseProjectionFixture() *exportpb.ClientOutcomeSummaryProjection {
 	clientID := "client-1"
 	categoryAcademic, categoryOther := &categorypb.JobCategory{Id: "cat-academic", Name: "Academic", Code: ptr("academic"), SortOrder: ptr(int32(1))}, &categorypb.JobCategory{Id: "cat-other", Name: "Other", Code: ptr("other"), SortOrder: ptr(int32(2))}
-	return &exportpb.ClientReportCardProjection{
+	return &exportpb.ClientOutcomeSummaryProjection{
 		Context:       &exportpb.SubscriptionGroupOutcomeExportContext{SubscriptionGroupId: "group-1", SubscriptionGroupName: "Grade 10", PriceScheduleName: "AY 2026-27"},
-		Client:        &exportpb.ClientReportCardClient{ClientId: clientID, Name: "Año, N"},
+		Client:        &exportpb.ClientOutcomeSummaryClient{ClientId: clientID, Name: "Año, N"},
 		JobCategories: []*categorypb.JobCategory{categoryOther, categoryAcademic},
 		JobTemplates: []*jobtemplatepb.JobTemplate{
 			{Id: "template-bio", Name: "Biology", JobCategoryId: ptr("cat-academic"), Active: true},
@@ -480,7 +480,7 @@ func clientPhaseProjectionFixture() *exportpb.ClientReportCardProjection {
 			{Id: "link-reflection", JobTemplateTaskId: "template-task-art", OutcomeCriteriaId: "criterion-reflection", SequenceOrder: 2, Active: true},
 			{Id: "link-planning", JobTemplateTaskId: "template-task-planning", OutcomeCriteriaId: "criterion-planning", SequenceOrder: 1, Active: true},
 		},
-		TaskOutcomes: []*exportpb.ClientReportCardTaskOutcome{
+		TaskOutcomes: []*exportpb.ClientOutcomeSummaryTaskOutcome{
 			{JobTaskId: "task-art", TemplateTaskCriteriaId: "link-technique", NumericValue: ptr(float64(3)), ScaledLabel: ptr("Proficient"), DeterminationNote: ptr("Careful work"), RecordedDate: ptr(int64(50))},
 		},
 		PhaseOutcomeSummaries: []*phaseoutcomepb.PhaseOutcomeSummary{
@@ -539,7 +539,7 @@ func TestTrimTrailingQualifier(t *testing.T) {
 // attribute (configured code), copied onto every job page.
 func TestBuildClientPhaseReportDataPlanLabelFromPlanAttribute(t *testing.T) {
 	card := clientPhaseProjectionFixture()
-	card.PlanAttributes = []*exportpb.ClientReportCardAttribute{{Code: "program_year", Value: "Year 5"}, {Code: "other", Value: "x"}}
+	card.PlanAttributes = []*exportpb.ClientOutcomeSummaryAttribute{{Code: "program_year", Value: "Year 5"}, {Code: "other", Value: "x"}}
 	data, err := buildClientPhaseReportData(&Deps{DocOptions: outcome_summary.DocumentOptions{PlanLabelAttributeCode: "program_year"}}, card, testProgressReportPhaseCode, "", "")
 	if err != nil {
 		t.Fatal(err)

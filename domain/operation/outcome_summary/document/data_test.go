@@ -19,10 +19,104 @@ import (
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	productplanstaffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan_staff"
+	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 	subscriptiongrouppb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group"
 	subscriptiongroupmemberpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_member"
 	sgppspb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/subscription_group_product_plan_staff"
 )
+
+func TestPlanLevelAndGroupLabel_MatchesLegacyGradeParse(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ group, plan, level, label string }{
+		{"Grade 9 Gold", "Grade 9", "Grade 9", "Gold"},
+		{"Grade 10 Palladium", "Grade 10", "Grade 10", "Palladium"},
+		{"Grade 9 Gold", "", "", "Grade 9 Gold"},
+		{"Palladium", "", "", "Palladium"},
+	} {
+		level, label := planLevelAndGroupLabel(tc.group, tc.plan)
+		if level != tc.level || label != tc.label {
+			t.Errorf("planLevelAndGroupLabel(%q, %q) = (%q, %q), want (%q, %q)", tc.group, tc.plan, level, label, tc.level, tc.label)
+		}
+	}
+}
+
+// Generic plan names have no equivalent in the old Grade-only parser.
+func TestPlanLevelAndGroupLabel_GenericPlanName(t *testing.T) {
+	level, label := planLevelAndGroupLabel("Level 2 Blue", "Level 2")
+	if level != "Level 2" || label != "Blue" {
+		t.Fatalf("got (%q, %q)", level, label)
+	}
+}
+
+func TestStripScheduleSuffix_OnlyKnownSchedules(t *testing.T) {
+	t.Parallel()
+	known := []string{"AY 2025-2026", "AY 2026-2027"}
+	for _, tc := range []struct{ input, want string }{
+		{"Mathematics — AY 2025-2026", "Mathematics"},
+		{"Science – AY 2026-2027", "Science"},
+		{"Arts - AY 2025-2026", "Arts"},
+		{"Mathematics — AY 2024-2025", "Mathematics — AY 2024-2025"},
+		{"Mathematics — Unknown", "Mathematics — Unknown"},
+		{"Mathematics", "Mathematics"},
+	} {
+		if got := stripScheduleSuffix(tc.input, known); got != tc.want {
+			t.Errorf("stripScheduleSuffix(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestSplitGroupQualifier_PrefixFromOptions(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, prefix, wantName, wantPeriod string }{
+		{"Grade 9 Gold (AY 2025-26)", "AY", "Grade 9 Gold", "2025-26"},
+		{"Grade 9 Gold (AY 2025-26)", "", "Grade 9 Gold (AY 2025-26)", ""},
+		{"Grade 9 Gold (Q1)", "AY", "Grade 9 Gold (Q1)", ""},
+		{"Palladium", "AY", "Palladium", ""},
+	} {
+		options := outcome_summary.Options{GroupPeriodQualifierPrefix: tc.prefix}
+		name, period := splitGroupQualifier(tc.name, options.GroupPeriodQualifierPrefix)
+		if name != tc.wantName || period != tc.wantPeriod {
+			t.Errorf("splitGroupQualifier(%q, %q) = (%q, %q), want (%q, %q)", tc.name, tc.prefix, name, period, tc.wantName, tc.wantPeriod)
+		}
+	}
+}
+
+// A non-education qualifier is generic-only; the legacy AY parser kept it.
+func TestSplitGroupQualifier_GenericConfiguredPrefix(t *testing.T) {
+	name, period := splitGroupQualifier("Group One (Q1)", "Q")
+	if name != "Group One" || period != "1" {
+		t.Fatalf("got (%q, %q)", name, period)
+	}
+}
+
+func TestFetchScheduleNames_PagesActiveAndInactive(t *testing.T) {
+	pages := map[bool][]int32{true: {}, false: {}}
+	d := &Deps{ListPriceSchedules: func(_ context.Context, req *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error) {
+		if req.GetSort() == nil {
+			t.Fatal("schedule pagination requires a stable sort")
+		}
+		active := true
+		for _, filter := range req.GetFilters().GetFilters() {
+			if filter.GetField() == "active" {
+				active = filter.GetBooleanFilter().GetValue()
+			}
+		}
+		page := req.GetPagination().GetOffset().GetPage()
+		pages[active] = append(pages[active], page)
+		if page == 1 {
+			data := make([]*priceschedulepb.PriceSchedule, pageLimit)
+			for i := range data {
+				data[i] = &priceschedulepb.PriceSchedule{Name: fmt.Sprintf("schedule-%t-%d", active, i)}
+			}
+			return &priceschedulepb.ListPriceSchedulesResponse{Data: data}, nil
+		}
+		return &priceschedulepb.ListPriceSchedulesResponse{Data: []*priceschedulepb.PriceSchedule{{Name: fmt.Sprintf("last-%t", active)}}}, nil
+	}}
+	names := fetchScheduleNames(context.Background(), d)
+	if len(names) != 2*(pageLimit+1) || !reflect.DeepEqual(pages[true], []int32{1, 2}) || !reflect.DeepEqual(pages[false], []int32{1, 2}) {
+		t.Fatalf("names=%d pages=%v", len(names), pages)
+	}
+}
 
 // M4 (audit T5): the report-card .docx builder duplicates the client_card IDOR
 // gates verbatim (fetchGroup + memberSubscription, "mirror student_card").
@@ -164,7 +258,7 @@ func depsForGroupJobs(n int) (d *Deps, group, client string) {
 // EXACTLY one job. With 2+ homeroom jobs the first-picked adviser is arbitrary and
 // must NOT leak onto the cover/headers (the nested singleton already blanks), yet
 // the FROZEN v1/v2 "adviser" key keeps its first-job behavior. 0/1/2-job cases
-// through collectCard + buildReportCardData, asserting root alias + nested
+// through collectCard + buildClientOutcomeSummaryData, asserting root alias + nested
 // projection consistency.
 func TestCollectCard_GroupLeadSingletonGate(t *testing.T) {
 	cases := []struct {
@@ -183,7 +277,7 @@ func TestCollectCard_GroupLeadSingletonGate(t *testing.T) {
 			if !ok {
 				t.Fatalf("collectCard returned !ok")
 			}
-			data := buildReportCardData(*rc)
+			data := buildClientOutcomeSummaryData(*rc)
 
 			// Root block alias — gated on exactly-one group job.
 			assertLeaf(t, data, "lead_staff_name_display", tc.wantLead)
@@ -206,7 +300,7 @@ func TestCollectCard_GroupLeadSingletonGate(t *testing.T) {
 
 // TestIsNonEnrolledPlaceholder is the backlogged B1 unit test (GOAL.md B1 row /
 // progress.md "B1 unit test"): the DOCX-layer row→evidence adaptation that
-// wraps the shared outcome_summary.IsNonEnrolledCell predicate. It pins the
+// wraps the shared outcome_summary.IsPlaceholderOutcomeCell predicate. It pins the
 // row-level contract collectCard relies on at data.go:199 — a subject the
 // client never took (an all-zero active scaffold, e.g. the untaken half of
 // an English/Filipino-style language pair) is suppressed, while a REAL zero
@@ -281,7 +375,7 @@ func TestIsNonEnrolledPlaceholder(t *testing.T) {
 
 // DP-10/11: every active primary teacher appears in the fallback; secondary,
 // inactive and foreign-group edges cannot leak into the document.
-func TestFetchClassEdgeTeachers_AllPrimariesOnly(t *testing.T) {
+func TestFetchProductPlanEdgeStaff_AllPrimariesOnly(t *testing.T) {
 	edge := func(id, staffID, role, group string, active bool) *sgppspb.SubscriptionGroupProductPlanStaff {
 		return &sgppspb.SubscriptionGroupProductPlanStaff{
 			Id: id, StaffId: staffID, Role: role, ProductPlanId: "pp-1", SubscriptionGroupId: group, Active: active,
@@ -308,7 +402,7 @@ func TestFetchClassEdgeTeachers_AllPrimariesOnly(t *testing.T) {
 		edge("e-foreign", "staff-Y", "primary", "sec-2", true),
 	}
 	for i, ordered := range [][]*sgppspb.SubscriptionGroupProductPlanStaff{edges, {edges[5], edges[4], edges[3], edges[2], edges[1], edges[0]}} {
-		got := fetchClassEdgeTeachers(context.Background(), depsFor(ordered), "sec-1", []*jobpb.Job{job})
+		got := fetchProductPlanEdgeStaff(context.Background(), depsFor(ordered), "sec-1", []*jobpb.Job{job})
 		if !reflect.DeepEqual([]string{"staff-A", "staff-B"}, got["job-1"]) {
 			t.Fatalf("order %d: primary teachers = %v", i, got["job-1"])
 		}
@@ -323,7 +417,7 @@ func TestFetchClassEdgeTeachers_AllPrimariesOnly(t *testing.T) {
 // edges (fail closed); a nil ListProductPlanStaffs dep skips the gate
 // entirely (today's un-gated behavior, preserved for callers that haven't
 // wired the dep yet).
-func TestFetchClassEdgeTeachers_EligibilityGate(t *testing.T) {
+func TestFetchProductPlanEdgeStaff_EligibilityGate(t *testing.T) {
 	prod := "prod-1"
 	job := &jobpb.Job{Id: "job-1", OutputProductId: &prod}
 
@@ -349,7 +443,7 @@ func TestFetchClassEdgeTeachers_EligibilityGate(t *testing.T) {
 				}}, nil
 			},
 		}
-		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		got := fetchProductPlanEdgeStaff(context.Background(), d, "sec-1", []*jobpb.Job{job})
 		if !reflect.DeepEqual([]string{"staff-A"}, got["job-1"]) {
 			t.Fatalf("teachers = %v, want [staff-A] (staff-B's revoked eligibility must drop only staff-B)", got["job-1"])
 		}
@@ -365,7 +459,7 @@ func TestFetchClassEdgeTeachers_EligibilityGate(t *testing.T) {
 				}}, nil
 			},
 		}
-		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		got := fetchProductPlanEdgeStaff(context.Background(), d, "sec-1", []*jobpb.Job{job})
 		if !reflect.DeepEqual([]string{"staff-A", "staff-B"}, got["job-1"]) {
 			t.Fatalf("teachers = %v, want [staff-A staff-B]", got["job-1"])
 		}
@@ -379,7 +473,7 @@ func TestFetchClassEdgeTeachers_EligibilityGate(t *testing.T) {
 				return &productplanstaffpb.ListProductPlanStaffsResponse{}, nil // "pps-B" never comes back
 			},
 		}
-		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		got := fetchProductPlanEdgeStaff(context.Background(), d, "sec-1", []*jobpb.Job{job})
 		if !reflect.DeepEqual([]string{"staff-A"}, got["job-1"]) {
 			t.Fatalf("teachers = %v, want [staff-A] (a missing eligibility row must drop the linked teacher)", got["job-1"])
 		}
@@ -393,7 +487,7 @@ func TestFetchClassEdgeTeachers_EligibilityGate(t *testing.T) {
 				return nil, errors.New("boom")
 			},
 		}
-		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		got := fetchProductPlanEdgeStaff(context.Background(), d, "sec-1", []*jobpb.Job{job})
 		if !reflect.DeepEqual([]string{"staff-A"}, got["job-1"]) {
 			t.Fatalf("teachers = %v, want [staff-A] (a list error must fail closed and drop staff-B)", got["job-1"])
 		}
@@ -405,7 +499,7 @@ func TestFetchClassEdgeTeachers_EligibilityGate(t *testing.T) {
 			ListProductPlans:                       plans,
 			// ListProductPlanStaffs intentionally left nil.
 		}
-		got := fetchClassEdgeTeachers(context.Background(), d, "sec-1", []*jobpb.Job{job})
+		got := fetchProductPlanEdgeStaff(context.Background(), d, "sec-1", []*jobpb.Job{job})
 		if !reflect.DeepEqual([]string{"staff-A", "staff-B"}, got["job-1"]) {
 			t.Fatalf("teachers = %v, want [staff-A staff-B] (nil dep must not gate)", got["job-1"])
 		}

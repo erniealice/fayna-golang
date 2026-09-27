@@ -790,9 +790,9 @@ func reportClientRow(clientID, displayName, firstName, lastName string, cells ..
 func reportCell(templateID, label string, score *float64, hasMarks, hasPositiveMark bool) *exportpb.SubscriptionGroupOutcomeCell {
 	cell := &exportpb.SubscriptionGroupOutcomeCell{
 		JobTemplateId: templateID,
-		EnrollmentEvidence: &exportpb.EnrollmentEvidence{
-			HasMarks:        hasMarks,
-			HasPositiveMark: hasPositiveMark,
+		TaskOutcomeEvidence: &exportpb.TaskOutcomeEvidence{
+			HasTaskOutcome:         hasMarks,
+			HasPositiveTaskOutcome: hasPositiveMark,
 		},
 	}
 	if label != "" {

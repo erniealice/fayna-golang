@@ -351,10 +351,10 @@ func explicitDocumentMatrix(ctx context.Context, deps *Deps, matrix *explicitMat
 func explicitPeriodDocumentName(ctx context.Context, deps *Deps, scheduleID string, category *exportpb.JobCategoryOption, period string) string {
 	fallback := explicitPeriodName(deps.Labels, category, period)
 	code, phasePeriod := strings.CutPrefix(period, "phase:")
-	if !phasePeriod || code == "" || scheduleID == "" || deps.FindApplicableReportCardBinding == nil {
+	if !phasePeriod || code == "" || scheduleID == "" || deps.FindApplicableOutcomeSummaryDocumentTemplate == nil {
 		return fallback
 	}
-	resp, err := deps.FindApplicableReportCardBinding(ctx, &cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest{PriceScheduleId: &scheduleID, JobTemplatePhaseCode: &code})
+	resp, err := deps.FindApplicableOutcomeSummaryDocumentTemplate(ctx, &cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest{PriceScheduleId: &scheduleID, JobTemplatePhaseCode: &code})
 	if err != nil || (resp != nil && !resp.GetSuccess()) {
 		log.Printf("group explicit PDF: phase document binding lookup failed: %v", err)
 		return fallback
@@ -463,7 +463,7 @@ func serveLegacySubscriptionGroupCSV(w http.ResponseWriter, r *http.Request, dep
 		}
 	}
 	if err := cw.Write(header); err != nil {
-		log.Printf("report cards export: write header: %v", err)
+		log.Printf("outcome summaries export: write header: %v", err)
 		return
 	}
 	record := make([]string, 0, len(table.Columns))
@@ -475,7 +475,7 @@ func serveLegacySubscriptionGroupCSV(w http.ResponseWriter, r *http.Request, dep
 			}
 		}
 		if err := cw.Write(record); err != nil {
-			log.Printf("report cards export: write row: %v", err)
+			log.Printf("outcome summaries export: write row: %v", err)
 			return
 		}
 	}
@@ -652,7 +652,7 @@ func normalizeExplicitMatrix(ctx context.Context, deps *Deps, resp *exportpb.Get
 		}
 		byID := make(map[string]*exportpb.SubscriptionGroupOutcomeCell, len(source.GetCells()))
 		for _, cell := range source.GetCells() {
-			if cell == nil || cell.GetEnrollmentEvidence() == nil {
+			if cell == nil || cell.GetTaskOutcomeEvidence() == nil {
 				return nil, explicitMatrixFailure{reason: "missing cell evidence", expectedSlots: len(columnIDs), actualSlots: len(source.GetCells()), canonicalOrder: true}
 			}
 			id := strings.TrimSpace(cell.GetJobTemplateId())

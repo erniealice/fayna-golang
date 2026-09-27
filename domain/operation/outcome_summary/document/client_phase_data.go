@@ -34,7 +34,7 @@ type selectedClientPhaseJob struct {
 // generic subscription_group_client_phase_outcome_report_v1 manifest contract.
 // It deliberately accepts no vertical labels or category identifiers: labels
 // and category names come from the projection, while map keys are manifest keys.
-func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjection, phaseCode string, printedBy string, printedAt string) (map[string]any, error) {
+func buildClientPhaseReportData(d *Deps, card *exportpb.ClientOutcomeSummaryProjection, phaseCode string, printedBy string, printedAt string) (map[string]any, error) {
 	if card == nil || card.Context == nil || strings.TrimSpace(card.Context.GetSubscriptionGroupId()) == "" {
 		return nil, fmt.Errorf("client phase report projection has no subscription-group context")
 	}
@@ -230,7 +230,7 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 		})
 	}
 
-	taskOutcomes := make(map[string]*exportpb.ClientReportCardTaskOutcome)
+	taskOutcomes := make(map[string]*exportpb.ClientOutcomeSummaryTaskOutcome)
 	for _, outcome := range card.TaskOutcomes {
 		if outcome == nil || strings.TrimSpace(outcome.GetJobTaskId()) == "" || strings.TrimSpace(outcome.GetTemplateTaskCriteriaId()) == "" {
 			return nil, fmt.Errorf("client phase report projection contains a malformed task outcome")
@@ -463,13 +463,14 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 		}
 	}
 
-	studentName := strings.TrimSpace(card.Client.GetName())
-	if studentName == "" {
-		studentName = strings.TrimSpace(strings.TrimSpace(card.Client.GetLastName()) + ", " + strings.TrimSpace(card.Client.GetFirstName()))
-		studentName = strings.TrimSuffix(studentName, ",")
+	displayName := strings.TrimSpace(card.Client.GetName())
+	if displayName == "" {
+		displayName = strings.TrimSpace(strings.TrimSpace(card.Client.GetLastName()) + ", " + strings.TrimSpace(card.Client.GetFirstName()))
+		displayName = strings.TrimSuffix(displayName, ",")
 	}
 	groupName := strings.TrimSpace(card.Context.GetSubscriptionGroupName())
-	grade, sectionName := gradeSection(groupName)
+	groupName, _ = splitGroupQualifier(groupName, d.Options.GroupPeriodQualifierPrefix)
+	grade, sectionName := planLevelAndGroupLabel(groupName, card.Context.GetPlanName())
 	if sectionName == "" {
 		sectionName = groupName
 	}
@@ -495,7 +496,7 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 	// can print it (loop items do not fall back to root values).
 	for _, raw := range jobs {
 		job := raw.(map[string]any)
-		job["page_student_name"] = studentName
+		job["page_student_name"] = displayName
 		job["page_grade_level"] = grade
 		job["page_section_name"] = sectionName
 		job["page_academic_year"] = academicYear
@@ -506,7 +507,7 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 	data := map[string]any{
 		"school_name":      strings.TrimSpace(headerName),
 		"academic_year":    academicYear,
-		"student_name":     studentName,
+		"student_name":     displayName,
 		"grade_level":      grade,
 		"section_name":     sectionName,
 		"client_reference": clientReference,
@@ -547,7 +548,7 @@ func buildClientPhaseReportData(d *Deps, card *exportpb.ClientReportCardProjecti
 // activities across per-grade attendance templates). The same duplicate and
 // ambiguity rules apply at that grain: two different jobs of one category
 // yielding the same category/criterion/activity path omit the cell and total.
-func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, historical bool) (map[string]any, map[string]any, map[string]any, map[string]any) {
+func buildProjectedOutcomeCellIndex(card *exportpb.ClientOutcomeSummaryProjection, historical bool) (map[string]any, map[string]any, map[string]any, map[string]any) {
 	cellsRoot := map[string]any{}
 	totalsRoot := map[string]any{}
 	categoryCellsRoot := map[string]any{}
@@ -604,7 +605,7 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 			jobPhasesByJob[phase.GetJobId()] = append(jobPhasesByJob[phase.GetJobId()], phase)
 		}
 	}
-	latestOutcomes := map[string]*exportpb.ClientReportCardTaskOutcome{}
+	latestOutcomes := map[string]*exportpb.ClientOutcomeSummaryTaskOutcome{}
 	for _, outcome := range card.GetTaskOutcomes() {
 		if outcome == nil || jobTasks[outcome.GetJobTaskId()] == nil || strings.TrimSpace(outcome.GetTemplateTaskCriteriaId()) == "" {
 			continue
@@ -861,7 +862,7 @@ func setClientReportCodeScalar(root map[string]any, path []string, value any) {
 // Missing outcomes create blank placeholder cells so configured task and
 // criterion structure remains visible. A numeric total is emitted only when
 // at least one numeric outcome exists; recorded zero remains "0".
-func buildProjectedOutcomeSections(card *exportpb.ClientReportCardProjection, historical bool) []any {
+func buildProjectedOutcomeSections(card *exportpb.ClientOutcomeSummaryProjection, historical bool) []any {
 	if card == nil {
 		return nil
 	}
@@ -949,7 +950,7 @@ func buildProjectedOutcomeSections(card *exportpb.ClientReportCardProjection, hi
 			return left.GetId() < right.GetId()
 		})
 	}
-	outcomes := map[string]*exportpb.ClientReportCardTaskOutcome{}
+	outcomes := map[string]*exportpb.ClientOutcomeSummaryTaskOutcome{}
 	for _, outcome := range card.GetTaskOutcomes() {
 		if outcome == nil {
 			continue
@@ -1118,7 +1119,7 @@ func projectedProgressToDate(
 	templateTasks map[string]*jobtemplatetaskpb.JobTemplateTask,
 	criteriaByTemplateTask map[string][]*templatecriteriapb.TemplateTaskCriteria,
 	criteriaByID map[string]*criteriapb.OutcomeCriteria,
-	taskOutcomes map[string]*exportpb.ClientReportCardTaskOutcome,
+	taskOutcomes map[string]*exportpb.ClientOutcomeSummaryTaskOutcome,
 	historical bool,
 ) (float64, float64, bool) {
 	var total, maximum float64
@@ -1159,7 +1160,7 @@ func categoryOrder(category *categorypb.JobCategory) int32 {
 	return category.GetSortOrder()
 }
 
-func taskOutcomeMark(outcome *exportpb.ClientReportCardTaskOutcome) string {
+func taskOutcomeMark(outcome *exportpb.ClientOutcomeSummaryTaskOutcome) string {
 	if outcome == nil {
 		return ""
 	}
@@ -1172,7 +1173,7 @@ func taskOutcomeMark(outcome *exportpb.ClientReportCardTaskOutcome) string {
 	return ""
 }
 
-func staffNames(card *exportpb.ClientReportCardProjection, jobID, jobPhaseID string) string {
+func staffNames(card *exportpb.ClientOutcomeSummaryProjection, jobID, jobPhaseID string) string {
 	jobID = strings.TrimSpace(jobID)
 	jobPhaseID = strings.TrimSpace(jobPhaseID)
 	byID := make(map[string]string, len(card.Staff))
@@ -1183,7 +1184,7 @@ func staffNames(card *exportpb.ClientReportCardProjection, jobID, jobPhaseID str
 	}
 	names := make([]string, 0, 2)
 	seen := make(map[string]struct{})
-	for _, assignment := range card.TeacherAssignments {
+	for _, assignment := range card.StaffAssignments {
 		if assignment == nil || strings.TrimSpace(jobPhaseID) == "" || strings.TrimSpace(assignment.GetJobPhaseId()) != jobPhaseID {
 			continue
 		}

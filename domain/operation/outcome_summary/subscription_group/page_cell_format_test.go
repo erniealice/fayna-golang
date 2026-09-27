@@ -21,10 +21,10 @@ func TestBuildRows_CellFormatComposite(t *testing.T) {
 	labels := map[string]string{"jobA": "O", "jobB": "7", "jobP": "1"}
 	f := func(v float64) *float64 { return &v }
 	scores := map[string]*float64{"jobA": f(94), "jobP": f(0)} // jobB: label-only
-	ev := map[string]outcome_summary.EnrollmentEvidence{
-		"jobA": {HasMarks: true, HasPositiveMark: true},
-		"jobB": {HasMarks: true, HasPositiveMark: true},
-		"jobP": {HasMarks: true}, // all-zero scaffold → blank
+	ev := map[string]outcome_summary.TaskOutcomeEvidence{
+		"jobA": {HasTaskOutcome: true, HasPositiveTaskOutcome: true},
+		"jobB": {HasTaskOutcome: true, HasPositiveTaskOutcome: true},
+		"jobP": {HasTaskOutcome: true}, // all-zero scaffold → blank
 	}
 	for _, tt := range []struct {
 		format string

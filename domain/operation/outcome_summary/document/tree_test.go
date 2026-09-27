@@ -57,8 +57,8 @@ func codedFn(values ...*taskoutcomepb.CodedTaskOutcomeValue) func(context.Contex
 // An empty card still resolves EVERY manifest-referenced path to a blank leaf (or
 // empty loop) — the engine leaks any unresolved {{leaf}} verbatim, so this is the
 // leak-law guard.
-func TestBuildReportCardData_ManifestBlankSeed(t *testing.T) {
-	data := buildReportCardData(reportCard{})
+func TestBuildClientOutcomeSummaryData_ManifestBlankSeed(t *testing.T) {
+	data := buildClientOutcomeSummaryData(clientOutcomeSummary{})
 
 	// A deep singleton scalar path with no data resolves to "" (not absent).
 	mustBlank(t, data, "job_categories.homeroom_attendance.job_template_phases.progress_report.job_template_tasks.m07.task_outcomes.days_present.numeric_value")
@@ -82,8 +82,8 @@ func TestBuildReportCardData_ManifestBlankSeed(t *testing.T) {
 
 // A real overlay wins over the seed, and manifest paths the data omits still get
 // blanked INSIDE a real loop item (per-item conform).
-func TestBuildReportCardData_ConformSeedsInsideLoopItems(t *testing.T) {
-	rc := reportCard{
+func TestBuildClientOutcomeSummaryData_ConformSeedsInsideLoopItems(t *testing.T) {
+	rc := clientOutcomeSummary{
 		JobCategories: map[string]any{
 			"academic": map[string]any{
 				"jobs": []any{
@@ -94,7 +94,7 @@ func TestBuildReportCardData_ConformSeedsInsideLoopItems(t *testing.T) {
 			},
 		},
 	}
-	data := buildReportCardData(rc)
+	data := buildClientOutcomeSummaryData(rc)
 	jobs, _ := resolvePath(data, "job_categories.academic.jobs")
 	item := jobs.([]any)[0].(map[string]any)
 	if item["job_template_name_display"] != "Mathematics" {

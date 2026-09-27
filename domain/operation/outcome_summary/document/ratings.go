@@ -45,6 +45,7 @@ type ratingContext struct {
 // non-academic jobs. Fully nil-safe: missing closures leave the affected maps
 // empty and every rating field renders blank.
 func fetchItemRatings(ctx context.Context, d *Deps, deportJobs []*jobpb.Job, groupJob *jobpb.Job, historical bool) *ratingContext {
+	scheduleNames := fetchScheduleNames(ctx, d)
 	c := &ratingContext{
 		nameOf:   map[string]string{},
 		pos:      map[string]map[int32]string{},
@@ -82,7 +83,7 @@ func fetchItemRatings(ctx context.Context, d *Deps, deportJobs []*jobpb.Job, gro
 	tmplNames := fetchTemplateNames(ctx, d, templateIDs, historical)
 	for _, j := range c.strandJobs {
 		jid := j.GetId()
-		c.nameOf[jid] = cleanSubject(colName(tmplNames, jobTemplate[jid]))
+		c.nameOf[jid] = stripScheduleSuffix(colName(tmplNames, jobTemplate[jid]), scheduleNames)
 	}
 
 	order, _, _ := fetchPhaseOrders(ctx, d, ids, historical)
@@ -237,8 +238,8 @@ func deportRows(c *ratingContext, merged mergedPairs) []deportRow {
 		return nil
 	}
 	enrolled := func(jid string) bool {
-		ev := outcome_summary.EnrollmentEvidence{HasMarks: true}
-		return !outcome_summary.IsNonEnrolledCell(ev, strings.TrimSpace(c.avg[jid]))
+		ev := outcome_summary.TaskOutcomeEvidence{HasTaskOutcome: true}
+		return !outcome_summary.IsPlaceholderOutcomeCell(ev, strings.TrimSpace(c.avg[jid]))
 	}
 	var out []deportRow
 	inPair := map[string]bool{}
@@ -325,6 +326,7 @@ func buildItemRatings(c *ratingContext, merged mergedPairs) (rows []ratingRow, g
 // the rotation period-2 strand fallback signal (the canonicalization
 // deactivated the merged-in strand job). Nil-safe.
 func fetchInactiveSubjectNames(ctx context.Context, d *Deps, subID string) map[string]bool {
+	scheduleNames := fetchScheduleNames(ctx, d)
 	out := map[string]bool{}
 	if d.ListJobs == nil || subID == "" {
 		return out
@@ -343,7 +345,7 @@ func fetchInactiveSubjectNames(ctx context.Context, d *Deps, subID string) map[s
 			},
 		})
 		if err != nil {
-			log.Printf("report card doc: list inactive jobs: %v", err)
+			log.Printf("outcome summary doc: list inactive jobs: %v", err)
 			return out
 		}
 		data := resp.GetData()
@@ -365,7 +367,7 @@ func fetchInactiveSubjectNames(ctx context.Context, d *Deps, subID string) map[s
 	}
 	names := fetchTemplateNames(ctx, d, templateIDs, true)
 	for _, tid := range jobTemplates {
-		if n := cleanSubject(strings.TrimSpace(names[tid])); n != "" {
+		if n := stripScheduleSuffix(strings.TrimSpace(names[tid]), scheduleNames); n != "" {
 			out[strings.ToLower(n)] = true
 		}
 	}

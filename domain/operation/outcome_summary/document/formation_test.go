@@ -8,6 +8,7 @@ import (
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
+	priceschedulepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/subscription/price_schedule"
 )
 
 // Formation-page (DOCX v2) builder tests. They pin the MMIS "Student Formation"
@@ -46,6 +47,9 @@ func job(id, tmpl, cat string) *jobpb.Job {
 // depsForFormation wires the three closures collectFormationGroups consumes.
 func depsForFormation() *Deps {
 	return &Deps{
+		ListPriceSchedules: func(context.Context, *priceschedulepb.ListPriceSchedulesRequest) (*priceschedulepb.ListPriceSchedulesResponse, error) {
+			return &priceschedulepb.ListPriceSchedulesResponse{Data: []*priceschedulepb.PriceSchedule{{Name: "AY 2025-2026"}}}, nil
+		},
 		ListJobCategories: catsFn(
 			&jobcategorypb.JobCategory{Id: "cat-acad", Name: "Academic", SortOrder: i32p(10)},
 			&jobcategorypb.JobCategory{Id: "cat-subj", Name: "Subject Deportment", SortOrder: i32p(20)},
@@ -167,15 +171,15 @@ func TestFormationData_Shape(t *testing.T) {
 	}
 }
 
-// TestBuildReportCardData_IncludesFormation pins that the top-level data map always
+// TestBuildClientOutcomeSummaryData_IncludesFormation pins that the top-level data map always
 // carries a formation_groups key (a subject-only card still emits an empty slice,
 // so the template's {{#formation_groups}} loop resolves rather than leaking).
-func TestBuildReportCardData_IncludesFormation(t *testing.T) {
-	rc := reportCard{
+func TestBuildClientOutcomeSummaryData_IncludesFormation(t *testing.T) {
+	rc := clientOutcomeSummary{
 		Subjects:        []itemRow{{Name: "Science", Sem1Band: "6", Sem2Band: "7", YearFinal: "7"}},
 		FormationGroups: []formationGroup{{Title: "Subject Deportment", Rows: []formationRow{{Subject: "Mathematics", Average: "98"}}}},
 	}
-	m := buildReportCardData(rc)
+	m := buildClientOutcomeSummaryData(rc)
 	fg, ok := m["formation_groups"].([]any)
 	if !ok {
 		t.Fatalf("formation_groups must be []any, got %T", m["formation_groups"])

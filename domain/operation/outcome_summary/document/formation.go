@@ -12,7 +12,7 @@ import (
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 )
 
-// The Formation page (report-card DOCX v2) mirrors the MMIS report card's
+// The Formation page (report-card DOCX v2) mirrors the MMIS outcome summary's
 // "Student Formation" page: one table per non-academic outcome category
 // (subject-deportment, homeroom-deportment), each strand shown with its frozen
 // authoritative average. It is fully generic — a "formation group" is any
@@ -20,7 +20,7 @@ import (
 // the category's own display NAME (data, never a code literal). The MMIS-specific
 // static wording (the "STUDENT FORMATION" heading, the grade-descriptor legend,
 // the certificate of transfer) lives ONLY in the .docx template artifact, exactly
-// like the existing "MYP Report Card" cover text.
+// like the existing "MYP Outcome Summary" cover text.
 //
 // Data faithfulness: education1's per-phase deportment task_outcome ("Conduct") is
 // loader-default scaffold (dominated by 100/0), so the Formation renders the FROZEN
@@ -66,6 +66,7 @@ type catInfo struct {
 // from an unrelated category. Fail-soft: a missing closure or lookup error yields
 // no groups, and the page renders its static sections only.
 func collectFormationGroups(ctx context.Context, d *Deps, deportJobs []*jobpb.Job, historical bool) []formationGroup {
+	scheduleNames := fetchScheduleNames(ctx, d)
 	if len(deportJobs) == 0 {
 		return nil
 	}
@@ -101,15 +102,15 @@ func collectFormationGroups(ctx context.Context, d *Deps, deportJobs []*jobpb.Jo
 	rowsByCat := map[string][]formationRow{}
 	for _, jid := range jobIDs {
 		avg := strings.TrimSpace(avgByJob[jid])
-		// A deportment job always carries the Conduct scaffold, so HasMarks=true;
+		// A deportment job always carries the Conduct scaffold, so HasTaskOutcome=true;
 		// the frozen average is the enrollment signal.
-		ev := outcome_summary.EnrollmentEvidence{HasMarks: true}
-		if outcome_summary.IsNonEnrolledCell(ev, avg) {
+		ev := outcome_summary.TaskOutcomeEvidence{HasTaskOutcome: true}
+		if outcome_summary.IsPlaceholderOutcomeCell(ev, avg) {
 			continue
 		}
 		cid := jobCat[jid]
 		rowsByCat[cid] = append(rowsByCat[cid], formationRow{
-			Subject: cleanSubject(colName(tmplNames, jobTemplate[jid])),
+			Subject: stripScheduleSuffix(colName(tmplNames, jobTemplate[jid]), scheduleNames),
 			Average: avg,
 		})
 	}
@@ -161,7 +162,7 @@ func fetchCategories(ctx context.Context, d *Deps) map[string]catInfo {
 	}
 	resp, err := d.ListJobCategories(ctx, &jobcategorypb.ListJobCategoriesRequest{})
 	if err != nil {
-		log.Printf("report card doc: list job categories: %v", err)
+		log.Printf("outcome summary doc: list job categories: %v", err)
 		return out
 	}
 	for _, c := range resp.GetData() {

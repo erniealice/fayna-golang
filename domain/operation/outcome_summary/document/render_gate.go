@@ -207,7 +207,7 @@ func reportRenderStatus(ctx context.Context, d *Deps, jobIDs []string, groupID s
 // covers exactly the selected client's distinct template-phase sheets and
 // NULL-template singleton sheets before applying the unchanged D5 predicate.
 // blocked is true when ANY of the client's sheets is blocked.
-func clientProjectionRenderStatus(card *exportpb.ClientReportCardProjection, groupID string) (bool, error) {
+func clientProjectionRenderStatus(card *exportpb.ClientOutcomeSummaryProjection, groupID string) (bool, error) {
 	gate, err := clientProjectionSheetGate(card, groupID)
 	if err != nil {
 		return false, err
@@ -240,7 +240,7 @@ func (g clientSheetGate) phaseBlocked(phase *jobphasepb.JobPhase) bool {
 
 // clientProjectionSheetGate validates the projection's gate coverage exactly as
 // before (any gap fails closed with an error) and returns the per-sheet verdict.
-func clientProjectionSheetGate(card *exportpb.ClientReportCardProjection, groupID string) (clientSheetGate, error) {
+func clientProjectionSheetGate(card *exportpb.ClientOutcomeSummaryProjection, groupID string) (clientSheetGate, error) {
 	gate := clientSheetGate{blockedTemplatePhases: map[string]bool{}, blockedJobPhases: map[string]bool{}}
 	if card == nil {
 		return gate, fmt.Errorf("client render gate: projection is nil")
@@ -290,7 +290,7 @@ func clientProjectionSheetGate(card *exportpb.ClientReportCardProjection, groupI
 		}
 	}
 
-	rows := make(map[sheetKey]*exportpb.ClientReportCardRenderGateSheet, len(card.GetRenderGateSheets()))
+	rows := make(map[sheetKey]*exportpb.ClientOutcomeSummaryRenderGateSheet, len(card.GetRenderGateSheets()))
 	for _, row := range card.GetRenderGateSheets() {
 		if row == nil || strings.TrimSpace(row.GetAppliedSubscriptionGroupId()) != groupID {
 			return gate, fmt.Errorf("client render gate: malformed row or group echo mismatch")

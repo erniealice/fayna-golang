@@ -120,7 +120,7 @@ type Deps struct {
 	ListAttributes                    func(ctx context.Context, req *commonpb.ListAttributesRequest) (*commonpb.ListAttributesResponse, error)
 	GetSubscriptionGroupOutcomeExport func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
 	// Optional phase-scoped report-card binding lookup for the class PDF title.
-	FindApplicableReportCardBinding func(context.Context, *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
+	FindApplicableOutcomeSummaryDocumentTemplate func(context.Context, *cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateRequest) (*cardbindingpb.FindApplicableJobOutcomeSummaryDocumentTemplateResponse, error)
 	// ResolveSubscriptionGroupDocumentTemplate composes the report-scoped Espyna resolver with
 	// app storage and returns no locator. GeneratePDF is Fycha's injected
 	// template+data -> PDF closure. Both are optional and PDF fails loud if nil.
@@ -131,7 +131,7 @@ type Deps struct {
 
 	// Non-enrolled-placeholder evidence walk (job_phase → job_task →
 	// task_outcome). Optional/nil-safe: when any is nil (a tier that never wired
-	// the walk, e.g. service-admin) FetchJobMarkEvidence yields empty evidence and
+	// the walk, e.g. service-admin) FetchJobTaskOutcomeEvidence yields empty evidence and
 	// no cell is blanked — the flat surface is byte-identical.
 	ListJobPhases    func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
 	ListJobTasks     func(ctx context.Context, req *jobtaskpb.ListJobTasksRequest) (*jobtaskpb.ListJobTasksResponse, error)
@@ -256,7 +256,7 @@ func fetchGrantHolderNames(ctx context.Context, deps *Deps, groupID string) []st
 		},
 	})
 	if err != nil {
-		log.Printf("report cards group: list group workspace users: %v", err)
+		log.Printf("outcome summaries group: list group workspace users: %v", err)
 		return nil
 	}
 	owners := map[string]bool{} // workspace_user_id of is_owner grants
@@ -270,7 +270,7 @@ func fetchGrantHolderNames(ctx context.Context, deps *Deps, groupID string) []st
 	}
 	wuResp, err := deps.ListWorkspaceUsers(ctx, &workspaceuserpb.ListWorkspaceUsersRequest{})
 	if err != nil {
-		log.Printf("report cards group: list workspace users: %v", err)
+		log.Printf("outcome summaries group: list workspace users: %v", err)
 		return nil
 	}
 	var names []string
@@ -372,9 +372,9 @@ func buildGroupTable(ctx context.Context, deps *Deps, groupID, rawJC string) (*s
 	// mark and is kept. Nil-safe: unwired closures → empty map → nothing blanked.
 	// Fail-closed: on a read error the evidence is incomplete, so we keep every
 	// grade (blank nothing) rather than risk blanking a real one.
-	evByJob, err := outcome_summary.FetchJobMarkEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
+	evByJob, err := outcome_summary.FetchJobTaskOutcomeEvidence(ctx, deps.ListJobPhases, deps.ListJobTasks, deps.ListTaskOutcomes, jobIDs)
 	if err != nil {
-		log.Printf("outcome summary group: enrollment evidence unavailable, keeping all grades: %v", err)
+		log.Printf("outcome summary group: task outcome evidence unavailable, keeping all grades: %v", err)
 		evByJob = nil
 	}
 
@@ -397,7 +397,7 @@ func buildGroupTable(ctx context.Context, deps *Deps, groupID, rawJC string) (*s
 	columns := buildColumns(templateIDs, tmplNames, l)
 
 	table := &types.TableConfig{
-		ID:          "report-cards-grid",
+		ID:          "outcome-summaries-grid",
 		Columns:     columns,
 		ShowSearch:  true,
 		ShowColumns: true,
@@ -480,7 +480,7 @@ func resolveGroupPartition(
 	// never all-categories).
 	cats, err := listActiveCategories(ctx, deps)
 	if err != nil {
-		log.Printf("report cards group: list categories (FAIL CLOSED to static H2 filter, no tabs): %v", err)
+		log.Printf("outcome summaries group: list categories (FAIL CLOSED to static H2 filter, no tabs): %v", err)
 		return static(), nil, nil
 	}
 	if len(cats) == 0 {
@@ -794,7 +794,7 @@ func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.Su
 			Title:               l.SubscriptionGroup.Title,
 			CurrentPath:         viewCtx.CurrentPath,
 			ActiveNav:           deps.Routes.ActiveNav,
-			ActiveSubNav:        "report-cards",
+			ActiveSubNav:        "outcome-summaries",
 			HeaderBreadcrumb:    l.SubscriptionGroup.Title,
 			HeaderBreadcrumbURL: deps.Routes.ListURL,
 			HeaderTitle:         group.GetName(),
@@ -834,7 +834,7 @@ func fetchGroup(ctx context.Context, deps *Deps, groupID string) *subscriptiongr
 	for _, req := range requests {
 		resp, err := deps.ListSubscriptionGroups(ctx, req)
 		if err != nil {
-			log.Printf("report cards group: list subscription group by id: %v", err)
+			log.Printf("outcome summaries group: list subscription group by id: %v", err)
 			continue
 		}
 		for _, g := range resp.GetData() {
@@ -869,7 +869,7 @@ func fetchMembers(ctx context.Context, deps *Deps, groupID string, historical bo
 	for _, req := range requests {
 		resp, err := deps.ListSubscriptionGroupMembers(ctx, req)
 		if err != nil {
-			log.Printf("report cards group: list members: %v", err)
+			log.Printf("outcome summaries group: list members: %v", err)
 			continue
 		}
 		for _, m := range resp.GetData() {
@@ -923,7 +923,7 @@ func fetchGroupJobs(ctx context.Context, deps *Deps, subIDs []string, historical
 					},
 				})
 				if err != nil {
-					log.Printf("report cards group: list jobs (page %d): %v", page, err)
+					log.Printf("outcome summaries group: list jobs (page %d): %v", page, err)
 					break
 				}
 				for _, j := range resp.GetData() {
@@ -967,7 +967,7 @@ func fetchSummaryLabels(ctx context.Context, deps *Deps, jobIDs []string, l outc
 			},
 		})
 		if err != nil {
-			log.Printf("report cards group: list job outcome summaries: %v", err)
+			log.Printf("outcome summaries group: list job outcome summaries: %v", err)
 			continue
 		}
 		for _, s := range resp.GetData() {
@@ -1011,7 +1011,7 @@ func fetchClients(ctx context.Context, deps *Deps, clientIDs []string) map[strin
 			},
 		})
 		if err != nil {
-			log.Printf("report cards group: list clients: %v", err)
+			log.Printf("outcome summaries group: list clients: %v", err)
 			continue
 		}
 		for _, c := range resp.GetData() {
@@ -1037,7 +1037,7 @@ func fetchAttributeValues(ctx context.Context, deps *Deps, clientIDs []string) m
 	for _, code := range codes {
 		attrID, err := deps.ResolveAttributeIDByCode(ctx, code)
 		if err != nil || attrID == "" {
-			log.Printf("report cards group: attribute code %q did not resolve (bands ignored for it): %v", code, err)
+			log.Printf("outcome summaries group: attribute code %q did not resolve (bands ignored for it): %v", code, err)
 			continue
 		}
 		vals := map[string]string{}
@@ -1055,7 +1055,7 @@ func fetchAttributeValues(ctx context.Context, deps *Deps, clientIDs []string) m
 				},
 			})
 			if err != nil {
-				log.Printf("report cards group: list client attributes for %q: %v", code, err)
+				log.Printf("outcome summaries group: list client attributes for %q: %v", code, err)
 				continue
 			}
 			for _, ca := range resp.GetData() {
@@ -1099,7 +1099,7 @@ func fetchTemplateMeta(ctx context.Context, deps *Deps, templateIDs []string, hi
 				Filters: &commonpb.FilterRequest{Filters: filters},
 			})
 			if err != nil {
-				log.Printf("report cards group: list job templates: %v", err)
+				log.Printf("outcome summaries group: list job templates: %v", err)
 				continue
 			}
 			for _, t := range resp.GetData() {
@@ -1157,7 +1157,7 @@ func buildColumns(templateIDs []string, names map[string]string, l outcome_summa
 	// offset lines up.
 	cols = append(cols, types.TableColumn{Key: "client", Label: l.SubscriptionGroup.ClientColumn, Width: "14rem", MinWidth: "14rem", NoSort: true})
 	// Second frozen column: the per-row actions (view client card + CSV
-	// download). Blank header mirrors the prod report card's action column.
+	// download). Blank header mirrors the prod outcome summary's action column.
 	// Excluded from the CSV export by key (export.go skips "rc-actions").
 	cols = append(cols, types.TableColumn{Key: actionsColumnKey, Label: "", Width: "5rem", MinWidth: "5rem", Align: "center", NoSort: true})
 	for _, tid := range ordered {
@@ -1179,7 +1179,7 @@ func orderedColumnIDs(cols []types.TableColumn) []string {
 }
 
 // rowActionsCell builds the frozen per-row actions cell: VIEW this client's
-// report card (boosted nav), then open the same Period/Format drawer as the
+// outcome summary (boosted nav), then open the same Period/Format drawer as the
 // client-card header — or the legacy PDF anchor fallback when only legacy
 // detail is permitted, or the view-only cell when neither download path is
 // permitted. Shared by BOTH grid builders (the static buildRows path here and
@@ -1211,7 +1211,7 @@ func buildRows(
 	cellJob, labelByJob map[string]string,
 	scoreByJob map[string]*float64,
 	cellFormat string,
-	evByJob map[string]outcome_summary.EnrollmentEvidence,
+	evByJob map[string]outcome_summary.TaskOutcomeEvidence,
 	groupID string,
 	routes outcome_summary.Routes,
 	l outcome_summary.Labels,
@@ -1226,7 +1226,7 @@ func buildRows(
 	for clientID, st := range clients {
 		cells := make([]types.TableCell, 0, len(templateIDs)+2)
 		cells = append(cells, types.TableCell{Value: st.listName()})
-		// Frozen 2nd column: per-row actions — VIEW this client's report card
+		// Frozen 2nd column: per-row actions — VIEW this client's outcome summary
 		// (boosted nav → view-3), then open the same Period/Format drawer as the
 		// client-card header. The drawer and header both submit the resolved
 		// group/client document endpoint, keeping output selection identical.
@@ -1236,7 +1236,7 @@ func buildRows(
 			jobID := cellJob[clientID+"\x00"+tid]
 			label := labelByJob[jobID]
 			switch {
-			case jobID != "" && label != "" && outcome_summary.IsNonEnrolledCell(evByJob[jobID], label):
+			case jobID != "" && label != "" && outcome_summary.IsPlaceholderOutcomeCell(evByJob[jobID], label):
 				// Non-enrolled placeholder (untaken-elective all-zero scaffold
 				// whose year-final floored to "1"): render the cell truly BLANK
 				// ("" — matching prod/MMIS), NOT the floor and NOT the "—" no-data

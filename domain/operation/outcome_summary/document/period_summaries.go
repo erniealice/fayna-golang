@@ -31,7 +31,7 @@ const periodSummaryCount = 3
 // Unpublished sheets reach here already redacted (scores stripped, notes kept),
 // so their cells are blank. Nothing is recomputed here: the grade sheet and the
 // document read the same stored summary.
-func buildPeriodSummaries(card *exportpb.ClientReportCardProjection, jobCategoryCode, taskCategoryCode string, historical bool) map[string]any {
+func buildPeriodSummaries(card *exportpb.ClientOutcomeSummaryProjection, jobCategoryCode, taskCategoryCode string, historical bool) map[string]any {
 	out := map[string]any{"summary_jobs": []any{}, "summary_tasks": []any{}}
 	for n := 1; n <= periodSummaryCount; n++ {
 		out["summary_average_period_"+strconv.Itoa(n)] = ""

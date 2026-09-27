@@ -41,7 +41,7 @@ func loadLandingCategories(ctx context.Context, deps *ListViewDeps) (cats []*job
 	}
 	allCats, templates, err := deps.ListJobListTabSupport(ctx)
 	if err != nil {
-		log.Printf("report cards landing: list category tab support: %v", err)
+		log.Printf("outcome summaries landing: list category tab support: %v", err)
 		return nil, nil, false // data-gated degrade → static columns
 	}
 	for _, c := range allCats {

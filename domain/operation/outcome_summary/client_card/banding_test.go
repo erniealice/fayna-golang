@@ -269,7 +269,7 @@ func renderTableCard(t *testing.T, cfg types.TableConfig) string {
 // .table-group-selection{display:none}), so they render INERTLY, not absent.
 func TestBandedTable_BulkControlsInert(t *testing.T) {
 	cfg := types.TableConfig{
-		ID: "report-cards-client",
+		ID: "outcome-summaries-client",
 		Groups: []types.TableRowGroup{
 			{ID: "rc-band-academic", Title: "Academic", DataAttrs: map[string]string{"testid": "rc-band-academic"}, Rows: []types.TableRow{{ID: "j1", Cells: []types.TableCell{{Value: "English"}}}}},
 			{ID: "rc-band-uncategorized", Title: "Uncategorized", DataAttrs: map[string]string{"testid": "rc-band-uncategorized"}, Rows: []types.TableRow{{ID: "j2", Cells: []types.TableCell{{Value: "Mystery"}}}}},

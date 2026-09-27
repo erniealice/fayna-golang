@@ -10,7 +10,7 @@ import (
 // ExportCellValue applies the shared report-cell display policy: a stored label
 // wins, a numeric score is the fallback, and a non-enrolled placeholder is blank.
 func ExportCellValue(cell *exportpb.SubscriptionGroupOutcomeCell, blank string) string {
-	if cell == nil || strings.TrimSpace(cell.GetJobTemplateId()) == "" || cell.GetEnrollmentEvidence() == nil {
+	if cell == nil || strings.TrimSpace(cell.GetJobTemplateId()) == "" || cell.GetTaskOutcomeEvidence() == nil {
 		return blank
 	}
 
@@ -18,9 +18,9 @@ func ExportCellValue(cell *exportpb.SubscriptionGroupOutcomeCell, blank string) 
 	if value == "" && cell.ScaledScore != nil {
 		value = strconv.FormatFloat(cell.GetScaledScore(), 'f', -1, 64)
 	}
-	if IsNonEnrolledCell(EnrollmentEvidence{
-		HasMarks:        cell.GetEnrollmentEvidence().GetHasMarks(),
-		HasPositiveMark: cell.GetEnrollmentEvidence().GetHasPositiveMark(),
+	if IsPlaceholderOutcomeCell(TaskOutcomeEvidence{
+		HasTaskOutcome:         cell.GetTaskOutcomeEvidence().GetHasTaskOutcome(),
+		HasPositiveTaskOutcome: cell.GetTaskOutcomeEvidence().GetHasPositiveTaskOutcome(),
 	}, value) {
 		return blank
 	}

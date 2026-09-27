@@ -64,7 +64,7 @@ func sampleSheetData() map[string]any {
 		PrintedAt:    "2026-07-20 09:30",
 	}
 	periodLabels := []string{"Semester 1", "Semester 2"}
-	students := []SheetStudent{
+	students := []SheetClient{
 		{Name: "Bonifacio, Andres", PhaseFinals: []string{"6", "7"}, YearFinal: "7"},
 		{Name: "Silang, Gabriela", PhaseFinals: []string{"5", "6"}, YearFinal: "6"},
 	}

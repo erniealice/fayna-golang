@@ -1,4 +1,4 @@
-// Package template_settings renders the TB3 report-card template management
+// Package template_settings renders the TB3 outcome summary template management
 // surface: a standalone settings page (D3 — a dedicated sidebar entry AFTER the
 // reports item, NOT a landing tab) listing the operator-uploaded, AY-scoped
 // document-template BINDINGS (job_outcome_summary_document_template), with
@@ -54,7 +54,7 @@ import (
 )
 
 // documentPurpose is the canonical generic discriminator the render resolver +
-// upload path share (D6). Vertical vocabulary ("Report Card") lives only in
+// upload path share (D6). Vertical vocabulary ("Outcome Summary") lives only in
 // lyngua values, never here.
 const documentPurpose = "report_card"
 
@@ -79,7 +79,7 @@ const (
 	// headroom for the multipart envelope + text fields) so ParseMultipartForm can
 	// never be steered into unbounded reads off the wire.
 	maxRequestBytes = maxUploadBytes + (1 << 20)
-	tableID         = "report-card-templates-table"
+	tableID         = "outcome-summary-templates-table"
 	dateLayout      = "2006-01-02"
 )
 
@@ -216,7 +216,7 @@ func NewListView(deps *Deps) view.View {
 				Title:          l.Title,
 				CurrentPath:    viewCtx.CurrentPath,
 				ActiveNav:      deps.Routes.ActiveNav,
-				ActiveSubNav:   "report-card-templates",
+				ActiveSubNav:   "outcome-summary-templates",
 				HeaderTitle:    l.Title,
 				HeaderSubtitle: l.Subtitle,
 				HeaderIcon:     "icon-file-text",
@@ -340,7 +340,7 @@ func NewUploadAction(deps *Deps) view.View {
 		// mislabeled/renamed file, a zip-bomb, a traversal-crafted archive) before
 		// it reaches storage or the renderer.
 		if err := validateDocxArchive(content); err != nil {
-			log.Printf("report-card template upload: reject archive: %v", err)
+			log.Printf("outcome summary template upload: reject archive: %v", err)
 			return view.HTMXError(l.InvalidFile)
 		}
 
@@ -355,11 +355,11 @@ func NewUploadAction(deps *Deps) view.View {
 		// with no configured validator is rejected, never silently accepted.
 		if phaseCode != "" {
 			if deps.ValidatePhaseTemplate == nil {
-				log.Printf("report-card template upload: reject phase upload: phase manifest validator not configured")
+				log.Printf("outcome summary template upload: reject phase upload: phase manifest validator not configured")
 				return view.HTMXError(l.InvalidFile)
 			}
 			if err := deps.ValidatePhaseTemplate(content); err != nil {
-				log.Printf("report-card template upload: reject phase manifest: %v", err)
+				log.Printf("outcome summary template upload: reject phase manifest: %v", err)
 				return view.HTMXError(l.InvalidFile)
 			}
 		}
@@ -397,7 +397,7 @@ func NewUploadAction(deps *Deps) view.View {
 				Active:           true,
 			},
 		}); err != nil {
-			log.Printf("report-card template upload: create document_template: %v", err)
+			log.Printf("outcome summary template upload: create document_template: %v", err)
 			return view.HTMXError(l.UploadFailed)
 		}
 
@@ -424,20 +424,20 @@ func NewUploadAction(deps *Deps) view.View {
 		}
 		createResp, err := deps.CreateTemplateBinding(ctx, &bindingpb.CreateJobOutcomeSummaryDocumentTemplateRequest{Data: binding})
 		if err != nil {
-			log.Printf("report-card template upload: create binding: %v", err)
+			log.Printf("outcome summary template upload: create binding: %v", err)
 			cleanupDocumentTemplate(ctx, deps, docID)
 			return view.HTMXError(l.UploadFailed)
 		}
 
 		// Bytes LAST. On failure, compensate both created rows (best effort).
 		if err := deps.UploadTemplate(ctx, storageContainerFallback, objectKey, content, docxContentTyp); err != nil {
-			log.Printf("report-card template upload: store bytes: %v", err)
+			log.Printf("outcome summary template upload: store bytes: %v", err)
 			if createResp != nil && len(createResp.GetData()) > 0 {
 				bindingID := createResp.GetData()[0].GetId()
 				if _, derr := deps.DeleteTemplateBinding(ctx, &bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest{
 					Data: &bindingpb.JobOutcomeSummaryDocumentTemplate{Id: bindingID},
 				}); derr != nil {
-					log.Printf("report-card template upload: compensate delete binding %s: %v", bindingID, derr)
+					log.Printf("outcome summary template upload: compensate delete binding %s: %v", bindingID, derr)
 				}
 			}
 			cleanupDocumentTemplate(ctx, deps, docID)
@@ -471,7 +471,7 @@ func NewPublishAction(deps *Deps) view.View {
 			return view.HTMXError(deps.Labels.TemplateSettings.NotConfigured)
 		}
 		if _, err := deps.PublishTemplateBinding(ctx, &bindingpb.PublishJobOutcomeSummaryDocumentTemplateRequest{Id: id}); err != nil {
-			log.Printf("report-card template publish %s: %v", id, err)
+			log.Printf("outcome summary template publish %s: %v", id, err)
 			return view.HTMXError(err.Error())
 		}
 		return view.HTMXSuccess(tableID)
@@ -502,7 +502,7 @@ func NewDeleteAction(deps *Deps) view.View {
 		if _, err := deps.DeleteTemplateBinding(ctx, &bindingpb.DeleteJobOutcomeSummaryDocumentTemplateRequest{
 			Data: &bindingpb.JobOutcomeSummaryDocumentTemplate{Id: id},
 		}); err != nil {
-			log.Printf("report-card template delete %s: %v", id, err)
+			log.Printf("outcome summary template delete %s: %v", id, err)
 			return view.HTMXError(err.Error())
 		}
 		reapUnreferencedDocTemplate(ctx, deps, docTemplateID, id)
@@ -523,13 +523,13 @@ func cleanupDocumentTemplate(ctx context.Context, deps *Deps, docID string) {
 		return
 	}
 	if deps.DeleteDocumentTemplate == nil {
-		log.Printf("report-card template cleanup: document_template %s left in place (delete closure not wired)", docID)
+		log.Printf("outcome summary template cleanup: document_template %s left in place (delete closure not wired)", docID)
 		return
 	}
 	if _, err := deps.DeleteDocumentTemplate(ctx, &documenttemplatepb.DeleteDocumentTemplateRequest{
 		Data: &documenttemplatepb.DocumentTemplate{Id: docID},
 	}); err != nil {
-		log.Printf("report-card template cleanup: delete document_template %s: %v", docID, err)
+		log.Printf("outcome summary template cleanup: delete document_template %s: %v", docID, err)
 	}
 }
 
@@ -562,7 +562,7 @@ func reapUnreferencedDocTemplate(ctx context.Context, deps *Deps, docTemplateID,
 	}
 	all, ok := listAllBindings(ctx, deps)
 	if !ok {
-		log.Printf("report-card template cleanup: reference scan incomplete — leaving document_template %s in place", docTemplateID)
+		log.Printf("outcome summary template cleanup: reference scan incomplete — leaving document_template %s in place", docTemplateID)
 		return
 	}
 	for _, b := range all {
@@ -597,7 +597,7 @@ func listAllBindings(ctx context.Context, deps *Deps) ([]*bindingpb.JobOutcomeSu
 	for _, req := range requests {
 		resp, err := deps.ListTemplateBindings(ctx, req)
 		if err != nil {
-			log.Printf("report-card template cleanup: list bindings: %v", err)
+			log.Printf("outcome summary template cleanup: list bindings: %v", err)
 			return nil, false
 		}
 		for _, b := range resp.GetData() {
@@ -629,7 +629,7 @@ func buildBindingRows(ctx context.Context, deps *Deps, perms *types.UserPermissi
 	}
 	resp, err := deps.ListTemplateBindings(ctx, &bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest{})
 	if err != nil {
-		log.Printf("report-card template settings: list bindings: %v", err)
+		log.Printf("outcome summary template settings: list bindings: %v", err)
 		return nil
 	}
 	l := deps.Labels.TemplateSettings
@@ -789,7 +789,7 @@ func docTemplateNames(ctx context.Context, deps *Deps) map[string]string {
 	}
 	resp, err := deps.ListDocumentTemplates(ctx, &documenttemplatepb.ListDocumentTemplatesRequest{})
 	if err != nil {
-		log.Printf("report-card template settings: list document templates: %v", err)
+		log.Printf("outcome summary template settings: list document templates: %v", err)
 		return out
 	}
 	for _, t := range resp.GetData() {
@@ -879,7 +879,7 @@ func replacementSource(ctx context.Context, deps *Deps, sourceID string) (*bindi
 	}
 	resp, err := deps.ListTemplateBindings(ctx, &bindingpb.ListJobOutcomeSummaryDocumentTemplatesRequest{})
 	if err != nil {
-		log.Printf("report-card template replacement: list bindings: %v", err)
+		log.Printf("outcome summary template replacement: list bindings: %v", err)
 		return nil, nil, false
 	}
 	for _, source := range resp.GetData() {
@@ -898,7 +898,7 @@ func replacementSource(ctx context.Context, deps *Deps, sourceID string) (*bindi
 		}
 		docs, err := deps.ListDocumentTemplates(ctx, &documenttemplatepb.ListDocumentTemplatesRequest{})
 		if err != nil {
-			log.Printf("report-card template replacement: list document templates: %v", err)
+			log.Printf("outcome summary template replacement: list document templates: %v", err)
 			return nil, nil, false
 		}
 		for _, artifact := range docs.GetData() {
@@ -951,7 +951,7 @@ func listAllSchedules(ctx context.Context, deps *Deps) []*priceschedulepb.PriceS
 	for _, req := range requests {
 		resp, err := deps.ListPriceSchedules(ctx, req)
 		if err != nil {
-			log.Printf("report-card template settings: list price schedules: %v", err)
+			log.Printf("outcome summary template settings: list price schedules: %v", err)
 			continue
 		}
 		for _, ps := range resp.GetData() {

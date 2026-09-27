@@ -76,7 +76,7 @@ func loadBlockManifest() manifestNode {
 			return
 		}
 		if err := json.Unmarshal(raw, &blockManifestParsed); err != nil {
-			log.Printf("report card doc: block manifest parse: %v", err)
+			log.Printf("outcome summary doc: block manifest parse: %v", err)
 			blockManifestParsed = manifestNode{}
 		}
 	})
@@ -173,7 +173,7 @@ func fetchYearLabelsStrict(ctx context.Context, d *Deps, jobIDs []string) map[st
 			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{listIn("job_id", jobIDs[start:end])}},
 		})
 		if err != nil {
-			log.Printf("report card doc: list job outcome summaries (strict): %v", err)
+			log.Printf("outcome summary doc: list job outcome summaries (strict): %v", err)
 			continue
 		}
 		for _, s := range resp.GetData() {
@@ -200,7 +200,7 @@ func fetchPhaseLabelsStrict(ctx context.Context, d *Deps, jobIDs []string, phase
 	for _, jid := range jobIDs {
 		resp, err := d.ListPhaseOutcomeSummarysByJob(ctx, &phasesumpb.ListPhaseOutcomeSummarysByJobRequest{JobId: jid})
 		if err != nil {
-			log.Printf("report card doc: list phase summaries by job (strict): %v", err)
+			log.Printf("outcome summary doc: list phase summaries by job (strict): %v", err)
 			continue
 		}
 		for _, s := range resp.GetPhaseOutcomeSummarys() {
@@ -253,7 +253,7 @@ func fetchTemplatePhaseCodes(ctx context.Context, d *Deps, templateIDs []string)
 		seen[tid] = true
 		resp, err := d.ListJobTemplatePhasesByTemplate(ctx, &jobtemplatephasepb.ListByJobTemplateRequest{JobTemplateId: tid})
 		if err != nil {
-			log.Printf("report card doc: list template phases by template: %v", err)
+			log.Printf("outcome summary doc: list template phases by template: %v", err)
 			continue
 		}
 		for _, p := range resp.GetJobTemplatePhases() {
@@ -304,7 +304,7 @@ type academicTreeRow struct {
 
 // buildJobCategoriesTree assembles the whole job_categories subtree (map keyed by
 // category code). Emitted under the "job_categories" root key by
-// buildReportCardData and blank-guarded by the manifest afterwards.
+// buildClientOutcomeSummaryData and blank-guarded by the manifest afterwards.
 func buildJobCategoriesTree(ctx context.Context, d *Deps, in treeInputs, strictYear map[string]string) map[string]any {
 	tree := map[string]any{}
 	catMap := func(code string) map[string]any {
@@ -362,7 +362,7 @@ func buildJobCategoriesTree(ctx context.Context, d *Deps, in treeInputs, strictY
 			continue
 		}
 		if len(jobs) != 1 || jobs[0] == nil {
-			log.Printf("report card doc: singleton category %q has %d job(s) (want exactly 1); projection left blank", code, len(jobs))
+			log.Printf("outcome summary doc: singleton category %q has %d job(s) (want exactly 1); projection left blank", code, len(jobs))
 			continue
 		}
 		job := jobs[0]
@@ -595,7 +595,7 @@ func buildSingletonProjection(ctx context.Context, d *Deps, groupJob *jobpb.Job,
 			JobIds: []string{groupJob.GetId()},
 		})
 		if err != nil {
-			log.Printf("report card doc: list coded task outcome values: %v", err)
+			log.Printf("outcome summary doc: list coded task outcome values: %v", err)
 		} else {
 			for _, v := range resp.GetValues() {
 				pc := strings.TrimSpace(v.GetPhaseCode())

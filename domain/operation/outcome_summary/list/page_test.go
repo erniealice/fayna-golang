@@ -103,8 +103,8 @@ func TestLandingScopedPastEmptyBandRendersZeroRows(t *testing.T) {
 	if !pd.Landing {
 		t.Fatalf("Landing = false, want true (empty landing, not the flat list)")
 	}
-	if pd.ActiveSubNav != "report-cards-past" {
-		t.Fatalf("ActiveSubNav = %q, want %q", pd.ActiveSubNav, "report-cards-past")
+	if pd.ActiveSubNav != "outcome-summaries-past" {
+		t.Fatalf("ActiveSubNav = %q, want %q", pd.ActiveSubNav, "outcome-summaries-past")
 	}
 	if want := res.Template + "-content"; pd.ContentTemplate != want {
 		t.Fatalf("ContentTemplate = %q, want %q (boosted-nav dispatch invariant)", pd.ContentTemplate, want)
@@ -153,8 +153,8 @@ func TestLandingScopedCurrentEmptyBandRendersZeroRows(t *testing.T) {
 	if len(pd.TabItems) != 0 {
 		t.Fatalf("TabItems = %d, want 0 (no tabstrip for an empty band)", len(pd.TabItems))
 	}
-	if pd.ActiveSubNav != "report-cards-current" {
-		t.Fatalf("ActiveSubNav = %q, want %q", pd.ActiveSubNav, "report-cards-current")
+	if pd.ActiveSubNav != "outcome-summaries-current" {
+		t.Fatalf("ActiveSubNav = %q, want %q", pd.ActiveSubNav, "outcome-summaries-current")
 	}
 	if groupsCalled {
 		t.Fatalf("ListSubscriptionGroups called; the group read must be skipped for an empty scoped band")
@@ -209,8 +209,8 @@ func TestLandingScopedPastRendersOnlyInactiveBand(t *testing.T) {
 			t.Fatalf("active-AY group g-active-1 rendered under scope=past; band boundary leaked")
 		}
 	}
-	if pd.ActiveSubNav != "report-cards-past" {
-		t.Fatalf("ActiveSubNav = %q, want %q", pd.ActiveSubNav, "report-cards-past")
+	if pd.ActiveSubNav != "outcome-summaries-past" {
+		t.Fatalf("ActiveSubNav = %q, want %q", pd.ActiveSubNav, "outcome-summaries-past")
 	}
 }
 
@@ -248,8 +248,8 @@ func TestLandingUnscopedUnfilteredBackcompat(t *testing.T) {
 	if len(pd.Table.Rows) != 1 {
 		t.Fatalf("Table.Rows = %d, want 1 (the active schedule's group renders)", len(pd.Table.Rows))
 	}
-	if pd.ActiveSubNav != "report-cards" {
-		t.Fatalf("ActiveSubNav = %q, want %q (base report-cards row)", pd.ActiveSubNav, "report-cards")
+	if pd.ActiveSubNav != "outcome-summaries" {
+		t.Fatalf("ActiveSubNav = %q, want %q (base report-cards row)", pd.ActiveSubNav, "outcome-summaries")
 	}
 }
 

@@ -162,10 +162,10 @@ func TestBuildRows_PhantomBlank_RealShown(t *testing.T) {
 		"jobR1": "1", // real 1
 		"jobR0": "0", // real 0
 	}
-	evByJob := map[string]outcome_summary.EnrollmentEvidence{
-		"jobP":  {HasMarks: true, HasPositiveMark: false}, // all-zero scaffold → phantom
-		"jobR1": {HasMarks: true, HasPositiveMark: true},  // enrolled → keep
-		"jobR0": {HasMarks: true, HasPositiveMark: true},  // enrolled → keep
+	evByJob := map[string]outcome_summary.TaskOutcomeEvidence{
+		"jobP":  {HasTaskOutcome: true, HasPositiveTaskOutcome: false}, // all-zero scaffold → phantom
+		"jobR1": {HasTaskOutcome: true, HasPositiveTaskOutcome: true},  // enrolled → keep
+		"jobR0": {HasTaskOutcome: true, HasPositiveTaskOutcome: true},  // enrolled → keep
 	}
 
 	rows := buildRows(clients, templateIDs, cellJob, labelByJob, nil, "", evByJob, "sec1", outcome_summary.Routes{}, outcome_summary.Labels{}, false, false)
@@ -583,7 +583,7 @@ func TestResolveSubscriptionGroupPartition_FailClosedOnCorpusError(t *testing.T)
 }
 
 // TestSubscriptionGroupDocumentTemplate_R8ScriptAndTabsContract pins that the R8 entries-seed
-// script (constant table id "report-cards-grid") survives the tabstrip addition,
+// script (constant table id "outcome-summaries-grid") survives the tabstrip addition,
 // that the tabs live inside the SINGLE content define (goldens untouched), and
 // that the constant Table.ID literal remains in page.go.
 func TestSubscriptionGroupDocumentTemplate_R8ScriptAndTabsContract(t *testing.T) {
@@ -593,11 +593,11 @@ func TestSubscriptionGroupDocumentTemplate_R8ScriptAndTabsContract(t *testing.T)
 	}
 	s := string(tpl)
 	for _, want := range []string{
-		"getElementById('report-cards-grid-entries')", // R8 seed script — constant id
-		"{{if .TabItems}}",             // tabstrip gate
-		`{{template "tabs"`,            // pyeza tabs component
-		`"report-cards-category-tabs"`, // tabstrip nav id
-		`"Indicator" "#tabContent"`,    // R2 indicator precedent
+		"getElementById('outcome-summaries-grid-entries')", // R8 seed script — constant id
+		"{{if .TabItems}}",                  // tabstrip gate
+		`{{template "tabs"`,                 // pyeza tabs component
+		`"outcome-summaries-category-tabs"`, // tabstrip nav id
+		`"Indicator" "#tabContent"`,         // R2 indicator precedent
 		`id="tabContent"`,
 		`role="tabpanel"`,
 	} {
@@ -613,7 +613,7 @@ func TestSubscriptionGroupDocumentTemplate_R8ScriptAndTabsContract(t *testing.T)
 	if err != nil {
 		t.Fatalf("read page.go: %v", err)
 	}
-	if !strings.Contains(string(pg), `"report-cards-grid"`) {
-		t.Errorf("page.go must keep the constant Table.ID \"report-cards-grid\" across tabs (R8)")
+	if !strings.Contains(string(pg), `"outcome-summaries-grid"`) {
+		t.Errorf("page.go must keep the constant Table.ID \"outcome-summaries-grid\" across tabs (R8)")
 	}
 }

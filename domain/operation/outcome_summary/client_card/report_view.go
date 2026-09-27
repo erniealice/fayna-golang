@@ -30,18 +30,18 @@ func narrowReportViewEnabled(ctx context.Context, deps *Deps, perms *types.UserP
 		outcome_summary.CanExplicitExport(perms, ctx, deps.ResolvePrincipalKind) &&
 		deps.Options.List.SubscriptionGroups() &&
 		deps.Options.SubscriptionGroupExportEnabled() &&
-		deps.GetSubscriptionGroupClientReportCard != nil
+		deps.GetSubscriptionGroupClientOutcomeSummary != nil
 }
 
 func renderReportView(ctx context.Context, viewCtx *view.ViewContext, deps *Deps, subscriptionGroupID, clientID string) view.ViewResult {
-	if deps.GetSubscriptionGroupClientReportCard == nil {
+	if deps.GetSubscriptionGroupClientOutcomeSummary == nil {
 		return view.Forbidden("subscription_group_outcome_export:read")
 	}
 	if strings.TrimSpace(subscriptionGroupID) == "" || strings.TrimSpace(clientID) == "" {
 		return view.Forbidden("subscription_group_outcome_export:read")
 	}
 
-	response, err := deps.GetSubscriptionGroupClientReportCard(ctx, &exportpb.GetSubscriptionGroupClientReportCardRequest{
+	response, err := deps.GetSubscriptionGroupClientOutcomeSummary(ctx, &exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest{
 		SubscriptionGroupId:  subscriptionGroupID,
 		ClientId:             clientID,
 		ClientAttributeCodes: append([]string(nil), deps.ClientAttributeCodes...),
@@ -57,7 +57,7 @@ func renderReportView(ctx context.Context, viewCtx *view.ViewContext, deps *Deps
 		log.Printf("client report view: scoped projection returned an incomplete response")
 		return view.ViewResult{Error: fmt.Errorf("client report projection is unavailable"), StatusCode: http.StatusServiceUnavailable}
 	}
-	projection := response.GetReportCard()
+	projection := response.GetOutcomeSummary()
 	if !clientProjectionValid(projection, subscriptionGroupID, clientID) {
 		return view.ViewResult{Error: fmt.Errorf("client report not found"), StatusCode: http.StatusNotFound}
 	}
@@ -67,7 +67,7 @@ func renderReportView(ctx context.Context, viewCtx *view.ViewContext, deps *Deps
 	return clientProjectionPage(ctx, viewCtx, deps, projection, clientName, table)
 }
 
-func clientProjectionValid(projection *exportpb.ClientReportCardProjection, groupID, clientID string) bool {
+func clientProjectionValid(projection *exportpb.ClientOutcomeSummaryProjection, groupID, clientID string) bool {
 	return projection != nil &&
 		projection.GetContext() != nil && projection.GetContext().GetSubscriptionGroupId() == groupID &&
 		projection.GetClient() != nil && projection.GetClient().GetClientId() == clientID &&
@@ -80,7 +80,7 @@ type phaseColumn struct {
 	sequence int32
 }
 
-func buildProjectedClientTable(deps *Deps, projection *exportpb.ClientReportCardProjection, bandByCategory bool) *types.TableConfig {
+func buildProjectedClientTable(deps *Deps, projection *exportpb.ClientOutcomeSummaryProjection, bandByCategory bool) *types.TableConfig {
 	if projection == nil || len(projection.GetJobs()) == 0 {
 		return nil
 	}
@@ -246,7 +246,7 @@ func buildProjectedClientTable(deps *Deps, projection *exportpb.ClientReportCard
 	}
 
 	table := &types.TableConfig{
-		ID:          "report-cards-client",
+		ID:          "outcome-summaries-client",
 		Columns:     columns,
 		Rows:        rows,
 		ShowSearch:  false,
@@ -348,7 +348,7 @@ func subjectName(template *jobtemplatepb.JobTemplate, fallback string) string {
 	return fallback
 }
 
-func projectedClientName(client *exportpb.ClientReportCardClient) string {
+func projectedClientName(client *exportpb.ClientOutcomeSummaryClient) string {
 	if client == nil {
 		return ""
 	}
@@ -378,7 +378,7 @@ func safeKey(value string) string {
 	return "uncategorized"
 }
 
-func clientProjectionPage(ctx context.Context, viewCtx *view.ViewContext, deps *Deps, projection *exportpb.ClientReportCardProjection, clientName string, table *types.TableConfig) view.ViewResult {
+func clientProjectionPage(ctx context.Context, viewCtx *view.ViewContext, deps *Deps, projection *exportpb.ClientOutcomeSummaryProjection, clientName string, table *types.TableConfig) view.ViewResult {
 	labels := deps.Labels
 	context := projection.GetContext()
 	groupName := strings.TrimSpace(context.GetSubscriptionGroupName())
@@ -395,7 +395,7 @@ func clientProjectionPage(ctx context.Context, viewCtx *view.ViewContext, deps *
 			Title:               labels.Client.Title,
 			CurrentPath:         viewCtx.CurrentPath,
 			ActiveNav:           deps.Routes.ActiveNav,
-			ActiveSubNav:        "report-cards",
+			ActiveSubNav:        "outcome-summaries",
 			HeaderBreadcrumb:    labels.SubscriptionGroup.Title,
 			HeaderBreadcrumbURL: route.ResolveURL(deps.Routes.SubscriptionGroupURL, "id", context.GetSubscriptionGroupId()),
 			HeaderTitle:         headerTitle,

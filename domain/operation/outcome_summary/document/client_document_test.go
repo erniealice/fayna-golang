@@ -33,13 +33,13 @@ func TestDownload_ExplicitProgressReport_UsesExportPermissionAndPhaseBinding(t *
 			card.Context.PriceScheduleId = strptr("schedule-1")
 			card.ClientSubscriptionIds = []string{"subscription-1"}
 			allowClientProjectionRender(card, "group-1")
-			response := &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: card}
+			response := &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true, OutcomeSummary: card}
 			projectionCalls, resolverCalls, renderCalls := 0, 0, 0
 			deps := &Deps{
 				Options:              outcome_summary.Options{Document: outcome_summary.DocumentOptions{ClientAttributeCodes: []string{"gender"}}},
 				ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindStaff },
 				DocumentHeaderName:   "Sample Organization",
-				GetSubscriptionGroupClientReportCard: func(_ context.Context, req *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
+				GetSubscriptionGroupClientOutcomeSummary: func(_ context.Context, req *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
 					projectionCalls++
 					if req.GetSubscriptionGroupId() != "group-1" || req.GetClientId() != "client-1" || len(req.GetClientAttributeCodes()) != 1 || req.GetClientAttributeCodes()[0] != "gender" {
 						t.Fatalf("projection request = %+v", req)
@@ -117,8 +117,8 @@ func TestDownload_ExplicitUnpublishedSheetRendersStructureWithBlankOutcomes(t *t
 	var rendered map[string]any
 	deps := &Deps{
 		ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindStaff },
-		GetSubscriptionGroupClientReportCard: func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
-			return &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: card}, nil
+		GetSubscriptionGroupClientOutcomeSummary: func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
+			return &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true, OutcomeSummary: card}, nil
 		},
 		ResolveTemplateBytes: func(context.Context, string, string) ([]byte, error) { return []byte("template"), nil },
 		GeneratePDF: func(_ []byte, data map[string]any) ([]byte, error) {
@@ -176,7 +176,7 @@ func TestClientProjectionRenderGateUsesDistinctTemplateAndSingletonSheets(t *tes
 	card := clientPhaseProjectionFixture()
 	card.JobPhases = append(card.JobPhases, &jobphasepb.JobPhase{Id: "phase-singleton", JobId: "job-art", Active: true})
 	card.RenderGateAppliedSubscriptionGroupId = "group-1"
-	card.RenderGateSheets = []*exportpb.ClientReportCardRenderGateSheet{
+	card.RenderGateSheets = []*exportpb.ClientOutcomeSummaryRenderGateSheet{
 		{JobTemplatePhaseId: ptr("template-phase-bio"), AppliedSubscriptionGroupId: "group-1", TargetCount: 3, AllPublished: true, HasData: true},
 		{JobTemplatePhaseId: ptr("template-phase-chem"), AppliedSubscriptionGroupId: "group-1", TargetCount: 2, AllPublished: true, HasData: true},
 		{JobTemplatePhaseId: ptr("template-phase-art"), AppliedSubscriptionGroupId: "group-1", TargetCount: 7, AllPublished: false, AnyWorkflowEntered: true, HasData: true},
@@ -196,25 +196,25 @@ func TestClientProjectionRenderGateFailsClosedOnIncompleteOrMismatchedCoverage(t
 	allowClientProjectionRender(base, "group-1")
 	tests := []struct {
 		name   string
-		mutate func(*exportpb.ClientReportCardProjection)
+		mutate func(*exportpb.ClientOutcomeSummaryProjection)
 	}{
-		{name: "projection group echo", mutate: func(card *exportpb.ClientReportCardProjection) {
+		{name: "projection group echo", mutate: func(card *exportpb.ClientOutcomeSummaryProjection) {
 			card.RenderGateAppliedSubscriptionGroupId = "group-other"
 		}},
-		{name: "missing sheet", mutate: func(card *exportpb.ClientReportCardProjection) {
+		{name: "missing sheet", mutate: func(card *exportpb.ClientOutcomeSummaryProjection) {
 			card.RenderGateSheets = card.RenderGateSheets[:len(card.RenderGateSheets)-1]
 		}},
-		{name: "duplicate sheet", mutate: func(card *exportpb.ClientReportCardProjection) {
+		{name: "duplicate sheet", mutate: func(card *exportpb.ClientOutcomeSummaryProjection) {
 			card.RenderGateSheets = append(card.RenderGateSheets, card.RenderGateSheets[0])
 		}},
-		{name: "foreign row group", mutate: func(card *exportpb.ClientReportCardProjection) {
+		{name: "foreign row group", mutate: func(card *exportpb.ClientOutcomeSummaryProjection) {
 			card.RenderGateSheets[0].AppliedSubscriptionGroupId = "group-other"
 		}},
-		{name: "short template coverage", mutate: func(card *exportpb.ClientReportCardProjection) { card.RenderGateSheets[2].TargetCount = 1 }},
+		{name: "short template coverage", mutate: func(card *exportpb.ClientOutcomeSummaryProjection) { card.RenderGateSheets[2].TargetCount = 1 }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			card := proto.Clone(base).(*exportpb.ClientReportCardProjection)
+			card := proto.Clone(base).(*exportpb.ClientOutcomeSummaryProjection)
 			tt.mutate(card)
 			if _, err := clientProjectionRenderStatus(card, "group-1"); err == nil {
 				t.Fatal("clientProjectionRenderStatus() error = nil, want fail-closed coverage error")
@@ -223,9 +223,9 @@ func TestClientProjectionRenderGateFailsClosedOnIncompleteOrMismatchedCoverage(t
 	}
 }
 
-func allowClientProjectionRender(card *exportpb.ClientReportCardProjection, groupID string) {
+func allowClientProjectionRender(card *exportpb.ClientOutcomeSummaryProjection, groupID string) {
 	card.RenderGateAppliedSubscriptionGroupId = groupID
-	card.RenderGateSheets = []*exportpb.ClientReportCardRenderGateSheet{
+	card.RenderGateSheets = []*exportpb.ClientOutcomeSummaryRenderGateSheet{
 		{JobTemplatePhaseId: ptr("template-phase-bio"), AppliedSubscriptionGroupId: groupID, TargetCount: 1, AllPublished: true, HasData: true},
 		{JobTemplatePhaseId: ptr("template-phase-chem"), AppliedSubscriptionGroupId: groupID, TargetCount: 1, AllPublished: true, HasData: true},
 		{JobTemplatePhaseId: ptr("template-phase-art"), AppliedSubscriptionGroupId: groupID, TargetCount: 2, AllPublished: true, HasData: true},
@@ -238,7 +238,7 @@ func TestDownload_ExplicitClientPeriodRequiresExportPermissionBeforeProjection(t
 			projectionCalls := 0
 			deps := &Deps{
 				ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindStaff },
-				GetSubscriptionGroupClientReportCard: func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
+				GetSubscriptionGroupClientOutcomeSummary: func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
 					projectionCalls++
 					return nil, nil
 				},
@@ -262,27 +262,27 @@ func TestDownload_ExplicitClientPeriodRequiresExportPermissionBeforeProjection(t
 func TestDownload_ExplicitProjectionErrorMapsTypedNotFoundAndDependencyFailure(t *testing.T) {
 	tests := []struct {
 		name       string
-		projection func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
+		projection func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error)
 		wantStatus int
 	}{
 		{
 			name: "typed non-enumerating not found",
-			projection: func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
+			projection: func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
 				return nil, fmt.Errorf("query: %w", espynaports.ErrClientReportNotFound)
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "dependency failure",
-			projection: func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
+			projection: func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
 				return nil, errors.New("database unavailable")
 			},
 			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name: "incomplete response",
-			projection: func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
-				return &exportpb.GetSubscriptionGroupClientReportCardResponse{}, nil
+			projection: func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
+				return &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{}, nil
 			},
 			wantStatus: http.StatusServiceUnavailable,
 		},
@@ -296,9 +296,9 @@ func TestDownload_ExplicitProjectionErrorMapsTypedNotFoundAndDependencyFailure(t
 						WholeReportProfile: bindingpb.RenderProfile_RENDER_PROFILE_SUBSCRIPTION_GROUP_CLIENT_PHASE_OUTCOME_REPORT_V1,
 					},
 				},
-				ResolvePrincipalKind:                 func(context.Context) int32 { return outcome_summary.PrincipalKindStaff },
-				GetSubscriptionGroupClientReportCard: tt.projection,
-				GenerateDoc:                          func([]byte, map[string]any) ([]byte, error) { return stubDocBytes, nil },
+				ResolvePrincipalKind:                     func(context.Context) int32 { return outcome_summary.PrincipalKindStaff },
+				GetSubscriptionGroupClientOutcomeSummary: tt.projection,
+				GenerateDoc:                              func([]byte, map[string]any) ([]byte, error) { return stubDocBytes, nil },
 			}
 			r := httptest.NewRequest(http.MethodGet, "/document?period=s1", nil)
 			r.SetPathValue("id", "group-1")
@@ -490,8 +490,8 @@ func TestDownload_ExplicitPhaseGateIsPerSheet(t *testing.T) {
 	var rendered map[string]any
 	deps := &Deps{
 		ResolvePrincipalKind: func(context.Context) int32 { return outcome_summary.PrincipalKindStaff },
-		GetSubscriptionGroupClientReportCard: func(context.Context, *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error) {
-			return &exportpb.GetSubscriptionGroupClientReportCardResponse{Success: true, ReportCard: card}, nil
+		GetSubscriptionGroupClientOutcomeSummary: func(context.Context, *exportpb.GetSubscriptionGroupClientOutcomeSummaryRequest) (*exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse, error) {
+			return &exportpb.GetSubscriptionGroupClientOutcomeSummaryResponse{Success: true, OutcomeSummary: card}, nil
 		},
 		ResolveTemplateBytes: func(context.Context, string, string) ([]byte, error) { return []byte("template"), nil },
 		GenerateDoc: func(_ []byte, data map[string]any) ([]byte, error) {

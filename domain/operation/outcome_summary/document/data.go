@@ -269,6 +269,32 @@ func collectCard(ctx context.Context, d *Deps, groupID, clientID string) (*clien
 	}
 
 	jobs := fetchJobs(ctx, d, subID, historical)
+	// The three card consumers (semester, strict tree, and item ratings) read
+	// overlapping job sets. Keep one scoped bulk result on this card's context.
+	if d.ListPhaseOutcomeSummariesByJobs != nil && len(jobs) != 0 {
+		ids := make([]string, 0, len(jobs))
+		seen := make(map[string]bool, len(jobs))
+		for _, job := range jobs {
+			if id := job.GetId(); id != "" && !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) != 0 {
+			rows, err := d.ListPhaseOutcomeSummariesByJobs(ctx, ids)
+			if err != nil {
+				log.Printf("outcome summary doc: bulk phase summaries: %v", err)
+			} else {
+				byJob := make(map[string][]*phasesumpb.PhaseOutcomeSummary, len(ids))
+				for _, row := range rows {
+					if row != nil && seen[row.GetJobId()] {
+						byJob[row.GetJobId()] = append(byJob[row.GetJobId()], row)
+					}
+				}
+				ctx = context.WithValue(ctx, cardPhaseSummariesKey{}, byJob)
+			}
+		}
+	}
 	// H2: keep only the configured category's subjects (academic), dropping
 	// same-origin deportment jobs. catID "" with catOK=true (no filter) keeps
 	// every job; catOK=false (a configured filter that could not be resolved)
@@ -754,16 +780,8 @@ func fetchPhaseOrders(ctx context.Context, d *Deps, jobIDs []string, historical 
 
 func fetchSemesterLabels(ctx context.Context, d *Deps, jobIDs []string, phaseOrder map[string]int32) map[string]map[int32]string {
 	out := map[string]map[int32]string{}
-	if d.ListPhaseOutcomeSummarysByJob == nil {
-		return out
-	}
 	for _, jid := range jobIDs {
-		resp, err := d.ListPhaseOutcomeSummarysByJob(ctx, &phasesumpb.ListPhaseOutcomeSummarysByJobRequest{JobId: jid})
-		if err != nil {
-			log.Printf("outcome summary doc: list phase summaries by job: %v", err)
-			continue
-		}
-		for _, s := range resp.GetPhaseOutcomeSummarys() {
+		for _, s := range cardPhaseSummariesForJob(ctx, d, jid) {
 			if !s.GetActive() {
 				continue
 			}
@@ -785,6 +803,25 @@ func fetchSemesterLabels(ctx context.Context, d *Deps, jobIDs []string, phaseOrd
 		}
 	}
 	return out
+}
+
+type cardPhaseSummariesKey struct{}
+
+// cardPhaseSummariesForJob preserves each per-job newest-first row order. A
+// legacy/nil bulk dependency retains the original per-job read behavior.
+func cardPhaseSummariesForJob(ctx context.Context, d *Deps, jobID string) []*phasesumpb.PhaseOutcomeSummary {
+	if cached, ok := ctx.Value(cardPhaseSummariesKey{}).(map[string][]*phasesumpb.PhaseOutcomeSummary); ok {
+		return cached[jobID]
+	}
+	if d.ListPhaseOutcomeSummarysByJob == nil {
+		return nil
+	}
+	resp, err := d.ListPhaseOutcomeSummarysByJob(ctx, &phasesumpb.ListPhaseOutcomeSummarysByJobRequest{JobId: jobID})
+	if err != nil {
+		log.Printf("outcome summary doc: list phase summaries by job: %v", err)
+		return nil
+	}
+	return resp.GetPhaseOutcomeSummarys()
 }
 
 func fetchYearLabels(ctx context.Context, d *Deps, jobIDs []string) map[string]string {

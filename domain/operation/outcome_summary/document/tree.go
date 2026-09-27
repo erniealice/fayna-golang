@@ -47,7 +47,6 @@ import (
 	jobpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job"
 	jobsumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_outcome_summary"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
-	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 )
 
@@ -194,16 +193,8 @@ func fetchYearLabelsStrict(ctx context.Context, d *Deps, jobIDs []string) map[st
 // Nil-safe.
 func fetchPhaseLabelsStrict(ctx context.Context, d *Deps, jobIDs []string, phaseOrder map[string]int32) map[string]map[int32]string {
 	out := map[string]map[int32]string{}
-	if d.ListPhaseOutcomeSummarysByJob == nil {
-		return out
-	}
 	for _, jid := range jobIDs {
-		resp, err := d.ListPhaseOutcomeSummarysByJob(ctx, &phasesumpb.ListPhaseOutcomeSummarysByJobRequest{JobId: jid})
-		if err != nil {
-			log.Printf("outcome summary doc: list phase summaries by job (strict): %v", err)
-			continue
-		}
-		for _, s := range resp.GetPhaseOutcomeSummarys() {
+		for _, s := range cardPhaseSummariesForJob(ctx, d, jid) {
 			if !s.GetActive() {
 				continue
 			}
@@ -242,7 +233,25 @@ func strictPhaseLabel(m map[string]map[int32]string, jobID string, order int32) 
 // closure yields an empty map and every phase key resolves blank.
 func fetchTemplatePhaseCodes(ctx context.Context, d *Deps, templateIDs []string) map[string]string {
 	out := map[string]string{}
-	if d.ListJobTemplatePhasesByTemplate == nil || len(templateIDs) == 0 {
+	if len(templateIDs) == 0 {
+		return out
+	}
+	if d.ListJobTemplatePhasesByTemplates != nil {
+		rows, err := d.ListJobTemplatePhasesByTemplates(ctx, templateIDs)
+		if err == nil {
+			for _, p := range rows {
+				if p == nil {
+					continue
+				}
+				if id, code := p.GetId(), strings.TrimSpace(p.GetCode()); id != "" && code != "" {
+					out[id] = code
+				}
+			}
+			return out
+		}
+		log.Printf("outcome summary doc: bulk template phases: %v", err)
+	}
+	if d.ListJobTemplatePhasesByTemplate == nil {
 		return out
 	}
 	seen := map[string]bool{}

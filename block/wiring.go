@@ -461,6 +461,7 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	pos := &u.Operation.PhaseOutcomeSummary
 	deps.GetPhaseOutcomeSummaryByJobPhase = pos.GetByJobPhase
 	deps.ListPhaseOutcomeSummarysByJob = pos.ListByJob
+	deps.ListPhaseOutcomeSummariesByJobs = pos.ListByJobs
 
 	// Report-cards navigation deps (view-1 landing tabbed group list + view-2
 	// per-subscription-group grid). All reused from already-wired top-level closures — no
@@ -497,6 +498,7 @@ func wireOutcomeSummaryDeps(deps *operation.OutcomeSummaryModuleDeps, u *UseCase
 	// Block-layout report-card tree: resolves job_template_phase.code (projected by
 	// the specialized ListByJobTemplate SQL) so per-phase leaves key by phase code.
 	deps.ListJobTemplatePhasesByTemplate = u.Operation.JobTemplatePhase.ListByJobTemplate
+	deps.ListJobTemplatePhasesByTemplates = u.Operation.JobTemplatePhase.ListByTemplates
 	deps.ListJobTemplates = u.Operation.JobTemplate.ListJobTemplates
 	deps.ListClients = u.Entity.Client.ListClients
 	deps.ListClientAttributes = u.Entity.ClientAttribute.ListClientAttributes

@@ -131,12 +131,14 @@ type Deps struct {
 	ListClients                            func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
 	ListJobOutcomeSummarys                 func(ctx context.Context, req *jobsumpb.ListJobOutcomeSummarysRequest) (*jobsumpb.ListJobOutcomeSummarysResponse, error)
 	ListPhaseOutcomeSummarysByJob          func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
+	ListPhaseOutcomeSummariesByJobs        func(ctx context.Context, jobIDs []string) ([]*phasesumpb.PhaseOutcomeSummary, error)
 	ListJobPhases                          func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error)
 	// ListJobTemplatePhasesByTemplate resolves a job_template's phases (with their
 	// stable `code`, projected by the specialized SQL) so the block tree can key
 	// per-phase leaves by phase code via job_phase.template_phase_id. Optional/
 	// nil-safe: a missing closure leaves every phase key blank.
-	ListJobTemplatePhasesByTemplate func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListJobTemplatePhasesByTemplate  func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListJobTemplatePhasesByTemplates func(ctx context.Context, templateIDs []string) ([]*jobtemplatephasepb.JobTemplatePhase, error)
 	// ListJobOutcomeLines is retained for a potential per-subject fallback; the
 	// per-criterion transcript now reads task_outcome (see below) since
 	// job_outcome_line on education1 is per-subject only.

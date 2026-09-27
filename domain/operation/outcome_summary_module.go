@@ -116,6 +116,7 @@ type OutcomeSummaryModuleDeps struct {
 	// Phase outcome summary operations
 	GetPhaseOutcomeSummaryByJobPhase func(ctx context.Context, req *phasesumpb.GetPhaseOutcomeSummaryByJobPhaseRequest) (*phasesumpb.GetPhaseOutcomeSummaryByJobPhaseResponse, error)
 	ListPhaseOutcomeSummarysByJob    func(ctx context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
+	ListPhaseOutcomeSummariesByJobs  func(ctx context.Context, jobIDs []string) ([]*phasesumpb.PhaseOutcomeSummary, error)
 
 	// Report-cards navigation deps (view-1 landing + view-2 group grid). All
 	// optional/nil-safe: a nil closure degrades the affected surface to its
@@ -154,6 +155,7 @@ type OutcomeSummaryModuleDeps struct {
 	// stable `code`) so the report-card block tree can key per-phase leaves by
 	// phase code. Optional/nil-safe.
 	ListJobTemplatePhasesByTemplate          func(ctx context.Context, req *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListJobTemplatePhasesByTemplates         func(ctx context.Context, templateIDs []string) ([]*jobtemplatephasepb.JobTemplatePhase, error)
 	ListJobTemplates                         func(ctx context.Context, req *jobtemplatepb.ListJobTemplatesRequest) (*jobtemplatepb.ListJobTemplatesResponse, error)
 	ListClients                              func(ctx context.Context, req *clientpb.ListClientsRequest) (*clientpb.ListClientsResponse, error)
 	ListClientAttributes                     func(ctx context.Context, req *clientattributepb.ListClientAttributesRequest) (*clientattributepb.ListClientAttributesResponse, error)
@@ -482,9 +484,11 @@ func newClientDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc {
 		ListClients:                               deps.ListClients,
 		ListJobOutcomeSummarys:                    deps.ListJobOutcomeSummarys,
 		ListPhaseOutcomeSummarysByJob:             deps.ListPhaseOutcomeSummarysByJob,
+		ListPhaseOutcomeSummariesByJobs:           deps.ListPhaseOutcomeSummariesByJobs,
 		ListJobPhases:                             deps.ListJobPhases,
 		GetPhaseApprovalGateRollup:                deps.GetPhaseApprovalGateRollup,
 		ListJobTemplatePhasesByTemplate:           deps.ListJobTemplatePhasesByTemplate,
+		ListJobTemplatePhasesByTemplates:          deps.ListJobTemplatePhasesByTemplates,
 		ListJobOutcomeLines:                       deps.ListJobOutcomeLines,
 		ListJobTasks:                              deps.ListJobTasks,
 		ListTaskOutcomes:                          deps.ListTaskOutcomes,

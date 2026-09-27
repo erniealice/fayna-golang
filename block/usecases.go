@@ -372,6 +372,7 @@ type JobTemplatePhaseUseCases struct {
 	UpdateJobTemplatePhase        func(context.Context, *jobtemplatephasepb.UpdateJobTemplatePhaseRequest) (*jobtemplatephasepb.UpdateJobTemplatePhaseResponse, error)
 	DeleteJobTemplatePhase        func(context.Context, *jobtemplatephasepb.DeleteJobTemplatePhaseRequest) (*jobtemplatephasepb.DeleteJobTemplatePhaseResponse, error)
 	ListByJobTemplate             func(context.Context, *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error)
+	ListByTemplates               func(context.Context, []string) ([]*jobtemplatephasepb.JobTemplatePhase, error)
 	ListPhaseCodesByPriceSchedule func(context.Context, *jobtemplatephasepb.ListPhaseCodesByPriceScheduleRequest) (*jobtemplatephasepb.ListPhaseCodesByPriceScheduleResponse, error)
 }
 
@@ -674,6 +675,7 @@ type JobOutcomeSummaryUseCases struct {
 type PhaseOutcomeSummaryUseCases struct {
 	GetByJobPhase func(context.Context, *phaseoutcomesumpb.GetPhaseOutcomeSummaryByJobPhaseRequest) (*phaseoutcomesumpb.GetPhaseOutcomeSummaryByJobPhaseResponse, error)
 	ListByJob     func(context.Context, *phaseoutcomesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phaseoutcomesumpb.ListPhaseOutcomeSummarysByJobResponse, error)
+	ListByJobs    func(context.Context, []string) ([]*phaseoutcomesumpb.PhaseOutcomeSummary, error)
 }
 
 // ActivityLaborUseCases — OPTIONAL (not in RequireFor; nil-able until espyna P5).

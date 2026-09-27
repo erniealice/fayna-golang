@@ -16,6 +16,8 @@ import (
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
+	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
+	phasesumpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
 	productplanpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan"
 	productplanstaffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/product/product_plan_staff"
@@ -251,6 +253,84 @@ func depsForGroupJobs(n int) (d *Deps, group, client string) {
 		},
 	}
 	return d, group, client
+}
+
+// The bulk closures must feed every consumer of the old per-job reads from one
+// card-local result, including the repeated strict/semester/item-rating walks.
+func TestCollectCard_BulkPhaseParityAndCount(t *testing.T) {
+	for _, n := range []int{1, 12, 24} {
+		t.Run(fmt.Sprintf("%d-group-jobs", n), func(t *testing.T) {
+			legacy, group, client := depsForGroupJobs(n)
+			listPhases := legacy.ListJobPhases
+			legacy.ListJobPhases = func(ctx context.Context, req *jobphasepb.ListJobPhasesRequest) (*jobphasepb.ListJobPhasesResponse, error) {
+				resp, err := listPhases(ctx, req)
+				for _, phase := range resp.GetData() {
+					phase.TemplatePhaseId = strp("tp-1")
+				}
+				return resp, err
+			}
+			var rows []*phasesumpb.PhaseOutcomeSummary
+			for i := 1; i <= n; i++ {
+				label := fmt.Sprintf("label-%d", i)
+				rows = append(rows, &phasesumpb.PhaseOutcomeSummary{
+					JobId: fmt.Sprintf("jh-%d", i), JobPhaseId: fmt.Sprintf("ph-%d", i),
+					Active: true, ScaledLabel: &label,
+				})
+			}
+			legacyPhaseCalls, legacyTemplateCalls := 0, 0
+			legacy.ListPhaseOutcomeSummarysByJob = func(_ context.Context, req *phasesumpb.ListPhaseOutcomeSummarysByJobRequest) (*phasesumpb.ListPhaseOutcomeSummarysByJobResponse, error) {
+				legacyPhaseCalls++
+				var out []*phasesumpb.PhaseOutcomeSummary
+				for _, row := range rows {
+					if row.GetJobId() == req.GetJobId() {
+						out = append(out, row)
+					}
+				}
+				return &phasesumpb.ListPhaseOutcomeSummarysByJobResponse{PhaseOutcomeSummarys: out}, nil
+			}
+			legacy.ListJobTemplatePhasesByTemplate = func(context.Context, *jobtemplatephasepb.ListByJobTemplateRequest) (*jobtemplatephasepb.ListByJobTemplateResponse, error) {
+				legacyTemplateCalls++
+				code := "phase-one"
+				return &jobtemplatephasepb.ListByJobTemplateResponse{JobTemplatePhases: []*jobtemplatephasepb.JobTemplatePhase{{Id: "tp-1", Code: &code}}}, nil
+			}
+			before, ok := collectCard(context.Background(), legacy, group, client)
+			if !ok {
+				t.Fatal("legacy card gate failed")
+			}
+			beforePhaseCalls, beforeTemplateCalls := legacyPhaseCalls, legacyTemplateCalls
+			bulk := *legacy
+			phaseCalls, templateCalls := 0, 0
+			bulk.ListPhaseOutcomeSummariesByJobs = func(_ context.Context, ids []string) ([]*phasesumpb.PhaseOutcomeSummary, error) {
+				phaseCalls++
+				if len(ids) != n {
+					t.Fatalf("bulk phase ids = %d, want %d", len(ids), n)
+				}
+				return rows, nil
+			}
+			bulk.ListJobTemplatePhasesByTemplates = func(_ context.Context, ids []string) ([]*jobtemplatephasepb.JobTemplatePhase, error) {
+				templateCalls++
+				if len(ids) != 1 || ids[0] != "tmpl-h" {
+					t.Fatalf("bulk template ids = %v, want [tmpl-h]", ids)
+				}
+				code := "phase-one"
+				return []*jobtemplatephasepb.JobTemplatePhase{{Id: "tp-1", Code: &code}}, nil
+			}
+			after, ok := collectCard(context.Background(), &bulk, group, client)
+			if !ok {
+				t.Fatal("bulk card gate failed")
+			}
+			if phaseCalls != 1 || templateCalls != 1 {
+				t.Fatalf("bulk calls phase=%d template=%d, want 1 each", phaseCalls, templateCalls)
+			}
+			if legacyPhaseCalls != beforePhaseCalls || legacyTemplateCalls != beforeTemplateCalls {
+				t.Fatalf("bulk card fell back to per-item reads: phase=%d template=%d", legacyPhaseCalls-beforePhaseCalls, legacyTemplateCalls-beforeTemplateCalls)
+			}
+			t.Logf("dependency calls for %d group jobs: phase %d→1, template %d→1", n, beforePhaseCalls, beforeTemplateCalls)
+			if a, b := buildClientOutcomeSummaryData(*before), buildClientOutcomeSummaryData(*after); !reflect.DeepEqual(a, b) {
+				t.Fatalf("card data changed for %d group jobs", n)
+			}
+		})
+	}
 }
 
 // The singleton-cardinality gate for the block-layout root alias

@@ -355,6 +355,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			result.Operation.JobTemplatePhase.UpdateJobTemplatePhase = op.JobTemplatePhase.UpdateJobTemplatePhase.Execute
 			result.Operation.JobTemplatePhase.DeleteJobTemplatePhase = op.JobTemplatePhase.DeleteJobTemplatePhase.Execute
 			result.Operation.JobTemplatePhase.ListByJobTemplate = op.JobTemplatePhase.ListByJobTemplate.Execute
+			if op.JobTemplatePhase.ListByTemplates != nil {
+				result.Operation.JobTemplatePhase.ListByTemplates = op.JobTemplatePhase.ListByTemplates.Execute
+			}
 			if op.JobTemplatePhase.ListPhaseCodesByPriceSchedule != nil {
 				result.Operation.JobTemplatePhase.ListPhaseCodesByPriceSchedule = op.JobTemplatePhase.ListPhaseCodesByPriceSchedule.Execute
 			}
@@ -431,6 +434,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 		if op.PhaseOutcomeSummary != nil {
 			result.Operation.PhaseOutcomeSummary.GetByJobPhase = op.PhaseOutcomeSummary.GetByJobPhase.Execute
 			result.Operation.PhaseOutcomeSummary.ListByJob = op.PhaseOutcomeSummary.ListByJob.Execute
+			if op.PhaseOutcomeSummary.ListByJobs != nil {
+				result.Operation.PhaseOutcomeSummary.ListByJobs = op.PhaseOutcomeSummary.ListByJobs.Execute
+			}
 		}
 
 		// -- Education grading (20260616 v1) — single-repo CRUD entities -----------

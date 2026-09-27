@@ -11,6 +11,7 @@ import (
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 
+	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	jobtaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_task"
 )
@@ -38,41 +39,71 @@ type PhaseRow struct {
 	DetailURL     string // deep link to /app/job-phase/{id} (job_phase module)
 }
 
+// phasesTabPageLimit is the adapter's maximum page size; one job's phases and
+// tasks fit well inside it.
+const phasesTabPageLimit = 100
+
+func stringEquals(field, value string) *commonpb.TypedFilter {
+	return &commonpb.TypedFilter{
+		Field: field,
+		FilterType: &commonpb.TypedFilter_StringFilter{StringFilter: &commonpb.StringFilter{
+			Value:         value,
+			Operator:      commonpb.StringOperator_STRING_EQUALS,
+			CaseSensitive: true,
+		}},
+	}
+}
+
 // loadPhasesTab populates the PageData with phases and tasks table data.
 func loadPhasesTab(ctx context.Context, deps *DetailViewDeps, pageData *PageData, jobID string) {
 	if deps.ListJobPhases == nil {
 		return
 	}
 
-	phasesResp, err := deps.ListJobPhases(ctx, &jobphasepb.ListJobPhasesRequest{})
+	// Ask for this job's phases and tasks only. An unfiltered list returns the
+	// first page of the whole workspace, so a job outside that page rendered an
+	// empty tab (plan 20260927-db-query-performance, audit DB-10). A job has a
+	// handful of phases and tasks, well inside one page.
+	phasesResp, err := deps.ListJobPhases(ctx, &jobphasepb.ListJobPhasesRequest{
+		Filters:    &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{stringEquals("job_id", jobID)}},
+		Pagination: &commonpb.PaginationRequest{Limit: phasesTabPageLimit},
+	})
 	if err != nil {
 		log.Printf("Failed to list job phases for job %s: %v", jobID, err)
 		return
 	}
 
-	var tasksResp *jobtaskpb.ListJobTasksResponse
-	if deps.ListJobTasks != nil {
-		tasksResp, err = deps.ListJobTasks(ctx, &jobtaskpb.ListJobTasksRequest{})
-		if err != nil {
-			log.Printf("Failed to list job tasks for job %s: %v", jobID, err)
-		}
-	}
-
-	// Filter phases by job ID
 	var phases []*jobphasepb.JobPhase
+	phaseIDs := make([]string, 0, len(phasesResp.GetData()))
+	inJob := map[string]bool{}
 	for _, p := range phasesResp.GetData() {
 		if p.GetJobId() == jobID {
 			phases = append(phases, p)
+			phaseIDs = append(phaseIDs, p.GetId())
+			inJob[p.GetId()] = true
 		}
 	}
 
 	// Build a task map keyed by phase ID for quick lookup
 	tasksByPhase := map[string][]*jobtaskpb.JobTask{}
-	if tasksResp != nil {
-		for _, t := range tasksResp.GetData() {
-			if t.GetJobPhase() != nil && t.GetJobPhase().GetJobId() == jobID {
-				phaseID := t.GetJobPhaseId()
-				tasksByPhase[phaseID] = append(tasksByPhase[phaseID], t)
+	if deps.ListJobTasks != nil && len(phaseIDs) > 0 {
+		tasksResp, err := deps.ListJobTasks(ctx, &jobtaskpb.ListJobTasksRequest{
+			Filters: &commonpb.FilterRequest{Filters: []*commonpb.TypedFilter{{
+				Field: "job_phase_id",
+				FilterType: &commonpb.TypedFilter_ListFilter{ListFilter: &commonpb.ListFilter{
+					Values:   phaseIDs,
+					Operator: commonpb.ListOperator_LIST_IN,
+				}},
+			}}},
+			Pagination: &commonpb.PaginationRequest{Limit: phasesTabPageLimit},
+		})
+		if err != nil {
+			log.Printf("Failed to list job tasks for job %s: %v", jobID, err)
+		} else {
+			for _, t := range tasksResp.GetData() {
+				if phaseID := t.GetJobPhaseId(); inJob[phaseID] {
+					tasksByPhase[phaseID] = append(tasksByPhase[phaseID], t)
+				}
 			}
 		}
 	}

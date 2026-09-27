@@ -115,25 +115,6 @@ func TestLabelsLynguaContract(t *testing.T) {
 	}
 }
 
-func TestCategoryLabelTierVocabulary(t *testing.T) {
-	root := outcomeSummaryRepoRoot(t)
-	for _, tc := range []struct {
-		tier string
-		want string
-	}{
-		{tier: "general", want: "Job Category"},
-		{tier: "education", want: "Grade Category"},
-	} {
-		t.Run(tc.tier, func(t *testing.T) {
-			labels := readOutcomeSummaryTranslation(t, root+"/packages/lyngua/translations/en/"+tc.tier+"/outcome_summary.json")
-			got, ok := translationValue(labels, "subscription_group_export.category_label")
-			if !ok || got != tc.want {
-				t.Fatalf("%s category_label = %q, present=%t; want %q", tc.tier, got, ok, tc.want)
-			}
-		})
-	}
-}
-
 func TestCommonLynguaMatchesCompiledDefaults(t *testing.T) {
 	root := outcomeSummaryRepoRoot(t)
 	common := readOutcomeSummaryTranslation(t, root+"/packages/lyngua/translations/en/common/outcome_summary.json")

@@ -10,6 +10,7 @@ import (
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
 	jobtemplatephasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_phase"
 	jobtemplatetaskpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template_task"
+	criteriapb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/outcome_criteria"
 	phaseoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/phase_outcome_summary"
 	exportpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/subscription_group_outcome_export"
 )
@@ -121,5 +122,43 @@ func TestBuildProjectedOutcomeCellIndexCategoryFamily(t *testing.T) {
 	}
 	if total := categoryTotals["academic"].(map[string]any)["technique"].(map[string]any)["numeric_value"]; total != "3" {
 		t.Fatalf("category total = %v, want 3", total)
+	}
+}
+
+// A code-less criterion that overrides a coded one (a per-activity variant
+// narrowing the limit) reports under the parent's code, and its own maximum is
+// exposed as the cell/total "maximum" leaf.
+func TestBuildProjectedOutcomeCellIndexPerActivityVariant(t *testing.T) {
+	card := clientPhaseProjectionFixture()
+	_, _, categoryCells, categoryTotals := buildProjectedOutcomeCellIndex(card, false)
+	cell := categoryCells["academic"].(map[string]any)["technique"].(map[string]any)["m07"].(map[string]any)
+	if cell["maximum"] != "4" {
+		t.Fatalf("shared criterion maximum = %#v, want 4", cell)
+	}
+
+	card = clientPhaseProjectionFixture()
+	card.OutcomeCriteria = append(card.OutcomeCriteria, &criteriapb.OutcomeCriteria{
+		Id: "criterion-technique-m07", Name: "Technique", OverridesId: ptr("criterion-technique"), MinScore: ptr(int32(0)), MaxScore: ptr(int32(5)), Active: true,
+	})
+	for _, link := range card.TemplateTaskCriteria {
+		if link.GetId() == "link-technique" {
+			link.OutcomeCriteriaId = "criterion-technique-m07"
+		}
+	}
+	_, _, categoryCells, categoryTotals = buildProjectedOutcomeCellIndex(card, false)
+	cell = categoryCells["academic"].(map[string]any)["technique"].(map[string]any)["m07"].(map[string]any)
+	if cell["numeric_value"] != "3" || cell["maximum"] != "5" {
+		t.Fatalf("variant cell = %#v, want numeric_value 3 and maximum 5 under the parent code", cell)
+	}
+	total := categoryTotals["academic"].(map[string]any)["technique"].(map[string]any)
+	if total["numeric_value"] != "3" || total["maximum"] != "5" {
+		t.Fatalf("variant total = %#v, want numeric_value 3 and maximum 5", total)
+	}
+	for _, section := range buildProjectedOutcomeSections(card, false) {
+		for _, raw := range section.(map[string]any)["rows"].([]any) {
+			if row := raw.(map[string]any); row["row_name"] == "Technique" && row["row_code"] != "technique" {
+				t.Fatalf("variant row_code = %v, want parent code technique", row["row_code"])
+			}
+		}
 	}
 }

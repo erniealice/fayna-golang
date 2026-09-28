@@ -136,3 +136,17 @@ func TestJHSClientPhaseAuthoringTemplateV7MatchesManifest(t *testing.T) {
 		t.Fatalf("JHS client phase v7 authoring asset: %v", err)
 	}
 }
+
+// TestJHSClientPhaseAuthoringTemplateV8MatchesManifest validates the v8 layout
+// (owner 2026-09-28): v7 with the attendance School Days row printing each
+// month's Days Present maximum (category_cells...days_present.mXX.maximum and
+// its category total) instead of a recorded School Days activity.
+func TestJHSClientPhaseAuthoringTemplateV8MatchesManifest(t *testing.T) {
+	docx, err := os.ReadFile("../../../../../../docs/plan/20260923-individual-report-card-downloads/artifacts/JHS Progress Report - MMIS Template v8.docx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateTemplate(testClientPhaseProfile, docx); err != nil {
+		t.Fatalf("JHS client phase v8 authoring asset: %v", err)
+	}
+}

@@ -99,12 +99,15 @@ func TestClientPhaseFixedScalarPathIsGeneric(t *testing.T) {
 	for _, key := range []string{
 		"outcome_cells.other_category.other-template.metric.s1.m07.numeric_value",
 		"outcome_totals.other_category.other-template.metric.numeric_value",
+		"outcome_cells.other_category.other-template.metric.s1.m07.maximum",
+		"category_cells.other_category.metric.m07.maximum",
+		"category_totals.other_category.metric.maximum",
 	} {
 		if !isClientPhaseFixedScalar(key) {
 			t.Errorf("valid generic path rejected: %s", key)
 		}
 	}
-	for _, key := range []string{"outcome_cells.x.y.z.s1.numeric_value", "outcome_totals.x.y.z.unknown", "outcome_cells.x..z.s1.m07.numeric_value"} {
+	for _, key := range []string{"outcome_cells.x.y.z.s1.numeric_value", "outcome_totals.x.y.z.unknown", "outcome_cells.x..z.s1.m07.numeric_value", "category_cells.x.y.m07.minimum", "category_totals.x.y.value"} {
 		if isClientPhaseFixedScalar(key) {
 			t.Errorf("invalid generic path accepted: %s", key)
 		}

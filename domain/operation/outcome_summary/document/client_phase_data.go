@@ -621,11 +621,15 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 		value     string
 		numeric   string
 		numericOK bool
+		maximum   string
+		maximumOK bool
 	}
 	type outcomeTotalCandidate struct {
-		owner   string
-		value   float64
-		hasData bool
+		owner      string
+		value      float64
+		hasData    bool
+		maximum    float64
+		hasMaximum bool
 	}
 	candidates := map[string]outcomeCellCandidate{}
 	ambiguousCells := map[string]bool{}
@@ -690,7 +694,7 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 					criterion := criteria[link.GetOutcomeCriteriaId()]
 					criterionCode := ""
 					if criterion != nil {
-						criterionCode = strings.TrimSpace(criterion.GetCode())
+						criterionCode = strings.TrimSpace(criterionFamily(criterion, criteria).GetCode())
 					}
 					if !clientReportPathCode(criterionCode) {
 						continue
@@ -713,9 +717,15 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 						cell.numeric = strconv.FormatFloat(outcome.GetNumericValue(), 'f', -1, 64)
 						cell.numericOK = true
 					}
+					// The bound criterion's own maximum (a per-activity variant's
+					// narrower limit when one is bound), e.g. a period's possible count.
+					if criterion.MaxScore != nil {
+						cell.maximum = formatClientReportMaximum(float64(criterion.GetMaxScore()))
+						cell.maximumOK = true
+					}
 					categoryPath := []string{path[0], path[2], path[4]}
 					categoryKey := strings.Join(categoryPath, "\x00")
-					categoryCell := outcomeCellCandidate{path: categoryPath, owner: owner, value: cell.value, numeric: cell.numeric, numericOK: cell.numericOK}
+					categoryCell := outcomeCellCandidate{path: categoryPath, owner: owner, value: cell.value, numeric: cell.numeric, numericOK: cell.numericOK, maximum: cell.maximum, maximumOK: cell.maximumOK}
 					if existing, exists := categoryCandidates[categoryKey]; exists && existing.owner != owner {
 						ambiguousCategoryCells[categoryKey] = true
 						ambiguousCategoryTotals[path[0]+"\x00"+path[2]] = true
@@ -734,13 +744,17 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 								categoryTotal.value += outcome.GetNumericValue()
 								categoryTotal.hasData = true
 							}
+							if cell.maximumOK {
+								categoryTotal.maximum += float64(criterion.GetMaxScore())
+								categoryTotal.hasMaximum = true
+							}
 							categoryTotalCandidates[categoryTotalKey] = categoryTotal
 						}
 					}
 					duplicateCellOwner := false
 					if existing, exists := candidates[key]; exists && existing.owner != owner {
 						duplicateCellOwner = true
-						if existing.value != cell.value || existing.numericOK != cell.numericOK || existing.numeric != cell.numeric {
+						if existing.value != cell.value || existing.numericOK != cell.numericOK || existing.numeric != cell.numeric || existing.maximum != cell.maximum {
 							ambiguousCells[key] = true
 						}
 					} else {
@@ -770,6 +784,10 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 							total.value += outcome.GetNumericValue()
 							total.hasData = true
 						}
+						if cell.maximumOK {
+							total.maximum += float64(criterion.GetMaxScore())
+							total.hasMaximum = true
+						}
 						totalCandidates[totalKey] = total
 					}
 				}
@@ -784,13 +802,21 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 		if candidate.numericOK {
 			leaf["numeric_value"] = candidate.numeric
 		}
+		if candidate.maximumOK {
+			leaf["maximum"] = candidate.maximum
+		}
 		setClientReportCodeLeaf(cellsRoot, candidate.path, leaf)
 	}
 	for key, total := range totalCandidates {
-		if !total.hasData || ambiguousTotals[key] {
+		if ambiguousTotals[key] {
 			continue
 		}
-		setClientReportCodeScalar(totalsRoot, append(strings.Split(key, "\x00"), "numeric_value"), formatClientReportMaximum(total.value))
+		if total.hasData {
+			setClientReportCodeScalar(totalsRoot, append(strings.Split(key, "\x00"), "numeric_value"), formatClientReportMaximum(total.value))
+		}
+		if total.hasMaximum {
+			setClientReportCodeScalar(totalsRoot, append(strings.Split(key, "\x00"), "maximum"), formatClientReportMaximum(total.maximum))
+		}
 	}
 	for key, candidate := range categoryCandidates {
 		if ambiguousCategoryCells[key] {
@@ -800,15 +826,37 @@ func buildProjectedOutcomeCellIndex(card *exportpb.ClientReportCardProjection, h
 		if candidate.numericOK {
 			leaf["numeric_value"] = candidate.numeric
 		}
+		if candidate.maximumOK {
+			leaf["maximum"] = candidate.maximum
+		}
 		setClientReportCodeLeaf(categoryCellsRoot, candidate.path, leaf)
 	}
 	for key, total := range categoryTotalCandidates {
-		if !total.hasData || ambiguousCategoryTotals[key] {
+		if ambiguousCategoryTotals[key] {
 			continue
 		}
-		setClientReportCodeScalar(categoryTotalsRoot, append(strings.Split(key, "\x00"), "numeric_value"), formatClientReportMaximum(total.value))
+		if total.hasData {
+			setClientReportCodeScalar(categoryTotalsRoot, append(strings.Split(key, "\x00"), "numeric_value"), formatClientReportMaximum(total.value))
+		}
+		if total.hasMaximum {
+			setClientReportCodeScalar(categoryTotalsRoot, append(strings.Split(key, "\x00"), "maximum"), formatClientReportMaximum(total.maximum))
+		}
 	}
 	return cellsRoot, totalsRoot, categoryCellsRoot, categoryTotalsRoot
+}
+
+// criterionFamily returns the criterion a bound criterion reports as on
+// documents. A code-less criterion that overrides a coded one (a per-activity
+// variant that only narrows bounds) keeps its parent's code and row, so
+// configuring limits per activity never changes template paths or rows.
+func criterionFamily(criterion *criteriapb.OutcomeCriteria, byID map[string]*criteriapb.OutcomeCriteria) *criteriapb.OutcomeCriteria {
+	if criterion == nil || strings.TrimSpace(criterion.GetCode()) != "" {
+		return criterion
+	}
+	if parent := byID[strings.TrimSpace(criterion.GetOverridesId())]; parent != nil && strings.TrimSpace(parent.GetCode()) != "" {
+		return parent
+	}
+	return criterion
 }
 
 func clientReportPathCode(code string) bool {
@@ -1035,11 +1083,12 @@ func buildProjectedOutcomeSections(card *exportpb.ClientReportCardProjection, hi
 					if taskCode == "" {
 						taskCode = genericPathKey(firstNonEmpty(templateTask.GetName(), task.GetName()))
 					}
-					criterionCode := strings.TrimSpace(criterion.GetCode())
+					family := criterionFamily(criterion, criteria)
+					criterionCode := strings.TrimSpace(family.GetCode())
 					if criterionCode == "" {
-						criterionCode = genericPathKey(criterion.GetName())
+						criterionCode = genericPathKey(family.GetName())
 					}
-					rowKey := jobID + "\x00" + criterion.GetId()
+					rowKey := jobID + "\x00" + family.GetId()
 					row := state.rowsByKey[rowKey]
 					if row == nil {
 						row = map[string]any{
@@ -1050,7 +1099,7 @@ func buildProjectedOutcomeSections(card *exportpb.ClientReportCardProjection, hi
 								return ""
 							}()),
 							"row_code": criterionCode,
-							"row_name": strings.TrimSpace(criterion.GetName()),
+							"row_name": strings.TrimSpace(family.GetName()),
 							"cells":    []any{},
 						}
 						state.rowsByKey[rowKey] = row

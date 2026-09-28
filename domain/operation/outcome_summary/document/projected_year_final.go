@@ -290,9 +290,10 @@ func buildProjectedJobCategories(card *exportpb.ClientReportCardProjection, grou
 					if criterion == nil {
 						continue
 					}
-					criterionKey := strings.TrimSpace(criterion.GetCode())
+					family := criterionFamily(criterion, criteriaByID)
+					criterionKey := strings.TrimSpace(family.GetCode())
 					if criterionKey == "" {
-						criterionKey = genericPathKey(criterion.GetName())
+						criterionKey = genericPathKey(family.GetName())
 					}
 					if criterionKey == "" {
 						continue

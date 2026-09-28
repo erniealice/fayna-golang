@@ -640,11 +640,14 @@ var headerFooterPart = regexp.MustCompile(`^word/(header|footer)[0-9]*\.xml$`)
 
 func isClientPhaseFixedScalar(key string) bool {
 	parts := strings.Split(key, ".")
-	validCell := len(parts) == 7 && parts[0] == "outcome_cells" && parts[6] == "numeric_value"
-	validTotal := len(parts) == 5 && parts[0] == "outcome_totals" && parts[4] == "numeric_value"
+	// Leaf: the recorded numeric value, or the bound criterion's maximum.
+	leaf := parts[len(parts)-1]
+	validLeaf := leaf == "numeric_value" || leaf == "maximum"
+	validCell := len(parts) == 7 && parts[0] == "outcome_cells" && validLeaf
+	validTotal := len(parts) == 5 && parts[0] == "outcome_totals" && validLeaf
 	// Template-independent family: category.criterion.activity / category.criterion.
-	validCategoryCell := len(parts) == 5 && parts[0] == "category_cells" && parts[4] == "numeric_value"
-	validCategoryTotal := len(parts) == 4 && parts[0] == "category_totals" && parts[3] == "numeric_value"
+	validCategoryCell := len(parts) == 5 && parts[0] == "category_cells" && validLeaf
+	validCategoryTotal := len(parts) == 4 && parts[0] == "category_totals" && validLeaf
 	if !validCell && !validTotal && !validCategoryCell && !validCategoryTotal {
 		return false
 	}

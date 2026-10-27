@@ -249,6 +249,7 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		ComputeJobOutcome:             deps.ComputeJobOutcome,
 		RecomputeEligibility:          deps.RecomputeEligibility,
 		ResolveCellRatingDescriptions: deps.ResolveCellRatingDescriptions,
+		GetOutcomeSummaryRoster:       deps.GetOutcomeSummaryRoster,
 	})
 
 	// Per-phase approval transition handlers (the signed HTMX POST forms in the

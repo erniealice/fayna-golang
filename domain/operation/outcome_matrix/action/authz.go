@@ -220,6 +220,7 @@ func resolveCellAuthority(ctx context.Context, deps authorityDeps, templateID st
 				descriptionMode: descModeByColKey[colKey],
 				jobPhaseID:      cell.GetJobPhaseId(),
 				jobID:           cell.GetJobId(),
+				clientID:        row.GetClientId(),
 			}
 			if cell.GetOutcomeId() != "" {
 				allowedUpdate[cell.GetOutcomeId()] = true

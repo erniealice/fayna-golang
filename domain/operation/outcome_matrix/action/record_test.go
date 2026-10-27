@@ -1019,3 +1019,84 @@ func TestTranslateAckErrors_PlaceholderUnresolved(t *testing.T) {
 		t.Fatalf("errMsg = %q, want the translated label", acks[0].errMsg)
 	}
 }
+
+// ── post-save roll-up repaint (rowCells) ─────────────────────────────────────
+
+type rowCellsAck struct {
+	Key      string            `json:"key"`
+	RowCells map[string]string `json:"rowCells"`
+}
+
+func rowCellsOf(t *testing.T, res view.ViewResult) []rowCellsAck {
+	t.Helper()
+	var env struct {
+		Result struct {
+			Cells []rowCellsAck `json:"cells"`
+		} `json:"omcell-result"`
+	}
+	if err := json.Unmarshal([]byte(res.Headers["HX-Trigger"]), &env); err != nil {
+		t.Fatalf("bad envelope: %v", err)
+	}
+	return env.Result.Cells
+}
+
+func TestCellMode_RecomputedCellCarriesFreshRowCells(t *testing.T) {
+	r := &recorder{}
+	d := r.deps(numericMatrix(true))
+	var gotReq *matrixpb.GetOutcomeSummaryRosterRequest
+	d.GetOutcomeSummaryRoster = func(_ context.Context, req *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error) {
+		gotReq = req
+		return &matrixpb.GetOutcomeSummaryRosterResponse{Rows: []*matrixpb.OutcomeSummaryRosterRow{
+			{ClientId: "client-1", YearFinalLabel: "VS", Phases: []*matrixpb.OutcomeSummaryPhaseEntry{
+				{JobTemplatePhaseId: "tp1", ScaledLabel: "O", SummaryScore: f64(89.5)},
+			}},
+			{ClientId: "client-other", Phases: []*matrixpb.OutcomeSummaryPhaseEntry{
+				{JobTemplatePhaseId: "tp1", ScaledLabel: "NM", SummaryScore: f64(10)},
+			}},
+		}}, nil
+	}
+	got := rowCellsOf(t, invoke(t, d, "save_mode=cell&cells."+existingID+"=86", allPerms))[0]
+	if gotReq == nil || gotReq.GetJobTemplateId() != tmplID || gotReq.GetScope() != matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE {
+		t.Fatalf("roster must be re-read MINE-scoped for the template, got %+v", gotReq)
+	}
+	want := map[string]string{"total:tp1": "89.5", "rating:tp1": "O", "rating:final": "VS"}
+	if len(got.RowCells) != len(want) {
+		t.Fatalf("rowCells = %v, want %v", got.RowCells, want)
+	}
+	for k, v := range want {
+		if got.RowCells[k] != v {
+			t.Errorf("rowCells[%q] = %q, want %q", k, got.RowCells[k], v)
+		}
+	}
+}
+
+func TestCellMode_RetiredSummaryClearsRowCells(t *testing.T) {
+	r := &recorder{}
+	d := r.deps(numericMatrix(true))
+	d.GetOutcomeSummaryRoster = func(context.Context, *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error) {
+		return &matrixpb.GetOutcomeSummaryRosterResponse{Rows: []*matrixpb.OutcomeSummaryRosterRow{{ClientId: "client-1"}}}, nil
+	}
+	got := rowCellsOf(t, invoke(t, d, "save_mode=cell&cells."+existingID+"=86", allPerms))[0]
+	for _, k := range []string{"total:tp1", "rating:tp1", "rating:final"} {
+		if v, ok := got.RowCells[k]; !ok || v != "" {
+			t.Errorf("rowCells[%q] = %q (present=%v), want an explicit blank", k, v, ok)
+		}
+	}
+}
+
+func TestCellMode_NoRosterOrNoDriver_NoRowCells(t *testing.T) {
+	r := &recorder{}
+	if got := rowCellsOf(t, invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=86", allPerms))[0]; got.RowCells != nil {
+		t.Errorf("unwired roster must omit rowCells, got %v", got.RowCells)
+	}
+	r2 := &recorder{wireElig: true, eligible: false}
+	d := r2.deps(numericMatrix(true))
+	called := false
+	d.GetOutcomeSummaryRoster = func(context.Context, *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error) {
+		called = true
+		return &matrixpb.GetOutcomeSummaryRosterResponse{}, nil
+	}
+	if got := rowCellsOf(t, invoke(t, d, "save_mode=cell&cells."+existingID+"=86", allPerms))[0]; got.RowCells != nil || called {
+		t.Errorf("a non-driving save must not re-read the roster (called=%v rowCells=%v)", called, got.RowCells)
+	}
+}

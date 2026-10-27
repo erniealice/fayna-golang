@@ -94,4 +94,12 @@ type Deps struct {
 	// back to numeric-type classification (the prior behavior), so a save never
 	// silently stops refreshing summaries.
 	RecomputeEligibility func(ctx context.Context, jobPhaseID string) (eligible bool, inScope map[string]bool, err error)
+
+	// GetOutcomeSummaryRoster re-reads the composites after the inline
+	// recompute so each save_mode=cell ack carries its row's fresh Average /
+	// Rating cells (rowCells) and the grid repaints them without a reload. Read
+	// with the SAME MINE scope as the authority re-derivation. Optional/nil-safe:
+	// nil (or a read error) omits rowCells and the grid keeps the page-load
+	// values until the next reload.
+	GetOutcomeSummaryRoster func(ctx context.Context, req *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error)
 }

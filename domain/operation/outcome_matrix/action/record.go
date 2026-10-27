@@ -16,6 +16,7 @@ import (
 
 	enums "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/enums"
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
+	matrixpb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/outcome_matrix"
 )
 
 // resultEvent is the HX-Trigger custom-event name the pyeza cell-grid AutoSave
@@ -255,7 +256,7 @@ func NewRecordAction(deps *Deps) view.View {
 				acks = append(acks, cellAck{
 					key: pw.key, ok: done, outcomeID: newID, value: normVal, hasNote: hasNote,
 					numeric: isNumericCriteria(pw.sc.ct), criteriaID: pw.sc.criteriaID,
-					jobPhaseID: pw.sc.jobPhaseID, jobID: pw.sc.jobID,
+					jobPhaseID: pw.sc.jobPhaseID, jobID: pw.sc.jobID, clientID: pw.sc.clientID,
 					errMsg: pickErrMsg(done, reason),
 				})
 				continue
@@ -264,7 +265,7 @@ func NewRecordAction(deps *Deps) view.View {
 			acks = append(acks, cellAck{
 				key: pw.key, ok: done, outcomeID: pw.outcomeID, value: normVal, hasNote: hasNote,
 				numeric: isNumericCriteria(pw.sc.ct), criteriaID: pw.sc.criteriaID,
-				jobPhaseID: pw.sc.jobPhaseID, jobID: pw.sc.jobID,
+				jobPhaseID: pw.sc.jobPhaseID, jobID: pw.sc.jobID, clientID: pw.sc.clientID,
 				errMsg: pickErrMsg(done, reason),
 			})
 		}
@@ -313,7 +314,8 @@ func NewRecordAction(deps *Deps) view.View {
 			}
 		}
 
-		return cellResponse(acks, phaseRes, jobRes)
+		rowCells := freshRowCells(ctx, deps.GetOutcomeSummaryRoster, templateID, auth.matrix, acks)
+		return cellResponse(acks, phaseRes, jobRes, rowCells)
 	})
 }
 
@@ -331,6 +333,7 @@ type srvCell struct {
 	descriptionMode bool
 	jobPhaseID      string
 	jobID           string
+	clientID        string // the matrix row (grid row id) the cell sits on
 }
 
 // pendingCellWrite is one addressed, permission-checked, addressable cell
@@ -399,6 +402,7 @@ type cellAck struct {
 	drives     bool   // graph-derived: this save drives a scaled-summary recompute
 	jobPhaseID string
 	jobID      string
+	clientID   string // grid row id, keys the rowCells repaint
 	hasNote    bool   // the outcome carries a determination_note after this write (icon state)
 	errMsg     string // set only when !ok (bounded, never echoes the value)
 }
@@ -501,9 +505,56 @@ func dedupIDs(acks []cellAck, pick func(cellAck) string) []string {
 	return out
 }
 
+// freshRowCells re-reads the summary roster once after the inline recompute
+// and projects, per client row that holds a successfully-saved recompute-driving
+// cell, the derived roll-up cells the grid renders (outcome_matrix.RollupCells).
+// Read with the authority's MINE scope; nil-safe and fail-safe — any miss
+// returns nil and the acks simply carry no repaint.
+func freshRowCells(
+	ctx context.Context,
+	roster func(context.Context, *matrixpb.GetOutcomeSummaryRosterRequest) (*matrixpb.GetOutcomeSummaryRosterResponse, error),
+	templateID string,
+	matrix *matrixpb.GetOutcomeMatrixResponse,
+	acks []cellAck,
+) map[string]map[string]string {
+	if roster == nil || templateID == "" {
+		return nil
+	}
+	clients := map[string]bool{}
+	for _, a := range acks {
+		if a.ok && a.drives && a.clientID != "" {
+			clients[a.clientID] = true
+		}
+	}
+	if len(clients) == 0 {
+		return nil
+	}
+	resp, err := roster(ctx, &matrixpb.GetOutcomeSummaryRosterRequest{
+		JobTemplateId: templateID,
+		Scope:         matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE,
+	})
+	if err != nil || resp == nil {
+		if err != nil {
+			log.Printf("[outcome-matrix] post-save roster read failed (no rating repaint): %v", err)
+		}
+		return nil
+	}
+	phaseIDs := make([]string, 0, len(matrix.GetPhases()))
+	for _, ph := range matrix.GetPhases() {
+		phaseIDs = append(phaseIDs, ph.GetJobTemplatePhaseId())
+	}
+	out := make(map[string]map[string]string, len(clients))
+	for _, rr := range resp.GetRows() {
+		if clients[rr.GetClientId()] {
+			out[rr.GetClientId()] = outcome_matrix.RollupCells(rr, phaseIDs)
+		}
+	}
+	return out
+}
+
 // cellResponse projects the acks + recompute results into the omcell-result
 // HX-Trigger JSON the AutoSave client parses.
-func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult) view.ViewResult {
+func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult, rowCells map[string]map[string]string) view.ViewResult {
 	type item struct {
 		Key                 string `json:"key"`
 		OK                  bool   `json:"ok"`
@@ -513,7 +564,10 @@ func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult) view.Vi
 		HasNarrative        bool   `json:"hasNarrative,omitempty"`
 		RatingFresh         *bool  `json:"ratingFresh,omitempty"`
 		RatingNotRecomputed string `json:"ratingNotRecomputed,omitempty"`
-		Error               string `json:"error,omitempty"`
+		// RowCells: the saved cell's row's derived roll-up cells after the
+		// recompute (column key → display value; "" renders the dash).
+		RowCells map[string]string `json:"rowCells,omitempty"`
+		Error    string            `json:"error,omitempty"`
 	}
 	items := make([]item, 0, len(acks))
 	for _, a := range acks {
@@ -538,6 +592,7 @@ func cellResponse(acks []cellAck, phaseRes, jobRes map[string]recResult) view.Vi
 			if worst == recFrozen {
 				it.RatingNotRecomputed = "authoritative_frozen"
 			}
+			it.RowCells = rowCells[a.clientID]
 		} else {
 			// Drives no scaled summary (a non-numeric cell, or a numeric ledger
 			// cell whose scheme has no score scale / whose criterion is outside the

@@ -72,7 +72,6 @@ import (
 	"context"
 	"log"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
@@ -83,19 +82,16 @@ import (
 )
 
 const (
-	// ratingKeyPrefix namespaces the synthetic ColumnKeys ("rating:{phase_id}").
-	// Collision-proof against real cell keys, which are always
-	// "{job_template_task_id}:{outcome_criteria_id}" (two UUIDs).
-	ratingKeyPrefix = "rating:"
-	// totalKeyPrefix namespaces the synthetic ColumnKeys of the RAW COMPOSITE
-	// leaf ("total:{phase_id}") that precedes each phase's rating leaf. Same
-	// collision-proofness as ratingKeyPrefix: real cell keys are always two
-	// UUIDs, and the ?hide= axis only ever knows phase ids and real cell keys.
-	totalKeyPrefix = "total:"
-	// finalColumnKey / finalL1Key address the trailing whole-row column.
-	finalColumnKey = "rating:final"
-	finalL1Key     = "rating-final"
-	finalSlug      = "final"
+	// ratingKeyPrefix / totalKeyPrefix / finalColumnKey are the synthetic
+	// roll-up ColumnKeys ("rating:{phase_id}", "total:{phase_id}",
+	// "rating:final"), shared with the save ack's repaint (outcome_matrix.
+	// RollupCells) so both address the same cells.
+	ratingKeyPrefix = outcome_matrix.RatingKeyPrefix
+	totalKeyPrefix  = outcome_matrix.TotalKeyPrefix
+	finalColumnKey  = outcome_matrix.FinalColumnKey
+	// finalL1Key addresses the trailing whole-row column's header.
+	finalL1Key = "rating-final"
+	finalSlug  = "final"
 )
 
 // augmentRatingColumns appends the derived rating columns and stamps the
@@ -305,22 +301,10 @@ func fetchRatingRoster(ctx context.Context, deps *PageViewDeps, templateID strin
 	return roster
 }
 
-// formatSummaryScore renders the stored raw composite for display. PRESENCE,
-// not value, decides blankness: an UNSET summary_score returns "" (the
-// component renders the standard "—"), while a stored 0 returns "0" — the two
-// are semantically different (nothing computed vs a computed zero) and must
-// never collapse into each other.
-//
-// 'f' with precision -1 emits the shortest round-tripping decimal, so an
-// integral composite prints without a decimal tail (28 → "28") and a
-// non-integral one prints verbatim, with no rounding and no decimal-places
-// assumption. Rounding is a write-path duty of the scoring scheme, never a
-// display decision taken here.
+// formatSummaryScore renders the stored raw composite for display (see
+// outcome_matrix.FormatSummaryScore — the save ack repaints with the same rule).
 func formatSummaryScore(pe *matrixpb.OutcomeSummaryPhaseEntry) string {
-	if pe == nil || pe.SummaryScore == nil {
-		return ""
-	}
-	return strconv.FormatFloat(pe.GetSummaryScore(), 'f', -1, 64)
+	return outcome_matrix.FormatSummaryScore(pe)
 }
 
 // ratingCell builds one derived read-only cell. Editable=false + no ReadOnly

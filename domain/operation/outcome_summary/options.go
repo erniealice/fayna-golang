@@ -213,6 +213,11 @@ type DocumentOptions struct {
 	// grain whose port is missing or unprovable fails the gate closed (503).
 	// (docs/plan/20260729-report-card-render-gate-group-grain/fayna.md)
 	GateGrain string
+	// BatchConcurrency is how many client documents the subscription-group
+	// batch download (client_document_batch) fetches at once. 0 = the package
+	// default (client_document_batch.DefaultConcurrency). The consuming app
+	// validates its range; the browser module keeps its own safety ceiling.
+	BatchConcurrency int
 }
 
 // GateGrainSubscriptionGroup is the DocumentOptions.GateGrain value that

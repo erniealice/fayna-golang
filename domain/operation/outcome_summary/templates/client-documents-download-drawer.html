@@ -1,0 +1,78 @@
+{{/* Subscription-group batch download: every member's client document for ONE
+     period, fetched by the browser through the existing per-client document
+     route and saved as a single STORE ZIP (pyeza bulk-download.js). The server
+     only renders this form and a read-only JSON manifest; no inline script
+     (CSP) — the module is self-included below and binds by delegation. */}}
+{{define "outcome-summary-client-documents-download-drawer-form"}}
+<form hx-boost="false" data-lf-bulk-download
+      data-manifest-url="{{.ManifestURL}}"
+      data-concurrency="{{.Concurrency}}"
+      data-msg-progress="{{.Labels.ProgressMessage}}"
+      data-msg-complete="{{.Labels.CompleteMessage}}"
+      data-msg-shortfall="{{.Labels.ShortfallMessage}}"
+      data-msg-stopped="{{.Labels.StoppedMessage}}"
+      data-msg-aborted="{{.Labels.AbortedMessage}}"
+      data-msg-error="{{.Labels.ErrorFallback}}"
+      data-msg-too-large="{{.Labels.TooLargeError}}"
+      data-msg-status-not-ready="{{.Labels.StatusNotReady}}"
+      data-msg-status-failed="{{.Labels.StatusFailed}}"
+      data-msg-save="{{.Labels.SaveAction}}"
+      data-msg-save-partial="{{.Labels.SavePartialAction}}"
+      data-testid="rc-client-documents-drawer">
+    <div class="sheet-body">
+        <p class="form-help" data-testid="rc-client-documents-intro">{{.Labels.Intro}}</p>
+        <div class="alert alert-info alert-subtle" role="status" aria-live="polite" data-lf-bulk-download-notice data-testid="rc-client-documents-notice" hidden>{{.Labels.Notice}}</div>
+        <div class="alert alert-error alert-subtle" role="alert" data-lf-bulk-download-error data-testid="rc-client-documents-error" hidden></div>
+        <div class="form-section">
+            <div class="form-row single">
+                <div class="form-group">
+                    <label class="form-label" for="rc-client-documents-period">{{.OptionLabels.PeriodLabel}}</label>
+                    <select id="rc-client-documents-period" data-testid="rc-client-documents-period" name="period" class="form-select">
+                        {{range .Periods}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row single">
+                <div class="form-group">
+                    <label class="form-label" for="rc-client-documents-format">{{.OptionLabels.FormatLabel}}</label>
+                    <select id="rc-client-documents-format" data-testid="rc-client-documents-format" name="format" class="form-select">
+                        {{range .Formats}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="form-section" data-lf-bulk-download-status hidden>
+            <progress class="lf-bulk-download-progress" max="1" value="0" data-lf-bulk-download-bar data-testid="rc-client-documents-progress-bar"></progress>
+            <p role="status" aria-live="polite" data-lf-bulk-download-progress data-testid="rc-client-documents-progress"></p>
+            <div data-lf-bulk-download-failures data-testid="rc-client-documents-failures" hidden>
+                <p class="form-label">{{.Labels.FailuresTitle}}</p>
+                <ul data-lf-bulk-download-failure-list data-testid="rc-client-documents-failure-list"></ul>
+            </div>
+        </div>
+    </div>
+    <div class="sheet-footer">
+        <button type="button" class="btn btn-secondary" data-lf-action="sheet-close" data-testid="rc-client-documents-close">{{.CommonLabels.Buttons.Cancel}}</button>
+        <button type="button" class="btn btn-secondary" data-lf-bulk-download-action="stop" data-testid="rc-client-documents-stop" hidden>{{.Labels.StopAction}}</button>
+        <button type="button" class="btn btn-secondary" data-lf-bulk-download-action="retry" data-testid="rc-client-documents-retry" hidden>{{.Labels.RetryAction}}</button>
+        <button type="button" class="btn btn-primary" data-lf-bulk-download-action="save" data-testid="rc-client-documents-save" hidden>{{.Labels.SaveAction}}</button>
+        <button type="submit" class="btn btn-primary" disabled data-lf-bulk-download-pending data-lf-busy-label="{{.Labels.PreparingAction}}" data-testid="rc-client-documents-start">{{.Labels.StartAction}}</button>
+    </div>
+</form>
+<script src="/assets/js/pyeza/bulk-download.js?v={{.CacheVersion}}"></script>
+{{end}}
+
+{{/* Toolbar button that opens the batch drawer. Rendered as the table
+     toolbar prefix (TableConfig.ToolbarPrefixTemplate) on a computed grid and
+     in the page toolbar when a category has no computed grid. */}}
+{{define "outcome-summary-client-documents-download-open"}}
+<button type="button" class="btn btn-secondary"
+        hx-get="{{.ActionURL}}"
+        hx-target="#sheetContent"
+        hx-swap="innerHTML"
+        hx-push-url="false"
+        data-lf-action="sheet-open"
+        data-lf-sheet-title="{{.Title}}"
+        title="{{.Title}}"
+        aria-haspopup="dialog"
+        data-testid="rc-client-documents-download-open">{{.Label}}</button>
+{{end}}

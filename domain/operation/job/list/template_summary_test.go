@@ -11,6 +11,7 @@ import (
 	"github.com/erniealice/pyeza-golang/types"
 
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
 
@@ -267,4 +268,142 @@ func buildDrawerSummaryTable(t *testing.T, deps *ListViewDeps, perms *types.User
 		t.Fatalf("buildDeliverySummaryTable() err = %v", err)
 	}
 	return table
+}
+
+// phaseStatusSummaryDeps returns a summary dependency set with four rows that
+// exercise every per-phase display state, plus a template-grain fallback row.
+func phaseStatusSummaryDeps() *ListViewDeps {
+	ps := func(id, code, name string, order int32, s jobphasepb.PhaseApprovalStatus, mixed, data bool) *summarypb.JobTemplateSummaryPhaseStatus {
+		return &summarypb.JobTemplateSummaryPhaseStatus{
+			JobTemplatePhaseId: id, Code: code, Name: name, PhaseOrder: order,
+			LowestStatus: s, MixedAttention: mixed, HasData: data,
+		}
+	}
+	return &ListViewDeps{
+		Labels: job.DefaultLabels(),
+		ListJobTemplateSummaries: func(context.Context, *summarypb.ListJobTemplateSummariesRequest) (*summarypb.ListJobTemplateSummariesResponse, error) {
+			return &summarypb.ListJobTemplateSummariesResponse{
+				Summaries: []*summarypb.JobTemplateSummary{
+					{
+						JobTemplateId: "tmpl-a", SubscriptionGroupId: "grp-a", JobTemplateName: "Math",
+						GroupPhaseStatuses: []*summarypb.JobTemplateSummaryPhaseStatus{
+							ps("phase-0001", "p1", "Phase 1", 1, jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_IN_PROGRESS, false, true),
+							ps("phase-0002", "p2", "Phase 2", 2, jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_IN_PROGRESS, false, false),
+							ps("phase-0003", "", "Phase 3", 3, jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_UNSPECIFIED, false, false),
+						},
+					},
+					{
+						JobTemplateId: "tmpl-b", SubscriptionGroupId: "grp-b", JobTemplateName: "Science",
+						GroupPhaseStatuses: []*summarypb.JobTemplateSummaryPhaseStatus{
+							ps("phase-0004", "p1", "Phase 1", 1, jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_FOR_REVIEW, false, true),
+							ps("phase-0005", "p2", "Phase 2", 2, jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_VERIFIED, false, true),
+							ps("phase-0006", "p3", "Phase 3", 3, jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_PUBLISHED, false, true),
+							// Mixed wins over the lowest status.
+							ps("phase-0007", "p4", "", 4, jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_IN_PROGRESS, true, true),
+						},
+					},
+					{JobTemplateId: "tmpl-c", SubscriptionGroupId: "grp-c", JobTemplateName: "Art"},
+					{
+						JobTemplateId: "tmpl-d", JobTemplateName: "Conduct", TemplateGrainFallback: true,
+						// A fallback row never renders phases, even if a provider sent some.
+						GroupPhaseStatuses: []*summarypb.JobTemplateSummaryPhaseStatus{
+							ps("phase-0008", "p1", "Phase 1", 1, jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_PUBLISHED, false, true),
+						},
+					},
+				},
+			}, nil
+		},
+	}
+}
+
+func TestTemplateSummaryPhaseStatus_offByDefault(t *testing.T) {
+	t.Parallel()
+	table := buildDrawerSummaryTable(t, phaseStatusSummaryDeps(), nil)
+	if got := len(table.Columns); got != 5 {
+		t.Fatalf("columns = %d, want the 5 base columns when not opted in", got)
+	}
+	for _, c := range table.Columns {
+		if c.Key == "phase_status" {
+			t.Fatal("phase_status column present without Options.Columns.PhaseApprovalStatus")
+		}
+	}
+	for _, r := range table.Rows {
+		if len(r.Cells) != 5 {
+			t.Fatalf("row %s cells = %d, want 5", r.ID, len(r.Cells))
+		}
+	}
+}
+
+func TestTemplateSummaryPhaseStatus_badgesInPhaseOrder(t *testing.T) {
+	t.Parallel()
+	deps := phaseStatusSummaryDeps()
+	deps.Options.Columns.PhaseApprovalStatus = true
+	table := buildDrawerSummaryTable(t, deps, nil)
+
+	if got := len(table.Columns); got != 6 {
+		t.Fatalf("columns = %d, want 6", got)
+	}
+	col := table.Columns[5]
+	if col.Key != "phase_status" || col.Label != "Phase Status" || col.Sortable || col.Filterable {
+		t.Fatalf("phase_status column = %+v, want last, labelled, not sortable, not filterable", col)
+	}
+	for _, f := range templateSummarySearchFields {
+		if f == "phase_status" {
+			t.Fatal("phase_status must not be a server search field")
+		}
+	}
+
+	type want struct{ label, variant, status, testID string }
+	check := func(rowIdx int, cellID string, wants []want) {
+		t.Helper()
+		cell := table.Rows[rowIdx].Cells[5]
+		if cell.Type != "badge" || cell.TestID != cellID {
+			t.Fatalf("row %d cell = type %q testid %q, want badge %q", rowIdx, cell.Type, cell.TestID, cellID)
+		}
+		if len(cell.Badges) != len(wants) {
+			t.Fatalf("row %d badges = %d, want %d", rowIdx, len(cell.Badges), len(wants))
+		}
+		for i, w := range wants {
+			b := cell.Badges[i]
+			if b.Label != w.label || b.Variant != w.variant || b.Status != w.status || b.TestID != w.testID {
+				t.Errorf("row %d badge %d = %+v, want %+v", rowIdx, i, b, w)
+			}
+		}
+	}
+	check(0, "job-phase-status-tmpl-a-grp-a", []want{
+		{"Phase 1: In Progress", "default", "in_progress", "job-phase-status-tmpl-a-grp-a-p1"},
+		{"Phase 2: Not started", "default", "not_started", "job-phase-status-tmpl-a-grp-a-p2"},
+		{"Phase 3: Not started", "default", "not_started", "job-phase-status-tmpl-a-grp-a-ase-0003"},
+	})
+	check(1, "job-phase-status-tmpl-b-grp-b", []want{
+		{"Phase 1: For Review", "warning", "for_review", "job-phase-status-tmpl-b-grp-b-p1"},
+		{"Phase 2: Verified", "info", "verified", "job-phase-status-tmpl-b-grp-b-p2"},
+		{"Phase 3: Published", "success", "published", "job-phase-status-tmpl-b-grp-b-p3"},
+		{"Attention — mixed", "warning", "mixed", "job-phase-status-tmpl-b-grp-b-p4"},
+	})
+	for _, idx := range []int{2, 3} {
+		cell := table.Rows[idx].Cells[5]
+		if cell.Type != "text" || cell.Value != "" || len(cell.Badges) != 0 || cell.TestID != "" {
+			t.Errorf("row %d (no phases / fallback) cell = %+v, want blank text", idx, cell)
+		}
+	}
+	if got := types.CellCSV(table.Rows[1].Cells[5]); got != "Phase 1: For Review; Phase 2: Verified; Phase 3: Published; Attention — mixed" {
+		t.Errorf("CSV = %q", got)
+	}
+}
+
+func TestTemplateSummaryPhaseStatus_labelsFromLyngua(t *testing.T) {
+	t.Parallel()
+	deps := phaseStatusSummaryDeps()
+	deps.Options.Columns.PhaseApprovalStatus = true
+	deps.Labels.Columns.PhaseStatus = "Custom Status"
+	deps.Labels.Approval.PhaseBadge = "{status} ({phase})"
+	deps.Labels.Approval.Status.InProgress = "Open"
+	table := buildDrawerSummaryTable(t, deps, nil)
+	if got := table.Columns[5].Label; got != "Custom Status" {
+		t.Fatalf("column label = %q", got)
+	}
+	if got := table.Rows[0].Cells[5].Badges[0].Label; got != "Open (Phase 1)" {
+		t.Fatalf("badge label = %q, want lyngua template applied", got)
+	}
 }

@@ -8,6 +8,7 @@ import (
 
 	outcomesummarypkg "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
 	clientcard "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/client_card"
+	clientdocumentbatch "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/client_document_batch"
 	documentview "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/document"
 	jobsummary "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/job_summary"
 	summarylist "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/list"
@@ -229,6 +230,12 @@ type OutcomeSummaryModule struct {
 	// ClientDocument is the per-client report-card .docx download (a raw
 	// handler wrapped like SubscriptionGroupExport). Nil when GenerateDoc is not wired.
 	ClientDocument http.HandlerFunc
+	// ClientDocumentsDownload is the subscription-group batch Period/Format
+	// drawer and ClientDocumentsManifest its read-only JSON member manifest (a
+	// raw handler wrapped like ClientDocument). The browser fetches every
+	// document through ClientDocument; neither surface renders document bytes.
+	ClientDocumentsDownload view.View
+	ClientDocumentsManifest http.HandlerFunc
 
 	// Report-card template settings surface (TB3).
 	TemplateSettings view.View
@@ -245,6 +252,17 @@ type OutcomeSummaryModule struct {
 // NewOutcomeSummaryModule creates a new outcome summary module with all views wired.
 func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModule {
 	clientDocument := newClientDocumentHandler(deps)
+	clientDocumentsBatchDeps := &clientdocumentbatch.Deps{
+		Routes:                            deps.Routes,
+		Labels:                            deps.Labels,
+		CommonLabels:                      deps.CommonLabels,
+		Options:                           deps.Options,
+		ResolvePrincipalKind:              deps.ResolvePrincipalKind,
+		PDFAvailable:                      deps.GeneratePDF != nil,
+		DOCXAvailable:                     deps.GenerateDoc != nil,
+		GetSubscriptionGroupOutcomeExport: deps.GetSubscriptionGroupOutcomeExport,
+		ResolveTemplateBytes:              deps.ResolveTemplateBytes,
+	}
 	subscriptionGroupDeps := &subscriptiongroupview.Deps{
 		Routes:                                   deps.Routes,
 		Labels:                                   deps.Labels,
@@ -309,6 +327,8 @@ func NewOutcomeSummaryModule(deps *OutcomeSummaryModuleDeps) *OutcomeSummaryModu
 		}),
 		SubscriptionGroupExport: subscriptiongroupview.NewExportHandler(subscriptionGroupDeps),
 		ClientDocument:          clientDocument,
+		ClientDocumentsDownload: clientdocumentbatch.NewDrawer(clientDocumentsBatchDeps),
+		ClientDocumentsManifest: clientdocumentbatch.NewManifestHandler(clientDocumentsBatchDeps),
 		ClientCard: clientcard.NewView(&clientcard.Deps{
 			Routes:               deps.Routes,
 			Labels:               deps.Labels,
@@ -470,6 +490,7 @@ func newClientDocumentHandler(deps *OutcomeSummaryModuleDeps) http.HandlerFunc {
 		GeneratePDF:                               deps.GeneratePDF,
 		ResolveTemplateBytes:                      deps.ResolveTemplateBytes,
 		GetSubscriptionGroupClientReportCard:      deps.GetSubscriptionGroupClientReportCard,
+		GetSubscriptionGroupOutcomeExport:         deps.GetSubscriptionGroupOutcomeExport,
 		ResolveSubscriptionGroupDocumentTemplate:  deps.ResolveSubscriptionGroupDocumentTemplate,
 		ListSubscriptionGroups:                    deps.ListSubscriptionGroups,
 		ListSubscriptionGroupMembers:              deps.ListSubscriptionGroupMembers,
@@ -540,6 +561,21 @@ func (m *OutcomeSummaryModule) RegisterRoutes(r view.RouteRegistrar) {
 			rr.HandleFunc("GET", m.routes.ClientDocumentURL, m.ClientDocument)
 		} else {
 			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.ClientDocumentURL)
+		}
+	}
+	if m.subscriptionGroupExportEnabled && m.ClientDocument != nil && m.routes.ClientDocumentURL != "" &&
+		m.ClientDocumentsDownload != nil && m.routes.ClientDocumentsDownloadDrawerURL != "" &&
+		m.ClientDocumentsManifest != nil && m.routes.ClientDocumentsManifestURL != "" {
+		// Batch download: the drawer is a view; the manifest is a raw JSON
+		// handler wrapped like ClientDocument (WrapHandler RBAC + workspace
+		// route map), so both gates observe real permissions.
+		if rr, ok := r.(interface {
+			HandleFunc(method, path string, handler http.HandlerFunc, middlewares ...string)
+		}); ok {
+			r.GET(m.routes.ClientDocumentsDownloadDrawerURL, m.ClientDocumentsDownload)
+			rr.HandleFunc("GET", m.routes.ClientDocumentsManifestURL, m.ClientDocumentsManifest)
+		} else {
+			log.Printf("outcome summary: RouteRegistrar does not support HandleFunc — skipping GET %s", m.routes.ClientDocumentsManifestURL)
 		}
 	}
 	r.GET(m.routes.JobSummaryURL, m.JobSummary)

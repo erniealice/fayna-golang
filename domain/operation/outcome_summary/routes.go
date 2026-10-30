@@ -92,8 +92,13 @@ type Routes struct {
 	ClientCardURL                      string `json:"client_url"`
 	ClientDocumentURL                  string `json:"client_document_url"`
 	ClientDownloadDrawerURL            string `json:"client_download_drawer_url"`
-	GroupDetailURL                     string `json:"group_detail_url"`
-	PhaseSummaryURL                    string `json:"phase_summary_url"`
+	// Education/app-only batch download of every member's client document for
+	// one period: the Period/Format drawer and its read-only JSON manifest.
+	// Generic defaults stay empty so non-opting consumers mount nothing.
+	ClientDocumentsDownloadDrawerURL string `json:"client_documents_download_drawer_url"`
+	ClientDocumentsManifestURL       string `json:"client_documents_manifest_url"`
+	GroupDetailURL                   string `json:"group_detail_url"`
+	PhaseSummaryURL                  string `json:"phase_summary_url"`
 
 	// Report-card template settings (TB3 management surface).
 	TemplateSettingsURL string `json:"template_settings_url"`
@@ -161,6 +166,12 @@ func (r Routes) RouteMap() map[string]string {
 	}
 	if r.ClientDownloadDrawerURL != "" {
 		routes["outcome_summary.client_download_drawer"] = r.ClientDownloadDrawerURL
+	}
+	if r.ClientDocumentsDownloadDrawerURL != "" {
+		routes["outcome_summary.client_documents_download_drawer"] = r.ClientDocumentsDownloadDrawerURL
+	}
+	if r.ClientDocumentsManifestURL != "" {
+		routes["outcome_summary.client_documents_manifest"] = r.ClientDocumentsManifestURL
 	}
 	if r.SubscriptionGroupDocumentTemplateSettingsURL != "" {
 		routes["outcome_summary.subscription_group_document_template_settings"] = r.SubscriptionGroupDocumentTemplateSettingsURL

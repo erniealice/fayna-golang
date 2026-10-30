@@ -25,6 +25,7 @@ import (
 	texttemplate "html/template"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	clientdocumentbatch "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/client_document_batch"
 
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
@@ -165,6 +166,12 @@ type PageData struct {
 	DownloadDrawerURL string
 	DownloadButton    string
 	DownloadTitle     string
+
+	// ClientDocumentsAction opens the batch "every member's document" drawer
+	// (client_document_batch). Nil unless the per-row explicit client download
+	// is usable; rendered as the table toolbar prefix or, without a computed
+	// grid, in the page toolbar.
+	ClientDocumentsAction *clientdocumentbatch.OpenAction
 }
 
 // groupTabInfo carries the resolved ?jc= tabstrip for one render — the shared
@@ -232,9 +239,9 @@ func NewView(deps *Deps) view.View {
 			// Empty-state: no computed summaries for this group → banner, not
 			// a blank grid (D.4 do-not-ship-blank). The tabstrip still renders
 			// (OUTSIDE the NotComputed branch) so an empty tab stays navigable.
-			return okPage(viewCtx, deps, group, grantHolders, nil, deps.Labels.SubscriptionGroup.NotComputedBanner, tabs)
+			return okPage(viewCtx, deps, group, grantHolders, nil, deps.Labels.SubscriptionGroup.NotComputedBanner, tabs, clientDocumentsAction(ctx, deps, groupID))
 		}
-		return okPage(viewCtx, deps, group, grantHolders, table, "", tabs)
+		return okPage(viewCtx, deps, group, grantHolders, table, "", tabs, clientDocumentsAction(ctx, deps, groupID))
 	})
 }
 
@@ -782,7 +789,7 @@ func numberRows(table *types.TableConfig) {
 // the group's servicing-grant holder names (comma-separated — a group can
 // carry several subscription_group_workspace_user rows), falling back to the
 // lyngua'd DetailLink label when no grants resolve.
-func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, grantHolders []string, table *types.TableConfig, banner string, tabs *groupTabInfo) view.ViewResult {
+func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.SubscriptionGroup, grantHolders []string, table *types.TableConfig, banner string, tabs *groupTabInfo, clientDocuments *clientdocumentbatch.OpenAction) view.ViewResult {
 	l := deps.Labels
 	caption := strings.Join(grantHolders, ", ")
 	if caption == "" {
@@ -813,6 +820,7 @@ func okPage(viewCtx *view.ViewContext, deps *Deps, group *subscriptiongrouppb.Su
 		pd.ActiveTab = tabs.ActiveTab
 		pd.TabsAria = tabs.Aria
 	}
+	applyClientDocumentsAction(pd, clientDocuments)
 	return view.OK("outcome-summary-subscription-group", pd)
 }
 

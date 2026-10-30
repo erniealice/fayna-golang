@@ -116,6 +116,11 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 	// redact per sheet on the projection (notes kept, scores blank); Year Final
 	// blanks recorded values across the whole document after assembly.
 
+	// Leave off jobs this client has no evidence for while classmates are
+	// graded; computed on the unredacted card before any sheet redaction.
+	omitted := omitNonEnrolledJobs(ctx, d, groupID, card, period)
+	card = withoutJobs(card, omitted)
+
 	printedBy := firstNonEmpty(consumer.GetUserIDFromContext(ctx), "system")
 	now := printedNow(ctx)
 	printedAt := now.Format("January 2, 2006 3:04 PM")
@@ -186,6 +191,9 @@ func handleExplicitClientDocument(w http.ResponseWriter, r *http.Request, d *Dep
 
 	filename := clientDocumentFilename(card.GetClient().GetName(), clientID, now, format)
 	w.Header().Set("Content-Disposition", contentDisposition(filename))
+	if len(omitted) > 0 {
+		w.Header().Set(OmittedItemsHeader, omittedItemsHeaderValue(omitted))
+	}
 	if format == "pdf" {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 	}

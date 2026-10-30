@@ -39,6 +39,7 @@ import (
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
 
+	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 	summarypb "github.com/erniealice/esqyma/pkg/schema/v1/service/operation/job_template_summary"
 )
 
@@ -61,6 +62,11 @@ type templateSummaryRow struct {
 	// doesn't cover) where the count is genuinely unknown — an aggregate row
 	// leaves this false, so its cell is byte-for-byte unchanged.
 	hideItemCount bool
+
+	// PhaseStatuses is the row's per-phase approval state (summary field
+	// group_phase_statuses), in phase order. Rendered only when the app opts
+	// into Options.Columns.PhaseApprovalStatus; empty on template-grain rows.
+	PhaseStatuses []*summarypb.JobTemplateSummaryPhaseStatus
 }
 
 // buildDeliverySummaryTable builds the template-grain TableConfig for the
@@ -85,6 +91,10 @@ func buildDeliverySummaryTable(ctx context.Context, deps *ListViewDeps, status s
 func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow, p tableparams.TableQueryParams, status, selected string, resp *summarypb.ListJobTemplateSummariesResponse, perms *types.UserPermissions) *types.TableConfig {
 	l := deps.Labels
 	columns := templateSummaryColumns(l)
+	showPhaseStatus := deps.Options.ShowPhaseApprovalStatus()
+	if showPhaseStatus {
+		columns = append(columns, phaseStatusColumn(l))
+	}
 	tableRows := make([]types.TableRow, 0, len(rows))
 	for _, r := range rows {
 		// Prefer the section-scoped URL so each row addresses its OWN section.
@@ -129,16 +139,20 @@ func templateSummaryTableConfig(deps *ListViewDeps, rows []templateSummaryRow, p
 			})
 		}
 
+		cells := []types.TableCell{
+			{Type: "text", Value: r.TemplateName},
+			{Type: "text", Value: r.GroupName},
+			{Type: "text", Value: r.DelivererName},
+			{Type: "number", Value: itemValue},
+			{Type: "text", Value: r.ScheduleName},
+		}
+		if showPhaseStatus {
+			cells = append(cells, phaseStatusCell(l, r))
+		}
 		tableRows = append(tableRows, types.TableRow{
-			ID:   r.TemplateID,
-			Href: matrixURL,
-			Cells: []types.TableCell{
-				{Type: "text", Value: r.TemplateName},
-				{Type: "text", Value: r.GroupName},
-				{Type: "text", Value: r.DelivererName},
-				{Type: "number", Value: itemValue},
-				{Type: "text", Value: r.ScheduleName},
-			},
+			ID:    r.TemplateID,
+			Href:  matrixURL,
+			Cells: cells,
 			DataAttrs: map[string]string{
 				"name":      r.TemplateName,
 				"group":     r.GroupName,
@@ -291,7 +305,7 @@ func responseTemplateSummaryRows(resp *summarypb.ListJobTemplateSummariesRespons
 	summaries := resp.GetSummaries()
 	rows := make([]templateSummaryRow, 0, len(summaries))
 	for _, s := range summaries {
-		rows = append(rows, templateSummaryRow{
+		row := templateSummaryRow{
 			TemplateID:    s.GetJobTemplateId(),
 			GroupID:       s.GetSubscriptionGroupId(),
 			TemplateName:  s.GetJobTemplateName(),
@@ -300,9 +314,83 @@ func responseTemplateSummaryRows(resp *summarypb.ListJobTemplateSummariesRespons
 			ItemCount:     int(s.GetJobCount()),
 			ScheduleName:  s.GetPriceScheduleName(),
 			hideItemCount: s.GetTemplateGrainFallback(),
-		})
+		}
+		if !s.GetTemplateGrainFallback() {
+			row.PhaseStatuses = s.GetGroupPhaseStatuses()
+		}
+		rows = append(rows, row)
 	}
 	return rows
+}
+
+// phaseStatusColumn is the optional per-phase approval column. It is neither
+// sortable nor filterable: the summary's sort and search are server-side over
+// an adapter allowlist that has no per-phase key.
+func phaseStatusColumn(l job.Labels) types.TableColumn {
+	return types.TableColumn{Key: "phase_status", Label: l.Columns.PhaseStatus, NoSort: true, NoFilter: true}
+}
+
+// phaseStatusCell renders one badge per phase in response (phase) order. A row
+// with no phase state (no active phase, no group, template-grain fallback)
+// renders a blank cell.
+func phaseStatusCell(l job.Labels, r templateSummaryRow) types.TableCell {
+	if len(r.PhaseStatuses) == 0 {
+		return types.TableCell{Type: "text"}
+	}
+	cellID := "job-phase-status-" + short(r.TemplateID)
+	if r.GroupID != "" {
+		cellID += "-" + short(r.GroupID)
+	}
+	badges := make([]types.BadgeData, 0, len(r.PhaseStatuses))
+	for _, p := range r.PhaseStatuses {
+		state, text, variant := phaseBadgeState(l, p)
+		key := p.GetCode()
+		if key == "" {
+			key = short(p.GetJobTemplatePhaseId())
+		}
+		badges = append(badges, types.BadgeData{
+			Label:   phaseBadgeLabel(l.Approval.PhaseBadge, p.GetName(), text),
+			Variant: variant,
+			Status:  state,
+			TestID:  cellID + "-" + key,
+		})
+	}
+	return types.TableCell{Type: "badge", Badges: badges, TestID: cellID}
+}
+
+// phaseBadgeState resolves one phase's display state. Precedence: mixed rows
+// first (the Attention overlay), then not-started (no sheet row, or IN_PROGRESS
+// with no data — the outcome_matrix NotStarted rule), then the ladder status.
+// Variants follow outcome_summary's approvalChipVariant status-badge family.
+// state is a machine token for data-status.
+func phaseBadgeState(l job.Labels, p *summarypb.JobTemplateSummaryPhaseStatus) (state, text, variant string) {
+	s := p.GetLowestStatus()
+	if p.GetMixedAttention() {
+		return "mixed", l.Approval.Mixed, "warning"
+	}
+	switch s {
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_IN_PROGRESS:
+		if p.GetHasData() {
+			return "in_progress", l.Approval.Status.InProgress, "default"
+		}
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_FOR_REVIEW:
+		return "for_review", l.Approval.Status.ForReview, "warning"
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_VERIFIED:
+		return "verified", l.Approval.Status.Verified, "info"
+	case jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_PUBLISHED:
+		return "published", l.Approval.Status.Published, "success"
+	}
+	return "not_started", l.Approval.NotStarted, "default"
+}
+
+// phaseBadgeLabel substitutes {phase} and {status} (once each). A phase with no
+// name, or a template without {phase}, shows the status text alone.
+func phaseBadgeLabel(tmpl, phase, status string) string {
+	if phase == "" || !strings.Contains(tmpl, "{phase}") {
+		return status
+	}
+	out := strings.Replace(tmpl, "{phase}", phase, 1)
+	return strings.Replace(out, "{status}", status, 1)
 }
 
 func responseCategoryCounts(resp *summarypb.ListJobTemplateSummariesResponse) map[string]int {

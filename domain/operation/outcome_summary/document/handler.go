@@ -175,6 +175,11 @@ type Deps struct {
 	// ports; storage locators and raw SQL stay outside Fayna.
 	GetSubscriptionGroupClientReportCard     func(ctx context.Context, req *exportpb.GetSubscriptionGroupClientReportCardRequest) (*exportpb.GetSubscriptionGroupClientReportCardResponse, error)
 	ResolveSubscriptionGroupDocumentTemplate func(ctx context.Context, req *exportpb.ResolveSubscriptionGroupOutcomeDocumentForRenderRequest) (*outcome_summary.ResolvedSubscriptionGroupDocumentTemplate, error)
+
+	// GetSubscriptionGroupOutcomeExport reads the group matrix that supplies the
+	// classmate evidence for the explicit-period omission rule
+	// (omit_non_enrolled.go). Optional/nil-safe: nil omits nothing.
+	GetSubscriptionGroupOutcomeExport func(ctx context.Context, req *exportpb.GetSubscriptionGroupOutcomeExportRequest) (*exportpb.GetSubscriptionGroupOutcomeExportResponse, error)
 }
 
 // NewDownloadHandler returns the per-client report-card .docx download handler.

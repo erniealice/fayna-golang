@@ -22,8 +22,10 @@
     {{end}}
     {{/* A computed grid uses TableConfig.PrimaryAction inside table-toolbar.
          Keep the download reachable when a category has no computed table. */}}
-    {{if and .NotComputed .DownloadDrawerURL}}
+    {{if and .NotComputed (or .DownloadDrawerURL .ClientDocumentsAction)}}
     <div class="page-toolbar">
+        {{if .ClientDocumentsAction}}{{template "outcome-summary-client-documents-download-open" .ClientDocumentsAction}}{{end}}
+        {{if .DownloadDrawerURL}}
         <button type="button" class="btn btn-secondary"
                 hx-get="{{.DownloadDrawerURL}}"
                 hx-target="#sheetContent"
@@ -34,6 +36,7 @@
                 title="{{.DownloadTitle}}"
                 aria-haspopup="dialog"
                 data-testid="rc-subscription-group-download-open">{{.DownloadButton}}</button>
+        {{end}}
     </div>
     {{end}}
     {{if .NotComputed}}

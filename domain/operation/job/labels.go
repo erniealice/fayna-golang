@@ -21,6 +21,29 @@ type Labels struct {
 	// Dashboard labels for the Job live dashboard
 	// (Phase 3 — Pyeza dashboard block + per-app live dashboards plan).
 	Dashboard DashboardLabels `json:"dashboard"`
+	// Approval holds the per-phase approval badge text of the summary list's
+	// optional phase_status column (Options.Columns.PhaseApprovalStatus).
+	Approval ApprovalLabels `json:"approval"`
+}
+
+// ApprovalLabels — per-phase approval badge text on the summary list. Same
+// vocabulary and keys as outcome_matrix.approval.{status,not_started,mixed};
+// the badge VARIANT is a Go switch, not lyngua.
+type ApprovalLabels struct {
+	Status     ApprovalStatusLabels `json:"status"`
+	NotStarted string               `json:"not_started"` // no sheet row, or IN_PROGRESS with no data
+	Mixed      string               `json:"mixed"`       // the phase's rows sit at differing statuses
+	// PhaseBadge composes one badge: {phase} is the phase's own name (data),
+	// {status} the resolved status text.
+	PhaseBadge string `json:"phase_badge"`
+}
+
+// ApprovalStatusLabels — the four approval ladder status texts.
+type ApprovalStatusLabels struct {
+	InProgress string `json:"in_progress"`
+	ForReview  string `json:"for_review"`
+	Verified   string `json:"verified"`
+	Published  string `json:"published"`
 }
 
 // DashboardLabels holds translatable strings for the Job live dashboard.
@@ -89,6 +112,9 @@ type ColumnLabels struct {
 	Deliverer string `json:"deliverer"`
 	Items     string `json:"items"`
 	Schedule  string `json:"schedule"`
+	// PhaseStatus heads the optional per-phase approval column
+	// (Options.Columns.PhaseApprovalStatus).
+	PhaseStatus string `json:"phase_status"`
 }
 
 type EmptyLabels struct {
@@ -246,15 +272,16 @@ func DefaultLabels() Labels {
 			AddJob: "Add Job",
 		},
 		Columns: ColumnLabels{
-			Name:      "Name",
-			Client:    "Client",
-			Status:    "Status",
-			Created:   "Created",
-			Location:  "Location",
-			Group:     "Group",
-			Deliverer: "Deliverer",
-			Items:     "Items",
-			Schedule:  "Schedule",
+			Name:        "Name",
+			Client:      "Client",
+			Status:      "Status",
+			Created:     "Created",
+			Location:    "Location",
+			Group:       "Group",
+			Deliverer:   "Deliverer",
+			Items:       "Items",
+			Schedule:    "Schedule",
+			PhaseStatus: "Phase Status",
 		},
 		Empty: EmptyLabels{
 			Title:             "No jobs found",
@@ -372,6 +399,17 @@ func DefaultLabels() Labels {
 			QuickJobCalendar:  "Job Calendar",
 			ViewAll:           "View All",
 			AxisHours:         "Hours",
+		},
+		Approval: ApprovalLabels{
+			Status: ApprovalStatusLabels{
+				InProgress: "In Progress",
+				ForReview:  "For Review",
+				Verified:   "Verified",
+				Published:  "Published",
+			},
+			NotStarted: "Not started",
+			Mixed:      "Attention — mixed",
+			PhaseBadge: "{phase}: {status}",
 		},
 	}
 }

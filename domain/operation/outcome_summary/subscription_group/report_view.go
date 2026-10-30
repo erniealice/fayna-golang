@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
+	clientdocumentbatch "github.com/erniealice/fayna-golang/domain/operation/outcome_summary/client_document_batch"
 	pyeza "github.com/erniealice/pyeza-golang"
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/types"
@@ -42,7 +43,7 @@ func renderReportView(ctx context.Context, viewCtx *view.ViewContext, deps *Deps
 	category := selectReportCategory(options.GetJobCategories(), viewCtx.Request.URL.Query().Get("jc"))
 	tabs, activeTab := reportCategoryTabs(deps, subscriptionGroupID, options.GetJobCategories(), category)
 	if category == nil || !category.GetFinalOutcomeAvailable() {
-		return reportPage(viewCtx, deps, options.GetContext(), nil, tabs, activeTab, reportCategoryID(category), deps.Labels.SubscriptionGroup.NotComputedBanner)
+		return reportPage(viewCtx, deps, options.GetContext(), nil, tabs, activeTab, reportCategoryID(category), deps.Labels.SubscriptionGroup.NotComputedBanner, clientDocumentsAction(ctx, deps, subscriptionGroupID))
 	}
 
 	categoryID := strings.TrimSpace(category.GetJobCategoryId())
@@ -81,7 +82,36 @@ func renderReportView(ctx context.Context, viewCtx *view.ViewContext, deps *Deps
 		deps.Routes.ClientDownloadDrawerURL != "" && outcome_summary.CanExplicitExport(perms, ctx, deps.ResolvePrincipalKind)
 	canDownloadLegacyDocument := clientDocumentMounted && outcome_summary.CanLegacyDetail(perms)
 	table := buildReportTable(deps, normalized, subscriptionGroupID, canDownloadClientDocument, canDownloadLegacyDocument)
-	return reportPage(viewCtx, deps, options.GetContext(), table, tabs, activeTab, reportCategoryID(category), "")
+	return reportPage(viewCtx, deps, options.GetContext(), table, tabs, activeTab, reportCategoryID(category), "", clientDocumentsAction(ctx, deps, subscriptionGroupID))
+}
+
+// clientDocumentsAction is the batch member-document toolbar action, gated
+// exactly like the per-row explicit client download (canDownloadClientDocument
+// above / page.go buildGroupTable) plus its own drawer and manifest routes.
+func clientDocumentsAction(ctx context.Context, deps *Deps, subscriptionGroupID string) *clientdocumentbatch.OpenAction {
+	return clientdocumentbatch.NewOpenAction(ctx, clientdocumentbatch.ActionConfig{
+		Routes:                deps.Routes,
+		Labels:                deps.Labels,
+		Options:               deps.Options,
+		ResolvePrincipalKind:  deps.ResolvePrincipalKind,
+		ClientDocumentMounted: deps.ClientDocumentMounted && deps.Routes.ClientDocumentURL != "",
+		ExportQueryWired:      deps.GetSubscriptionGroupOutcomeExport != nil,
+	}, subscriptionGroupID)
+}
+
+// applyClientDocumentsAction places the batch action beside the table's
+// PrimaryAction (TableConfig.ToolbarPrefixTemplate, precedent centymo
+// collection/list) and keeps it on the page so the not-computed toolbar can
+// render it too.
+func applyClientDocumentsAction(pageData *PageData, action *clientdocumentbatch.OpenAction) {
+	if pageData == nil || action == nil {
+		return
+	}
+	pageData.ClientDocumentsAction = action
+	if pageData.Table != nil && pageData.Table.ToolbarPrefixTemplate == "" && pageData.Table.ToolbarPrefix == "" {
+		pageData.Table.ToolbarPrefixTemplate = clientdocumentbatch.OpenActionTemplate
+		pageData.Table.ToolbarPrefixData = action
+	}
 }
 
 func normalizeReportMatrix(ctx context.Context, deps *Deps, response *exportpb.GetSubscriptionGroupOutcomeExportResponse) (*explicitMatrix, error) {
@@ -276,7 +306,7 @@ func stripExporterSequence(name string) string {
 	return strings.TrimSpace(name[close+2:])
 }
 
-func reportPage(viewCtx *view.ViewContext, deps *Deps, exportContext *exportpb.SubscriptionGroupOutcomeExportContext, table *types.TableConfig, tabs []pyeza.TabItem, activeTab, category, banner string) view.ViewResult {
+func reportPage(viewCtx *view.ViewContext, deps *Deps, exportContext *exportpb.SubscriptionGroupOutcomeExportContext, table *types.TableConfig, tabs []pyeza.TabItem, activeTab, category, banner string, clientDocuments *clientdocumentbatch.OpenAction) view.ViewResult {
 	l := deps.Labels
 	drawerURL := ""
 	if category != "" && strings.TrimSpace(deps.Routes.SubscriptionGroupDownloadDrawerURL) != "" {
@@ -314,5 +344,6 @@ func reportPage(viewCtx *view.ViewContext, deps *Deps, exportContext *exportpb.S
 		DownloadButton:    l.SubscriptionGroupExport.DownloadAction,
 		DownloadTitle:     l.SubscriptionGroupExport.DrawerTitle,
 	}
+	applyClientDocumentsAction(pageData, clientDocuments)
 	return view.OK("outcome-summary-subscription-group", pageData)
 }

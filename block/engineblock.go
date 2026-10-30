@@ -21,9 +21,11 @@ import (
 	"github.com/erniealice/espyna-golang/consumer"
 	consumerapp "github.com/erniealice/espyna-golang/consumer/app"
 	espynaports "github.com/erniealice/espyna-golang/ports"
+	"github.com/erniealice/espyna-golang/shared/identity"
 	commonpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/common"
 	attachmentpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/attachment"
 	documenttemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/document/template"
+	principaltypepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/principal_type"
 	staffpb "github.com/erniealice/esqyma/pkg/schema/v1/domain/entity/staff"
 	jobcategorypb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_category"
 	jobtemplatepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_template"
@@ -1005,19 +1007,38 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 }
 
 // newStaffResolver returns a ResolveStaff closure mapping the acting session
-// user to their active staff_id via the typed staff list use case (never raw
-// SQL). Returns "" when there is no authenticated user or no matching active
-// staff — a fail-closed identity the outcome-matrix read-only gate and the
-// record-action IDOR guard both treat as "cannot edit". The user_id filter
-// narrows the query server-side; the result is re-verified client-side because
-// the resolved staff_id is a security identity (the write-ownership axis) and
-// must never be a row the filter did not actually match to this user.
+// user to their active staff_id. Returns "" when there is no authenticated user
+// or no matching active staff — a fail-closed identity the outcome-matrix
+// read-only gate and the record-action IDOR guard both treat as "cannot edit".
+//
+// A STAFF-persona session (active binding PrincipalType STAFF) already carries
+// its staff.id as the session-bound PrincipalID — the same identity espyna's
+// row-scope and approval adapters act on (principalscope.ActingStaff) — so it
+// is returned directly with no staff:list read. A staff persona with an empty
+// PrincipalID fails closed. Without this, a teacher role lacking staff:list had
+// every grade-sheet save denied (422).
+//
+// Any other persona (operator) maps user → staff via the typed staff list use
+// case (never raw SQL). The user_id filter narrows the query server-side; the
+// result is re-verified client-side because the resolved staff_id is a security
+// identity (the write-ownership axis) and must never be a row the filter did
+// not actually match to this user.
 func newStaffResolver(
 	listStaffs func(context.Context, *staffpb.ListStaffsRequest) (*staffpb.ListStaffsResponse, error),
 ) func(context.Context) (string, error) {
 	return func(ctx context.Context) (string, error) {
 		userID := consumer.GetUserIDFromContext(ctx)
-		if userID == "" || listStaffs == nil {
+		if userID == "" {
+			return "", nil
+		}
+		if id, ok := identity.FromContext(ctx); ok && id != nil &&
+			id.PrincipalType == int32(principaltypepb.PrincipalType_PRINCIPAL_TYPE_STAFF) {
+			if id.UserID != userID {
+				return "", nil
+			}
+			return id.PrincipalID, nil
+		}
+		if listStaffs == nil {
 			return "", nil
 		}
 		resp, err := listStaffs(ctx, &staffpb.ListStaffsRequest{

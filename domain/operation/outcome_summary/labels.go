@@ -20,6 +20,10 @@ type Labels struct {
 	// vocabulary. Canonical tags stay generic; vertical wording is a Lyngua value.
 	SubscriptionGroupExport SubscriptionGroupExportLabels `json:"subscription_group_export"`
 	ClientDocumentDownload  ClientDocumentDownloadLabels  `json:"client_document_download"`
+	// ClientDocumentsDownload is the subscription-group batch (ZIP) download of
+	// every member's client document for one period. Period/format option
+	// wording is shared with ClientDocumentDownload.
+	ClientDocumentsDownload ClientDocumentsDownloadLabels `json:"client_documents_download"`
 	// ClientDocument holds wording printed INSIDE client documents (not UI).
 	ClientDocument ClientDocumentLabels `json:"client_document"`
 	// TemplateSettings holds the TB3 report-card template management surface
@@ -193,6 +197,38 @@ type ClientDocumentDownloadLabels struct {
 	DownloadingAction     string `json:"downloading_action"`
 	DownloadNotice        string `json:"download_notice"`
 	DownloadErrorFallback string `json:"download_error_fallback"`
+}
+
+// ClientDocumentsDownloadLabels holds the subscription-group batch download
+// drawer and its browser progress/outcome messages. Placeholders {done},
+// {total}, {ok}, {not_ready} and {failed} are DATA-substituted by the browser
+// module; the codes ok/not_ready/failed in _manifest.csv are machine values,
+// not labels.
+type ClientDocumentsDownloadLabels struct {
+	OpenAction               string `json:"open_action"`
+	DrawerTitle              string `json:"drawer_title"`
+	Intro                    string `json:"intro"`
+	StartAction              string `json:"start_action"`
+	PreparingAction          string `json:"preparing_action"`
+	StopAction               string `json:"stop_action"`
+	RetryAction              string `json:"retry_action"`
+	SaveAction               string `json:"save_action"`
+	SavePartialAction        string `json:"save_partial_action"`
+	Notice                   string `json:"notice"`
+	ProgressMessage          string `json:"progress_message"`
+	CompleteMessage          string `json:"complete_message"`
+	ShortfallMessage         string `json:"shortfall_message"`
+	StoppedMessage           string `json:"stopped_message"`
+	AbortedMessage           string `json:"aborted_message"`
+	FailuresTitle            string `json:"failures_title"`
+	StatusNotReady           string `json:"status_not_ready"`
+	StatusFailed             string `json:"status_failed"`
+	ErrorFallback            string `json:"error_fallback"`
+	TemplateUnavailableError string `json:"template_unavailable_error"`
+	FormatUnavailableError   string `json:"format_unavailable_error"`
+	PeriodUnavailableError   string `json:"period_unavailable_error"`
+	EmptyError               string `json:"empty_error"`
+	TooLargeError            string `json:"too_large_error"`
 }
 
 // ClientDocumentLabels is vocabulary printed inside client documents. Both
@@ -456,6 +492,32 @@ func DefaultLabels() Labels {
 			DownloadingAction:     "Downloading…",
 			DownloadNotice:        "Preparing your file. Please do not close this window or refresh the page until the download completes.",
 			DownloadErrorFallback: "The download could not be completed. Please try again.",
+		},
+		ClientDocumentsDownload: ClientDocumentsDownloadLabels{
+			OpenAction:               "Download all",
+			DrawerTitle:              "Download All Reports",
+			Intro:                    "Every member's report for the selected period is downloaded one by one and saved as a single ZIP file.",
+			StartAction:              "Download ZIP",
+			PreparingAction:          "Preparing…",
+			StopAction:               "Stop",
+			RetryAction:              "Retry failed",
+			SaveAction:               "Save ZIP",
+			SavePartialAction:        "Save incomplete ZIP",
+			Notice:                   "Keep this window open until the ZIP is saved. Files are prepared a few at a time so the server is not overloaded.",
+			ProgressMessage:          "{done} of {total} processed",
+			CompleteMessage:          "All {total} files are ready.",
+			ShortfallMessage:         "{ok} of {total} ready — {not_ready} not ready, {failed} failed. See _manifest.csv in the ZIP.",
+			StoppedMessage:           "Stopped. {ok} of {total} ready.",
+			AbortedMessage:           "Stopped after repeated server errors. {ok} of {total} ready. Try again later or retry the failed files.",
+			FailuresTitle:            "Not included",
+			StatusNotReady:           "Not ready",
+			StatusFailed:             "Failed",
+			ErrorFallback:            "The download could not be completed. Please try again.",
+			TemplateUnavailableError: "No published template is available for this period.",
+			FormatUnavailableError:   "This format is not available.",
+			PeriodUnavailableError:   "This period is not available for this group.",
+			EmptyError:               "This group has no members to download.",
+			TooLargeError:            "This download is too large for a single ZIP file.",
 		},
 		TemplateSettings: TemplateSettingsLabels{
 			Title:              "Outcome Report Templates",

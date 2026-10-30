@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	outcomesummarypkg "github.com/erniealice/fayna-golang/domain/operation/outcome_summary"
@@ -141,6 +142,52 @@ func TestOutcomeSummaryModule_ClientDrawerRequiresMountedDocumentHandler(t *test
 	if !mountedRoutes.get[routes.ClientDownloadDrawerURL] {
 		t.Fatal("client drawer route must mount when the document handler is mounted")
 	}
+}
+
+func TestOutcomeSummaryModule_ClientDocumentsBatchMountsOnlyBesideDocumentHandler(t *testing.T) {
+	routes := outcomesummarypkg.DefaultRoutes()
+	routes.ClientDocumentsDownloadDrawerURL = "/action/report-cards/section/{id}/download-all"
+	routes.ClientDocumentsManifestURL = "/report-cards/section/{id}/download-all/manifest"
+	options := outcomesummarypkg.Options{SubscriptionGroupExport: outcomesummarypkg.SubscriptionGroupExportOptions{Enabled: true}}
+
+	withoutRenderer := NewOutcomeSummaryModule(&OutcomeSummaryModuleDeps{Routes: routes, Labels: outcomesummarypkg.DefaultLabels(), Options: options})
+	missing := newOutcomeSummaryRouteRecorder()
+	withoutRenderer.RegisterRoutes(missing)
+	if missing.get[routes.ClientDocumentsDownloadDrawerURL] || missing.raw["GET "+routes.ClientDocumentsManifestURL] {
+		t.Fatal("batch drawer/manifest must not mount without the per-client document handler")
+	}
+
+	generateDoc := func([]byte, map[string]any) ([]byte, error) { return []byte("docx"), nil }
+	disabled := NewOutcomeSummaryModule(&OutcomeSummaryModuleDeps{Routes: routes, Labels: outcomesummarypkg.DefaultLabels(), GenerateDoc: generateDoc})
+	disabledRoutes := newOutcomeSummaryRouteRecorder()
+	disabled.RegisterRoutes(disabledRoutes)
+	if disabledRoutes.get[routes.ClientDocumentsDownloadDrawerURL] || disabledRoutes.raw["GET "+routes.ClientDocumentsManifestURL] {
+		t.Fatal("batch drawer/manifest must not mount while the explicit export is disabled")
+	}
+
+	mounted := NewOutcomeSummaryModule(&OutcomeSummaryModuleDeps{Routes: routes, Labels: outcomesummarypkg.DefaultLabels(), Options: options, GenerateDoc: generateDoc})
+	mountedRoutes := newOutcomeSummaryRouteRecorder()
+	mounted.RegisterRoutes(mountedRoutes)
+	if !mountedRoutes.get[routes.ClientDocumentsDownloadDrawerURL] || !mountedRoutes.raw["GET "+routes.ClientDocumentsManifestURL] {
+		t.Fatal("batch drawer (view) and manifest (raw handler) must mount beside the per-client document handler")
+	}
+
+	unrouted := routesWithoutBatch(routes)
+	plain := NewOutcomeSummaryModule(&OutcomeSummaryModuleDeps{Routes: unrouted, Labels: outcomesummarypkg.DefaultLabels(), Options: options, GenerateDoc: generateDoc})
+	plainRoutes := newOutcomeSummaryRouteRecorder()
+	plain.RegisterRoutes(plainRoutes)
+	for path := range plainRoutes.get {
+		if strings.Contains(path, "download-all") {
+			t.Fatalf("an app without batch route keys mounted %s", path)
+		}
+	}
+}
+
+// routesWithoutBatch clears the opt-in batch route keys (service-admin shape).
+func routesWithoutBatch(routes outcomesummarypkg.Routes) outcomesummarypkg.Routes {
+	routes.ClientDocumentsDownloadDrawerURL = ""
+	routes.ClientDocumentsManifestURL = ""
+	return routes
 }
 
 // TestTemplateSettingsDeps_WiresPhaseManifestValidator locks the R2/C3

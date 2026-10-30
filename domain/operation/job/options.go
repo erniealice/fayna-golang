@@ -20,6 +20,24 @@ type Options struct {
 
 	// RowLink configures the GRAIN each row's detail link addresses.
 	RowLink RowLinkOptions
+
+	// Columns opts the summary list into optional columns.
+	Columns ColumnOptions
+}
+
+// ColumnOptions — optional summary-list columns. Zero value adds none, so an
+// app that sets nothing (service-admin) is byte-unchanged.
+type ColumnOptions struct {
+	// PhaseApprovalStatus adds one column of compact badges: one per active
+	// job_template_phase of the row's template, in phase order, each carrying
+	// that phase's approval state over the row's (subscription_group,
+	// template) slice (summary field group_phase_statuses).
+	PhaseApprovalStatus bool
+}
+
+// ShowPhaseApprovalStatus reports whether the per-phase approval column is on.
+func (o Options) ShowPhaseApprovalStatus() bool {
+	return o.Columns.PhaseApprovalStatus
 }
 
 // RowLinkOptions — the grain of a summary row's detail URL.

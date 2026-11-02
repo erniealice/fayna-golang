@@ -15,15 +15,34 @@
        - read-only → the note rendered as text (or an empty-state), a read-only
          hint, and a Close button. No form, no textarea, no Save.
 
-     Data: .FormAction .OutcomeID .Editable .Note .HasNote .Labels (NarrativeLabels)
+     Data: .FormAction .OutcomeID .Editable .Note .HasNote .DescriptorOptions
+           .SelectedEntryID .Labels (NarrativeLabels)
            .CommonLabels .WorkspaceID (injected). Reads/writes determination_note
            only — text_value is never surfaced here. */}}
 {{define "outcome-matrix-narrative-drawer"}}
 {{if .Editable}}
-<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="om-note-form">
+<form hx-post="{{.FormAction}}" hx-swap="none" data-hx-on="sheet-response" data-testid="om-note-form"{{if .DescriptorOptions}} data-om-note-pick{{end}}>
     {{actionForm .FormAction .WorkspaceID}}
     <input type="hidden" name="outcome_id" value="{{.OutcomeID}}">
     <div class="sheet-body">
+        {{if .DescriptorOptions}}
+        <div class="form-row single" data-testid="om-note-descriptors">
+            <div class="form-group lf-radio-readable">
+                {{template "form-radio-group" (dict
+                    "Name" "rating_description_set_entry_id"
+                    "Label" .Labels.DescriptorListLabel
+                    "Hint" .Labels.DescriptorListHint
+                    "Selected" .SelectedEntryID
+                    "Options" .DescriptorOptions
+                )}}
+                <button type="submit" name="use_descriptor" value="1" class="btn lf-btn-outline"
+                        data-testid="om-note-use-descriptor">{{.Labels.UseDescriptorButton}}</button>
+                {{/* Shown by outcome-matrix-note-pick.js. Without JS it stays hidden and Save stays enabled. */}}
+                <p class="form-hint" role="status" hidden data-testid="om-note-pick-hint">{{.Labels.DescriptorPickHint}}
+                    <button type="button" class="btn lf-btn-outline" data-om-note-keep data-testid="om-note-pick-keep">{{.Labels.DescriptorKeepNote}}</button></p>
+            </div>
+        </div>
+        {{end}}
         <div class="form-row single">
             <div class="form-group">
                 <label class="form-label" for="om-narrative-note">{{.Labels.FieldLabel}}</label>

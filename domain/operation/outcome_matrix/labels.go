@@ -44,6 +44,17 @@ type NarrativeLabels struct {
 	EmptyText    string `json:"empty_text"`     // read-only variant, no note recorded
 	ReadOnlyHint string `json:"read_only_hint"` // why the drawer is view-only
 
+	// Descriptor list. {label} in the two option templates is the selectable
+	// row's option_label.
+	DescriptorListLabel     string `json:"descriptor_list_label"`
+	DescriptorListHint      string `json:"descriptor_list_hint"`
+	UseDescriptorButton     string `json:"use_descriptor_button"`
+	DescriptorOption        string `json:"descriptor_option"`
+	DescriptorOptionDefault string `json:"descriptor_option_default"`
+	// Shown while a chosen wording is waiting on the use-descriptor button.
+	DescriptorPickHint string `json:"descriptor_pick_hint"`
+	DescriptorKeepNote string `json:"descriptor_keep_note"`
+
 	// Icon + drawer-title composition templates. The view fills {name} (the
 	// resolved entity/row name) and {column} (the resolved leaf-column label) —
 	// GENERIC placeholder tokens, never vertical nouns; the pyeza component
@@ -274,6 +285,10 @@ type ErrorLabels struct {
 	RatingDescriptionPlaceholderUnresolved string `json:"rating_description_placeholder_unresolved"`
 	// Q26 conditional-write CONFLICT (schema-proposal §9.1).
 	CellChangedRetry string `json:"cell_changed_retry"`
+	// A posted descriptor entry is not selectable for the cell at its current value.
+	DescriptorNotAvailable string `json:"descriptor_not_available"`
+	// The use-descriptor button was clicked with no wording chosen.
+	DescriptorChooseWording string `json:"descriptor_choose_wording"`
 }
 
 // DefaultLabels returns Labels with English (general tier) defaults, byte-for-byte
@@ -325,6 +340,8 @@ func DefaultLabels() Labels {
 			RatingDescriptionResolutionFailed:      "This rating was not saved: the rubric descriptors could not be checked. Please try again.",
 			RatingDescriptionPlaceholderUnresolved: "A description needs information that is missing for this record — contact an administrator.",
 			CellChangedRetry:                       "This rating was not saved: another change was made while you were editing. Please refresh and try again.",
+			DescriptorNotAvailable:                 "That wording is not available for this cell any more. Reopen and try again.",
+			DescriptorChooseWording:                "Choose a wording first, then click Use this wording.",
 		},
 		Approval: ApprovalLabels{
 			Bar: ApprovalBarLabels{Title: "Phase Approvals"},
@@ -385,17 +402,24 @@ func DefaultLabels() Labels {
 			DownloadAria:    "Download {column}",
 		},
 		Narrative: NarrativeLabels{
-			Title:         "Narrative",
-			FieldLabel:    "Narrative",
-			Placeholder:   "Add a narrative for this cell…",
-			SaveButton:    "Save narrative",
-			ClearButton:   "Clear",
-			EmptyText:     "No narrative recorded.",
-			ReadOnlyHint:  "This cell is read only — you can view but not edit its narrative.",
-			AriaAdd:       "Add narrative for {name}, {column}",
-			AriaEdit:      "Edit narrative for {name}, {column}",
-			AriaView:      "View narrative for {name}, {column} (read only)",
-			TitleTemplate: "{name} — {column}",
+			Title:                   "Narrative",
+			FieldLabel:              "Narrative",
+			Placeholder:             "Add a narrative for this cell…",
+			SaveButton:              "Save narrative",
+			ClearButton:             "Clear",
+			EmptyText:               "No narrative recorded.",
+			ReadOnlyHint:            "This cell is read only — you can view but not edit its narrative.",
+			DescriptorListLabel:     "Choose wording for this rating",
+			DescriptorListHint:      "Replaces the narrative below. The rating does not change.",
+			UseDescriptorButton:     "Use this wording",
+			DescriptorOption:        "Option {label}",
+			DescriptorOptionDefault: "Option {label} (default)",
+			DescriptorPickHint:      "Click Use this wording to apply your choice, or edit the narrative below to save your own text.",
+			DescriptorKeepNote:      "Keep my note",
+			AriaAdd:                 "Add narrative for {name}, {column}",
+			AriaEdit:                "Edit narrative for {name}, {column}",
+			AriaView:                "View narrative for {name}, {column} (read only)",
+			TitleTemplate:           "{name} — {column}",
 		},
 		TemplateSettings: TemplateSettingsLabels{
 			Title:               "Sheet Templates",

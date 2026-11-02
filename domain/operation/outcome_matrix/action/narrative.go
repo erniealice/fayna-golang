@@ -30,6 +30,7 @@ import (
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 
 	"github.com/erniealice/pyeza-golang/route"
+	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
 	taskoutcomepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/task_outcome"
@@ -55,6 +56,12 @@ type NarrativeDeps struct {
 	// recorded_by ownership re-read (POST). UpdateTaskOutcome persists the note.
 	ReadTaskOutcome   func(ctx context.Context, req *taskoutcomepb.ReadTaskOutcomeRequest) (*taskoutcomepb.ReadTaskOutcomeResponse, error)
 	UpdateTaskOutcome func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error)
+
+	// ResolveCellRatingDescriptions and UpdateTaskOutcomeIfUnchanged back the
+	// descriptor list (narrative_selection.go). Same closures the record action
+	// uses. Unwired: no list on GET, denied on POST.
+	ResolveCellRatingDescriptions func(ctx context.Context, req *matrixpb.ResolveCellRatingDescriptionsRequest) (*matrixpb.ResolveCellRatingDescriptionsResponse, error)
+	UpdateTaskOutcomeIfUnchanged  func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest, expected *taskoutcomepb.TaskOutcome) (*taskoutcomepb.UpdateTaskOutcomeResponse, bool, error)
 }
 
 // NarrativeDrawerData is the template-facing shape for outcome-matrix-narrative-drawer.
@@ -66,6 +73,11 @@ type NarrativeDrawerData struct {
 	Editable   bool   // server-resolved: textarea+Save+Clear vs read-only view
 	Note       string // current determination_note
 	HasNote    bool   // Note != "" (drives the read-only empty-state)
+
+	// DescriptorOptions is non-empty only on an editable cell with at least two
+	// selectable wordings for its current rating.
+	DescriptorOptions []types.RadioOption
+	SelectedEntryID   string
 
 	Labels       outcome_matrix.NarrativeLabels
 	CommonLabels any    // injected by ViewAdapter
@@ -98,25 +110,32 @@ func NewNarrativeAction(deps *NarrativeDeps) view.View {
 			// IN_PROGRESS, not frozen) AND the principal must hold task_outcome:update.
 			// Any miss ⇒ the read-only variant; the client never decides.
 			editable := false
+			var cell srvCell
 			if perms.Can("task_outcome", "update") {
 				if auth, ok := resolveCellAuthority(ctx, authorityDeps{
 					ResolveStaff:     deps.ResolveStaff,
 					GetOutcomeMatrix: deps.GetOutcomeMatrix,
 				}, templateID); ok {
 					editable = auth.allowedUpdate[outcomeID]
+					cell = auth.byOutcome[outcomeID]
 				}
 			}
 
-			note := readDeterminationNote(ctx, deps, outcomeID)
+			outcome := readOutcome(ctx, deps, outcomeID)
+			note := outcome.GetDeterminationNote()
 
-			return view.OK("outcome-matrix-narrative-drawer", &NarrativeDrawerData{
+			data := &NarrativeDrawerData{
 				FormAction: route.ResolveURL(deps.Routes.NarrativeURL, "id", templateID),
 				OutcomeID:  outcomeID,
 				Editable:   editable,
 				Note:       note,
 				HasNote:    note != "",
 				Labels:     deps.Labels.Narrative,
-			})
+			}
+			if editable {
+				data.DescriptorOptions, data.SelectedEntryID = loadDescriptorOptions(ctx, deps, cell, outcome)
+			}
+			return view.OK("outcome-matrix-narrative-drawer", data)
 		}
 
 		// POST — save the note. Gate on the write family FIRST (fail-closed).
@@ -143,6 +162,11 @@ func NewNarrativeAction(deps *NarrativeDeps) view.View {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
+		// A descriptor pick is its own path: the note and clear fields are not read.
+		if strings.TrimSpace(viewCtx.Request.FormValue("use_descriptor")) != "" {
+			return applyDescriptorSelection(ctx, deps, auth, outcomeID, strings.TrimSpace(viewCtx.Request.FormValue("rating_description_set_entry_id")))
+		}
+
 		// Empty submission (or the explicit Clear button) clears the note.
 		note := strings.TrimSpace(viewCtx.Request.FormValue("note"))
 		if strings.TrimSpace(viewCtx.Request.FormValue("clear")) != "" {
@@ -163,27 +187,28 @@ func NewNarrativeAction(deps *NarrativeDeps) view.View {
 	})
 }
 
-// readDeterminationNote best-effort loads a cell's current determination_note for
-// the GET drawer. Returns "" on any miss (unwired closure, read error, empty
-// note, or a staff-scoped read that resolves nothing) — the drawer still renders
-// (empty note / read-only). It NEVER reads text_value (f9): determination_note is
-// the one canonical narrative field post-cutover.
-func readDeterminationNote(ctx context.Context, deps *NarrativeDeps, outcomeID string) string {
+// readOutcome best-effort loads a cell's current outcome for the GET drawer.
+// Returns nil on any miss (unwired closure, read error, or a staff-scoped read
+// that resolves nothing), which the generated getters read as an empty note and
+// no value — the drawer still renders (empty note / read-only). The drawer NEVER
+// reads text_value (f9): determination_note is the one canonical narrative field
+// post-cutover.
+func readOutcome(ctx context.Context, deps *NarrativeDeps, outcomeID string) *taskoutcomepb.TaskOutcome {
 	if deps.ReadTaskOutcome == nil {
-		return ""
+		return nil
 	}
 	resp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
 	})
 	if err != nil {
 		log.Printf("[outcome-matrix] narrative read failed for outcome %s: %v", outcomeID, err)
-		return ""
+		return nil
 	}
 	records := resp.GetData()
 	if len(records) == 0 {
-		return ""
+		return nil
 	}
-	return records[0].GetDeterminationNote()
+	return records[0]
 }
 
 // saveDeterminationNote applies the write-time IDOR re-guard then routes through

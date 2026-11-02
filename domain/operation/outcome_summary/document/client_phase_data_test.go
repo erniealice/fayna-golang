@@ -586,3 +586,29 @@ func TestComposeJobVariantName(t *testing.T) {
 		}
 	}
 }
+
+// TestClientPhaseData_PickedNoteIsComment: the card prints the stored note, so a
+// wording picked in the narrative drawer reaches it with no re-resolve.
+func TestClientPhaseData_PickedNoteIsComment(t *testing.T) {
+	const picked = "Wording from another selectable set"
+	card := clientPhaseProjectionFixture()
+	for _, outcome := range card.TaskOutcomes {
+		if outcome.GetTemplateTaskCriteriaId() == "link-technique" {
+			outcome.DeterminationNote = ptr(picked)
+		}
+	}
+	data, err := buildClientPhaseReportData(&Deps{DocumentHeaderName: "Sample School"}, card, testProgressReportPhaseCode, "Teacher A", "2026-09-23")
+	if err != nil {
+		t.Fatalf("buildClientPhaseReportData() error = %v", err)
+	}
+	for _, row := range data["jobs"].([]any) {
+		job := row.(map[string]any)
+		for _, a := range job["assessments"].([]any) {
+			assessment := a.(map[string]any)
+			if assessment["assessment_name"] == "Technique" && assessment["comment"] == picked {
+				return
+			}
+		}
+	}
+	t.Fatalf("picked note did not reach the assessment comment")
+}

@@ -39,6 +39,7 @@ type ratingMatcher struct {
 	min, max    *float64
 	match       *float64
 	description string
+	entryID     string
 }
 
 // ratingDescriptions is the resolved description set for one cell. Empty means
@@ -61,7 +62,7 @@ func ratingDescriptionsFromList(descs []*matrixpb.RatingDescription) ratingDescr
 		if text == "" {
 			continue
 		}
-		m := ratingMatcher{kind: d.GetScaleKind(), min: d.InputMin, max: d.InputMax, description: text}
+		m := ratingMatcher{kind: d.GetScaleKind(), min: d.InputMin, max: d.InputMax, description: text, entryID: d.GetRatingDescriptionSetEntryId()}
 		switch d.GetScaleKind() {
 		case enums.ScaleKind_SCALE_KIND_EXACT_MAP:
 			raw := strings.TrimSpace(d.GetInputMatch())
@@ -83,20 +84,30 @@ func ratingDescriptionsFromList(descs []*matrixpb.RatingDescription) ratingDescr
 // half-open range containing v. "" when nothing matches (an intentional
 // absence, e.g. level 0 — Q20).
 func (r ratingDescriptions) describe(v float64) string {
-	for _, m := range r {
+	if m := r.match(v); m != nil {
+		return m.description
+	}
+	return ""
+}
+
+// match returns the band for v under the same rule describe applies, or nil.
+func (r ratingDescriptions) match(v float64) *ratingMatcher {
+	for i := range r {
+		m := &r[i]
 		if m.kind == enums.ScaleKind_SCALE_KIND_EXACT_MAP && m.match != nil && math.Abs(*m.match-v) < 1e-9 {
-			return m.description
+			return m
 		}
 	}
-	for _, m := range r {
+	for i := range r {
+		m := &r[i]
 		if m.kind != enums.ScaleKind_SCALE_KIND_RANGE_MAP {
 			continue
 		}
 		if (m.min == nil || v >= *m.min) && (m.max == nil || v < *m.max) {
-			return m.description
+			return m
 		}
 	}
-	return ""
+	return nil
 }
 
 // ── batch resolution (Q18: the resolver is the ONLY source) ────────────────

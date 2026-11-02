@@ -285,6 +285,9 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		ResolveStaff:      deps.ResolveStaff,
 		ReadTaskOutcome:   deps.ReadTaskOutcome,
 		UpdateTaskOutcome: deps.UpdateTaskOutcome,
+
+		ResolveCellRatingDescriptions: deps.ResolveCellRatingDescriptions,
+		UpdateTaskOutcomeIfUnchanged:  deps.UpdateTaskOutcomeIfUnchanged,
 	})
 
 	return &OutcomeMatrixModule{

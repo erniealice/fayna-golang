@@ -172,7 +172,12 @@
         var xhr = detail.xhr;
         var ok = detail.successful === true ||
             (detail.successful === undefined && !!xhr && xhr.status >= 200 && xhr.status < 300);
-        finishReturnRequest(form, ok);
+        // A state-conflict refusal answers 4xx WITH HX-Location (the page refreshes
+        // in place): close the dialog over the refreshed sheet. A real refusal
+        // without HX-Location keeps the dialog open as before.
+        var refreshed = !!xhr && typeof xhr.getResponseHeader === 'function' &&
+            !!xhr.getResponseHeader('HX-Location');
+        finishReturnRequest(form, ok || refreshed);
     });
 
     // Mark that HTMX actually started the request, so a submission HTMX never

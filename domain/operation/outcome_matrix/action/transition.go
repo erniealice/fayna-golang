@@ -3,15 +3,19 @@ package action
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 
 	"github.com/erniealice/pyeza-golang/route"
 	"github.com/erniealice/pyeza-golang/view"
 
+	espynaports "github.com/erniealice/espyna-golang/ports"
 	jobphasepb "github.com/erniealice/esqyma/pkg/schema/v1/domain/operation/job_phase"
 )
 
@@ -26,8 +30,9 @@ import (
 // defect is NOT repeated). The use case is authoritative (full-set authz, D7
 // ownership / admin override, ancestry+workspace, hard-freeze, exact-set
 // compare); this handler only forwards the trusted sheet identity. The raw
-// server error is NEVER echoed to the client — a single lyngua'd fail-closed
-// message is surfaced; the detail is logged server-side.
+// server error is NEVER echoed to the client — the error is CLASSIFIED
+// (classifyTransitionError) into a fixed lyngua'd message; the detail is logged
+// server-side.
 
 // TransitionDeps holds the four transition use-case closures + the routes/labels.
 // Each closure is optional/nil-safe (a nil closure fails the action closed).
@@ -166,64 +171,154 @@ func newTransitionAction(deps *TransitionDeps, verb string, run func(ctx context
 			// Fail closed: log the detail, surface only the generic lyngua'd
 			// message (never echo the raw server error — it could enumerate).
 			log.Printf("outcome matrix approval %s: template=%s phase=%s group=%s: %v", verb, templateID, phaseID, groupID, err)
-			return view.HTMXError(deps.Labels.Approval.Errors.ActionFailed)
+			label, status, refresh := classifyTransitionError(err, deps.Labels.Approval.Errors)
+			return transitionErrorResult(viewCtx, deps, templateID, groupID, label, status, refresh)
 		}
 
 		// Success → client-side redirect back to the matrix page so the bar chips
-		// + cell editability re-render from the new sheet state.
-		//
-		// Redirect to the SAME scope the transition was invoked from: a
-		// section-scoped (Group*) transition must return to the section sheet, not
-		// the template-wide one. Sending a section operator back to MatrixURL drops
-		// the group narrowing and dumps them on the all-sections sheet, losing their
-		// place after every submit/verify/publish/return.
-		//
-		// Guarded like the row-link grain decision (job/list/template_summary.go):
-		// fall back to template grain when the group route is unconfigured or the
-		// path carried no group id — never emit a half-resolved path. Deliberately
-		// NOT gated on job.Options.RowLinkScopedByGroup(): that option chooses where
-		// the job LIST links to, whereas this is "return where the request came
-		// from". The group matrix route is mounted whenever GroupMatrixURL is set
-		// (outcome_matrix_module.go), so an operator can reach the section sheet by
-		// link or bookmark even in a deployment whose list links at template grain —
-		// and bouncing them to another scope would still be wrong.
-		redirect := route.ResolveURL(deps.Routes.MatrixURL, "id", templateID)
-		if groupID != "" && deps.Routes.GroupMatrixURL != "" {
-			redirect = route.ResolveURL(deps.Routes.GroupMatrixURL, "id", templateID, "group_id", groupID)
-		}
-		// Re-render the sheet IN PLACE rather than reloading the browser.
-		// htmx 1.9.10 handles HX-Redirect by setting location.href — a full page
-		// reload, which is why the operator watches the OLD table paint again
-		// before the new state appears. HX-Location instead issues a client-side
-		// AJAX GET and swaps, keeping the app shell, the loading indicator and the
-		// scroll position, so the bar comes back already carrying the next verb.
-		//
-		// target ECHOES the request's HX-Target — the id htmx resolved from the
-		// form's own hx-target — so no layout constant ("#main-content") is baked
-		// into a domain package; the handler follows whatever the view is
-		// configured to swap. A non-htmx caller sends no HX-Target, so that path
-		// keeps the plain full-page redirect and still completes the transition.
-		//
-		// Deliberately NO "select": the matrix GET already answers an HX-Request
-		// with the bare content partial (<div class="page-content">…), not a full
-		// document, so there is no #main-content element inside the response to
-		// select — asking for one selects nothing and blanks the target.
-		if t := strings.TrimSpace(viewCtx.Request.Header.Get("HX-Target")); t != "" {
-			if loc, err := json.Marshal(map[string]string{
-				"path":   redirect,
-				"target": "#" + t,
-			}); err == nil {
-				return view.ViewResult{
-					StatusCode: http.StatusOK,
-					Headers:    map[string]string{"HX-Location": string(loc)},
-				}
-			}
-		}
-		return view.ViewResult{
-			StatusCode: http.StatusOK,
-			Headers: map[string]string{
-				"HX-Redirect": redirect,
-			},
-		}
+		// + cell editability re-render from the new sheet state (see sheetLocationResult).
+		return sheetLocationResult(viewCtx, deps, templateID, groupID, http.StatusOK, nil)
 	})
+}
+
+// sheetLocationResult builds the "return to the sheet the request came from"
+// response shared by the success path and the state-conflict refresh. status is
+// the HTTP status to carry (200 on success, 409 on a refreshed conflict); extra
+// headers (HX-Error-Message, HX-Trigger) are merged in.
+func sheetLocationResult(viewCtx *view.ViewContext, deps *TransitionDeps, templateID, groupID string, status int, extra map[string]string) view.ViewResult {
+	headers := make(map[string]string, len(extra)+1)
+	for k, v := range extra {
+		headers[k] = v
+	}
+	// Redirect to the SAME scope the transition was invoked from: a
+	// section-scoped (Group*) transition must return to the section sheet, not
+	// the template-wide one. Sending a section operator back to MatrixURL drops
+	// the group narrowing and dumps them on the all-sections sheet, losing their
+	// place after every submit/verify/publish/return.
+	//
+	// Guarded like the row-link grain decision (job/list/template_summary.go):
+	// fall back to template grain when the group route is unconfigured or the
+	// path carried no group id — never emit a half-resolved path. Deliberately
+	// NOT gated on job.Options.RowLinkScopedByGroup(): that option chooses where
+	// the job LIST links to, whereas this is "return where the request came
+	// from". The group matrix route is mounted whenever GroupMatrixURL is set
+	// (outcome_matrix_module.go), so an operator can reach the section sheet by
+	// link or bookmark even in a deployment whose list links at template grain —
+	// and bouncing them to another scope would still be wrong.
+	redirect := route.ResolveURL(deps.Routes.MatrixURL, "id", templateID)
+	if groupID != "" && deps.Routes.GroupMatrixURL != "" {
+		redirect = route.ResolveURL(deps.Routes.GroupMatrixURL, "id", templateID, "group_id", groupID)
+	}
+	// Re-render the sheet IN PLACE rather than reloading the browser.
+	// htmx 1.9.10 handles HX-Redirect by setting location.href — a full page
+	// reload, which is why the operator watches the OLD table paint again
+	// before the new state appears. HX-Location instead issues a client-side
+	// AJAX GET and swaps, keeping the app shell, the loading indicator and the
+	// scroll position, so the bar comes back already carrying the next verb.
+	//
+	// target ECHOES the request's HX-Target — the id htmx resolved from the
+	// form's own hx-target — so no layout constant ("#main-content") is baked
+	// into a domain package; the handler follows whatever the view is
+	// configured to swap. A non-htmx caller sends no HX-Target, so that path
+	// keeps the plain full-page redirect and still completes the transition.
+	//
+	// Deliberately NO "select": the matrix GET already answers an HX-Request
+	// with the bare content partial (<div class="page-content">…), not a full
+	// document, so there is no #main-content element inside the response to
+	// select — asking for one selects nothing and blanks the target.
+	if t := strings.TrimSpace(viewCtx.Request.Header.Get("HX-Target")); t != "" {
+		if loc, err := json.Marshal(map[string]string{
+			"path":   redirect,
+			"target": "#" + t,
+		}); err == nil {
+			headers["HX-Location"] = string(loc)
+			return view.ViewResult{StatusCode: status, Headers: headers}
+		}
+	}
+	headers["HX-Redirect"] = redirect
+	return view.ViewResult{StatusCode: status, Headers: headers}
+}
+
+// classifyTransitionError maps a transition error to a fixed, lyngua'd label, an
+// HTTP status and whether the page should refresh (state conflict / freeze: the
+// operator's view is stale). The raw error is never returned or echoed — only a
+// label chosen here. Anything unrecognised stays the generic 422 ActionFailed.
+func classifyTransitionError(err error, l outcome_matrix.ApprovalErrorLabels) (label string, status int, refresh bool) {
+	var stateErr *espynaports.JobPhaseApprovalStateError
+	switch {
+	case errors.As(err, &stateErr):
+		switch {
+		case stateErr.Mixed:
+			return l.StateChanged, http.StatusConflict, true
+		case stateErr.Found == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_FOR_REVIEW:
+			return l.AlreadyForReview, http.StatusConflict, true
+		case stateErr.Found == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_VERIFIED:
+			return l.AlreadyVerified, http.StatusConflict, true
+		case stateErr.Found == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_PUBLISHED:
+			return l.AlreadyPublished, http.StatusConflict, true
+		case stateErr.Found == jobphasepb.PhaseApprovalStatus_PHASE_APPROVAL_STATUS_IN_PROGRESS:
+			return l.AlreadyInProgress, http.StatusConflict, true
+		}
+		return l.StateChanged, http.StatusConflict, true
+	case errors.Is(err, espynaports.ErrJobPhaseApprovalFrozen):
+		return l.Frozen, http.StatusConflict, true
+	case errors.Is(err, espynaports.ErrJobPhaseApprovalOperatorLogin):
+		return l.UseStaffLogin, http.StatusForbidden, false
+	case errors.Is(err, espynaports.ErrJobPhaseApprovalSelfVerify):
+		return l.SelfVerify, http.StatusForbidden, false
+	case errors.Is(err, espynaports.ErrJobPhaseApprovalNotAllowed):
+		return l.NotAllowed, http.StatusForbidden, false
+	}
+	return l.ActionFailed, http.StatusUnprocessableEntity, false
+}
+
+// transitionErrorResult renders a classified refusal. Every row carries the
+// label in HX-Error-Message (the in-page banner, and text for a non-htmx caller).
+// A refresh row additionally re-renders the sheet (HX-Location) and sends the
+// same label as a pyeza:toast, which outlives the swap that replaces the banner.
+// A label that is empty (an app that never loaded the new keys) falls back to
+// ActionFailed so the operator never sees a blank message.
+func transitionErrorResult(viewCtx *view.ViewContext, deps *TransitionDeps, templateID, groupID, label string, status int, refresh bool) view.ViewResult {
+	if strings.TrimSpace(label) == "" {
+		label = deps.Labels.Approval.Errors.ActionFailed
+	}
+	// HX-Error-Message carries the label's raw UTF-8 bytes; the browser exposes
+	// them as Latin-1 and pyeza ui-form-result.js re-decodes them as UTF-8, so
+	// labels keep their punctuation (no stripping, no server-side escape).
+	extra := map[string]string{"HX-Error-Message": label}
+	if !refresh {
+		return view.ViewResult{StatusCode: status, Headers: extra}
+	}
+	toast, err := json.Marshal(map[string]any{
+		"pyeza:toast": map[string]string{
+			"message": label,
+			"state":   "warning",
+			"testid":  "pa-transition-notice",
+		},
+	})
+	if err == nil {
+		extra["HX-Trigger"] = asciiJSON(string(toast))
+	}
+	return sheetLocationResult(viewCtx, deps, templateID, groupID, status, extra)
+}
+
+// asciiJSON escapes every non-ASCII rune of an already-encoded JSON document as
+// \uXXXX. HTTP header values are read by the browser as Latin-1, so raw UTF-8
+// (an em dash in a label) would arrive as mojibake; \u escapes are plain ASCII
+// and decode correctly in JSON.parse. Non-ASCII can only occur inside strings.
+func asciiJSON(in string) string {
+	var b strings.Builder
+	for _, r := range in {
+		if r < 0x80 {
+			b.WriteRune(r)
+			continue
+		}
+		if r > 0xFFFF {
+			r1, r2 := utf16.EncodeRune(r)
+			fmt.Fprintf(&b, "\\u%04x\\u%04x", r1, r2)
+			continue
+		}
+		fmt.Fprintf(&b, "\\u%04x", r)
+	}
+	return b.String()
 }

@@ -117,9 +117,15 @@ populated on PageData for any non-template consumer that needs it. */}}
      signed by {{actionForm}} over its EXACT resolved path (the action-workspace
      guard verifies over r.URL.Path); the landed Q7 rowActionTokens path does
      NOT cover these non-table bar buttons (codex fresh finding). CSRF rides the
-     htmx:configRequest hook (scripts.html). Success → HX-Redirect reload; error
-     → HX-Error-Message swapped into the per-phase form-result banner via the
-     shared data-hx-on="form-result" handler (CSP-safe, no inline eval). */}}
+     htmx:configRequest hook (scripts.html). Success → HX-Location (HX-Redirect
+     fallback) reload; error → HX-Error-Message swapped into the per-phase
+     form-result banner via the shared data-hx-on="form-result" handler (CSP-safe,
+     no inline eval). A state conflict also sends HX-Location + a pyeza:toast.
+     IN-FLIGHT GUARD: every button of a phase carries data-pa-btn="{{.Slug}}";
+     the host forms disable them all during the POST (hx-disabled-elt; pyeza
+     lf-hx-on keeps them locked until the navigation swap) and hx-sync drops a
+     second transition for the same phase. data-connection-error is the text
+     form-result shows when no usable response arrived (outcome unknown). */}}
 {{define "outcome-matrix-approval-bar"}}
 <section class="status-band" data-testid="pa-bar" aria-label="{{.Labels.Approval.Bar.Title}}">
     <div class="status-band__rows">
@@ -137,6 +143,8 @@ populated on PageData for any non-template consumer that needs it. */}}
                  controls, so the band shows only status. */}}
             {{if .CanSubmit}}
             <form id="pa-{{.Slug}}-submit-form" class="status-form status-form--host" hx-post="{{.SubmitPath}}" hx-confirm="{{.SubmitConfirm}}"
+                  hx-disabled-elt="[data-pa-btn='{{.Slug}}']" hx-sync="closest .status-row:drop"
+                  data-connection-error="{{$root.CommonLabels.Errors.ConnectionProblem}}"
                   data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
                   data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
                 {{actionForm .SubmitPath $root.WorkspaceID}}
@@ -145,6 +153,8 @@ populated on PageData for any non-template consumer that needs it. */}}
             {{end}}
             {{if .CanVerify}}
             <form id="pa-{{.Slug}}-verify-form" class="status-form status-form--host" hx-post="{{.VerifyPath}}" hx-confirm="{{.VerifyConfirm}}"
+                  hx-disabled-elt="[data-pa-btn='{{.Slug}}']" hx-sync="closest .status-row:drop"
+                  data-connection-error="{{$root.CommonLabels.Errors.ConnectionProblem}}"
                   data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
                   data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
                 {{actionForm .VerifyPath $root.WorkspaceID}}
@@ -153,6 +163,8 @@ populated on PageData for any non-template consumer that needs it. */}}
             {{end}}
             {{if .CanPublish}}
             <form id="pa-{{.Slug}}-publish-form" class="status-form status-form--host" hx-post="{{.PublishPath}}" hx-confirm="{{.PublishConfirm}}"
+                  hx-disabled-elt="[data-pa-btn='{{.Slug}}']" hx-sync="closest .status-row:drop"
+                  data-connection-error="{{$root.CommonLabels.Errors.ConnectionProblem}}"
                   data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
                   data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
                 {{actionForm .PublishPath $root.WorkspaceID}}
@@ -161,6 +173,8 @@ populated on PageData for any non-template consumer that needs it. */}}
             {{end}}
             {{if .CanReturn}}
             <form id="pa-{{.Slug}}-return-form" class="status-form status-form--return" hx-post="{{.ReturnPath}}"
+                  hx-disabled-elt="[data-pa-btn='{{.Slug}}']" hx-sync="closest .status-row:drop"
+                  data-connection-error="{{$root.CommonLabels.Errors.ConnectionProblem}}"
                   data-hx-on="form-result" data-result-id="pa-{{.Slug}}-result" data-success-source="header"
                   data-error-fallback="{{$root.Labels.Approval.Errors.ActionFailed}}">
                 {{actionForm .ReturnPath $root.WorkspaceID}}
@@ -188,7 +202,7 @@ populated on PageData for any non-template consumer that needs it. */}}
                             data-testid="pa-{{.Slug}}-return-cancel">{{$root.CommonLabels.Buttons.Cancel}}</button>
                     <button type="submit" form="pa-{{.Slug}}-return-form"
                             class="dialog-btn dialog-btn-confirm"
-                            data-return-reason-confirm
+                            data-return-reason-confirm data-pa-btn="{{.Slug}}"
                             data-testid="pa-{{.Slug}}-return-confirm">{{$root.CommonLabels.Buttons.Confirm}}</button>
                 </div>
             </template>
@@ -243,11 +257,11 @@ populated on PageData for any non-template consumer that needs it. */}}
 {{with .Phase}}
 <span class="cell-grid-headactions" data-testid="pa-{{.Slug}}-actions">
     {{if .ReturnReason}}<span class="status-row__note" data-testid="pa-{{.Slug}}-return-note">{{.ReturnReason}}</span>{{end}}
-    {{if .CanSubmit}}<button type="submit" form="pa-{{.Slug}}-submit-form" class="btn btn-primary status-form__btn" data-testid="pa-{{.Slug}}-submit">{{$labels.Actions.Submit}}</button>{{end}}
-    {{if .CanVerify}}<button type="submit" form="pa-{{.Slug}}-verify-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-verify">{{$labels.Actions.Verify}}</button>{{end}}
-    {{if .CanPublish}}<button type="submit" form="pa-{{.Slug}}-publish-form" class="btn btn-action status-form__btn" data-testid="pa-{{.Slug}}-publish">{{$labels.Actions.Publish}}</button>{{end}}
+    {{if .CanSubmit}}<button type="submit" form="pa-{{.Slug}}-submit-form" class="btn btn-primary status-form__btn" data-pa-btn="{{.Slug}}" data-testid="pa-{{.Slug}}-submit">{{$labels.Actions.Submit}}</button>{{end}}
+    {{if .CanVerify}}<button type="submit" form="pa-{{.Slug}}-verify-form" class="btn btn-action status-form__btn" data-pa-btn="{{.Slug}}" data-testid="pa-{{.Slug}}-verify">{{$labels.Actions.Verify}}</button>{{end}}
+    {{if .CanPublish}}<button type="submit" form="pa-{{.Slug}}-publish-form" class="btn btn-action status-form__btn" data-pa-btn="{{.Slug}}" data-testid="pa-{{.Slug}}-publish">{{$labels.Actions.Publish}}</button>{{end}}
     {{if .CanReturn}}<button type="button" class="btn btn-ghost status-form__btn"
-            data-return-reason-open
+            data-return-reason-open data-pa-btn="{{.Slug}}"
             data-return-reason-dialog="pa-{{.Slug}}-return-dialog"
             data-return-form="pa-{{.Slug}}-return-form"
             aria-haspopup="dialog" aria-controls="dialog"

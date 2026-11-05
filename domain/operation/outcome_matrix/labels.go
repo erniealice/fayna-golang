@@ -212,10 +212,20 @@ type ApprovalConfirmLabels struct {
 	Return  string `json:"return"`
 }
 
-// ApprovalErrorLabels — the single generic transition-failure message (raw
-// server errors are never echoed to the client — fail-closed messaging).
+// ApprovalErrorLabels — transition-refusal messages. The server classifies a
+// refusal into one of these fixed strings (raw server errors are never echoed to
+// the client); ActionFailed is the fallback for anything unclassified.
 type ApprovalErrorLabels struct {
-	ActionFailed string `json:"action_failed"`
+	ActionFailed      string `json:"action_failed"`
+	AlreadyForReview  string `json:"already_for_review"`
+	AlreadyVerified   string `json:"already_verified"`
+	AlreadyPublished  string `json:"already_published"`
+	AlreadyInProgress string `json:"already_in_progress"`
+	StateChanged      string `json:"state_changed"`
+	Frozen            string `json:"frozen"`
+	NotAllowed        string `json:"not_allowed"`
+	UseStaffLogin     string `json:"use_staff_login"`
+	SelfVerify        string `json:"self_verify"`
 }
 
 // PageLabels — page heading.
@@ -370,7 +380,16 @@ func DefaultLabels() Labels {
 				Return:  "Return this phase to In Progress? Editing reopens.",
 			},
 			Errors: ApprovalErrorLabels{
-				ActionFailed: "This phase could not be updated — it may be locked, finalized, or you may lack permission.",
+				ActionFailed:      "This phase could not be updated — it may be locked, finalized, or you may lack permission.",
+				AlreadyForReview:  "This phase was already submitted for review. The page has been refreshed.",
+				AlreadyVerified:   "This phase was already verified. The page has been refreshed.",
+				AlreadyPublished:  "This phase was already published. The page has been refreshed.",
+				AlreadyInProgress: "This phase is already open for editing (it was returned or not yet submitted). The page has been refreshed.",
+				StateChanged:      "This phase's status changed while you were working. The page has been refreshed.",
+				Frozen:            "This phase is finalized and can no longer be changed.",
+				NotAllowed:        "You can't make this change on this phase. Ask an administrator if you need access.",
+				UseStaffLogin:     "Approvals are made from your staff login. Switch login and try again.",
+				SelfVerify:        "You submitted this phase, so someone else must verify it.",
 			},
 			Mixed:              "Attention — mixed",
 			NotStarted:         "Not started",

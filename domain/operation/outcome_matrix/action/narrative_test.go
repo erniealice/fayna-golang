@@ -254,3 +254,87 @@ func TestNarrative_POST_NoUpdatePerm_Blocked(t *testing.T) {
 		t.Errorf("permission-denied save must not return 200")
 	}
 }
+
+// ── GET: a reviewer reading another teacher's narrative (2026-11-05) ─────────
+
+// reviewerDeps models a Teacher login that reviews a sheet it did not record:
+// the owner-scoped single-outcome read refuses (not found), while the grade
+// sheet matrix — which applies the principal's row scope — shows the cell.
+func reviewerDeps(matrix *matrixpb.GetOutcomeMatrixResponse, scopes *[]matrixpb.OutcomeMatrixScope) *NarrativeDeps {
+	d := (&narrativeRec{}).deps(matrix)
+	d.ResolveStaff = func(context.Context) (string, error) { return "reviewer-staff", nil }
+	d.GetOutcomeMatrix = func(_ context.Context, req *matrixpb.GetOutcomeMatrixRequest) (*matrixpb.GetOutcomeMatrixResponse, error) {
+		*scopes = append(*scopes, req.GetScope())
+		return matrix, nil
+	}
+	d.ReadTaskOutcome = func(context.Context, *taskoutcomepb.ReadTaskOutcomeRequest) (*taskoutcomepb.ReadTaskOutcomeResponse, error) {
+		return nil, errNotFoundForTest
+	}
+	return d
+}
+
+type testErr string
+
+func (e testErr) Error() string { return string(e) }
+
+const errNotFoundForTest = testErr("task outcome not found")
+
+func otherTeachersCell(note string) *matrixpb.GetOutcomeMatrixResponse {
+	m := numericMatrix(true)
+	c := m.Rows[0].Cells[colKey]
+	c.RecordedBy = "other-teacher"
+	c.Editable = false
+	c.DeterminationNote = &note
+	return m
+}
+
+func TestNarrative_GET_Reviewer_SeesOtherTeachersNote_ReadOnly(t *testing.T) {
+	var scopes []matrixpb.OutcomeMatrixScope
+	d := reviewerDeps(otherTeachersCell("Shows steady growth."), &scopes)
+	data := narrativeData(t, narrativeInvoke(t, d, http.MethodGet, "outcome_id="+existingID, "", narrPerms))
+	if data.Note != "Shows steady growth." || !data.HasNote {
+		t.Errorf("reviewer must see the note the grid shows, got %+v", data)
+	}
+	if data.Editable {
+		t.Errorf("another teacher's cell must stay read-only for a reviewer")
+	}
+	for _, s := range scopes {
+		if s != matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE {
+			t.Errorf("without workspace:list the fallback must use the MINE matrix, got %v", s)
+		}
+	}
+}
+
+func TestNarrative_GET_Reviewer_WorkspaceList_UsesAllScope(t *testing.T) {
+	var scopes []matrixpb.OutcomeMatrixScope
+	d := reviewerDeps(otherTeachersCell("n"), &scopes)
+	perms := append([]string{"workspace:list"}, narrPerms...)
+	narrativeData(t, narrativeInvoke(t, d, http.MethodGet, "outcome_id="+existingID, "", perms))
+	if len(scopes) == 0 || scopes[len(scopes)-1] != matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL {
+		t.Errorf("with workspace:list the fallback must use the ALL matrix (as the grid does), got %v", scopes)
+	}
+}
+
+func TestNarrative_GET_Reviewer_OutcomeOutsideVisibleMatrix_NoNote(t *testing.T) {
+	var scopes []matrixpb.OutcomeMatrixScope
+	d := reviewerDeps(otherTeachersCell("hidden"), &scopes)
+	data := narrativeData(t, narrativeInvoke(t, d, http.MethodGet, "outcome_id=not-on-my-sheet", "", narrPerms))
+	if data.Note != "" || data.HasNote || data.Editable {
+		t.Errorf("an outcome the principal's matrix does not show must reveal nothing, got %+v", data)
+	}
+}
+
+func TestNarrative_POST_Reviewer_StillBlocked(t *testing.T) {
+	var scopes []matrixpb.OutcomeMatrixScope
+	m := otherTeachersCell("old")
+	d := reviewerDeps(m, &scopes)
+	updates := 0
+	d.UpdateTaskOutcome = func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error) {
+		updates++
+		return &taskoutcomepb.UpdateTaskOutcomeResponse{}, nil
+	}
+	narrativeInvoke(t, d, http.MethodPost, "", "outcome_id="+existingID+"&note=changed", narrPerms)
+	if updates != 0 {
+		t.Errorf("a reviewer must not save another teacher's narrative")
+	}
+}

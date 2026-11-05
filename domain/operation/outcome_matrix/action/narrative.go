@@ -123,6 +123,13 @@ func NewNarrativeAction(deps *NarrativeDeps) view.View {
 
 			outcome := readOutcome(ctx, deps, outcomeID)
 			note := outcome.GetDeterminationNote()
+			if outcome == nil {
+				// The single-outcome read is owner-scoped for a Teacher login, so a
+				// reviewer (e.g. a subject coordinator) reading another teacher's cell
+				// gets nothing. Fall back to the matrix the grid itself shows them:
+				// the same scope rule, the same row scope, read-only.
+				note = noteFromVisibleMatrix(ctx, deps, perms, templateID, outcomeID)
+			}
 
 			data := &NarrativeDrawerData{
 				FormAction: route.ResolveURL(deps.Routes.NarrativeURL, "id", templateID),
@@ -185,6 +192,38 @@ func NewNarrativeAction(deps *NarrativeDeps) view.View {
 			Headers:    map[string]string{"HX-Trigger": `{"formSuccess":true}`},
 		}
 	})
+}
+
+// noteFromVisibleMatrix returns the narrative of outcomeID as the acting principal's
+// grade sheet shows it: the ALL matrix when they hold workspace:list, otherwise
+// their MINE matrix (own classes plus the sections they review). The matrix query
+// applies the principal's row scope, so an outcome outside what the grid would
+// show resolves to "". Display only: it never makes a cell editable, and saves
+// still go through resolveCellAuthority and the recorded_by re-read.
+func noteFromVisibleMatrix(ctx context.Context, deps *NarrativeDeps, perms *types.UserPermissions, templateID, outcomeID string) string {
+	if deps.GetOutcomeMatrix == nil || templateID == "" || outcomeID == "" {
+		return ""
+	}
+	scope := matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_MINE
+	if perms.Can(drawerScopeEntity, drawerScopeAction) {
+		scope = matrixpb.OutcomeMatrixScope_OUTCOME_MATRIX_SCOPE_ALL
+	}
+	matrix, err := deps.GetOutcomeMatrix(ctx, &matrixpb.GetOutcomeMatrixRequest{
+		JobTemplateId: templateID,
+		Scope:         scope,
+	})
+	if err != nil || matrix == nil {
+		log.Printf("[outcome-matrix] narrative matrix fallback failed for template %s: %v", templateID, err)
+		return ""
+	}
+	for _, row := range matrix.GetRows() {
+		for _, cell := range row.GetCells() {
+			if cell.GetOutcomeId() == outcomeID {
+				return cell.GetDeterminationNote()
+			}
+		}
+	}
+	return ""
 }
 
 // readOutcome best-effort loads a cell's current outcome for the GET drawer.

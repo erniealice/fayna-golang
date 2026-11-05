@@ -169,9 +169,11 @@ func NewNarrativeAction(deps *NarrativeDeps) view.View {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
+		reviewEdit := perms.Can("task_outcome", "update_in_review_scope")
+
 		// A descriptor pick is its own path: the note and clear fields are not read.
 		if strings.TrimSpace(viewCtx.Request.FormValue("use_descriptor")) != "" {
-			return applyDescriptorSelection(ctx, deps, auth, outcomeID, strings.TrimSpace(viewCtx.Request.FormValue("rating_description_set_entry_id")))
+			return applyDescriptorSelection(ctx, deps, auth, outcomeID, strings.TrimSpace(viewCtx.Request.FormValue("rating_description_set_entry_id")), reviewEdit)
 		}
 
 		// Empty submission (or the explicit Clear button) clears the note.
@@ -180,7 +182,7 @@ func NewNarrativeAction(deps *NarrativeDeps) view.View {
 			note = ""
 		}
 
-		if !saveDeterminationNote(ctx, deps, auth.actingStaff, outcomeID, note) {
+		if !saveDeterminationNote(ctx, deps, auth.actingStaff, outcomeID, note, reviewEdit) {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
@@ -259,7 +261,7 @@ func readOutcome(ctx context.Context, deps *NarrativeDeps, outcomeID string) *ta
 // DeterminationNote, so the partial-update adapter writes only that column (never
 // the numeric/text/categorical/pass_fail value). Returns false on any
 // guard/use-case failure.
-func saveDeterminationNote(ctx context.Context, deps *NarrativeDeps, actingStaff, outcomeID, note string) bool {
+func saveDeterminationNote(ctx context.Context, deps *NarrativeDeps, actingStaff, outcomeID, note string, reviewEdit bool) bool {
 	if deps.ReadTaskOutcome == nil || deps.UpdateTaskOutcome == nil {
 		return false
 	}
@@ -278,10 +280,14 @@ func saveDeterminationNote(ctx context.Context, deps *NarrativeDeps, actingStaff
 
 	// IDOR guard: the outcome MUST belong to the acting staff (parity with the
 	// cell-edit updateCell guard).
-	if existing.GetRecordedBy() != actingStaff {
+	if existing.GetRecordedBy() != actingStaff && !reviewEdit {
 		log.Printf("[outcome-matrix] narrative IDOR blocked: staff %s tried to edit the note on outcome %s owned by %s",
 			actingStaff, outcomeID, existing.GetRecordedBy())
 		return false
+	}
+	if existing.GetRecordedBy() != actingStaff {
+		log.Printf("[outcome-matrix] review edit: staff %s outcome %s (recorder %s)",
+			actingStaff, outcomeID, existing.GetRecordedBy())
 	}
 
 	req := &taskoutcomepb.UpdateTaskOutcomeRequest{

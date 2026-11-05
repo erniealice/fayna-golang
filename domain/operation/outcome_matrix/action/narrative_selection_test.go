@@ -498,3 +498,60 @@ func TestNarrativeSelection_SavePathNeverSetsFlag(t *testing.T) {
 		t.Fatalf("flag = %v, want set false", flag)
 	}
 }
+
+// ── review edit on the descriptor pick (plan 20261105-reviewer-edit-grades, AC-7) ──
+
+func (r *selectionRec) pickWithPerms(t *testing.T, perms []string, entryID string) view.ViewResult {
+	t.Helper()
+	form := url.Values{"outcome_id": {existingID}, "use_descriptor": {"1"}, "rating_description_set_entry_id": {entryID}}
+	return narrativeInvoke(t, r.drawerDeps(), http.MethodPost, "", form.Encode(), perms)
+}
+
+// AC-7: non-recorder + permission ⇒ the pick is written, note column only,
+// ownership columns untouched.
+func TestNarrativeSelection_ReviewEdit_NonRecorderAllowed(t *testing.T) {
+	r := newSelectionRec(3)
+	r.owner = "someone-else"
+	res := r.pickWithPerms(t, narrReviewEditPerms, "set-c-e3")
+	if !isSuccess(res) {
+		t.Fatalf("review edit pick must succeed: %+v", res)
+	}
+	if len(r.writes) != 1 {
+		t.Fatalf("want 1 conditional write, got %d", len(r.writes))
+	}
+	w := r.writes[0]
+	if w.GetDeterminationNote() != "set-c wording for three" {
+		t.Errorf("note = %q", w.GetDeterminationNote())
+	}
+	if w.GetRecordedBy() != "" || w.ReviewedBy != nil || w.ReviewedDate != nil {
+		t.Errorf("review edit must not set ownership/review columns: %+v", w)
+	}
+}
+
+// AC-7: non-recorder without the permission ⇒ blocked.
+func TestNarrativeSelection_ReviewEdit_NonRecorderWithoutPermBlocked(t *testing.T) {
+	r := newSelectionRec(3)
+	r.owner = "someone-else"
+	res := r.pickWithPerms(t, narrPerms, "set-c-e3")
+	if isSuccess(res) {
+		t.Fatalf("non-recorder without review edit must be blocked")
+	}
+	if r.writeAttempts != 0 {
+		t.Errorf("blocked pick must not attempt a write, got %d", r.writeAttempts)
+	}
+}
+
+// AC-7: the recorder is unaffected either way.
+func TestNarrativeSelection_ReviewEdit_RecorderUnaffected(t *testing.T) {
+	for name, perms := range map[string][]string{"without": narrPerms, "with": narrReviewEditPerms} {
+		t.Run(name, func(t *testing.T) {
+			r := newSelectionRec(3)
+			if res := r.pickWithPerms(t, perms, "set-c-e3"); !isSuccess(res) {
+				t.Fatalf("recorder pick must succeed: %+v", res)
+			}
+			if len(r.writes) != 1 {
+				t.Errorf("want 1 write, got %d", len(r.writes))
+			}
+		})
+	}
+}

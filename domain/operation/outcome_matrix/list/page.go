@@ -1340,9 +1340,11 @@ func buildRows(rows []*matrixpb.OutcomeRow, actingStaff, readOnlyTooltip string,
 			TestID: "om-row-" + clientID,
 		}
 		for colKey, cell := range r.GetCells() {
-			// Read-only when recorded by a different staff member. Honor the
-			// backend editable flag too (job not spawned → not editable).
-			readOnly := cell.GetRecordedBy() != "" && cell.GetRecordedBy() != actingStaff
+			// Read-only when recorded by a different staff member, unless the
+			// backend marks the cell editable (review edit: the server granted
+			// this recorded cell to a non-recorder). Honor the backend editable
+			// flag too (job not spawned → not editable).
+			readOnly := cell.GetRecordedBy() != "" && cell.GetRecordedBy() != actingStaff && !cell.GetEditable()
 			editable := cell.GetEditable()
 			// Phase-status render mirror: a workflow-locked / hard-frozen phase
 			// forces the cell read-only (server GuardCellWrite is authoritative).

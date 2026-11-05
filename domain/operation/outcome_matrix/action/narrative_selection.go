@@ -128,7 +128,7 @@ func loadDescriptorOptions(ctx context.Context, deps *NarrativeDeps, cell srvCel
 // applyDescriptorSelection writes the wording for a posted entry id. Every miss
 // denies with nothing written. The write is conditional on the row just read, so
 // a rating changed since then cannot take a note chosen for the old rating.
-func applyDescriptorSelection(ctx context.Context, deps *NarrativeDeps, auth *cellAuthority, outcomeID, entryID string) view.ViewResult {
+func applyDescriptorSelection(ctx context.Context, deps *NarrativeDeps, auth *cellAuthority, outcomeID, entryID string, reviewEdit bool) view.ViewResult {
 	denied := view.HTMXError(deps.Labels.Errors.PermissionDenied)
 	notAvailable := view.HTMXError(deps.Labels.Errors.DescriptorNotAvailable)
 
@@ -150,9 +150,12 @@ func applyDescriptorSelection(ctx context.Context, deps *NarrativeDeps, auth *ce
 		return denied
 	}
 	existing := readResp.GetData()[0]
-	if existing.GetRecordedBy() != auth.actingStaff {
+	if existing.GetRecordedBy() != auth.actingStaff && !reviewEdit {
 		log.Printf("[outcome-matrix] descriptor pick IDOR blocked: staff %s on outcome %s owned by %s", auth.actingStaff, outcomeID, existing.GetRecordedBy())
 		return denied
+	}
+	if existing.GetRecordedBy() != auth.actingStaff {
+		log.Printf("[outcome-matrix] review edit: staff %s outcome %s (recorder %s)", auth.actingStaff, outcomeID, existing.GetRecordedBy())
 	}
 	if existing.NumericValue == nil {
 		return notAvailable

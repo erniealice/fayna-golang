@@ -1100,3 +1100,151 @@ func TestCellMode_NoRosterOrNoDriver_NoRowCells(t *testing.T) {
 		t.Errorf("a non-driving save must not re-read the roster (called=%v rowCells=%v)", called, got.RowCells)
 	}
 }
+
+// ── review edit (plan 20261105-reviewer-edit-grades, AC-6) ───────────────────
+//
+// reviewEdit is computed by the handler from the permission code
+// task_outcome:update_in_review_scope. The matrix fixture marks the cell
+// editable (the server said so); the stored record is owned by someone else.
+
+const reviewEditPerm = "task_outcome:update_in_review_scope"
+
+var reviewEditPerms = append(append([]string{}, allPerms...), reviewEditPerm)
+
+// AC-6: non-recorder + permission ⇒ update request sent, ownership columns not set.
+func TestUpdateCell_ReviewEdit_NonRecorderAllowed(t *testing.T) {
+	r := &recorder{readOwner: "someone-else"}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", reviewEditPerms)
+	got := cells(t, res)[0]
+	if !got.OK {
+		t.Fatalf("review edit on another recorder's cell must save: %+v", got)
+	}
+	if r.updateCalls != 1 || r.lastUpdate == nil {
+		t.Fatalf("want exactly 1 update request, got %d", r.updateCalls)
+	}
+	if r.lastUpdate.GetRecordedBy() != "" {
+		t.Errorf("review edit must not set RecordedBy, got %q", r.lastUpdate.GetRecordedBy())
+	}
+	if r.lastUpdate.ReviewedBy != nil && r.lastUpdate.GetReviewedBy() != "" {
+		t.Errorf("review edit must not set ReviewedBy, got %q", r.lastUpdate.GetReviewedBy())
+	}
+	if r.lastUpdate.ReviewedDate != nil {
+		t.Errorf("review edit must not set ReviewedDate")
+	}
+	if r.lastUpdate.GetId() != existingID {
+		t.Errorf("update must target the outcome %q, got %q", existingID, r.lastUpdate.GetId())
+	}
+}
+
+// AC-6: non-recorder without the permission ⇒ blocked (today's behaviour).
+func TestUpdateCell_ReviewEdit_NonRecorderWithoutPermBlocked(t *testing.T) {
+	r := &recorder{readOwner: "someone-else"}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", allPerms)
+	if got := cells(t, res)[0]; got.OK {
+		t.Fatalf("non-recorder without review edit must be blocked: %+v", got)
+	}
+	if r.updateCalls != 0 || r.condUpdateCalls != 0 {
+		t.Errorf("blocked save must not reach any update, got %d/%d", r.updateCalls, r.condUpdateCalls)
+	}
+}
+
+// AC-6: the recorder is unaffected by the permission, either way.
+func TestUpdateCell_ReviewEdit_RecorderUnaffected(t *testing.T) {
+	for name, perms := range map[string][]string{"without": allPerms, "with": reviewEditPerms} {
+		t.Run(name, func(t *testing.T) {
+			r := &recorder{} // stored owner == acting staff
+			res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", perms)
+			if got := cells(t, res)[0]; !got.OK {
+				t.Fatalf("recorder save must succeed: %+v", got)
+			}
+			if r.updateCalls != 1 {
+				t.Errorf("want 1 update, got %d", r.updateCalls)
+			}
+		})
+	}
+}
+
+// AC-6: the permission is read from the caller's perms by exact code; related
+// codes grant nothing.
+func TestUpdateCell_ReviewEdit_PermissionBitReadFromPerms(t *testing.T) {
+	cases := []struct {
+		name  string
+		perms []string
+		want  bool
+	}{
+		{"exact code", reviewEditPerms, true},
+		{"update only", allPerms, false},
+		{"approval scope only", append(append([]string{}, allPerms...), "approval_scope:workspace"), false},
+		{"other entity same action", append(append([]string{}, allPerms...), "job_phase:update_in_review_scope"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &recorder{readOwner: "someone-else"}
+			res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=80", tc.perms)
+			if got := cells(t, res)[0]; got.OK != tc.want {
+				t.Fatalf("ok = %v, want %v (%+v)", got.OK, tc.want, got)
+			}
+		})
+	}
+}
+
+// AC-6 (function level): updateCell honours the trailing reviewEdit flag.
+func TestUpdateCell_ReviewEdit_FlagDirect(t *testing.T) {
+	for _, reviewEdit := range []bool{false, true} {
+		r := &recorder{readOwner: "someone-else"}
+		_, ok, _, _ := updateCell(context.Background(), r.deps(numericMatrix(true)), staffID, existingID, "80",
+			enums.CriteriaType_CRITERIA_TYPE_NUMERIC_SCORE, cellBounds{}, nil, reviewEdit)
+		if ok != reviewEdit {
+			t.Errorf("reviewEdit=%v: ok = %v", reviewEdit, ok)
+		}
+		wantCalls := 0
+		if reviewEdit {
+			wantCalls = 1
+		}
+		if r.updateCalls != wantCalls {
+			t.Errorf("reviewEdit=%v: updateCalls = %d, want %d", reviewEdit, r.updateCalls, wantCalls)
+		}
+	}
+}
+
+// AC-6: delete by a non-recorder stays blocked even with the review-edit permission.
+func TestDeleteCell_ReviewEditStillBlocked(t *testing.T) {
+	r := &recorder{readOwner: "someone-else"}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=", reviewEditPerms)
+	if got := cells(t, res)[0]; got.OK {
+		t.Fatalf("review edit must never delete another recorder's outcome: %+v", got)
+	}
+	if r.deleteCalls != 0 {
+		t.Errorf("delete must not reach DeleteTaskOutcome, got %d", r.deleteCalls)
+	}
+	if r.updateCalls != 0 {
+		t.Errorf("a blank-value clear must not degrade to an update, got %d", r.updateCalls)
+	}
+}
+
+// P2 finding 1: a reviewer types into a cell that looked blank (new.* key)
+// while another teacher saved it meanwhile. The lost-ack retry branch may only
+// resolve to the acting staff's OWN outcome, so the review-edit allowance must
+// not turn this into a blind overwrite of the teacher's fresh grade.
+func TestCellMode_ReviewEdit_LostAckRetryOnOthersOutcomeBlocked(t *testing.T) {
+	r := &recorder{readOwner: "someone-else"}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=90", reviewEditPerms)
+	got, ok := byKey(cells(t, res), "new."+jobTaskID+":"+criteriaID)
+	if !ok || got.OK {
+		t.Fatalf("new.* retry on another recorder's outcome must be refused: %+v", got)
+	}
+	if r.updateCalls != 0 || r.condUpdateCalls != 0 || r.createCalls != 0 {
+		t.Errorf("refused retry must not write, got update=%d cond=%d create=%d", r.updateCalls, r.condUpdateCalls, r.createCalls)
+	}
+}
+
+// The recorder's own lost-ack retry still resolves to an UPDATE with the
+// review-edit permission held.
+func TestCellMode_ReviewEdit_OwnLostAckRetryStillUpdates(t *testing.T) {
+	r := &recorder{}
+	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=90", reviewEditPerms)
+	got, ok := byKey(cells(t, res), "new."+jobTaskID+":"+criteriaID)
+	if !ok || !got.OK || got.OutcomeID != existingID {
+		t.Fatalf("own retry must update the existing outcome: %+v", got)
+	}
+}

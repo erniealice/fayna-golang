@@ -113,6 +113,10 @@ func NewRecordAction(deps *Deps) view.View {
 		hasCreate := perms.Can("task_outcome", "create")
 		hasUpdate := perms.Can("task_outcome", "update")
 		hasDelete := perms.Can("task_outcome", "delete")
+		// reviewEdit: holder may update an existing outcome recorded by someone else
+		// (espyna decides which outcomes via Editable). Pairs with hasUpdate; never
+		// reaches delete. Code resolves to task_outcome:update_in_review_scope.
+		reviewEdit := perms.Can("task_outcome", "update_in_review_scope")
 		if !hasCreate && !hasUpdate && !hasDelete {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
@@ -223,7 +227,7 @@ func NewRecordAction(deps *Deps) view.View {
 				// ack was lost) → resolve to an UPDATE, return its id so the client
 				// renames new.* → cells.*. Never a duplicate insert.
 				if sc.outcomeID != "" && hasUpdate && allowedUpdate[sc.outcomeID] {
-					pending = append(pending, pendingCellWrite{key: key, outcomeID: sc.outcomeID, raw: raw, sc: sc})
+					pending = append(pending, pendingCellWrite{key: key, outcomeID: sc.outcomeID, raw: raw, sc: sc, ownRetry: true})
 					continue
 				}
 				log.Printf("[outcome-matrix] create blocked: job_task %s criteria %s not addressable for staff %s", jobTaskID, criteriaID, actingStaff)
@@ -261,7 +265,7 @@ func NewRecordAction(deps *Deps) view.View {
 				})
 				continue
 			}
-			normVal, done, hasNote, reason := updateCell(ctx, deps, actingStaff, pw.outcomeID, pw.raw, pw.sc.ct, pw.sc.bounds, res)
+			normVal, done, hasNote, reason := updateCell(ctx, deps, actingStaff, pw.outcomeID, pw.raw, pw.sc.ct, pw.sc.bounds, res, reviewEdit && !pw.ownRetry)
 			acks = append(acks, cellAck{
 				key: pw.key, ok: done, outcomeID: pw.outcomeID, value: normVal, hasNote: hasNote,
 				numeric: isNumericCriteria(pw.sc.ct), criteriaID: pw.sc.criteriaID,
@@ -347,6 +351,11 @@ type pendingCellWrite struct {
 	raw       string
 	sc        srvCell
 	isCreate  bool
+	// ownRetry marks a lost-ack retry of a new.* key. It may only resolve to
+	// the acting staff's OWN outcome, so the review-edit allowance is never
+	// applied to it: a reviewer typing into a cell that looked blank must not
+	// overwrite a grade another teacher saved meanwhile.
+	ownRetry bool
 }
 
 // pickErrMsg returns "" on success, the callee's specific reason when it
@@ -658,7 +667,7 @@ func failMsg(ok bool, reason string) string {
 // not in description mode — the note is never touched). Callers pass res
 // only for the cell it was resolved for (record.go keys it by the cell's own
 // server-derived job_id/job_task_id/criteria_id).
-func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, colCT enums.CriteriaType, bounds cellBounds, res *ratingResolution) (value string, ok bool, hasNote bool, reason string) {
+func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, colCT enums.CriteriaType, bounds cellBounds, res *ratingResolution, reviewEdit bool) (value string, ok bool, hasNote bool, reason string) {
 	if deps.ReadTaskOutcome == nil || (deps.UpdateTaskOutcome == nil && deps.UpdateTaskOutcomeIfUnchanged == nil) {
 		return "", false, false, ""
 	}
@@ -677,10 +686,16 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 	existing := records[0]
 
 	// IDOR guard: the outcome MUST belong to the acting staff.
-	if existing.GetRecordedBy() != actingStaff {
+	// A review-scope holder may edit an outcome recorded by someone else; espyna
+	// has already restricted allowedUpdate to the outcomes in that holder's scope.
+	if existing.GetRecordedBy() != actingStaff && !reviewEdit {
 		log.Printf("[outcome-matrix] IDOR blocked: staff %s tried to edit outcome %s owned by %s",
 			actingStaff, outcomeID, existing.GetRecordedBy())
 		return "", false, false, ""
+	}
+	if existing.GetRecordedBy() != actingStaff {
+		log.Printf("[outcome-matrix] review edit: staff %s outcome %s (recorder %s)",
+			actingStaff, outcomeID, existing.GetRecordedBy())
 	}
 
 	// Rating-resolution rejection (Q22): UNRESOLVED_IDENTITY / AMBIGUOUS /
@@ -773,6 +788,7 @@ func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) 
 	existing := records[0]
 
 	// Defense in depth: delete only outcomes owned by the acting staff.
+	// Review edit never reaches delete: this recorder-only check is intentionally unchanged.
 	if existing.GetRecordedBy() != actingStaff {
 		log.Printf("[outcome-matrix] IDOR blocked: staff %s tried to delete outcome %s owned by %s",
 			actingStaff, outcomeID, existing.GetRecordedBy())

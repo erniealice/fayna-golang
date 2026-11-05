@@ -338,3 +338,91 @@ func TestNarrative_POST_Reviewer_StillBlocked(t *testing.T) {
 		t.Errorf("a reviewer must not save another teacher's narrative")
 	}
 }
+
+// ── review edit (plan 20261105-reviewer-edit-grades, AC-7) ───────────────────
+
+var narrReviewEditPerms = append(append([]string{}, narrPerms...), "task_outcome:update_in_review_scope")
+
+// AC-7: non-recorder + permission ⇒ the note update is sent, note column only,
+// ownership columns untouched.
+func TestNarrative_ReviewEdit_NonRecorderAllowed(t *testing.T) {
+	r := &narrativeRec{readOwner: "someone-else"}
+	res := narrativeInvoke(t, r.deps(numericMatrix(true)), http.MethodPost, "", "outcome_id="+existingID+"&note=Reviewed+note", narrReviewEditPerms)
+	if r.updateCalls != 1 {
+		t.Fatalf("want 1 update, got %d (status %d)", r.updateCalls, res.StatusCode)
+	}
+	d := r.updateReq.GetData()
+	if d.GetDeterminationNote() != "Reviewed note" {
+		t.Errorf("note: got %q", d.GetDeterminationNote())
+	}
+	if d.GetRecordedBy() != "" {
+		t.Errorf("review edit must not set RecordedBy, got %q", d.GetRecordedBy())
+	}
+	if d.ReviewedBy != nil && d.GetReviewedBy() != "" {
+		t.Errorf("review edit must not set ReviewedBy, got %q", d.GetReviewedBy())
+	}
+	if d.ReviewedDate != nil {
+		t.Errorf("review edit must not set ReviewedDate")
+	}
+	if d.NumericValue != nil || d.TextValue != nil || d.CategoricalValue != nil || d.PassFailValue != nil {
+		t.Errorf("note save must not set any typed grade value: %+v", d)
+	}
+}
+
+// AC-7: non-recorder without the permission ⇒ blocked.
+func TestNarrative_ReviewEdit_NonRecorderWithoutPermBlocked(t *testing.T) {
+	r := &narrativeRec{readOwner: "someone-else"}
+	res := narrativeInvoke(t, r.deps(numericMatrix(true)), http.MethodPost, "", "outcome_id="+existingID+"&note=hi", narrPerms)
+	if r.updateCalls != 0 {
+		t.Errorf("non-recorder without review edit must not update, got %d", r.updateCalls)
+	}
+	if res.StatusCode == http.StatusOK {
+		t.Errorf("blocked save must not return 200")
+	}
+}
+
+// AC-7: the recorder is unaffected either way.
+func TestNarrative_ReviewEdit_RecorderUnaffected(t *testing.T) {
+	for name, perms := range map[string][]string{"without": narrPerms, "with": narrReviewEditPerms} {
+		t.Run(name, func(t *testing.T) {
+			r := &narrativeRec{}
+			narrativeInvoke(t, r.deps(numericMatrix(true)), http.MethodPost, "", "outcome_id="+existingID+"&note=mine", perms)
+			if r.updateCalls != 1 {
+				t.Errorf("recorder save must update once, got %d", r.updateCalls)
+			}
+		})
+	}
+}
+
+// AC-7: the permission bit is read from perms by exact code only.
+func TestNarrative_ReviewEdit_PermissionBitReadFromPerms(t *testing.T) {
+	cases := []struct {
+		name  string
+		perms []string
+		want  int
+	}{
+		{"exact code", narrReviewEditPerms, 1},
+		{"update only", narrPerms, 0},
+		{"approval scope only", append(append([]string{}, narrPerms...), "approval_scope:workspace"), 0},
+		{"other entity same action", append(append([]string{}, narrPerms...), "job_phase:update_in_review_scope"), 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &narrativeRec{readOwner: "someone-else"}
+			narrativeInvoke(t, r.deps(numericMatrix(true)), http.MethodPost, "", "outcome_id="+existingID+"&note=hi", tc.perms)
+			if r.updateCalls != tc.want {
+				t.Errorf("updateCalls = %d, want %d", r.updateCalls, tc.want)
+			}
+		})
+	}
+}
+
+// AC-7: the review-edit permission does not widen the MINE-derived allow-set:
+// a forged outcome id stays blocked.
+func TestNarrative_ReviewEdit_ForgedOutcomeStillBlocked(t *testing.T) {
+	r := &narrativeRec{readOwner: "someone-else"}
+	narrativeInvoke(t, r.deps(numericMatrix(true)), http.MethodPost, "", "outcome_id=forged-x&note=hi", narrReviewEditPerms)
+	if r.updateCalls != 0 {
+		t.Errorf("forged outcome must never update, got %d", r.updateCalls)
+	}
+}

@@ -426,3 +426,22 @@ func TestNarrative_ReviewEdit_ForgedOutcomeStillBlocked(t *testing.T) {
 		t.Errorf("forged outcome must never update, got %d", r.updateCalls)
 	}
 }
+
+// Class override: a primary teacher holding update_in_class_scope may save a
+// note on another recorder's cell; without the code it is blocked.
+func TestNarrative_ClassOverride_NonRecorderAllowed(t *testing.T) {
+	perms := append(append([]string{}, narrPerms...), "task_outcome:update_in_class_scope")
+	r := &narrativeRec{readOwner: "someone-else"}
+	narrativeInvoke(t, r.deps(numericMatrix(true)), http.MethodPost, "", "outcome_id="+existingID+"&note=Class+note", perms)
+	if r.updateCalls != 1 || r.updateReq.GetData().GetDeterminationNote() != "Class note" {
+		t.Fatalf("class override note save must update once, got %d", r.updateCalls)
+	}
+}
+
+func TestNarrative_ClassOverride_WithoutCodeBlocked(t *testing.T) {
+	r := &narrativeRec{readOwner: "someone-else"}
+	narrativeInvoke(t, r.deps(numericMatrix(true)), http.MethodPost, "", "outcome_id="+existingID+"&note=hi", narrPerms)
+	if r.updateCalls != 0 {
+		t.Errorf("without the code a non-recorder note save must be blocked, got %d updates", r.updateCalls)
+	}
+}

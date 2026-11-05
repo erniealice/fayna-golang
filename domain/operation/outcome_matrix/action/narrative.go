@@ -169,7 +169,9 @@ func NewNarrativeAction(deps *NarrativeDeps) view.View {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
 
-		reviewEdit := perms.Can("task_outcome", "update_in_review_scope")
+		// review-scope editor OR primary-teacher class override: espyna decides
+		// per cell (Editable / update scope); no fayna-side recorder-only veto.
+		reviewEdit := perms.Can("task_outcome", "update_in_review_scope") || perms.Can("task_outcome", "update_in_class_scope")
 
 		// A descriptor pick is its own path: the note and clear fields are not read.
 		if strings.TrimSpace(viewCtx.Request.FormValue("use_descriptor")) != "" {

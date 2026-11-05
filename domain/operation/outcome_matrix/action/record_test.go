@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -1443,5 +1444,49 @@ func TestCellMode_ClassOverride_NeverClears(t *testing.T) {
 	got := cells(t, invoke(t, d, "save_mode=cell&cells."+existingID+"=", perms))[0]
 	if got.OK || got.Error != "not_editable" || cd.calls != 0 || r.deleteCalls != 0 {
 		t.Fatalf("class override must not clear: %+v cond=%d plain=%d", got, cd.calls, r.deleteCalls)
+	}
+}
+
+// A locked/frozen phase: espyna's cell guard refuses with a wrapped
+// ErrTaskOutcomeNotEditable. Update (conditional and plain), create and clear
+// (own recorder) all ack not_editable, never value_rejected / delete_failed.
+func TestCellMode_LockedPhase_AcksNotEditable(t *testing.T) {
+	locked := fmt.Errorf("cell write guard: phase p is PHASE_APPROVAL_STATUS_FOR_REVIEW (workflow-locked): %w", espynaports.ErrTaskOutcomeNotEditable)
+	ackFor := func(t *testing.T, d *Deps, body string) ackItem {
+		t.Helper()
+		return cells(t, invoke(t, d, body, allPerms))[0]
+	}
+	// update, conditional path
+	r := &recorder{}
+	d := r.deps(numericMatrix(true))
+	d.UpdateTaskOutcomeIfUnchanged = func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest, *taskoutcomepb.TaskOutcome) (*taskoutcomepb.UpdateTaskOutcomeResponse, bool, error) {
+		return nil, false, locked
+	}
+	if g := ackFor(t, d, "save_mode=cell&cells."+existingID+"=90"); g.OK || g.Error != "not_editable" {
+		t.Errorf("conditional update: want not_editable, got %+v", g)
+	}
+	// update, plain path
+	r = &recorder{plainOnly: true}
+	d = r.deps(numericMatrix(true))
+	d.UpdateTaskOutcome = func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest) (*taskoutcomepb.UpdateTaskOutcomeResponse, error) {
+		return nil, locked
+	}
+	if g := ackFor(t, d, "save_mode=cell&cells."+existingID+"=90"); g.OK || g.Error != "not_editable" {
+		t.Errorf("plain update: want not_editable, got %+v", g)
+	}
+	// create
+	r = &recorder{}
+	d = r.deps(numericMatrix(false))
+	d.CreateTaskOutcomeIfAbsent = func(context.Context, *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, bool, error) {
+		return nil, false, locked
+	}
+	key := "new." + jobTaskID + ":" + criteriaID
+	if g := ackFor(t, d, "save_mode=cell&"+key+"=90"); g.OK || g.Error != "not_editable" {
+		t.Errorf("create: want not_editable, got %+v", g)
+	}
+	// clear (recorder's own cell)
+	r = &recorder{deleteErr: locked}
+	if g := ackFor(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"="); g.OK || g.Error != "not_editable" {
+		t.Errorf("clear: want not_editable, got %+v", g)
 	}
 }

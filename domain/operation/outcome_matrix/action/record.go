@@ -770,6 +770,11 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 	case deps.UpdateTaskOutcomeIfUnchanged != nil:
 		_, conflict, err := deps.UpdateTaskOutcomeIfUnchanged(ctx, req, existing)
 		if err != nil {
+			if errors.Is(err, espynaports.ErrTaskOutcomeNotEditable) {
+				// Phase workflow-locked / job frozen: refused, not a failure.
+				log.Printf("[outcome-matrix] conditional update not editable for outcome %s: %v", outcomeID, err)
+				return "", false, false, "not_editable"
+			}
 			log.Printf("[outcome-matrix] conditional update failed for outcome %s: %v", outcomeID, err)
 			return "", false, false, ""
 		}
@@ -783,6 +788,10 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 		return "", false, existing.GetDeterminationNote() != "", ""
 	default:
 		if _, err := deps.UpdateTaskOutcome(ctx, req); err != nil {
+			if errors.Is(err, espynaports.ErrTaskOutcomeNotEditable) {
+				log.Printf("[outcome-matrix] update not editable for outcome %s: %v", outcomeID, err)
+				return "", false, false, "not_editable"
+			}
 			log.Printf("[outcome-matrix] update failed for outcome %s: %v", outcomeID, err)
 			return "", false, false, ""
 		}
@@ -792,20 +801,20 @@ func updateCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw str
 
 // deleteCell removes an editable outcome with a server-derived IDOR guard (staff-owned
 // outcomes only), then delegates to task_outcome:delete.
-func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) bool {
+func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) (bool, string) {
 	if deps.ReadTaskOutcome == nil || deps.DeleteTaskOutcome == nil {
-		return false
+		return false, "delete_failed"
 	}
 	readResp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
 	})
 	if err != nil {
 		log.Printf("[outcome-matrix] read failed for outcome %s: %v", outcomeID, err)
-		return false
+		return false, "delete_failed"
 	}
 	records := readResp.GetData()
 	if len(records) == 0 {
-		return false
+		return false, "delete_failed"
 	}
 	existing := records[0]
 
@@ -814,16 +823,20 @@ func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) 
 	if existing.GetRecordedBy() != actingStaff {
 		log.Printf("[outcome-matrix] IDOR blocked: staff %s tried to delete outcome %s owned by %s",
 			actingStaff, outcomeID, existing.GetRecordedBy())
-		return false
+		return false, "delete_failed"
 	}
 
 	if _, err := deps.DeleteTaskOutcome(ctx, &taskoutcomepb.DeleteTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
 	}); err != nil {
+		if errors.Is(err, espynaports.ErrTaskOutcomeNotEditable) {
+			log.Printf("[outcome-matrix] delete not editable for outcome %s: %v", outcomeID, err)
+			return false, "not_editable"
+		}
 		log.Printf("[outcome-matrix] delete failed for outcome %s: %v", outcomeID, err)
-		return false
+		return false, "delete_failed"
 	}
-	return true
+	return true, ""
 }
 
 // clearCell clears an existing cell. The recorder clearing their own cell takes
@@ -834,7 +847,7 @@ func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) 
 // cleared and, on failure, the bounded ack code.
 func clearCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string, reviewClear bool) (bool, string) {
 	if deps.ReadTaskOutcome == nil {
-		return deleteCell(ctx, deps, actingStaff, outcomeID), "delete_failed"
+		return deleteCell(ctx, deps, actingStaff, outcomeID)
 	}
 	readResp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
@@ -847,7 +860,7 @@ func clearCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string, r
 	}
 	existing := readResp.GetData()[0]
 	if existing.GetRecordedBy() == actingStaff {
-		return deleteCell(ctx, deps, actingStaff, outcomeID), "delete_failed"
+		return deleteCell(ctx, deps, actingStaff, outcomeID)
 	}
 	if !reviewClear {
 		// Another recorder's cell without the review-clear code (a class

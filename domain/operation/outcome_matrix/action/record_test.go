@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	espynaports "github.com/erniealice/espyna-golang/ports"
 	"github.com/erniealice/pyeza-golang/types"
 	"github.com/erniealice/pyeza-golang/view"
 
@@ -1246,5 +1247,173 @@ func TestCellMode_ReviewEdit_OwnLostAckRetryStillUpdates(t *testing.T) {
 	got, ok := byKey(cells(t, res), "new."+jobTaskID+":"+criteriaID)
 	if !ok || !got.OK || got.OutcomeID != existingID {
 		t.Fatalf("own retry must update the existing outcome: %+v", got)
+	}
+}
+
+// ── review override (fill / clear) ───────────────────────────────────────────
+
+const otherStaff = "staff-other"
+
+var (
+	fillPerms  = []string{"task_outcome:create", "task_outcome:update", "task_outcome:create_in_review_scope"}
+	clearPerms = []string{"task_outcome:delete", "task_outcome:delete_in_review_scope"}
+)
+
+type condDelete struct {
+	calls    int
+	expected *taskoutcomepb.TaskOutcome
+	conflict bool
+	err      error
+}
+
+func (c *condDelete) wire(d *Deps) {
+	d.DeleteTaskOutcomeIfUnchanged = func(_ context.Context, _ *taskoutcomepb.DeleteTaskOutcomeRequest, expected *taskoutcomepb.TaskOutcome) (*taskoutcomepb.DeleteTaskOutcomeResponse, bool, error) {
+		c.calls++
+		c.expected = expected
+		if c.err != nil {
+			return nil, false, c.err
+		}
+		if c.conflict {
+			return nil, true, nil
+		}
+		return &taskoutcomepb.DeleteTaskOutcomeResponse{}, false, nil
+	}
+}
+
+func TestCellMode_ReviewFill_CreateSentAndNotEditableMapped(t *testing.T) {
+	key := "new." + jobTaskID + ":" + criteriaID
+	// Create is dispatched as today (RecordedBy still the actor; espyna replaces it).
+	r := &recorder{}
+	res := invoke(t, r.deps(numericMatrix(false)), "save_mode=cell&"+key+"=90", fillPerms)
+	got, ok := byKey(cells(t, res), key)
+	if !ok || !got.OK || got.OutcomeID != "new-outcome-9" {
+		t.Fatalf("fill create not acked ok: %+v", got)
+	}
+	if r.lastCreate == nil || r.lastCreate.GetRecordedBy() != staffID {
+		t.Errorf("create request must still carry the acting staff, got %+v", r.lastCreate)
+	}
+	// NOT_EDITABLE from espyna maps to the existing not_editable ack.
+	r2 := &recorder{}
+	d := r2.deps(numericMatrix(false))
+	d.CreateTaskOutcomeIfAbsent = func(context.Context, *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, bool, error) {
+		return nil, false, espynaports.ErrTaskOutcomeNotEditable
+	}
+	got2, _ := byKey(cells(t, invoke(t, d, "save_mode=cell&"+key+"=90", fillPerms)), key)
+	if got2.OK || got2.Error != "not_editable" {
+		t.Fatalf("want not_editable ack, got %+v", got2)
+	}
+}
+
+func TestCellMode_ReviewClear_OthersOutcomeUsesConditionalDelete(t *testing.T) {
+	r := &recorder{readOwner: otherStaff, readNumeric: ptrF(88)}
+	d := r.deps(numericMatrix(true))
+	cd := &condDelete{}
+	cd.wire(d)
+	got := cells(t, invoke(t, d, "save_mode=cell&cells."+existingID+"=", clearPerms))[0]
+	if !got.OK || got.NextKey != "new."+jobTaskID+":"+criteriaID {
+		t.Fatalf("override clear not acked ok with nextKey: %+v", got)
+	}
+	if cd.calls != 1 || cd.expected == nil || cd.expected.GetRecordedBy() != otherStaff || cd.expected.GetNumericValue() != 88 {
+		t.Errorf("conditional delete must get the read snapshot once, calls=%d expected=%+v", cd.calls, cd.expected)
+	}
+	if r.deleteCalls != 0 {
+		t.Errorf("plain delete must not run for an override clear, got %d", r.deleteCalls)
+	}
+}
+
+func TestCellMode_ReviewClear_ConflictAcksRetry(t *testing.T) {
+	r := &recorder{readOwner: otherStaff}
+	d := r.deps(numericMatrix(true))
+	cd := &condDelete{conflict: true}
+	cd.wire(d)
+	got := cells(t, invoke(t, d, "save_mode=cell&cells."+existingID+"=", clearPerms))[0]
+	if got.OK || got.NextKey != "" || got.Error != outcome_matrix.DefaultLabels().Errors.CellChangedRetry {
+		t.Fatalf("conflict must ack cell_changed_retry, got %+v", got)
+	}
+	// Error and unwired fail closed with delete_failed.
+	cd2 := &condDelete{err: errors.New("boom")}
+	d2 := r.deps(numericMatrix(true))
+	cd2.wire(d2)
+	if g := cells(t, invoke(t, d2, "save_mode=cell&cells."+existingID+"=", clearPerms))[0]; g.OK || g.Error != "delete_failed" {
+		t.Errorf("error must ack delete_failed, got %+v", g)
+	}
+	d3 := r.deps(numericMatrix(true))
+	if g := cells(t, invoke(t, d3, "save_mode=cell&cells."+existingID+"=", clearPerms))[0]; g.OK || g.Error != "delete_failed" || r.deleteCalls != 0 {
+		t.Errorf("unwired conditional delete must fail closed, got %+v deleteCalls=%d", g, r.deleteCalls)
+	}
+}
+
+func TestCellMode_ReviewClear_WithoutCodeBlocked(t *testing.T) {
+	r := &recorder{readOwner: otherStaff}
+	d := r.deps(numericMatrix(true))
+	cd := &condDelete{}
+	cd.wire(d)
+	got := cells(t, invoke(t, d, "save_mode=cell&cells."+existingID+"=", []string{"task_outcome:delete"}))[0]
+	if got.OK {
+		t.Fatalf("clear of another's outcome without the review code must be refused: %+v", got)
+	}
+	if cd.calls != 0 || r.deleteCalls != 0 {
+		t.Errorf("no delete of any kind may run, cond=%d plain=%d", cd.calls, r.deleteCalls)
+	}
+}
+
+func TestCellMode_OwnClearUnchanged(t *testing.T) {
+	// Even with the review code, the recorder's own clear is today's plain delete.
+	r := &recorder{}
+	d := r.deps(numericMatrix(true))
+	cd := &condDelete{}
+	cd.wire(d)
+	got := cells(t, invoke(t, d, "save_mode=cell&cells."+existingID+"=", clearPerms))[0]
+	if !got.OK || r.deleteCalls != 1 || cd.calls != 0 {
+		t.Fatalf("own clear must use plain delete: ok=%v plain=%d cond=%d", got.OK, r.deleteCalls, cd.calls)
+	}
+}
+
+func TestCellMode_ReviewFill_LostAckSameValueAcksOK(t *testing.T) {
+	key := "new." + jobTaskID + ":" + criteriaID
+	r := &recorder{readOwner: otherStaff, readNumeric: ptrF(90)}
+	got, ok := byKey(cells(t, invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&"+key+"=90", fillPerms)), key)
+	if !ok || !got.OK || got.OutcomeID != existingID || got.Value != "90" {
+		t.Fatalf("same-value retry must ack ok with the outcome id: %+v", got)
+	}
+	if r.updateCalls != 0 || r.createCalls != 0 || r.condUpdateCalls != 0 {
+		t.Errorf("same-value retry must not write: update=%d create=%d cond=%d", r.updateCalls, r.createCalls, r.condUpdateCalls)
+	}
+}
+
+func TestCellMode_ReviewFill_LostAckDifferentValueBlocked(t *testing.T) {
+	key := "new." + jobTaskID + ":" + criteriaID
+	r := &recorder{readOwner: otherStaff, readNumeric: ptrF(85)}
+	got, _ := byKey(cells(t, invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&"+key+"=90", fillPerms)), key)
+	if got.OK {
+		t.Fatalf("different-value retry must be refused: %+v", got)
+	}
+	if r.updateCalls != 0 || r.createCalls != 0 || r.condUpdateCalls != 0 {
+		t.Errorf("refused retry must not write: update=%d create=%d cond=%d", r.updateCalls, r.createCalls, r.condUpdateCalls)
+	}
+	// Without the fill code the same-value retry is refused as today.
+	r2 := &recorder{readOwner: otherStaff, readNumeric: ptrF(90)}
+	g2, _ := byKey(cells(t, invoke(t, r2.deps(numericMatrix(true)), "save_mode=cell&"+key+"=90", allPerms)), key)
+	if g2.OK {
+		t.Fatalf("no fill code: retry must be refused, got %+v", g2)
+	}
+}
+
+func ptrF(f float64) *float64 { return &f }
+
+func TestCellMode_ClassOverride_PrimaryTeacherUpdatesOthersCell(t *testing.T) {
+	r := &recorder{readOwner: otherStaff, readNumeric: ptrF(80)}
+	perms := []string{"task_outcome:update", "task_outcome:update_in_class_scope"}
+	got := cells(t, invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=92", perms))[0]
+	if !got.OK || got.Value != "92" || r.condUpdateCalls != 1 || r.updateCalls != 1 {
+		t.Fatalf("class override update must dispatch: %+v cond=%d upd=%d", got, r.condUpdateCalls, r.updateCalls)
+	}
+}
+
+func TestCellMode_ClassOverride_WithoutCodeRefused(t *testing.T) {
+	r := &recorder{readOwner: otherStaff, readNumeric: ptrF(80)}
+	got := cells(t, invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=92", []string{"task_outcome:update"}))[0]
+	if got.OK || r.updateCalls != 0 || r.condUpdateCalls != 0 {
+		t.Fatalf("without the code the recorder-only refusal stands: %+v upd=%d", got, r.updateCalls)
 	}
 }

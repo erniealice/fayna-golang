@@ -106,6 +106,8 @@ type OutcomeMatrixModuleDeps struct {
 	// year, schema-proposal §9.1) — see action.Deps for the contract.
 	UpdateTaskOutcomeIfUnchanged func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest, expected *taskoutcomepb.TaskOutcome) (*taskoutcomepb.UpdateTaskOutcomeResponse, bool, error)
 	CreateTaskOutcomeIfAbsent    func(ctx context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, bool, error)
+	// DeleteTaskOutcomeIfUnchanged — review-scope clear (see action.Deps).
+	DeleteTaskOutcomeIfUnchanged func(ctx context.Context, req *taskoutcomepb.DeleteTaskOutcomeRequest, expected *taskoutcomepb.TaskOutcome) (*taskoutcomepb.DeleteTaskOutcomeResponse, bool, error)
 
 	ResolveStaff func(ctx context.Context) (string, error)
 
@@ -243,6 +245,7 @@ func NewOutcomeMatrixModule(deps *OutcomeMatrixModuleDeps) *OutcomeMatrixModule 
 		ReadTaskOutcome:               deps.ReadTaskOutcome,
 		UpdateTaskOutcomeIfUnchanged:  deps.UpdateTaskOutcomeIfUnchanged,
 		CreateTaskOutcomeIfAbsent:     deps.CreateTaskOutcomeIfAbsent,
+		DeleteTaskOutcomeIfUnchanged:  deps.DeleteTaskOutcomeIfUnchanged,
 		GetOutcomeMatrix:              deps.GetOutcomeMatrix,
 		ResolveStaff:                  deps.ResolveStaff,
 		ComputePhaseOutcome:           deps.ComputePhaseOutcome,

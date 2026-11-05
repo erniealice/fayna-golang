@@ -38,6 +38,13 @@ type Deps struct {
 	UpdateTaskOutcomeIfUnchanged func(ctx context.Context, req *taskoutcomepb.UpdateTaskOutcomeRequest, expected *taskoutcomepb.TaskOutcome) (resp *taskoutcomepb.UpdateTaskOutcomeResponse, conflict bool, err error)
 	CreateTaskOutcomeIfAbsent    func(ctx context.Context, req *taskoutcomepb.CreateTaskOutcomeRequest) (resp *taskoutcomepb.CreateTaskOutcomeResponse, conflict bool, err error)
 
+	// DeleteTaskOutcomeIfUnchanged is the review-scope clear of another staff's
+	// outcome: a soft delete that lands only if the row still carries the
+	// snapshot read earlier in the request (conflict ⇒ nothing deleted, ack
+	// `cell_changed_retry`). nil ⇒ an override clear fails closed
+	// (`delete_failed`); a recorder clearing their own cell never uses it.
+	DeleteTaskOutcomeIfUnchanged func(ctx context.Context, req *taskoutcomepb.DeleteTaskOutcomeRequest, expected *taskoutcomepb.TaskOutcome) (resp *taskoutcomepb.DeleteTaskOutcomeResponse, conflict bool, err error)
+
 	// GetOutcomeMatrix re-derives the acting principal's MINE-scoped matrix on
 	// POST so the batch save only touches cells the server itself says are
 	// addressable — the POST body's cell addresses are attacker-controlled and

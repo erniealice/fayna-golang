@@ -444,6 +444,7 @@ type TaskOutcomeUseCases struct {
 	// cells closed (outcome_matrix action.Deps contract).
 	UpdateTaskOutcomeIfUnchanged func(context.Context, *taskoutcomepb.UpdateTaskOutcomeRequest, *taskoutcomepb.TaskOutcome) (*taskoutcomepb.UpdateTaskOutcomeResponse, bool, error)
 	CreateTaskOutcomeIfAbsent    func(context.Context, *taskoutcomepb.CreateTaskOutcomeRequest) (*taskoutcomepb.CreateTaskOutcomeResponse, bool, error)
+	DeleteTaskOutcomeIfUnchanged func(context.Context, *taskoutcomepb.DeleteTaskOutcomeRequest, *taskoutcomepb.TaskOutcome) (*taskoutcomepb.DeleteTaskOutcomeResponse, bool, error)
 	// ListCodedTaskOutcomeValuesByJob — ownership-joined latest-cell read
 	// (job → template ancestry) carrying phase/task/criterion codes. Optional /
 	// nil-safe: a nil closure leaves the coded-cell surface blank.

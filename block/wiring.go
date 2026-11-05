@@ -401,6 +401,7 @@ func wireOutcomeMatrixDeps(deps *operation.OutcomeMatrixModuleDeps, u *UseCases)
 	// and locked create-if-absent for the grade-sheet save path.
 	deps.UpdateTaskOutcomeIfUnchanged = to.UpdateTaskOutcomeIfUnchanged
 	deps.CreateTaskOutcomeIfAbsent = to.CreateTaskOutcomeIfAbsent
+	deps.DeleteTaskOutcomeIfUnchanged = to.DeleteTaskOutcomeIfUnchanged
 
 	// NOTE: deps.ComputePhaseOutcome / deps.ComputeJobOutcome (inline grade
 	// recompute, W2) are NOT sourced here — they come from the app AppContext via

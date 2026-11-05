@@ -423,6 +423,9 @@ func buildFaynaUseCases(uc *consumer.UseCases) *UseCases {
 			if op.TaskOutcome.CreateTaskOutcomeIfAbsent != nil {
 				result.Operation.TaskOutcome.CreateTaskOutcomeIfAbsent = op.TaskOutcome.CreateTaskOutcomeIfAbsent.Execute
 			}
+			if op.TaskOutcome.DeleteTaskOutcomeIfUnchanged != nil {
+				result.Operation.TaskOutcome.DeleteTaskOutcomeIfUnchanged = op.TaskOutcome.DeleteTaskOutcomeIfUnchanged.Execute
+			}
 		}
 
 		if op.JobOutcomeSummary != nil {

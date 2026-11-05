@@ -3,6 +3,7 @@ package action
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	espynaports "github.com/erniealice/espyna-golang/ports"
 	"github.com/erniealice/fayna-golang/domain/operation/outcome_matrix"
 	"github.com/erniealice/pyeza-golang/view"
 
@@ -117,6 +119,16 @@ func NewRecordAction(deps *Deps) view.View {
 		// (espyna decides which outcomes via Editable). Pairs with hasUpdate; never
 		// reaches delete. Code resolves to task_outcome:update_in_review_scope.
 		reviewEdit := perms.Can("task_outcome", "update_in_review_scope")
+		// classOverride: a primary teacher of the class may change another
+		// recorder's grade (espyna decides via Editable and re-checks in the
+		// write). Same effect here as reviewEdit: no fayna-side recorder-only veto.
+		reviewEdit = reviewEdit || perms.Can("task_outcome", "update_in_class_scope")
+		// reviewFill / reviewClear: holder may fill a blank cell / clear a cell on
+		// another staff's behalf (espyna decides which cells via Editable and
+		// re-checks in the write). They pair with hasCreate / hasDelete and never
+		// widen the entry gate below.
+		reviewFill := perms.Can("task_outcome", "create_in_review_scope")
+		reviewClear := perms.Can("task_outcome", "delete_in_review_scope")
 		if !hasCreate && !hasUpdate && !hasDelete {
 			return view.HTMXError(deps.Labels.Errors.PermissionDenied)
 		}
@@ -187,7 +199,7 @@ func NewRecordAction(deps *Deps) view.View {
 						acks = append(acks, cellAck{key: key, errMsg: "not_editable"})
 						continue
 					}
-					deleted := deleteCell(ctx, deps, actingStaff, outcomeID)
+					deleted, clearReason := clearCell(ctx, deps, actingStaff, outcomeID, reviewClear)
 					nextKey := ""
 					if deleted {
 						nextKey = clearKey
@@ -196,7 +208,7 @@ func NewRecordAction(deps *Deps) view.View {
 						key: key, ok: deleted, nextKey: nextKey, outcomeID: "", value: "",
 						numeric: isNumericCriteria(sc.ct), criteriaID: sc.criteriaID,
 						jobPhaseID: sc.jobPhaseID, jobID: sc.jobID,
-						errMsg: failMsg(deleted, "delete_failed"),
+						errMsg: failMsg(deleted, clearReason),
 					})
 					continue
 				}
@@ -265,7 +277,17 @@ func NewRecordAction(deps *Deps) view.View {
 				})
 				continue
 			}
-			normVal, done, hasNote, reason := updateCell(ctx, deps, actingStaff, pw.outcomeID, pw.raw, pw.sc.ct, pw.sc.bounds, res, reviewEdit && !pw.ownRetry)
+			var (
+				normVal string
+				done    bool
+				hasNote bool
+				reason  string
+			)
+			if pw.ownRetry {
+				normVal, done, hasNote, reason = retryCell(ctx, deps, actingStaff, pw.outcomeID, pw.raw, pw.sc.ct, pw.sc.bounds, res, reviewFill)
+			} else {
+				normVal, done, hasNote, reason = updateCell(ctx, deps, actingStaff, pw.outcomeID, pw.raw, pw.sc.ct, pw.sc.bounds, res, reviewEdit)
+			}
 			acks = append(acks, cellAck{
 				key: pw.key, ok: done, outcomeID: pw.outcomeID, value: normVal, hasNote: hasNote,
 				numeric: isNumericCriteria(pw.sc.ct), criteriaID: pw.sc.criteriaID,
@@ -804,6 +826,107 @@ func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) 
 	return true
 }
 
+// clearCell clears an existing cell. The recorder clearing their own cell, and
+// every caller without task_outcome:delete_in_review_scope, take today's
+// deleteCell unchanged. A review-clear holder clearing a cell recorded by
+// someone else goes through the conditional soft delete, which lands only if
+// the row still carries the snapshot read here. Returns whether the cell was
+// cleared and, on failure, the bounded ack code.
+func clearCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string, reviewClear bool) (bool, string) {
+	if !reviewClear {
+		ok := deleteCell(ctx, deps, actingStaff, outcomeID)
+		return ok, "delete_failed"
+	}
+	if deps.ReadTaskOutcome == nil {
+		return false, "delete_failed"
+	}
+	readResp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
+		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
+	})
+	if err != nil {
+		log.Printf("[outcome-matrix] read failed for outcome %s: %v", outcomeID, err)
+		return false, "delete_failed"
+	}
+	records := readResp.GetData()
+	if len(records) == 0 || records[0] == nil {
+		return false, "delete_failed"
+	}
+	if records[0].GetRecordedBy() == actingStaff {
+		ok := deleteCell(ctx, deps, actingStaff, outcomeID)
+		return ok, "delete_failed"
+	}
+	return clearCellOverride(ctx, deps, actingStaff, outcomeID, records[0])
+}
+
+// clearCellOverride is the review-scope clear of another staff's outcome. It
+// fails closed when the conditional delete is unwired. conflict ⇒ the cell
+// changed since the read: nothing is deleted and the grid asks for a retry.
+func clearCellOverride(ctx context.Context, deps *Deps, actingStaff, outcomeID string, existing *taskoutcomepb.TaskOutcome) (bool, string) {
+	if deps.DeleteTaskOutcomeIfUnchanged == nil {
+		log.Printf("[outcome-matrix] review clear blocked for outcome %s: DeleteTaskOutcomeIfUnchanged unwired", outcomeID)
+		return false, "delete_failed"
+	}
+	log.Printf("[outcome-matrix] review clear: staff %s outcome %s (recorder %s)", actingStaff, outcomeID, existing.GetRecordedBy())
+	_, conflict, err := deps.DeleteTaskOutcomeIfUnchanged(ctx, &taskoutcomepb.DeleteTaskOutcomeRequest{
+		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
+	}, existing)
+	if err != nil {
+		if errors.Is(err, espynaports.ErrTaskOutcomeNotEditable) {
+			return false, "not_editable"
+		}
+		log.Printf("[outcome-matrix] review clear failed for outcome %s: %v", outcomeID, err)
+		return false, "delete_failed"
+	}
+	if conflict {
+		log.Printf("[outcome-matrix] review clear CONFLICT for outcome %s: cell changed since read", outcomeID)
+		return false, ackCellChangedRetry
+	}
+	return true, ""
+}
+
+// retryCell resolves a lost-ack new.* retry that now addresses an existing
+// outcome. The recorder's own outcome is updated as before (updateCell, no
+// review allowance). When the outcome is someone else's (an earlier override
+// fill whose ack was lost) and the actor holds review-fill, the retry is
+// acked ok with the outcome id and NO write only if the stored value equals
+// the submitted one; a different value is refused, so a cell that looked
+// blank can never overwrite a grade saved meanwhile.
+func retryCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, colCT enums.CriteriaType, bounds cellBounds, res *ratingResolution, reviewFill bool) (value string, ok bool, hasNote bool, reason string) {
+	if !reviewFill || deps.ReadTaskOutcome == nil {
+		return updateCell(ctx, deps, actingStaff, outcomeID, raw, colCT, bounds, res, false)
+	}
+	readResp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
+		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
+	})
+	if err != nil {
+		log.Printf("[outcome-matrix] read failed for outcome %s: %v", outcomeID, err)
+		return "", false, false, ""
+	}
+	records := readResp.GetData()
+	if len(records) == 0 || records[0] == nil {
+		return "", false, false, ""
+	}
+	stored := records[0]
+	if stored.GetRecordedBy() == actingStaff {
+		return updateCell(ctx, deps, actingStaff, outcomeID, raw, colCT, bounds, res, false)
+	}
+	ct := stored.GetCriteriaType()
+	if ct == enums.CriteriaType_CRITERIA_TYPE_UNSPECIFIED {
+		ct = colCT
+	}
+	probe := &taskoutcomepb.TaskOutcome{}
+	if !applyValueStrict(probe, ct, raw, bounds) {
+		return "", false, false, ""
+	}
+	want := normalizedValue(ct, probe)
+	if want == "" || normalizedValue(ct, stored) != want {
+		log.Printf("[outcome-matrix] lost-ack retry blocked: outcome %s holds a different value than submitted", outcomeID)
+		return "", false, false, ""
+	}
+	log.Printf("[outcome-matrix] review fill retry acked without write: staff %s outcome %s (recorder %s)", actingStaff, outcomeID, stored.GetRecordedBy())
+	return want, true, stored.GetDeterminationNote() != "", ""
+}
+
 // createCell routes a new-cell value through task_outcome:create. The caller
 // has already verified the (job_task, criteria) address against the acting
 // principal's server-derived matrix — a POST-supplied address alone is never
@@ -839,8 +962,10 @@ func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteri
 			// Stamp the column's criteria type — an untyped row is permanently
 			// un-editable (updateCell's strict parse has no type to parse as).
 			CriteriaType: ct,
-			RecordedBy:   actingStaff,
-			Active:       true,
+			// For a review-fill override espyna replaces RecordedBy with the
+			// cell owner (L1); this value is only authoritative for own cells.
+			RecordedBy: actingStaff,
+			Active:     true,
 		},
 	}
 	if !applyValueStrict(req.Data, ct, raw, bounds) {
@@ -882,6 +1007,10 @@ func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteri
 		resp, err = deps.CreateTaskOutcome(ctx, req)
 	}
 	if err != nil {
+		if errors.Is(err, espynaports.ErrTaskOutcomeNotEditable) {
+			log.Printf("[outcome-matrix] create not editable for job_task %s criteria %s", jobTaskID, criteriaID)
+			return "", "", false, false, "not_editable"
+		}
 		log.Printf("[outcome-matrix] create failed for job_task %s criteria %s: %v", jobTaskID, criteriaID, err)
 		return "", "", false, false, ""
 	}

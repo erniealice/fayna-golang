@@ -637,9 +637,9 @@ func TestCellMode_MultiCell_CreateReturnsNewID(t *testing.T) {
 func TestCellMode_CreateThenResubmit_Idempotent(t *testing.T) {
 	// The client lost the create ack and re-POSTs new.{addr}. The fresh MINE
 	// re-derivation now shows an outcome at that address (recorded=true) → the
-	// action must UPDATE it (returning the existing id for the rename), never
-	// create a duplicate.
-	r := &recorder{}
+	// action must ack it (returning the existing id for the rename) without
+	// writing, never create a duplicate.
+	r := &recorder{readNumeric: ptrF(90)}
 	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=90", allPerms)
 	items := cells(t, res)
 	got, ok := byKey(items, "new."+jobTaskID+":"+criteriaID)
@@ -652,8 +652,8 @@ func TestCellMode_CreateThenResubmit_Idempotent(t *testing.T) {
 	if r.createCalls != 0 {
 		t.Errorf("idempotency breach: create was called %d times (want 0 — duplicate!)", r.createCalls)
 	}
-	if r.updateCalls != 1 {
-		t.Errorf("want the retry to UPDATE (1 call), got %d", r.updateCalls)
+	if r.updateCalls != 0 {
+		t.Errorf("want the retry to ack without a write, got %d updates", r.updateCalls)
 	}
 }
 
@@ -1239,14 +1239,14 @@ func TestCellMode_ReviewEdit_LostAckRetryOnOthersOutcomeBlocked(t *testing.T) {
 	}
 }
 
-// The recorder's own lost-ack retry still resolves to an UPDATE with the
-// review-edit permission held.
+// The recorder's own lost-ack retry acks ok with no write when the value is
+// already stored, with the review-edit permission held.
 func TestCellMode_ReviewEdit_OwnLostAckRetryStillUpdates(t *testing.T) {
-	r := &recorder{}
+	r := &recorder{readNumeric: ptrF(90)}
 	res := invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&new."+jobTaskID+":"+criteriaID+"=90", reviewEditPerms)
 	got, ok := byKey(cells(t, res), "new."+jobTaskID+":"+criteriaID)
-	if !ok || !got.OK || got.OutcomeID != existingID {
-		t.Fatalf("own retry must update the existing outcome: %+v", got)
+	if !ok || !got.OK || got.OutcomeID != existingID || r.updateCalls != 0 {
+		t.Fatalf("own retry (value already stored) must ack ok with the id and no write: %+v upd=%d", got, r.updateCalls)
 	}
 }
 
@@ -1282,7 +1282,7 @@ func (c *condDelete) wire(d *Deps) {
 
 func TestCellMode_ReviewFill_CreateSentAndNotEditableMapped(t *testing.T) {
 	key := "new." + jobTaskID + ":" + criteriaID
-	// Create is dispatched as today (RecordedBy still the actor; espyna replaces it).
+	// Create is dispatched as today (RecordedBy is the actor, design v2).
 	r := &recorder{}
 	res := invoke(t, r.deps(numericMatrix(false)), "save_mode=cell&"+key+"=90", fillPerms)
 	got, ok := byKey(cells(t, res), key)
@@ -1415,5 +1415,33 @@ func TestCellMode_ClassOverride_WithoutCodeRefused(t *testing.T) {
 	got := cells(t, invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&cells."+existingID+"=92", []string{"task_outcome:update"}))[0]
 	if got.OK || r.updateCalls != 0 || r.condUpdateCalls != 0 {
 		t.Fatalf("without the code the recorder-only refusal stands: %+v upd=%d", got, r.updateCalls)
+	}
+}
+
+// A retry must never revert a newer change: the actor's own row now holds a
+// different value (a main teacher changed it after the fill).
+func TestCellMode_LostAckRetry_DoesNotRevertNewerChange(t *testing.T) {
+	key := "new." + jobTaskID + ":" + criteriaID
+	r := &recorder{readNumeric: ptrF(75)}
+	got, _ := byKey(cells(t, invoke(t, r.deps(numericMatrix(true)), "save_mode=cell&"+key+"=90", allPerms)), key)
+	if got.OK || got.Error != outcome_matrix.DefaultLabels().Errors.CellChangedRetry {
+		t.Fatalf("changed-since retry must ack cell_changed_retry: %+v", got)
+	}
+	if r.updateCalls != 0 || r.condUpdateCalls != 0 || r.createCalls != 0 {
+		t.Errorf("retry must not write: upd=%d cond=%d create=%d", r.updateCalls, r.condUpdateCalls, r.createCalls)
+	}
+}
+
+// Class override never clears: a primary teacher clearing another recorder's
+// cell is refused with not_editable and nothing is deleted.
+func TestCellMode_ClassOverride_NeverClears(t *testing.T) {
+	r := &recorder{readOwner: otherStaff}
+	d := r.deps(numericMatrix(true))
+	cd := &condDelete{}
+	cd.wire(d)
+	perms := []string{"task_outcome:delete", "task_outcome:update_in_class_scope"}
+	got := cells(t, invoke(t, d, "save_mode=cell&cells."+existingID+"=", perms))[0]
+	if got.OK || got.Error != "not_editable" || cd.calls != 0 || r.deleteCalls != 0 {
+		t.Fatalf("class override must not clear: %+v cond=%d plain=%d", got, cd.calls, r.deleteCalls)
 	}
 }

@@ -826,36 +826,37 @@ func deleteCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string) 
 	return true
 }
 
-// clearCell clears an existing cell. The recorder clearing their own cell, and
-// every caller without task_outcome:delete_in_review_scope, take today's
-// deleteCell unchanged. A review-clear holder clearing a cell recorded by
+// clearCell clears an existing cell. The recorder clearing their own cell takes
+// today's deleteCell unchanged; another recorder's cell without
+// task_outcome:delete_in_review_scope is refused (not_editable). A review-clear holder clearing a cell recorded by
 // someone else goes through the conditional soft delete, which lands only if
 // the row still carries the snapshot read here. Returns whether the cell was
 // cleared and, on failure, the bounded ack code.
 func clearCell(ctx context.Context, deps *Deps, actingStaff, outcomeID string, reviewClear bool) (bool, string) {
-	if !reviewClear {
-		ok := deleteCell(ctx, deps, actingStaff, outcomeID)
-		return ok, "delete_failed"
-	}
 	if deps.ReadTaskOutcome == nil {
-		return false, "delete_failed"
+		return deleteCell(ctx, deps, actingStaff, outcomeID), "delete_failed"
 	}
 	readResp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
 	})
-	if err != nil {
-		log.Printf("[outcome-matrix] read failed for outcome %s: %v", outcomeID, err)
+	if err != nil || len(readResp.GetData()) == 0 || readResp.GetData()[0] == nil {
+		if err != nil {
+			log.Printf("[outcome-matrix] read failed for outcome %s: %v", outcomeID, err)
+		}
 		return false, "delete_failed"
 	}
-	records := readResp.GetData()
-	if len(records) == 0 || records[0] == nil {
-		return false, "delete_failed"
+	existing := readResp.GetData()[0]
+	if existing.GetRecordedBy() == actingStaff {
+		return deleteCell(ctx, deps, actingStaff, outcomeID), "delete_failed"
 	}
-	if records[0].GetRecordedBy() == actingStaff {
-		ok := deleteCell(ctx, deps, actingStaff, outcomeID)
-		return ok, "delete_failed"
+	if !reviewClear {
+		// Another recorder's cell without the review-clear code (a class
+		// override never clears): refused, not a failure.
+		log.Printf("[outcome-matrix] clear blocked: staff %s lacks delete_in_review_scope for outcome %s (recorder %s)",
+			actingStaff, outcomeID, existing.GetRecordedBy())
+		return false, "not_editable"
 	}
-	return clearCellOverride(ctx, deps, actingStaff, outcomeID, records[0])
+	return clearCellOverride(ctx, deps, actingStaff, outcomeID, existing)
 }
 
 // clearCellOverride is the review-scope clear of another staff's outcome. It
@@ -885,15 +886,16 @@ func clearCellOverride(ctx context.Context, deps *Deps, actingStaff, outcomeID s
 }
 
 // retryCell resolves a lost-ack new.* retry that now addresses an existing
-// outcome. The recorder's own outcome is updated as before (updateCell, no
-// review allowance). When the outcome is someone else's (an earlier override
-// fill whose ack was lost) and the actor holds review-fill, the retry is
-// acked ok with the outcome id and NO write only if the stored value equals
-// the submitted one; a different value is refused, so a cell that looked
-// blank can never overwrite a grade saved meanwhile.
+// outcome. It NEVER writes: a retry is replayed from a stale form, so it must
+// not overwrite whatever was saved since (a main teacher's change, a reviewer's
+// edit). If the stored value equals the submitted one the first attempt landed:
+// ack ok with the outcome id. If the actor's own row now differs, something
+// changed it after the fill: cell_changed_retry. Someone else's row is acked
+// the same way only for a review-fill holder (an earlier override fill whose
+// ack was lost); otherwise it is refused as before.
 func retryCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw string, colCT enums.CriteriaType, bounds cellBounds, res *ratingResolution, reviewFill bool) (value string, ok bool, hasNote bool, reason string) {
-	if !reviewFill || deps.ReadTaskOutcome == nil {
-		return updateCell(ctx, deps, actingStaff, outcomeID, raw, colCT, bounds, res, false)
+	if deps.ReadTaskOutcome == nil {
+		return "", false, false, ""
 	}
 	readResp, err := deps.ReadTaskOutcome(ctx, &taskoutcomepb.ReadTaskOutcomeRequest{
 		Data: &taskoutcomepb.TaskOutcome{Id: outcomeID},
@@ -907,8 +909,14 @@ func retryCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw stri
 		return "", false, false, ""
 	}
 	stored := records[0]
-	if stored.GetRecordedBy() == actingStaff {
-		return updateCell(ctx, deps, actingStaff, outcomeID, raw, colCT, bounds, res, false)
+	own := stored.GetRecordedBy() == actingStaff
+	if !own && !reviewFill {
+		log.Printf("[outcome-matrix] IDOR blocked: staff %s tried to retry into outcome %s owned by %s",
+			actingStaff, outcomeID, stored.GetRecordedBy())
+		return "", false, false, ""
+	}
+	if res != nil && res.reject {
+		return "", false, stored.GetDeterminationNote() != "", res.reason
 	}
 	ct := stored.GetCriteriaType()
 	if ct == enums.CriteriaType_CRITERIA_TYPE_UNSPECIFIED {
@@ -920,10 +928,12 @@ func retryCell(ctx context.Context, deps *Deps, actingStaff, outcomeID, raw stri
 	}
 	want := normalizedValue(ct, probe)
 	if want == "" || normalizedValue(ct, stored) != want {
-		log.Printf("[outcome-matrix] lost-ack retry blocked: outcome %s holds a different value than submitted", outcomeID)
+		log.Printf("[outcome-matrix] lost-ack retry not applied: outcome %s changed since the first attempt", outcomeID)
+		if own {
+			return "", false, stored.GetDeterminationNote() != "", ackCellChangedRetry
+		}
 		return "", false, false, ""
 	}
-	log.Printf("[outcome-matrix] review fill retry acked without write: staff %s outcome %s (recorder %s)", actingStaff, outcomeID, stored.GetRecordedBy())
 	return want, true, stored.GetDeterminationNote() != "", ""
 }
 
@@ -962,8 +972,8 @@ func createCell(ctx context.Context, deps *Deps, actingStaff, jobTaskID, criteri
 			// Stamp the column's criteria type — an untyped row is permanently
 			// un-editable (updateCell's strict parse has no type to parse as).
 			CriteriaType: ct,
-			// For a review-fill override espyna replaces RecordedBy with the
-			// cell owner (L1); this value is only authoritative for own cells.
+			// RecordedBy is always the actor, including a review-fill override
+			// (design v2: the filler is the recorder).
 			RecordedBy: actingStaff,
 			Active:     true,
 		},
